@@ -8213,6 +8213,84 @@
       ],
       "status": "assigned",
       "verdicts": {}
+    },
+    "i059": {
+      "assigned_at": "2026-10-31T14:56:47+00:00",
+      "branch": "p3/wso-i059",
+      "closed_at": "2026-10-31T18:18:43+00:00",
+      "files": [
+        "src/CMessage.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x4F6A70",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageProjectileTrailingVFX::GetMsgSubType",
+          "our_len": 0,
+          "their_len": 69
+        },
+        {
+          "address": "0x501FE0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageInsertResponse::UnmarshalMessage",
+          "our_len": 0,
+          "their_len": 39
+        },
+        {
+          "address": "0x4FD930",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageContinueDialog::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x5017E0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageInsertResponse::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x502B40",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageLoadDialog::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x431560",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CBaldurMessage::SwapItemRequest",
+          "our_len": 0,
+          "their_len": 14
+        },
+        {
+          "address": "0x4F6FA0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage117::GetMsgSubType",
+          "our_len": 0,
+          "their_len": 12
+        },
+        {
+          "address": "0x514FF0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate",
+          "our_len": 0,
+          "their_len": 2
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
