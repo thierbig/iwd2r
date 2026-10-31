@@ -19205,15 +19205,6 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
-// 0x514F60
-CMessageProjectileImmumityUpdate::CMessageProjectileImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target)
-    : CMessage(caller, target)
-{
-    if (pSprite != NULL) {
-        m_projectileImmunities = pSprite->GetDerivedStats()->m_cImmunitiesProjectile;
-    }
-}
-
 // 0x4088A0
 SHORT CMessageProjectileImmumityUpdate::GetCommType()
 {
