@@ -7346,12 +7346,6 @@ CMessageRemoveItem::CMessageRemoveItem(SHORT slot, LONG caller, LONG target)
     m_slot = slot;
 }
 
-// 0x40A0E0
-BYTE CMessageRemoveItem::GetMsgType()
-{
-    return CBaldurMessage::MSG_TYPE_CMESSAGE;
-}
-
 // 0x4641F0
 BYTE CMessageRemoveItem::GetMsgSubType()
 {
