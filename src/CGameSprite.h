@@ -622,6 +622,7 @@ public:
     void CheckModal();
     CGameObject* GetTargetShare();
     SHORT MoveToObject(CGameObject* pTarget);
+    SHORT MoveToObjectFormation(CGameSprite* pTarget); // #guess name: action 215
     SHORT MoveToPoint();
     SHORT MoveToPoint(const CPoint& dest, LONG range);
     SHORT Dialog(CGameSprite* pTarget);

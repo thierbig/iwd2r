@@ -14127,9 +14127,13 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 215:
-        // TODO: 0x72962C-0x729654 not ported (0x73EA80).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // Engine-internal action 215 (ACTION.IDS has no entry for 205-228 and
+        // neither IEex nor WSO names it): the sprite-target formation move,
+        // the twin of MoveToObject (0x72962C-0x729654, 0x73EA80).
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = MoveToObjectFormation(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 221:
         // (0x72A7B9-0x72A7F6)
         field_72DE = m_curAction.m_specificID;
@@ -20674,6 +20678,103 @@ CGameEffect* CGameSprite::Damage(CItem* curWeapon, CItem* pLauncher, SHORT nAbil
     pDamage->m_special = weaponId.m_attributes;
 
     return pDamage;
+}
+
+// 0x73EA80
+SHORT CGameSprite::MoveToObjectFormation(CGameSprite* pTarget)
+{
+    // #guess name: engine-internal action 215, unnamed in ACTION.IDS (the
+    // shipped file has no 205-228 entries) and in IEex; the sprite-target
+    // formation twin of MoveToObject (0x73EDD0). The mover walks to its
+    // formation slot around the target, oriented by the target's direction;
+    // the action's m_specificID's low byte is the formation type and
+    // m_specificID2's the mover's slot.
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (m_derivedStats.m_nEncumberance == 2) {
+        FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The slot is clamped by the party size (the group list's count, at least
+    // 6); an out-of-range slot takes the first offset.
+    BYTE nSlot = static_cast<BYTE>(m_curAction.m_specificID2);
+    BYTE nMaxSlot = static_cast<BYTE>(pGame->m_group.GetCount());
+    if (nMaxSlot <= 6) {
+        nMaxSlot = 6;
+    }
+    if (nSlot >= nMaxSlot) {
+        nSlot = 0;
+    }
+
+    SHORT nFormation = static_cast<SHORT>(m_curAction.m_specificID & 0xFF);
+    SHORT nAngle = static_cast<SHORT>(
+        ((static_cast<SHORT>(pTarget->m_nDirection) + 8) * 360) / 16 % 360);
+    CPoint* pOffsets = pGame->m_group.GetOffsets(nFormation, nAngle, TRUE);
+    if (pOffsets == NULL) {
+        UTIL_ASSERT(pOffsets != NULL);
+    }
+
+    CPoint ptWaypoint;
+    pTarget->GetNextWaypoint(&ptWaypoint);
+
+    // The target's waypoint cell plus the mover's formation offset, centred
+    // in the cell (the grid size's halves).
+    CPoint ptDest;
+    ptDest.x = (ptWaypoint.x / CPathSearch::GRID_SQUARE_SIZEX
+                   + pOffsets[nSlot].x / CAIGroup::OFFSET_MULTIPLIER)
+        * CPathSearch::GRID_SQUARE_SIZEX
+        + CPathSearch::GRID_SQUARE_SIZEX / 2;
+    ptDest.y = (pOffsets[nSlot].y / CAIGroup::OFFSET_MULTIPLIER
+                   + ptWaypoint.y / CPathSearch::GRID_SQUARE_SIZEY)
+        * CPathSearch::GRID_SQUARE_SIZEY
+        + CPathSearch::GRID_SQUARE_SIZEY / 2;
+
+    delete[] pOffsets;
+
+    if ((ptDest.x / CPathSearch::GRID_SQUARE_SIZEX != m_pos.x / CPathSearch::GRID_SQUARE_SIZEX
+            || ptDest.y / CPathSearch::GRID_SQUARE_SIZEY != m_pos.y / CPathSearch::GRID_SQUARE_SIZEY)
+        && ((ptDest.x / CPathSearch::GRID_SQUARE_SIZEX != m_curDest.x / CPathSearch::GRID_SQUARE_SIZEX
+                || ptDest.y / CPathSearch::GRID_SQUARE_SIZEY != m_curDest.y / CPathSearch::GRID_SQUARE_SIZEY
+                || field_5618 == 0)
+            || (m_pPath == NULL && m_currentSearchRequest == NULL))) {
+        field_5618 = 0;
+
+        // A new path every eighth call (the same cadence as MoveToObject).
+        if (field_5616 % 8 == 0) {
+            m_curDest = ptDest;
+
+            CSearchRequest* pSearchRequest = new CSearchRequest();
+            if (pSearchRequest == NULL) {
+                return ACTION_ERROR;
+            }
+
+            pSearchRequest->m_searchBitmap = &(m_pArea->m_search);
+            memcpy(pSearchRequest->m_terrainTable, m_terrainTable, sizeof(m_terrainTable));
+            pSearchRequest->m_pathSmooth = m_animation.GetPathSmooth();
+            pSearchRequest->m_sourceId = m_id;
+            pSearchRequest->m_nTargetPoints = 1;
+
+            pSearchRequest->m_targetPoints = new POINT[1];
+            if (pSearchRequest->m_targetPoints == NULL) {
+                delete pSearchRequest;
+                return ACTION_ERROR;
+            }
+
+            pSearchRequest->m_targetPoints[0] = ptDest;
+            pSearchRequest->m_sourceSide = m_typeAI.GetEnemyAlly();
+            field_5618 = 1;
+            SetTarget(pSearchRequest, FALSE, LIST_FRONT);
+        }
+
+        field_5616++;
+    }
+
+    return ACTION_INTERRUPTABLE;
 }
 
 // 0x73EDD0
