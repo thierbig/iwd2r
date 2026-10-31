@@ -838,6 +838,11 @@ std::vector<CPoint> IcewindCProjectileScorcher::m_offsets;
 // 0x8E52E8
 BYTE IcewindCProjectileScorcher::m_offsetsInitialized = FALSE;
 
+// 0x57B080
+IcewindCProjectileScorcher::~IcewindCProjectileScorcher()
+{
+}
+
 // 0x57B210
 void IcewindCProjectileScorcher::AIUpdate()
 {
