@@ -662,6 +662,159 @@ TEST_CASE("sprite: UseDoor on a locked door leaves it closed and says it is lock
     ClearMessages();
 }
 
+// CGameSprite::RandomWalk (0x747F80, actions 85 and 130): the action queues a
+// copy of itself and then either a random MoveToPoint inside the view
+// (RandomWalk) or a Face to a random direction plus a short Wait (RandomTurn);
+// out of the view, or while the frame rate says the choice is pointless, it
+// queues a longer Wait instead; an interrupt answers without queueing.
+TEST_CASE("sprite: RandomWalk and RandomTurn queue their step and their copy", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+
+    // The view and the frame rates the handler reads; restored at the end.
+    const int nSavedRenderPerSec = g_pChitin->m_nRenderPerSec;
+    const int nSavedAIPerSec = g_pChitin->m_nAIPerSec;
+    const CRect rSavedViewPort = pArea->m_cInfinity.rViewPort;
+    const int nSavedNewX = pArea->m_cInfinity.nNewX;
+    const int nSavedNewY = pArea->m_cInfinity.nNewY;
+    const WORD nSavedHuntingRange = pCharacter->m_huntingRange;
+
+    auto clearQueue = [pCharacter]() {
+        while (!pCharacter->m_queuedActions.IsEmpty()) {
+            delete pCharacter->m_queuedActions.RemoveHead();
+        }
+    };
+
+    CAIAction randomWalk;
+    randomWalk.m_actionID = CAIAction::RANDOMWALK;
+    CAIAction randomTurn;
+    randomTurn.m_actionID = 130;
+
+    // An interrupt answers ACTION_INTERRUPTABLE and queues nothing.
+    pCharacter->SetCurrAction(randomWalk);
+    pCharacter->m_interrupt = TRUE;
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_queuedActions.IsEmpty());
+    pCharacter->m_interrupt = FALSE;
+
+    // With the frame rate down the walk only waits: a Wait of 1..40 and the
+    // copy of the action itself.
+    g_pChitin->m_nRenderPerSec = 0;
+    pCharacter->SetCurrAction(randomWalk);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+    {
+        CAIAction* pWait = pCharacter->m_queuedActions.GetHead();
+        CHECK(pWait->m_actionID == CAIAction::WAIT);
+        CHECK((pWait->m_specificID >= 1 && pWait->m_specificID <= 40));
+        CAIAction* pSelf = pCharacter->m_queuedActions.GetTail();
+        CHECK(pSelf->m_actionID == CAIAction::RANDOMWALK);
+        CHECK(pSelf->m_specificID == 0);
+        CHECK(pSelf->m_specificID2 == -1);
+        CHECK(pSelf->m_specificID3 == 0);
+        CHECK(pSelf->m_dest == CPoint(-1, -1));
+        CHECK(pSelf->m_internalFlags == 0);
+    }
+
+    // Out of the view it also only waits.
+    g_pChitin->m_nRenderPerSec = 15;
+    g_pChitin->m_nAIPerSec = 0;
+    pArea->m_cInfinity.nNewX = 0;
+    pArea->m_cInfinity.nNewY = 0;
+    pArea->m_cInfinity.rViewPort = CRect(pCharacter->m_pos.x + 1000,
+        pCharacter->m_pos.y + 1000,
+        pCharacter->m_pos.x + 1100,
+        pCharacter->m_pos.y + 1100);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+    CHECK(pCharacter->m_queuedActions.GetHead()->m_actionID == CAIAction::WAIT);
+    CHECK((pCharacter->m_queuedActions.GetHead()->m_specificID >= 1
+        && pCharacter->m_queuedActions.GetHead()->m_specificID <= 40));
+    CHECK(pCharacter->m_queuedActions.GetTail()->m_actionID == CAIAction::RANDOMWALK);
+
+    // In the view a turn faces a random direction (0..15) and waits 1..10.
+    pArea->m_cInfinity.rViewPort = CRect(pCharacter->m_pos.x - 50,
+        pCharacter->m_pos.y - 50,
+        pCharacter->m_pos.x + 50,
+        pCharacter->m_pos.y + 50);
+    pCharacter->m_huntingRange = 0;
+    pCharacter->SetCurrAction(randomTurn);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 3);
+    {
+        POSITION pos = pCharacter->m_queuedActions.GetHeadPosition();
+        CAIAction* pWait = pCharacter->m_queuedActions.GetNext(pos);
+        CHECK(pWait->m_actionID == CAIAction::WAIT);
+        CHECK((pWait->m_specificID >= 1 && pWait->m_specificID <= 10));
+        CAIAction* pFace = pCharacter->m_queuedActions.GetNext(pos);
+        CHECK(pFace->m_actionID == CAIAction::FACE);
+        CHECK((pFace->m_specificID >= 0 && pFace->m_specificID < 16));
+        CAIAction* pSelf = pCharacter->m_queuedActions.GetNext(pos);
+        CHECK(pSelf->m_actionID == 130);
+        CHECK(pSelf->m_dest == CPoint(-1, -1));
+    }
+
+    // A walk (seed 3's second draw is even) moves to a point inside the area:
+    // MoveToPoint with specificID -2, and the copy behind it.
+    pCharacter->SetCurrAction(randomWalk);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+    {
+        CAIAction* pMove = pCharacter->m_queuedActions.GetHead();
+        CHECK(pMove->m_actionID == CAIAction::MOVETOPOINT);
+        CHECK(pMove->m_specificID == -2);
+        CHECK(pMove->m_specificID2 == -1);
+        CHECK((pMove->m_dest.x >= 0 && pMove->m_dest.x < pArea->m_cInfinity.nAreaX));
+        CHECK((pMove->m_dest.y >= 0 && pMove->m_dest.y < pArea->m_cInfinity.nAreaY));
+        CHECK(pCharacter->m_queuedActions.GetTail()->m_actionID == CAIAction::RANDOMWALK);
+    }
+
+    // A walk whose draw is odd (seed 1) is a turn as well.
+    pCharacter->SetCurrAction(randomWalk);
+    clearQueue();
+    srand(1);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 3);
+    {
+        POSITION pos = pCharacter->m_queuedActions.GetHeadPosition();
+        CHECK(pCharacter->m_queuedActions.GetNext(pos)->m_actionID == CAIAction::WAIT);
+        CHECK(pCharacter->m_queuedActions.GetNext(pos)->m_actionID == CAIAction::FACE);
+        CHECK(pCharacter->m_queuedActions.GetNext(pos)->m_actionID == CAIAction::RANDOMWALK);
+    }
+
+    clearQueue();
+    g_pChitin->m_nRenderPerSec = nSavedRenderPerSec;
+    g_pChitin->m_nAIPerSec = nSavedAIPerSec;
+    pArea->m_cInfinity.rViewPort = rSavedViewPort;
+    pArea->m_cInfinity.nNewX = nSavedNewX;
+    pArea->m_cInfinity.nNewY = nSavedNewY;
+    pCharacter->m_huntingRange = nSavedHuntingRange;
+}
+
 namespace {
 
 // Every object of a type on the area's three lists.

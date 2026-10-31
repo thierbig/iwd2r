@@ -562,6 +562,7 @@ public:
     SHORT Follow();
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);
+    SHORT RandomWalk();
     void sub_71D0B0();
     void sub_72FBF0();
     void CheckSequence(BYTE& sequence);
