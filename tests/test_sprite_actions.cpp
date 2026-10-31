@@ -390,6 +390,23 @@ void ClearMessages()
     }
 }
 
+// The queued messages of one kind, oldest first (tests/test_combat.cpp's
+// Queued).
+template <class T>
+std::vector<T*> Queued()
+{
+    std::vector<T*> found;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* message = handler.m_messageList.GetNext(pos);
+        if (T* typed = dynamic_cast<T*>(message)) {
+            found.push_back(typed);
+        }
+    }
+    return found;
+}
+
 }
 
 TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its action clears", "[ai][data]")
@@ -1883,4 +1900,64 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
     if (kind == KIND_CLASS && (nEntryClass == 0 || nEntryClass == 5)) {
         CHECK(pLevelList->field_18 == 2);
     }
+}
+
+// CGameSprite::Help (0x74FF10, action 17): every object within GetHelpRange
+// (twice the visual range, CAIObjectType::ANYONE) gets a Help trigger
+// (TRIGGER.IDS 3) from the caller, its AI type as the cause and no
+// specifics, queued as a CMessageSetTrigger; the handler answers
+// ACTION_DONE.
+TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.empty()) {
+        SKIP("[iwd2r-skip] no finished character");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates.front());
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->m_visibility.SetAreaExplored();
+    pArea->SortLists();
+    ClearMessages();
+
+    CHECK(pCharacter->Help() == CGameAIBase::ACTION_DONE);
+
+    // The character itself is in range (distance 0) and on the area's front
+    // list, so at least one message is queued.
+    const std::vector<CMessageSetTrigger*> messages = Queued<CMessageSetTrigger>();
+    REQUIRE(!messages.empty());
+    bool bSelf = false;
+    for (CMessageSetTrigger* message : messages) {
+        CHECK(message->m_trigger.m_triggerID == CAITrigger::HELP);
+        CHECK(message->m_trigger.m_specificID == 0);
+        CHECK(message->m_trigger.GetCause().Equal(pCharacter->GetAIType()));
+        CHECK(message->GetSource() == pCharacter->GetId());
+        bSelf = bSelf || message->GetTarget() == pCharacter->GetId();
+    }
+    CHECK(bSelf);
+
+    // Running the queued message puts the trigger on the target.
+    pCharacter->m_pendingTriggers.RemoveAll();
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    while (!handler.m_messageList.IsEmpty()) {
+        CMessage* message = handler.m_messageList.RemoveHead();
+        message->Run();
+        delete message;
+    }
+    bool bHeard = false;
+    POSITION pos = pCharacter->m_pendingTriggers.GetHeadPosition();
+    while (pos != NULL) {
+        if (pCharacter->m_pendingTriggers.GetNext(pos)->m_triggerID == CAITrigger::HELP) {
+            bHeard = true;
+        }
+    }
+    CHECK(bHeard);
 }

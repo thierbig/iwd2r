@@ -10227,6 +10227,36 @@ void CGameSprite::sub_71A550(CButtonData buttonData, BOOLEAN firstCall)
     }
 }
 
+// 0x74FF10
+SHORT CGameSprite::Help()
+{
+    CTypedPtrList<CPtrList, LONG*> targets;
+
+    // Every object within the help range (GetHelpRange is twice the visual
+    // range) hears the call. The original evaluates GetTerrainTable first
+    // and the range second; both are calls in the argument list, so the
+    // trailing arguments sit under them on the stack.
+    m_pArea->GetAllInRange(m_pos,
+        CAIObjectType::ANYONE,
+        GetHelpRange(),
+        GetTerrainTable(),
+        targets,
+        FALSE,
+        FALSE);
+
+    CAITrigger trigger(CAITrigger::HELP, m_typeAI, 0);
+
+    POSITION pos = targets.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(targets.GetNext(pos)));
+
+        CMessage* message = new CMessageSetTrigger(trigger, m_id, nId);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x7500F0
 SHORT CGameSprite::Rest()
 {
@@ -13689,9 +13719,8 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = GiveItem(static_cast<CGameAIBase*>(pTarget));
         goto release;
     case 17:
-        // Help
-        // TODO: 0x72955F-0x72956F not ported (0x74FF10).
-        returnValue = ACTION_ERROR;
+        // Help (0x72955F-0x72956F)
+        returnValue = Help();
         goto done;
     case 18:
         // Hide
