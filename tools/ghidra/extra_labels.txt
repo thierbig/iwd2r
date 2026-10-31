@@ -7,11 +7,11 @@
 # docs/wso/disagreements.json (only_theirs): tiny constant-subtype getters of the
 # CMessage hierarchy, named in task-34-report.md §3 rows 3-6; ours defines
 # CMessageSetVariable's inline (53, CMessage.h "NOTE: The BYTE at 0x84CF0C")
-# and none of the other three classes.
+# and the projectile-immunity one (0x516D40, imported in i057 -- see
+# docs/evidence/516D40.md), and none of the other two.
 0x453560 CMessageSetVariable::GetMsgSubType
 0x4F6A70 CMessageProjectileTrailingVFX::GetMsgSubType
 0x4F6FA0 CMessage117::GetMsgSubType
-0x516D40 CMessageProjectileImmumityUpdate::GetMsgSubType
 
 # Task 38 (rows 21-40 of task-34-report.md section 3): the CMessage
 # Marshal/UnmarshalMessage pairs no scenario reaches. Addresses and names from
@@ -29,4 +29,3 @@
 0x515670 CMessage105::UnmarshalMessage
 0x516910 CMessage117::MarshalMessage
 0x516A80 CMessage117::UnmarshalMessage
-0x516D50 CMessageSpellLevelImmumityUpdate::MarshalMessage
