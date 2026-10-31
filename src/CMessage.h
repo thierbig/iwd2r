@@ -1970,7 +1970,7 @@ public:
         const CPoint& launch, CPoint targetPoint, SHORT launchHeight,
         LONG caller, LONG target);
 
-    SHORT GetCommType() override;       // returns SEND (3)
+    SHORT GetCommType() override;       // returns BROADCAST_OTHERS (3)
     BYTE GetMsgType() override;         // returns MSG_TYPE_CMESSAGE (0x43)
     BYTE GetMsgSubType() override;      // returns MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX (0x56)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
