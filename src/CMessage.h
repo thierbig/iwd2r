@@ -1985,7 +1985,6 @@ public:
         LONG caller, LONG target);
 
     SHORT GetCommType() override;       // returns BROADCAST_OTHERS (3)
-    BYTE GetMsgSubType() override;      // returns MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX (0x56)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;                // no-op
