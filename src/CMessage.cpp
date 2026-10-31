@@ -19250,6 +19250,22 @@ CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
 {
 }
 
+// NOTE: The original's slot holds 0x40A0E0, the one GetMsgType body every
+// CMessage subclass shares (identical-code folding), so the address stays on
+// the copies the tree already labels.
+BYTE CMessageProjectileImmumityUpdate::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// NOTE: The original's slot holds 0x516D40, one body for both immunity
+// messages (vtables 0x84D548 and 0x84D580): it returns the spell-level
+// immunities subtype (the byte at 0x84CF3F) for this message too.
+BYTE CMessageProjectileImmumityUpdate::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
+}
+
 // 0x515010
 void CMessageProjectileImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
