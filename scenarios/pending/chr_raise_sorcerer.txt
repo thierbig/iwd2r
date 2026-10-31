@@ -1,0 +1,1642 @@
+# Task 53: raise a sorcerer 12 in the original through the cheat console
+# and export it as a .chr fixture (party-plan item 1; the druid 7 is done
+# and import-proven, Tasks 49/50).
+# timeout: 1800
+# cheats: 1
+#
+# Plan (task-49-report.md, "Step 2 - party plan", item 1) as written:
+# "Ryssc12", 66000 XP = level 12; XPLEVEL.2DA thresholds 1000/3000/6000/
+# 10000/15000/21000/28000/36000/45000/55000/66000, one SETCURRENTXP per
+# level, one level-up walk per command (11 walks).  Known-spell targets:
+# chargen L1 picks SPWI119 Larloch's Minor Drain (grid cell 8 = (379,223))
+# and SPWI226 Ray of Enfeeblement (cell 13 = (336,266)); the level-4
+# popup's +1 L2 pick SPWI217 Agannazzar's Scorcher (L2 list cell 0 =
+# (279,96)); the level-12 popup's single +1 L6 pick SPWI603 Chain
+# Lightning (L6 cell 4 = (451,96)).  The other popup-8 picks fill the
+# SPLSRCKN badge with the first pickable LISTSPLL SOR spell per tab
+# (GUIREC panel 8 verified from the CHU: row-1 grid button centers are
+# (279/322/365/408/451, 96), forward Done = (722,394)).
+#
+# Druid lessons applied from the start (task-49-report.md):
+# - the console only opens on the world screen and the line stays in the
+#   box after RETURN: every command after the first goes through
+#   close/reopen (CTRL+TAB) plus exact-count BACKSPACEs (32 for a 4-digit
+#   xp, 33 for 5-digit), and each walk ends ESC, wait 30 before its world
+#   checkpoint: with the skill points drained the level-up popup closes on
+#   its own Done, so ONE ESC closes the record and returns to the world
+#   (a second ESC opened the Options screen and desynced every later
+#   console command - attempt 1 launch 2).
+# - the level-up chain commits itself only when every popup's gate opens
+#   (Done wraps back to panel 2 and LevelUp commits): popup 55's Done
+#   needs m_nExtraSkillPoints < 2 (a sorcerer at INT 10 gets 2 points per
+#   level, drained onto Alchemy + (477,93) and Concentration + (477,207)
+#   — (477,130) is Animal Empathy, disabled for a sorcerer); popup 7 at
+#   levels 4/8/12 needs its ability
+#   point spent; popup 56 at levels 3/6/9/12 needs its feat point(s)
+#   spent; popup 8 (sorcerer known spells) needs the pick.  GUIREC
+#   panels 7/55/56 share the 18x35 +/- column pair, (477,y) = "+";
+#   disabled/capped rows no-op.
+# - export only after a world checkpoint that must read level 12; popup
+#   13's name edit PRE-FILLS with the 7-char character name Ryssc12
+#   (launch 1 wrote RYSSC12.CHR mid-run with the unmodified fill), so 8x
+#   BACK clears it before typing the export name Ryssc12C; Done (467,465)
+#   writes into the oracle game copy's Characters\ (CInfGame::
+#   CharacterExport, src/CInfGame.cpp:3049).  The mixed-case typed name
+#   never matches the upper-cased on-disk export list
+#   (IsNameOnExportList, strcmp), so a stale RYSSC12C.CHR is overwritten
+#   directly, without the overwrite popup.
+# - CHECK marks what could not be taken from the druid scenario or the
+#   plan (the sorcerer rows in the two class lists, the chargen spell
+#   screen, the popup-56 spend for a sorcerer) instead of researching
+#   it.  RESOLVED by attempt 2 launch 1 (runs/20261030-173126): popup 8
+#   opens one tab per pending SPLSRCKN spell level, ascending, each
+#   needing exactly one pick — the Done click is gated on
+#   m_nExtraMageSpells == 0 and ignored while a pick is owed, so a
+#   missed pick strands the tab (that launch died at level 7).  The
+#   pick cells below are the first pickable LISTSPLL SOR spell per
+#   tab in list order (known spells occupy cells but SetEnabled(FALSE),
+#   so clicking them no-ops).
+
+wait 60
+checkpoint menu
+# New Game (645,262), Done (537,562), slot 1 Create Character (530,100).
+click 645 262
+wait 90
+click 537 562
+wait 60
+click 530 100
+wait 90
+checkpoint chargen
+# Gender (400,128): Male (400,286), Next (536,562) to Appearance, Next
+# again back to the menu.
+click 400 128
+wait 30
+click 400 286
+wait 20
+checkpoint male
+click 536 562
+wait 30
+checkpoint appearance
+click 536 562
+wait 30
+checkpoint gender_done
+# Race (400,163): Elf (400,198), Next.
+click 400 163
+wait 30
+click 400 198
+wait 20
+checkpoint elf
+click 536 562
+wait 30
+checkpoint race_done
+# Class (400,198): Sorcerer = row 10 (400,449), Next.
+# CHECK: chargen class-list rows — the druid runs proved only row 4
+# (400,233); the sorcerer is assumed 6 rows lower on the same 36 px grid
+# (alphabetical list: ... Rogue 9 (400,413), Sorcerer 10 (400,449),
+# Wizard 11 (400,485)).
+click 400 198
+wait 30
+click 400 449
+wait 20
+checkpoint sorcerer
+click 536 562
+wait 30
+checkpoint class_done
+# Alignment (400,233): True Neutral = row 5 (400,269), Next.
+click 400 233
+wait 30
+click 400 269
+wait 20
+checkpoint true_neutral
+click 536 562
+wait 30
+checkpoint alignment_done
+# Abilities (400,268): no raises — the plan's picks do not depend on
+# ability scores and CHA (the sorcerer casting stat) is not part of the
+# plan; the unspent-points prompt keeps all 16 points (druid precedent:
+# the prompt fires on unspent points, raised or not).
+click 400 268
+wait 30
+checkpoint abilities
+click 536 562
+wait 30
+checkpoint points_prompt
+click 338 331
+wait 30
+checkpoint abilities_done
+# Skills (400,303): 8 points = two rows x 4 ranks (INT 10 pool
+# (2+0)x4, same as the druid); Done needs them all spent.
+click 400 303
+wait 30
+checkpoint skills
+click 499 276
+wait 15
+click 499 276
+wait 15
+click 499 276
+wait 15
+click 499 276
+wait 15
+click 499 204
+wait 15
+click 499 204
+wait 15
+click 499 204
+wait 15
+click 499 204
+wait 15
+click 536 562
+wait 30
+checkpoint skills_done
+# Feats (panel 55): all ten + rows once; the single point takes the
+# first enabled row (rank feats spend without flipping a bits entry) —
+# as in both druid chargen runs.
+click 499 168
+wait 15
+click 499 204
+wait 15
+click 499 240
+wait 15
+click 499 276
+wait 15
+click 499 312
+wait 15
+click 499 348
+wait 15
+click 499 384
+wait 15
+click 499 420
+wait 15
+click 499 456
+wait 15
+click 499 492
+wait 15
+shot feats_panel
+click 536 562
+wait 30
+checkpoint feats_done
+# Sorcerer chargen known spells (the arcane pick screen after feats; the
+# druid's panel-17 analogue): the two L1 picks = SPWI119 Larloch's Minor
+# Drain (cell 8 = (379,223)) and SPWI226 Ray of Enfeeblement (cell 13 =
+# (336,266)); distinct buttons only (a re-click refunds, druid lesson).
+# CHECK: the sorcerer pick screen itself was not exercised in the druid
+# runs; the cells are the plan's, Done is the shared chargen Next/Done
+# (536,562) the druid's panel 17 used.
+click 379 223
+wait 15
+click 336 266
+wait 15
+checkpoint spell_picks
+click 536 562
+wait 30
+checkpoint spell_done
+shot spell_done
+# Chargen finishes: Appearance (400,338), Sound, Name (400,373): Ryssc12,
+# Done (458,268), Next back to Party Formation.
+click 400 338
+wait 30
+click 536 562
+wait 30
+click 536 562
+wait 30
+click 400 373
+wait 30
+type Ryssc12
+wait 15
+click 458 268
+wait 30
+checkpoint named
+click 536 562
+wait 60
+checkpoint party_formation
+# Done (634,507) starts the game; chapter Done (514,549) loads the area.
+click 634 507
+wait 150
+checkpoint chapter
+click 514 549
+wait 150
+checkpoint world
+wait 300
+checkpoint world_settled
+# The opening dialog (Hedron, entry 0), as in console_cheats.txt.
+click 300 399
+wait 60
+click 340 437
+wait 60
+click 250 386
+wait 60
+click 280 437
+wait 60
+click 398 583
+wait 60
+click 250 399
+wait 120
+checkpoint opening_done
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+# Select the sorcerer (sole party member, slot 1).
+key 1
+wait 10
+checkpoint selected
+# ---- Walk l2: SETCURRENTXP(1000) -> level 2 ----
+# Fresh console box: nothing to clear before the first command.
+key CTRL+TAB
+wait 10
+type CTRLALTDELETE:SETCURRENTXP(1000)
+key RETURN
+wait 60
+checkpoint sor_l2_xp
+key CTRL+TAB
+wait 10
+# Console closed before key R: the record only opens over the
+# world screen (per-walk ESC + this close = the launch-3 lesson).
+key R
+wait 60
+checkpoint sor_l2_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: the class list; pick the sorcerer row (369,367).
+# CHECK: popup-54 class rows — launch 1 proved (369,403) is the wizard
+# slot (rows 0-8 are the nine standard classes, druid at 187 = row 3;
+# row 9 is the first specialist); (369,367) is one 36 px row up, the
+# ruling from the launch-1 shots.  The shot below shows the highlighted
+# row before Done commits it.
+click 369 367
+wait 10
+shot sor_l2_class
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points (INT 10 pool) onto cost-1
+# class skills — Alchemy + (477,93) x3, Concentration + (477,207)
+# x3 (extra clicks no-op once the pool is drained or the row is
+# capped; launch 1: (477,130) is Animal Empathy, disabled for a
+# sorcerer).  Done opens the gate (m_nExtraSkillPoints < 2).
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: level 2 grants no picks (SPLSRCKN row 2 == row 1), so no
+# spell tab opens here; the chain commits right after popup 55's
+# Done — nothing to click.
+wait 60
+checkpoint sor_l2_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l2_world
+
+# ---- Walk l3: SETCURRENTXP(3000) -> level 3 ----
+# 32 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(3000)
+key RETURN
+wait 60
+checkpoint sor_l3_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l3_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 56 (feats — levels 3/6/9/12): the + spray spends the
+# point on the first enabled row, Done.
+# CHECK: FEATCLAS rows for a sorcerer are unverified (the druid
+# never saw popup 56); one point per popup assumed — a second
+# point needs another spray + Done round.
+click 477 93
+wait 15
+click 477 130
+wait 15
+click 477 167
+wait 15
+click 477 204
+wait 15
+click 477 241
+wait 15
+click 477 278
+wait 15
+click 477 315
+wait 15
+click 477 352
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 3 - row 2 = +1 L1, ONE tab.  Pick the first
+# pickable L1 cell in LISTSPLL order: cell 0 SPWI103 (279,96); Done
+# (722,394) commits (a Done while the pick badge is up is ignored).
+click 279 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l3_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l3_world
+
+# ---- Walk l4: SETCURRENTXP(6000) -> level 4 ----
+# 32 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(6000)
+key RETURN
+wait 60
+checkpoint sor_l4_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l4_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 7 (abilities — levels 4/8/12): spend the point on the
+# first row.
+# CHECK: popup 7 + rows assumed on the shared GUIREC +/- pair,
+# first row (477,93); only popup 55 rows were proven in the druid
+# runs.
+click 477 93
+wait 15
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 4 = +1 L2, ONE tab.  The pick = SPWI217
+# Agannazzar's Scorcher, L2 list cell 0 (279,96) — a target spell;
+# Done (722,394) commits.
+click 279 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l4_leveled
+shot sor_l4_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l4_world
+
+# ---- Walk l5: SETCURRENTXP(10000) -> level 5 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(10000)
+key RETURN
+wait 60
+checkpoint sor_l5_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l5_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 5 - row 4 = +1 L1 +1 L2, TWO tabs ascending.
+# L1: SPWI104 (cell 1 — cell 0 SPWI103 is already known) at (322,96).
+# Done summons L2: SPWI222 (cell 1 — SPWI217 known) at (322,96);
+# the second Done commits.
+click 322 96
+wait 15
+click 722 394
+wait 30
+click 322 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l5_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l5_world
+
+# ---- Walk l6: SETCURRENTXP(15000) -> level 6 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(15000)
+key RETURN
+wait 60
+checkpoint sor_l6_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l6_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 56: the feat point via the + spray, Done.
+click 477 93
+wait 15
+click 477 130
+wait 15
+click 477 167
+wait 15
+click 477 204
+wait 15
+click 477 241
+wait 15
+click 477 278
+wait 15
+click 477 315
+wait 15
+click 477 352
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 6 = +1 L3, ONE tab.  SPWI323, L3 cell 0
+# (279,96); Done commits.
+click 279 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l6_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l6_world
+
+# ---- Walk l7: SETCURRENTXP(21000) -> level 7 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(21000)
+key RETURN
+wait 60
+checkpoint sor_l7_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l7_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 7 - row 6 = +1 L1 +1 L2 +1 L3, THREE tabs.
+# L1: SPWI117 (cell 2 — cells 0/1 plus the chargen pair known) at
+# (365,96).  L2: SPWI201 (cell 2 — SPWI217/SPWI222 known) at
+# (365,96).  L3: SPWI316 (cell 1 — SPWI323 known) at (322,96).
+# Done after each pick summons the next tab; the last Done commits.
+click 365 96
+wait 15
+click 722 394
+wait 30
+click 365 96
+wait 15
+click 722 394
+wait 30
+click 322 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l7_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l7_world
+
+# ---- Walk l8: SETCURRENTXP(28000) -> level 8 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(28000)
+key RETURN
+wait 60
+checkpoint sor_l8_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l8_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 7: one ability point onto the first + row (477,93), Done.
+click 477 93
+wait 15
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 8 = +1 L4, ONE tab.  SPWI417, L4 cell 0
+# (279,96); Done commits.
+click 279 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l8_leveled
+shot sor_l8_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l8_world
+
+# ---- Walk l9: SETCURRENTXP(36000) -> level 9 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(36000)
+key RETURN
+wait 60
+checkpoint sor_l9_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l9_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 56: the feat point via the + spray, Done.
+click 477 93
+wait 15
+click 477 130
+wait 15
+click 477 167
+wait 15
+click 477 204
+wait 15
+click 477 241
+wait 15
+click 477 278
+wait 15
+click 477 315
+wait 15
+click 477 352
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 9 - row 8 = +1 L2 +1 L3 +1 L4, THREE tabs.
+# L2: SPWI214 (cell 3 — cells 0-2 known) at (408,96).  L3: SPWI302
+# (cell 2 — cells 0/1 known) at (365,96).  L4: SPWI401 (cell 2 —
+# SPWI417 known) at (365,96).  Done after each pick; the last
+# Done commits.
+click 408 96
+wait 15
+click 722 394
+wait 30
+click 365 96
+wait 15
+click 722 394
+wait 30
+click 365 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l9_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l9_world
+
+# ---- Walk l10: SETCURRENTXP(45000) -> level 10 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(45000)
+key RETURN
+wait 60
+checkpoint sor_l10_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l10_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 10 = +1 L5, ONE tab.  SPWI501, L5 cell 0
+# (279,96); Done commits.
+click 279 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l10_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l10_world
+
+# ---- Walk l11: SETCURRENTXP(55000) -> level 11 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(55000)
+key RETURN
+wait 60
+checkpoint sor_l11_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l11_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 11 - row 10 = +1 L2 +1 L3 +1 L4 +1 L5, FOUR
+# tabs.  L2: SPWI223 (cell 4 — cells 0-3 known) at (451,96).  L3:
+# SPWI304 (cell 3 — cells 0-2 known) at (408,96).  L4: SPWI425
+# (cell 3 — SPWI417/SPWI401 known) at (408,96).  L5: SPWI525
+# (cell 1 — SPWI501 known) at (322,96).  Done after each pick; the
+# last Done commits.
+click 451 96
+wait 15
+click 722 394
+wait 30
+click 408 96
+wait 15
+click 722 394
+wait 30
+click 408 96
+wait 15
+click 722 394
+wait 30
+click 322 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l11_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l11_world
+
+# ---- Walk l12: SETCURRENTXP(66000) -> level 12 ----
+# 33 BACKs clear the line the console keeps after RETURN.
+key CTRL+TAB
+wait 10
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type CTRLALTDELETE:SETCURRENTXP(66000)
+key RETURN
+wait 60
+checkpoint sor_l12_xp
+key CTRL+TAB
+wait 10
+key R
+wait 60
+checkpoint sor_l12_record
+
+# Level Up on the record.
+click 713 391
+wait 30
+# Popup 54: sorcerer row (369,367).
+click 369 367
+wait 10
+click 722 394
+wait 30
+# Popup 7: one ability point onto the first + row (477,93), Done.
+click 477 93
+wait 15
+click 722 394
+wait 30
+# Popup 55: drain the 2 skill points on Alchemy + Concentration, Done.
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 93
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 477 207
+wait 15
+click 722 394
+wait 30
+# Popup 56: the feat point via the + spray, Done.
+click 477 93
+wait 15
+click 477 130
+wait 15
+click 477 167
+wait 15
+click 477 204
+wait 15
+click 477 241
+wait 15
+click 477 278
+wait 15
+click 477 315
+wait 15
+click 477 352
+wait 15
+click 722 394
+wait 30
+# Popup 8: SPLSRCKN row 12 = +1 L6, ONE tab.  The pick = SPWI603
+# Chain Lightning, L6 list cell 4 (451,96) — a target spell; Done
+# commits level 12.
+click 451 96
+wait 15
+click 722 394
+wait 30
+wait 60
+checkpoint sor_l12_leveled
+shot sor_l12_leveled
+key ESCAPE
+wait 30
+checkpoint sor_l12_world
+
+# All 11 walks done (66000 = the level-12 threshold).  Verify the level
+# on a fresh record open, then export (druid pattern).
+key R
+wait 60
+checkpoint sor_level_check
+# Export (314,373) -> popup 13.  ResetExportPanel sets the edit EMPTY
+# (src/CScreenCharacter.cpp:1088); type Ryssc12C.  Done (467,465) then hits
+# the "Overwrite existing character?" prompt (popup 10 — the typed name
+# upper-cases onto the stale attempt-1 RYSSC12C.CHR), so Overwrite
+# (click 329 291, src/CScreenCharacter.cpp:7335/7374
+# CharacterExport(nCharacterId, field_176E)) writes the live level-12
+# marshal over RYSSC12C.CHR in the oracle game copy Characters folder
+# (CInfGame::CharacterExport, src/CInfGame.cpp:3049).
+click 314 373
+wait 30
+checkpoint export_popup
+shot export_popup
+click 397 283
+wait 30
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+key BACK
+wait 3
+type Ryssc12C
+wait 15
+click 467 465
+wait 90
+checkpoint exported
+shot exported
+# Overwrite the stale RYSSC12C on popup 10 (attempt-3 ruling).
+click 329 291
+wait 60
+checkpoint world_end
+quit

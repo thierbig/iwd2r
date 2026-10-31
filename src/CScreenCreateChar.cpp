@@ -5671,6 +5671,11 @@ void CScreenCreateChar::OnDoneButtonClick()
                     delete m_pCharacters;
                     m_pCharacters = NULL;
 
+                    // NOTE: ImportCharacter changed m_nGameSprite; the exe
+                    //  reloads its local here (0x616BAB) so the releases below
+                    //  target the imported sprite, not the deleted one.
+                    nGameSprite = m_nGameSprite;
+
                     BYTE rc;
                     do {
                         rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_nGameSprite,

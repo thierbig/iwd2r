@@ -2317,7 +2317,10 @@ INT CRuleTables::GetMaxDruidShapeshifts(CCreatureFileHeader& BStats, INT nLevel)
     INT nShapeshifts = 0;
 
     if (BStats.m_druidLevel != 0) {
-        nShapeshifts = atol(m_tMaxDruidShapeshifts.GetAt(CPoint(nLevel - 1, 0)));
+        // NOTE: GetAt's CPoint is (column, row): the level selects the ROW,
+        // the column is 0 (the exe's inlined GetAt at 0x543770 strides
+        // nLevel - 1 by m_nSizeX and bounds it by m_nSizeY).
+        nShapeshifts = atol(m_tMaxDruidShapeshifts.GetAt(CPoint(0, nLevel - 1)));
 
         if (nShapeshifts != 0) {
             nShapeshifts += BStats.m_featExtraShapeshifting;

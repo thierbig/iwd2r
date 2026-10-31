@@ -26565,6 +26565,9 @@ class ChrFixtureTest(unittest.TestCase):
     checkpoint reads level 7 back in the world.  Offsets: CHR = 0x224-byte
     header + CRE, baseStats at CRE+8 (src/CInfGame.cpp:3049,
     src/CGameSprite.cpp:7928).
+
+    The Task 53 sorcerer 12 export (RYSSC12C.CHR, run 20261030-213848) is
+    pinned by test_raised_sorcerer_export.
     """
 
     def test_raised_druid_export(self):
@@ -26583,6 +26586,61 @@ class ChrFixtureTest(unittest.TestCase):
                          [11, 10, 12, 12, 8, 10])
         self.assertEqual({i: v for i, v in enumerate(d[0x43C:0x43C + 64])
                           if v}, {0: 1, 1: 5, 2: 1, 3: 5, 4: 1, 5: 1, 6: 1})
+
+    def test_raised_sorcerer_export(self):
+        """scenarios/chr/RYSSC12C.CHR — the Task 53 console-raised sorcerer 12.
+
+        Run 20261030-213848 (attempt 3) raised the chargen sorcerer with one
+        CTRLALTDELETE:SETCURRENTXP(66000) (the XPLEVEL.2DA level-12
+        threshold) and one eleven-level walk, then exported as `Ryssc12C`:
+        Done lands on the "Overwrite existing character?" popup and Overwrite
+        (329,291) writes the live level-12 marshal over the stale attempt-1
+        RYSSC12C.CHR (CInfGame::CharacterExport, src/CInfGame.cpp:3049).
+        Known spells: CCreatureFileOffsets sits at CRE+900 with
+        m_spellListOffset/m_spellListCount [7][9] at +0x36/+0x132
+        (src/FileFormat.h:614, written at src/CGameSprite.cpp:8027-8044);
+        each offset is CRE-relative, count x 16-byte CCreatureFileSpell,
+        first UINT = the spell ID (0-based LISTSPLL.2DA data row,
+        src/CInfGame.cpp:11474).  The sorcerer is class index 5.
+        """
+        with open(os.path.join(ROOT, 'scenarios', 'chr', 'RYSSC12C.CHR'),
+                  'rb') as f:
+            d = f.read()
+        self.assertEqual(len(d), 3174)
+        self.assertEqual(d[:8], b'CHR V2.2')
+        self.assertEqual(d[8:40].split(b'\0')[0], b'Ryssc12')
+        self.assertEqual(struct.unpack_from('<I', d, 0x23C)[0], 66000)  # xp
+        self.assertEqual(struct.unpack_from('<hh', d, 0x248), (48, 48))  # hp
+        self.assertEqual(d[0x2AE], 12)  # characterLevel
+        self.assertEqual(d[0x2AF + 9], 12)  # classLevels[sorcerer]
+        self.assertEqual(d[0x2AF + 10], 0)  # no wizard strays (attempt 1's bug)
+        # STR INT WIS DEX CON CHA; skills: Alchemy 11, Concentration 4.
+        self.assertEqual([d[0x48A + i] for i in range(6)],
+                         [13, 10, 10, 12, 8, 10])
+        self.assertEqual({i: v for i, v in enumerate(d[0x43C:0x43C + 64])
+                          if v}, {0: 11, 3: 4})
+        cre, base = 0x224, 0x224 + 900
+        lists = {}
+        for nclass in range(7):
+            for nlevel in range(9):
+                i = 9 * nclass + nlevel
+                off = struct.unpack_from('<I', d, base + 0x36 + 4 * i)[0]
+                cnt = struct.unpack_from('<I', d, base + 0x132 + 4 * i)[0]
+                ids = [struct.unpack_from('<I', d, cre + off + 16 * k)[0]
+                       for k in range(cnt)]
+                if ids:
+                    lists[(nclass, nlevel)] = ids
+        # The plan's four target spells — SPWI119=169 and SPWI226=226 (L1),
+        # SPWI217=4 (L2), SPWI603=32 (L6) — plus the SPLSRCKN auto-grants;
+        # every non-sorcerer class list is empty.
+        self.assertEqual(lists, {
+            (5, 0): [169, 226, 27, 37, 39],
+            (5, 1): [4, 22, 25, 26, 31],
+            (5, 2): [23, 82, 85, 107],
+            (5, 3): [17, 49, 63],
+            (5, 4): [9, 13],
+            (5, 5): [32],
+        })
 
 
 if __name__ == '__main__':

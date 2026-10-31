@@ -137,6 +137,10 @@ The guards in `src/render/api.h` leave these for the renderer that first draws t
 - Store and character files now load (their byte-reversed signature checks were fixed), and so do EFF and cell-header resources. The three apply-EFF effects (177, 182, 183) now apply EFF files and draw `rand()`; an EFF holding an effect id `DecodeEffect` does not know dereferences NULL, as in the original.
 - `CBaldurChitin::AllocResObject` has no special class for resource types 1021 and 1022 (the biography); `ImportCharacter` works around it.
 
+## Chargen multiplayer branch (from the 2026-10-30 import fixes)
+
+- **OnDoneButtonClick (0x615F50) lacks its multiplayer status calls.** The exe calls `CMultiplayerSettings::GetCharacterStatus` (0x518B60) and `SignalCharacterStatus` (0x518BA0) on the Done path; our body has neither (parity asm, waived as pre-existing in docs/evidence/615F50.md). Single-player is unaffected.
+
 ## Save and load screens (from project 3, milestone 4, save-screens)
 
 - `CMoveList::Marshal` (0x5170F0), now called by `CInfGame::SaveGame`, still has a TODO to add the sprite id to the area's `field_AAA` (src/CMoveList.cpp); until it is ported a creature with a pending move is not saved with the master area.
