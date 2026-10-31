@@ -318,6 +318,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STOP_ESCAPE_AREA = 82;
 // 0x84CF2C
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TIME_STOP = 85;
 
+// 0x84CF2D
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX = 86;
+
 // 0x84CF2E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_RELEASE = 87;
 
@@ -19025,6 +19028,12 @@ SHORT CMessageProjectileTrailingVFX::GetCommType()
 BYTE CMessageProjectileTrailingVFX::GetMsgType()
 {
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x4F6A70
+BYTE CMessageProjectileTrailingVFX::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX;
 }
 
 // 0x511D00
