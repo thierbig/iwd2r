@@ -108,9 +108,6 @@ public:
 // AIUpdate 0x57B210, Render 0x57B780, Fire 0x57B1D0, and DeliverEffects —
 // slot 0x0078 holds 0x799CA0, CProjectileArea85072C::OnArrival, an empty
 // function MSVC ICF-folded with this class's equally empty DeliverEffects.
-// Render is still a parked i047 row (0x57B780), so that override is a
-// declaration only; nothing instantiates this class, which keeps it
-// link-safe.
 class IcewindCProjectileScorcher : public CProjectileSingleTarget {
 public:
     // 0x57B080. Scalar deleting dtor: the delete branch calls
@@ -119,7 +116,7 @@ public:
     /* 0000 */ ~IcewindCProjectileScorcher() override;
     // 0x57B210.
     /* 000C */ void AIUpdate() override;
-    // 0x57B780 (parked i047).
+    // 0x57B780.
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
     // 0x57B1D0: marshals the seven arguments, calls the base Fire at
     // 0x5791D0, stores +0x2D2, then invokes slot 0x0078.

@@ -927,6 +927,75 @@ void IcewindCProjectileScorcher::AIUpdate()
     m_sound.SetCoordinates(m_pos.x, m_pos.y, m_posZ);
 }
 
+// 0x57B780
+void IcewindCProjectileScorcher::Render(CGameArea* pArea, CVidMode* pVidMode, int nSurface)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\IcewindCProjectiles.cpp
+    // __LINE__: 207
+    if (pVidMode == NULL) {
+        CUtil::UtilAssert(207, "C:\\Projects\\Icewind2\\src\\Baldur\\IcewindCProjectiles.cpp", "pVidMode != NULL", NULL);
+    }
+
+    CInfinity* pInfinity = m_pArea->GetInfinity();
+    DWORD flags = 0x200;
+    if (CGameSprite::DIR_N < field_1DA) {
+        flags |= CInfinity::MIRROR_FX;
+    }
+    if (CGameSprite::DIR_W < field_1DA && field_1DA < CGameSprite::DIR_E) {
+        flags |= CInfinity::MIRROR_FX_UPDOWN;
+    }
+    CRect viewport(pInfinity->nCurrentX, pInfinity->nCurrentY,
+        pInfinity->nCurrentX + pInfinity->rViewPort.Width(),
+        pInfinity->nCurrentY + pInfinity->rViewPort.Height());
+    CPoint point(m_pos.x, m_pos.y - m_posZ + m_pArea->GetHeightOffset(m_pos, m_listType));
+    CPoint reference;
+    CSize size;
+    m_animation->GetCurrentCenterPoint(reference, FALSE);
+    m_animation->GetCurrentFrameSize(size, FALSE);
+    CRect bounds;
+    bounds.SetRect(0, 0, size.cx, size.cy);
+    for (BYTE index = 0; index < m_nSegments; ++index) {
+        SHORT tile = static_cast<SHORT>(static_cast<SHORT>(point.y / CVisibilityMap::SQUARE_SIZEY)
+            * m_pArea->m_visibility.m_nWidth + point.x / CVisibilityMap::SQUARE_SIZEX);
+        if (!m_pArea->m_visibility.IsTileVisible(tile)) {
+            continue;
+        }
+        CRect gcBounds;
+        gcBounds.left = CGameSprite::DIR_N < field_1DA
+            ? reference.x - bounds.right + point.x + bounds.left : point.x - reference.x;
+        gcBounds.top = CGameSprite::DIR_W < field_1DA && field_1DA < CGameSprite::DIR_E
+            ? bounds.top - bounds.bottom + reference.y + point.y : point.y - reference.y;
+        gcBounds.right = gcBounds.left + bounds.Width();
+        gcBounds.bottom = gcBounds.top + bounds.Height();
+        CRect intersection;
+        intersection.IntersectRect(gcBounds, viewport);
+        if (intersection.IsRectEmpty()) {
+            continue;
+        }
+        flags |= CInfinity::FXPREP_COPYFROMBACK;
+        pInfinity->FXPrep(bounds, flags, nSurface, point, reference);
+        if (pInfinity->FXLock(bounds, flags)) {
+            pInfinity->FXRender(m_animation, reference.x, reference.y, flags, 0);
+            pInfinity->FXRenderClippingPolys(point.x, point.y, 0, reference, gcBounds, FALSE, flags);
+            pInfinity->FXUnlock(flags, NULL, CPoint(0, 0));
+            pInfinity->FXBltFrom(nSurface, bounds, point.x, point.y, reference.x, reference.y, flags);
+        }
+        INT step = index + 1;
+        point.x = static_cast<LONG>(static_cast<DWORD>(m_deltaX) * step + static_cast<DWORD>(m_posExactX))
+            >> CGameSprite::EXACT_SCALE;
+        LONG scaledY = static_cast<LONG>((static_cast<DWORD>(m_deltaY) * step + static_cast<DWORD>(m_posExactY)) * 3);
+        point.y = ((scaledY / 4) >> CGameSprite::EXACT_SCALE) - m_posZ
+            + m_pArea->GetHeightOffset(m_pos, m_listType);
+        if (m_deltaZ > 0) {
+            point.y -= step < m_deltaZ ? step : m_deltaZ;
+        } else if (m_deltaZ < 0) {
+            LONG delta = static_cast<LONG>(0u - static_cast<DWORD>(m_deltaZ));
+            point.y = static_cast<LONG>(static_cast<DWORD>(point.y)
+                + static_cast<DWORD>(step < delta ? step : delta));
+        }
+    }
+}
+
 // 0x57BBC0
 void IcewindCProjectileScorcher::InitializeOffsets()
 {
