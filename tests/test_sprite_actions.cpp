@@ -1978,13 +1978,6 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
 // specifics, queued as a CMessageSetTrigger; the handler answers
 // ACTION_DONE.
 TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][data]")
-// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
-// own dialog with the target without Dialog's distance/LOS checks. Action
-// 137 takes the dialog resource from the action (the actor's m_dialog),
-// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
-// talk, the world screen opens the dialog, and the handler is done. A
-// charmed actor, or one of the two unable to speak, is an error.
-TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
 {
     if (DataDir() == nullptr) {
         SKIP("[iwd2r-skip] IWD2_DATA unset");
@@ -2037,6 +2030,23 @@ TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the t
         }
     }
     CHECK(bHeard);
+}
+
+// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
+// own dialog with the target without Dialog's distance/LOS checks. Action
+// 137 takes the dialog resource from the action (the actor's m_dialog),
+// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
+// talk, the world screen opens the dialog, and the handler is done. A
+// charmed actor, or one of the two unable to speak, is an error.
+TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
     std::vector<BYTE> cre = FinishedCharacter();
     if (cre.empty()) {
         SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
