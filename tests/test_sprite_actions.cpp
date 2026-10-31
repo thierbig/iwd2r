@@ -1884,3 +1884,122 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
         CHECK(pLevelList->field_18 == 2);
     }
 }
+
+TEST_CASE("sprite: RemoveSpell erases the action's spell from its list", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // A character that owns the spell lists (the Rest test's search); the
+    // entries the test removes are added to its lists below, so the shipped
+    // data only supplies the character and the game's spell table.
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        BOOL bHasSpells = !pProbe->m_innateSpells.m_List.empty();
+        for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES && !bHasSpells; nClass++) {
+            const CGameSpriteGroupedSpellList& spells = pProbe->m_spells.m_spellsByClass[nClass];
+            for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel && !bHasSpells; nLevel++)
+                bHasSpells = !spells.m_lists[nLevel].m_List.empty();
+        }
+        for (UINT nLevel = 0; nLevel < pProbe->m_domainSpells.m_nHighestLevel && !bHasSpells; nLevel++)
+            bHasSpells = !pProbe->m_domainSpells.m_lists[nLevel].m_List.empty();
+        delete pProbe;
+        if (bHasSpells) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with spells, domains or innates");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // A normal spell of the game's table (GetSpellType 1): a memorized spell
+    // is added to the bard list (index 0) and the same id to the domain list,
+    // so both case-1 removals are deterministic.
+    UINT nSpellId = 0;
+    CResRef resRef;
+    for (UINT nIndex = 0; nIndex < pGame->m_spells.m_nCount; nIndex++) {
+        UINT nCandidate = nIndex;
+        const CResRef& candidate = pGame->m_spells.Get(nCandidate);
+        if (candidate.IsValid() && pGame->GetSpellType(candidate) == 1) {
+            nSpellId = nIndex;
+            resRef = candidate;
+            break;
+        }
+    }
+    if (!resRef.IsValid()) {
+        SKIP("[iwd2r-skip] the spell table has no normal spell");
+    }
+
+    // The memorized path: a class entry with one available memorization;
+    // sub_727720 only finds entries whose field_8 is above zero.
+    CGameSpriteGroupedSpellList& classList = pCharacter->m_spells.m_spellsByClass[0];
+    REQUIRE(classList.Add(nSpellId, 0, 0, 1, 0) == TRUE);
+    const size_t nClassBefore = classList.m_lists[0].m_List.size();
+
+    pCharacter->m_curAction = CAIAction::NULL_ACTION;
+    pCharacter->m_curAction.SetString1(resRef.GetResRefStr());
+    CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+    CHECK(classList.m_lists[0].m_List.size() == nClassBefore - 1);
+    for (const CGameSpriteSpellListEntry& entry : classList.m_lists[0].m_List) {
+        CHECK(entry.m_nID != nSpellId);
+    }
+
+    // The domain path: the same id only in the domain list, with a specialist
+    // mask (sub_727720 reports the domain entry's specialization; the handler
+    // then removes it from the domain list as well). RemoveDomainSpell only
+    // acts for a cleric, and the built-in data's caster here is not one.
+    if (pCharacter->m_derivedStats.HasClass(CAIOBJECTTYPE_C_CLERIC)) {
+        CGameSpriteGroupedSpellList& domainList = pCharacter->m_domainSpells;
+        REQUIRE(domainList.Add(nSpellId, 0, 0, 1, 0) == TRUE);
+        // The domain scan reports the cleric class; the memorized removal for
+        // it asserts unless that list covers level 0 (the original expects a
+        // cleric to have one).
+        pCharacter->m_spells.m_spellsByClass[1].m_nHighestLevel = 1;
+        pCharacter->m_baseStats.m_specialization = 1;
+        const size_t nDomainBefore = domainList.m_lists[0].m_List.size();
+
+        pCharacter->m_curAction = CAIAction::NULL_ACTION;
+        pCharacter->m_curAction.SetString1(resRef.GetResRefStr());
+        CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+        CHECK(domainList.m_lists[0].m_List.size() == nDomainBefore - 1);
+    }
+
+    // The innate path, when the character has an innate entry.
+    if (!pCharacter->m_innateSpells.m_List.empty()) {
+        UINT nInnateId = pCharacter->m_innateSpells.m_List.front().m_nID;
+        pCharacter->m_innateSpells.m_List.front().field_8 = 1;
+        const CResRef& innateResRef = pGame->GetInnateSpells()->Get(nInnateId);
+        REQUIRE(innateResRef.IsValid());
+        const size_t nInnateBefore = pCharacter->m_innateSpells.m_List.size();
+
+        pCharacter->m_curAction = CAIAction::NULL_ACTION;
+        pCharacter->m_curAction.SetString1(innateResRef.GetResRefStr());
+        CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_innateSpells.m_List.size() == nInnateBefore - 1);
+    }
+
+    // The id path with nothing to decode answers ACTION_ERROR.
+    pCharacter->m_curAction = CAIAction::NULL_ACTION;
+    pCharacter->field_588 = 0;
+    pCharacter->m_curAction.m_specificID = 0;
+    CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_ERROR);
+}
