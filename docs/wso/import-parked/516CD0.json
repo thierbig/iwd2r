@@ -1,0 +1,7 @@
+{
+  "address": "0x516CD0",
+  "name": "CMessageSpellLevelImmumityUpdate::CMessageSpellLevelImmumityUpdate",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "Not measurable on its own: no scenario that the batch's measurements ran ever builds a CMessageSpellLevelImmumityUpdate. Parked with its dependencies, imported with the batch and parked back to the merge base's text alongside it: row 0x40A0E0 CMessageSpellLevelImmumityUpdate::GetMsgType, and twin row 0x516D40 CMessageProjectileImmumityUpdate::GetMsgSubType (the exe folds both classes' GetMsgSubType into the one address, subtype 104). The class stays declared for its kept rows (0x4B2340 dtor, 0x4088A0 GetCommType, 0x516D50 MarshalMessage, 0x516E90 UnmarshalMessage, 0x516F10 Run), whose defined dtor serves as the key function for its emitted vtable."
+}

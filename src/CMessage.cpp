@@ -17271,15 +17271,6 @@ void CMessageWeaponImmumityUpdate::Run()
 
 // -----------------------------------------------------------------------------
 
-// 0x516CD0
-CMessageSpellLevelImmumityUpdate::CMessageSpellLevelImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target)
-    : CMessage(caller, target)
-{
-    if (pSprite != NULL) {
-        m_spellLevelImmunities = pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel;
-    }
-}
-
 // 0x4B2340
 CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate()
 {

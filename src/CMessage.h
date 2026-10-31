@@ -1775,7 +1775,6 @@ public:
 
 class CMessageSpellLevelImmumityUpdate : public CMessage {
 public:
-    CMessageSpellLevelImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target);
     ~CMessageSpellLevelImmumityUpdate() override;
     SHORT GetCommType() override;
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
