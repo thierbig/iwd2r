@@ -17265,14 +17265,6 @@ void CMessageWeaponImmumityUpdate::Run()
 
 // -----------------------------------------------------------------------------
 
-// 0x4088A0
-SHORT CMessageSpellLevelImmumityUpdate::GetCommType()
-{
-    return BROADCAST_OTHERS;
-}
-
-// -----------------------------------------------------------------------------
-
 // 0x4F6D80
 CMessage103::CMessage103(BOOLEAN a1, PLAYER_ID idPlayer, INT nPortrait, LONG caller, LONG target)
     : CMessage(caller, target)
@@ -18952,12 +18944,6 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
-// 0x4088A0
-SHORT CMessageProjectileTrailingVFX::GetCommType()
-{
-    return BROADCAST_OTHERS;
-}
-
 // 0x511D00
 void CMessageProjectileTrailingVFX::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19076,12 +19062,6 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     cnt += sizeof(LONG);
     m_launchHeight = *reinterpret_cast<SHORT*>(pData + cnt);
     return TRUE;
-}
-
-// 0x4088A0
-SHORT CMessageProjectileImmumityUpdate::GetCommType()
-{
-    return BROADCAST_OTHERS;
 }
 
 // 0x515010
