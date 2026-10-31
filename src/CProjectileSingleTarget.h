@@ -108,16 +108,16 @@ public:
 // AIUpdate 0x57B210, Render 0x57B780, Fire 0x57B1D0, and DeliverEffects —
 // slot 0x0078 holds 0x799CA0, CProjectileArea85072C::OnArrival, an empty
 // function MSVC ICF-folded with this class's equally empty DeliverEffects.
-// AIUpdate and Render are parked i047 rows 0x57B210/0x57B780, so the base
-// overrides are declarations only; nothing instantiates this class, which
-// keeps them link-safe.
+// Render is still a parked i047 row (0x57B780), so that override is a
+// declaration only; nothing instantiates this class, which keeps it
+// link-safe.
 class IcewindCProjectileScorcher : public CProjectileSingleTarget {
 public:
     // 0x57B080. Scalar deleting dtor: the delete branch calls
     // operator_delete 0x7FC984, the body at 0x57B0A0 tears down the
     // std::set member.
     /* 0000 */ ~IcewindCProjectileScorcher() override;
-    // 0x57B210 (parked i047).
+    // 0x57B210.
     /* 000C */ void AIUpdate() override;
     // 0x57B780 (parked i047).
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
@@ -140,9 +140,18 @@ public:
     /* 0088 */ virtual void GatherTargets();
     /* 008C */ virtual void Strike(LONG target, BYTE initial);
 
+    /* 02AE */ BYTE m_lifeSpan;
+    /* 02AF */ BYTE m_nSegments;
+    /* 02B0 */ LONG m_deltaZ;
+
     // The ids this wave has already struck (exe std::set internals: _Myhead
     // 0x2BA, _Multi 0x2BE, NIL sentinel 0x8E28C8).
     /* 02B6 */ std::set<DWORD> m_struckTargets;
+
+    /* 02C6 */ LONG m_tickCount;
+    /* 02CA */ LONG m_strikePeriod;
+    /* 02CE */ LONG m_clearPeriod;
+    /* 02D2 */ LONG m_strikeTarget;
 };
 
 #endif /* CPROJECTILESINGLETARGET_H_ */
