@@ -7343,6 +7343,12 @@ CMessageRemoveItem::CMessageRemoveItem(SHORT slot, LONG caller, LONG target)
     m_slot = slot;
 }
 
+// 0x40A0D0
+SHORT CMessageRemoveItem::GetCommType()
+{
+    return SEND;
+}
+
 // 0x464180
 CMessageAddItem::~CMessageAddItem()
 {
