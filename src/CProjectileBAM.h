@@ -53,6 +53,19 @@ public:
     /* 02A1 */ BYTE field_2A1;
 };
 
+// The sparkle-burst projectile: Explode decodes the child projectile its
+// sparkle colour maps to (types 196 to 203) and fires it at the target
+// (vtable 0x84D938, which sits immediately before CProjectileBAM's).
+// NOTE: The exe's vtable for this class overrides Fire too (slot 0x6C
+// -> 0x52D9F0, shared with the sibling class at vtable 0x84DC68 — the
+// exploding-projectile intermediate whose ctor 0x52CCE0 this class's
+// ctor 0x5297B0 calls). That Fire override is not part of batch i058,
+// so ours inherits CProjectileBAM::Fire.
+class CProjectileSparkleExplosion : public CProjectileBAM {
+public:
+    /* 0088 */ virtual void Explode();
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {

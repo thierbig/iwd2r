@@ -732,6 +732,49 @@ void CProjectileBAM::UpdateBasedOnTargetPoint(LONG x, LONG y)
     }
 }
 
+// 0x52E160
+void CProjectileSparkleExplosion::Explode()
+{
+    WORD nChildType;
+    switch (m_nSparkleColour) {
+    case 1:
+    case 9:
+    case 10:
+        nChildType = 0xC4;
+        break;
+    case 2:
+        nChildType = 0xC5;
+        break;
+    case 3:
+    case 11:
+        nChildType = 0xC8;
+        break;
+    case 4:
+        nChildType = 0xC6;
+        break;
+    case 5:
+        nChildType = 0xC7;
+        break;
+    case 6:
+        nChildType = 0xC9;
+        break;
+    case 7:
+    case 8:
+        nChildType = 0xCA;
+        break;
+    case 12:
+        nChildType = 0xCB;
+        break;
+    default:
+        return;
+    }
+
+    CProjectile* pChild = DecodeProjectile(nChildType, NULL, 0);
+    if (pChild != NULL) {
+        pChild->Fire(m_pArea, m_sourceId, m_targetId, m_targetPos, 30, m_nSparkleColour);
+    }
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x5300E0
