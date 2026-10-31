@@ -177,6 +177,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PLAY_SOUND = 32;
 // 0x84CEF8
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PLAY_SOUND_REF = 33;
 
+// 0x84CEF9
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM = 34;
+
 // 0x84CEFA
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_REPLIES = 35;
 
@@ -7353,6 +7356,12 @@ SHORT CMessageRemoveItem::GetCommType()
 BYTE CMessageRemoveItem::GetMsgType()
 {
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x4641F0
+BYTE CMessageRemoveItem::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM;
 }
 
 // 0x464180
