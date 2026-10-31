@@ -19229,11 +19229,6 @@ CMessageProjectileImmumityUpdate::CMessageProjectileImmumityUpdate(CGameSprite* 
     }
 }
 
-// 0x514FF0
-CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
-{
-}
-
 // 0x4088A0
 SHORT CMessageProjectileImmumityUpdate::GetCommType()
 {

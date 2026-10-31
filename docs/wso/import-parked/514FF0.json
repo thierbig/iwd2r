@@ -1,0 +1,7 @@
+{
+  "address": "0x514FF0",
+  "name": "CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised. A dependency imported with the batch; parked with it: row 0x514F60 CMessageProjectileImmumityUpdate"
+}
