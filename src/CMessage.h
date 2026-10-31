@@ -1983,18 +1983,18 @@ public:
         const CPoint& launch, CPoint targetPoint, SHORT launchHeight,
         LONG caller, LONG target);
 
-    SHORT GetCommType() override;       // returns BROADCAST_OTHERS (3)
+    SHORT GetCommType() override; // returns BROADCAST_OTHERS (3)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
 
     // The caller is the projectile's ID before Fire registers it.
-    /* 000C */ CResRef m_resRef;        // resource name from field_17E (8 bytes)
-    /* 0014 */ CString m_resRef2;       // area resource name
-    /* 0018 */ LONG m_launchX;          // launch position x
-    /* 001C */ LONG m_launchY;          // launch position y
-    /* 0020 */ LONG m_targetX;          // original Fire target point x
-    /* 0024 */ LONG m_targetY;          // original Fire target point y
-    /* 0028 */ SHORT m_launchHeight;    // launch height (from DetermineHeight, SHORT copy)
+    /* 000C */ CResRef m_resRef; // resource name from field_17E (8 bytes)
+    /* 0014 */ CString m_resRef2; // area resource name
+    /* 0018 */ LONG m_launchX; // launch position x
+    /* 001C */ LONG m_launchY; // launch position y
+    /* 0020 */ LONG m_targetX; // original Fire target point x
+    /* 0024 */ LONG m_targetY; // original Fire target point y
+    /* 0028 */ SHORT m_launchHeight; // launch height (from DetermineHeight, SHORT copy)
 };
 
 // A message replacing a sprite's projectile immunities before a projectile
