@@ -626,6 +626,8 @@ public:
     SHORT MoveToPoint(const CPoint& dest, LONG range);
     SHORT Dialog(CGameSprite* pTarget);
     SHORT PlayerDialog(CGameSprite* pTarget);
+    SHORT Interact(CGameSprite* pTarget);
+    SHORT StartDialog(CGameSprite* pTarget);
     SHORT UseDoor();
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
@@ -667,6 +669,7 @@ public:
     SHORT sub_75F3D0(int a1);
     SHORT LeaveArea();
     SHORT LeaveAreaName();
+    SHORT Help();
     SHORT Rest();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
     SHORT ForceHide(CGameSprite* pSprite);

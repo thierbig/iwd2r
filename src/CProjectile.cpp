@@ -1153,7 +1153,7 @@ void IcewindCProjectileScorcher::Strike(LONG target, BYTE initial)
     objects->ReleaseShare(m_sourceId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
 }
 
-// 0x799CA0. The exe's function is a bare `ret`: MSVC ICF-folded it with
+// NOTE: The original's slot holds 0x799CA0, a bare `ret`: MSVC ICF-folded it with
 // CProjectileArea85072C::OnArrival (also empty), and the Scorcher's
 // vtable slot 0x0078 points here.
 void IcewindCProjectileScorcher::DeliverEffects()

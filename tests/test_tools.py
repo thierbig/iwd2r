@@ -9600,6 +9600,65 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, brief)
         self.assertNotIn('oracle mismatch', brief)
 
+    def test_wave_brief_carries_a_rows_recall(self):
+        # Task 64: an import row's brief quotes what the tree already records
+        # about it -- its evidence front matter at the base and why an earlier
+        # batch parked it -- so the worker does not rediscover it
+        self.write_disagreements(_WAVE_ROWS[:2])
+        self.next(size=2)
+        repo = os.path.join(self.tmp, 'repo')
+        os.makedirs(os.path.join(repo, 'docs', 'evidence'), exist_ok=True)
+        os.makedirs(os.path.join(repo, 'docs', 'wso', 'import-parked'),
+                    exist_ok=True)
+        _write(os.path.join(repo, 'docs', 'evidence', '643CC0.md'),
+               '---\naddress: 0x643CC0\nname: Render\nkind: trace\n'
+               'exemption: ' + 'x' * 250 + '\n'
+               'parity_waiver: reads a static the fork moved\n---\n')
+        _write(os.path.join(repo, 'docs', 'wso', 'import-parked', '643CD0.json'),
+               json.dumps({'address': '0x643CD0', 'name': 'Draw',
+                           'file': 'src/A.cpp', 'batch': 'i003',
+                           'needs': 'the draw path measured'}))
+        self.git('init', '-q', '-b', 'first', cwd=repo)
+        self.git('add', '-A', cwd=repo)
+        self.git('commit', '-qm', 'evidence and a parked row', cwd=repo)
+        # an earlier closed batch unparked Render
+        with open(self.state) as f:
+            state = json.load(f)
+        state['batches']['i009'] = {
+            'status': 'closed',
+            'rows': [],
+            'unparked': [dict(_WAVE_ROWS[0], at='2026-10-30T10:00:00+00:00',
+                              reason='rule 4: waiting on the fork note',
+                              needs='a frida trace')],
+        }
+        with open(self.state, 'w') as f:
+            json.dump(state, f)
+        template = os.path.join(ROOT, 'docs', 'wso', 'brief-template.md')
+        rc, brief = self.wave.render_brief(template, self.state, 'b001', repo=repo)
+        self.assertEqual(rc, 0, brief)
+        # the evidence line: kind, then exemption (cut at 200) and waiver
+        self.assertIn('   - recall: evidence at first: kind trace; exemption: '
+                      + 'x' * 200 + '...; parity_waiver: reads a static the fork '
+                      'moved', brief)
+        self.assertNotIn('x' * 201, brief)
+        # the park history: the unparked entry names its batch
+        self.assertIn('   - recall: parked by i009: a frida trace; unparked: '
+                      'rule 4: waiting on the fork note', brief)
+        # a row still parked at the base
+        self.assertIn('   - recall: parked at first: the draw path measured',
+                      brief)
+        # a row with nothing recorded gets no recall line
+        self.git('rm', '-q', os.path.join('docs', 'evidence', '643CC0.md'),
+                 os.path.join('docs', 'wso', 'import-parked', '643CD0.json'),
+                 cwd=repo)
+        self.git('commit', '-qm', 'nothing recorded', cwd=repo)
+        del state['batches']['i009']
+        with open(self.state, 'w') as f:
+            json.dump(state, f)
+        rc, brief = self.wave.render_brief(template, self.state, 'b001', repo=repo)
+        self.assertEqual(rc, 0, brief)
+        self.assertNotIn('- recall', brief)
+
     # -- recompare ---------------------------------------------------------
 
     @staticmethod

@@ -1,0 +1,1 @@
+{"address": "0x501FE0", "name": "CMessageInsertResponse::UnmarshalMessage", "file": "src/CMessage.cpp", "batch": "i059", "needs": "fork body contradicts the exe: his body is a TODO stub returning FALSE; the exe resolves ids via CGameRemoteObjectArray::Find and reads length-prefixed per-action records into CAIResponse::Add"}
