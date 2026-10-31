@@ -1778,7 +1778,6 @@ public:
     CMessageSpellLevelImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target);
     ~CMessageSpellLevelImmumityUpdate() override;
     SHORT GetCommType() override;
-    BYTE GetMsgType() override;
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
@@ -1986,7 +1985,6 @@ public:
         LONG caller, LONG target);
 
     SHORT GetCommType() override;       // returns BROADCAST_OTHERS (3)
-    BYTE GetMsgType() override;         // returns MSG_TYPE_CMESSAGE (0x43)
     BYTE GetMsgSubType() override;      // returns MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX (0x56)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;

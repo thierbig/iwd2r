@@ -17291,12 +17291,6 @@ SHORT CMessageSpellLevelImmumityUpdate::GetCommType()
     return BROADCAST_OTHERS;
 }
 
-// 0x40A0E0
-BYTE CMessageSpellLevelImmumityUpdate::GetMsgType()
-{
-    return CBaldurMessage::MSG_TYPE_CMESSAGE;
-}
-
 // 0x516D50
 void CMessageSpellLevelImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19106,12 +19100,6 @@ SHORT CMessageProjectileTrailingVFX::GetCommType()
     return BROADCAST_OTHERS;
 }
 
-// 0x40A0E0
-BYTE CMessageProjectileTrailingVFX::GetMsgType()
-{
-    return CBaldurMessage::MSG_TYPE_CMESSAGE;
-}
-
 // 0x4F6A70
 BYTE CMessageProjectileTrailingVFX::GetMsgSubType()
 {
@@ -19264,12 +19252,6 @@ CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
 SHORT CMessageProjectileImmumityUpdate::GetCommType()
 {
     return BROADCAST_OTHERS;
-}
-
-// 0x40A0E0
-BYTE CMessageProjectileImmumityUpdate::GetMsgType()
-{
-    return CBaldurMessage::MSG_TYPE_CMESSAGE;
 }
 
 // 0x515010

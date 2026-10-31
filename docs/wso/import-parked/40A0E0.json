@@ -1,0 +1,7 @@
+{
+  "address": "0x40A0E0",
+  "name": "CMessageProjectileImmumityUpdate::GetMsgType",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "not measured: Frida could not hook it on ours in world_entry (Error: unable to intercept function at 01006360; please file a bug); Frida could not hook it on ours in first_fight (Error: unable to intercept function at 00D16360; please file a bug); Frida could not hook it on ours in walk_and_talk (Error: unable to intercept function at 00736360; please file a bug); Frida could not hook it on ours in action_bar (Error: unable to intercept function at 01056360; please file a bug); Frida could not hook it on ours in equip_shots (Error: unable to intercept function at 00A06360; please file a bug); Frida could not hook it on ours in inventory (Error: unable to intercept function at 00CA6360; please file a bug); Frida could not hook it on ours in level_up (Error: unable to intercept function at 00776360; please file a bug); Frida could not hook it on ours in world_map (Error: unable to intercept function at 005E6360; please file a bug). A dependency imported with the batch; parked with it: rows 0x4F69B0 CMessageProjectileTrailingVFX and 0x514F60 CMessageProjectileImmumityUpdate, 0x516CD0 CMessageSpellLevelImmumityUpdate"
+}
