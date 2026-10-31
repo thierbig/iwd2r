@@ -7336,6 +7336,13 @@ CMessageAddItem::CMessageAddItem(const CItem& item, LONG caller, LONG target)
     m_item.m_flags = item.m_flags;
 }
 
+// 0x4F5C70
+CMessageRemoveItem::CMessageRemoveItem(SHORT slot, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_slot = slot;
+}
+
 // 0x464180
 CMessageAddItem::~CMessageAddItem()
 {
