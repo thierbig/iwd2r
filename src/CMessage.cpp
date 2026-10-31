@@ -19107,6 +19107,11 @@ BYTE CMessageProjectileImmumityUpdate::GetMsgType()
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
 }
 
+// 0x514FF0
+CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
+{
+}
+
 // 0x515010
 void CMessageProjectileImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
