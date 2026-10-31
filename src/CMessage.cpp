@@ -19471,3 +19471,60 @@ BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
     return TRUE;
 }
+
+// 0x504250
+void CMessageRemoveItem::Run()
+{
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    if (pSprite->GetObjectType() == CGameObject::TYPE_SPRITE) {
+        if (pSprite->m_equipment.m_items[m_slot] != NULL) {
+            pSprite->Unequip(m_slot);
+            g_pBaldurChitin->GetObjectGame()->AddDisposableItem(pSprite->m_equipment.m_items[m_slot]);
+            pSprite->m_equipment.m_items[m_slot] = NULL;
+            if (m_slot == pSprite->m_equipment.m_selectedWeapon) {
+                pSprite->EquipMostDamagingMelee();
+            }
+        }
+
+        CMessageSpriteEquipment* pMessage = new CMessageSpriteEquipment(pSprite,
+            pSprite->GetId(),
+            pSprite->GetId());
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE, pMessage->GetCommType());
+
+        g_pBaldurChitin->GetActiveEngine()->UpdatePersonalItemStatus(m_targetId);
+
+        if (m_slot >= 43 && m_slot <= 50) {
+            // The quick weapon slots; the button is (m_slot - 43) / 2.
+            pSprite->SetQuickWeapon(static_cast<BYTE>(m_slot - 43), CButtonData());
+            pSprite->SetQuickWeapon(static_cast<BYTE>(m_slot - 43), static_cast<BYTE>(0));
+        } else if (m_slot >= 15 && m_slot <= 17) {
+            // The quick item slots.
+            pSprite->SetQuickItem(static_cast<BYTE>(m_slot - 15), CButtonData());
+        }
+
+        if ((static_cast<INT>(m_slot) - 43) / 2 == pSprite->m_nWeaponSet) {
+            pSprite->sub_726F20();
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(pSprite->GetId())
+                == g_pBaldurChitin->m_pEngineWorld->GetSelectedCharacter()) {
+                g_pBaldurChitin->GetObjectGame()->GetButtonArray()->UpdateButtons();
+            }
+        }
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+}
