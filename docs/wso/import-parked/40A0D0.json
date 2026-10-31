@@ -1,0 +1,1 @@
+{"address": "0x40A0D0", "name": "CMessageRemoveItem::GetCommType", "file": "src/CMessage.cpp", "batch": "i060", "needs": "not measured: called on one side only in world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map"}
