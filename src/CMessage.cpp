@@ -17271,12 +17271,17 @@ void CMessageWeaponImmumityUpdate::Run()
 
 // -----------------------------------------------------------------------------
 
-// 0x4B2340
+// NOTE: The original folds this destructor into 0x4B2340, a body it shares
+// with the other message classes whose destructors do nothing of their own
+// (the original calls it 121-411 times per scenario, ours never calls this
+// copy), so the address is not this copy's to claim.
 CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate()
 {
 }
 
-// 0x4088A0
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
 SHORT CMessageSpellLevelImmumityUpdate::GetCommType()
 {
     return BROADCAST_OTHERS;
@@ -19070,7 +19075,9 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
-// 0x4088A0
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
 SHORT CMessageProjectileTrailingVFX::GetCommType()
 {
     return BROADCAST_OTHERS;
@@ -19196,7 +19203,9 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
-// 0x4088A0
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
 SHORT CMessageProjectileImmumityUpdate::GetCommType()
 {
     return BROADCAST_OTHERS;
