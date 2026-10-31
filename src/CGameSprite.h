@@ -627,6 +627,7 @@ public:
     SHORT Dialog(CGameSprite* pTarget);
     SHORT PlayerDialog(CGameSprite* pTarget);
     SHORT UseDoor();
+    SHORT TryBash(CGameObject* pTarget);
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
     SHORT SpellPoint();
