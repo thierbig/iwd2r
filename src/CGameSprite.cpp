@@ -27046,7 +27046,6 @@ void CGameSprite::sub_761AB0(CGameSprite* target)
     }
 }
 
-
 // 0x75EC50
 // ChangeAnimation (actions 194 and 219): the sprite takes on a new creature
 // file - the action's string1 names a CRE (found in the key table) whose data
