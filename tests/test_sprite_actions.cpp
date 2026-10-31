@@ -7,6 +7,7 @@
 #include "CBaldurChitin.h"
 #include "CGameAnimationTypeCharacter.h"
 #include "CGameArea.h"
+#include "CGameContainer.h"
 #include "CGameDialog.h"
 #include "CGameDoor.h"
 #include "CGameSprite.h"
@@ -685,6 +686,183 @@ std::vector<CGameObject*> ObjectsOfType(CGameArea* pArea, BYTE type)
     return objects;
 }
 
+}
+
+TEST_CASE("sprite: PickLock unlocks a picked door, and reports a failed or unpickable one", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door1");
+    REQUIRE(pDoor != NULL);
+    REQUIRE((pDoor->m_dwFlags & 0x2) != 0);
+
+    CAIAction pickLock;
+    pickLock.m_actionID = 145;
+    pickLock.m_acteeID.Set(pDoor->m_typeAI);
+
+    // From the party's start the door is more than four squares away: the
+    // handler only starts the walk and remembers where it is headed.
+    const CPoint ptStart = pCharacter->GetPos();
+    const int startDx = pDoor->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX
+        - ptStart.x / CPathSearch::GRID_SQUARE_SIZEX;
+    const int startDy = pDoor->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY
+        - ptStart.y / CPathSearch::GRID_SQUARE_SIZEY;
+    INFO("start " << ptStart.x << "," << ptStart.y << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    REQUIRE(startDx * startDx + startDy * startDy > 0x10);
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() != CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curAction.m_dest == pDoor->GetPos());
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+
+    // Next to it, a difficulty of zero is a pick: the door's locked bit is
+    // cleared at once, the unlocked trigger and an unlock message go out, and
+    // the door is told to force the action pick.
+    pCharacter->m_pos = pDoor->GetPos();
+    pDoor->m_lockDifficulty = 0;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) == 0);
+
+    int nUnlocked = 0;
+    int nPickFailed = 0;
+    int nForcePick = 0;
+    bool bUnlock = false;
+    DWORD dwUnlockFlags = 0;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            CHECK(pTrigger->m_targetId == pDoor->GetId());
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            } else if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (auto* pUnlock = dynamic_cast<CMessageUnlock*>(pMessage)) {
+            bUnlock = true;
+            dwUnlockFlags = pUnlock->m_dwFlags;
+            CHECK(pUnlock->m_targetId == pDoor->GetId());
+            CHECK(pUnlock->m_sourceId == pCharacter->GetId());
+        } else if (auto* pForcePick = dynamic_cast<CMessageSetForceActionPick*>(pMessage)) {
+            CHECK(pForcePick->m_targetId == pDoor->GetId());
+            nForcePick += pForcePick->m_forceActionPick ? 1 : 0;
+        }
+    }
+    CHECK(nForcePick == 1);
+    CHECK(nUnlocked == 1);
+    CHECK(nPickFailed == 0);
+    REQUIRE(bUnlock);
+    CHECK((dwUnlockFlags & 0x2) == 0);
+
+    // A difficulty above the skill: the picklock-failed trigger, no unlock
+    // message, the door still locked.
+    pDoor->m_dwFlags |= 0x2;
+    pDoor->m_lockDifficulty = 1000;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    nPickFailed = 0;
+    nUnlocked = 0;
+    bUnlock = false;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            } else if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (dynamic_cast<CMessageUnlock*>(pMessage) != nullptr) {
+            bUnlock = true;
+        }
+    }
+    CHECK(nPickFailed == 1);
+    CHECK(nUnlocked == 0);
+    CHECK(!bUnlock);
+
+    // A difficulty of 100 is unpickable: the same failed trigger and no
+    // unlock even though the skill would beat a real difficulty.
+    pDoor->m_lockDifficulty = 100;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    nPickFailed = 0;
+    bUnlock = false;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (dynamic_cast<CMessageUnlock*>(pMessage) != nullptr) {
+            bUnlock = true;
+        }
+    }
+    CHECK(nPickFailed == 1);
+    CHECK(!bUnlock);
+
+    // A locked barrel: the same pick, but the container's own flags are left
+    // to the unlock message (the door clears its bit itself).
+    std::vector<CGameObject*> containers = ObjectsOfType(pArea, CGameObject::TYPE_CONTAINER);
+    CGameContainer* pBarrel = NULL;
+    for (CGameObject* pObject : containers) {
+        auto* pContainer = static_cast<CGameContainer*>(pObject);
+        if (pContainer->m_containerType == 11) {
+            pBarrel = pContainer;
+            break;
+        }
+    }
+    REQUIRE(pBarrel != NULL);
+    pBarrel->m_dwFlags |= 0x1;
+    pBarrel->m_lockDifficulty = 0;
+    pCharacter->m_pos = pBarrel->GetPos();
+    CAIAction pickBarrel = pickLock;
+    pickBarrel.m_acteeID.Set(pBarrel->m_typeAI);
+    ClearMessages();
+    pCharacter->SetCurrAction(pickBarrel);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pBarrel->m_dwFlags & 0x1) != 0);
+    nUnlocked = 0;
+    bUnlock = false;
+    dwUnlockFlags = 0;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            }
+        } else if (auto* pUnlock = dynamic_cast<CMessageUnlock*>(pMessage)) {
+            bUnlock = true;
+            dwUnlockFlags = pUnlock->m_dwFlags;
+            CHECK(pUnlock->m_targetId == pBarrel->GetId());
+        }
+    }
+    CHECK(nUnlocked == 1);
+    REQUIRE(bUnlock);
+    CHECK(dwUnlockFlags == (pBarrel->m_dwFlags & ~0x1));
+
+    ClearMessages();
 }
 
 TEST_CASE("sprite: DoAIUpdate runs while the world is paused and cycles the AI inhibitor", "[ai][data]")
