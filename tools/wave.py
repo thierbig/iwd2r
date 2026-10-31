@@ -38,6 +38,13 @@ The coordinator's wave loop, one command each::
     python3 tools/wave.py run --dry-run --state COPY.json   # one batch, fake worker
     python3 tools/wave.py run --clear b011      # the coordinator's retry of an exception
     python3 tools/wave.py run --clear b011 --rerun   # a checks/review exception re-runs the worker (plain --clear re-checks the last report)
+    python3 tools/wave.py run --queue import --clear i011 --rerun-frida   # a record/close
+                                                # exception re-runs the batch's Frida phase
+                                                # on its worktree (measuring or marking what
+                                                # close asks for, a parked row the batch
+                                                # imported included), then records and closes;
+                                                # the worker and the review are not run again;
+                                                # a plain --clear keeps R71 (no phase rerun)
 
 Rows come from docs/wso/disagreements.json (tools/xrec.py); batch state
 lives in docs/wso/wave-state.json, created by the first `next`.  Nothing

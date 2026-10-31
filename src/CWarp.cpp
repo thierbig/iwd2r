@@ -303,8 +303,68 @@ void CWarp::TimerSynchronousUpdate()
 {
 }
 
+// The engine's timer pump: every entry of lTimers gets its virtual Update
+// (vtable+0xC in the original, see CWarpTimer in the header) either on every
+// call (field_4) or when its accumulator reaches its period, and may then
+// remove itself from this list. The walk takes the next POSITION before it
+// touches the current timer, so a self-removal is safe - as the original's
+// "next node first" does.
+//
 // 0x7B5550
 void CWarp::TimerUpdate()
 {
-    // TODO: Incomplete.
+    POSITION pos = lTimers.GetHeadPosition();
+
+    while (pos != NULL) {
+        CWarpTimer* pTimer = static_cast<CWarpTimer*>(lTimers.GetNext(pos));
+
+        if (pTimer == NULL) {
+            continue;
+        }
+
+        BOOL bUpdate;
+        if (pTimer->field_4 != 0) {
+            bUpdate = TRUE;
+        } else {
+            pTimer->field_1C += 10000 / static_cast<LONG>(CChitin::TIMER_UPDATES_PER_SECOND);
+            bUpdate = pTimer->field_1C >= pTimer->field_18;
+        }
+
+        if (!bUpdate) {
+            continue;
+        }
+
+        pTimer->Update();
+
+        if (pTimer->field_4 == 0) {
+            pTimer->field_1C %= pTimer->field_18;
+        }
+
+        // NOTE: The self-removal needs all four fields; the binary tests them
+        // in this order (+0x08, +0x10, +0x0C, +0x14) and zeroes +0x0C before
+        // RemoveAt and +0x14 after it.
+        if (pTimer->field_8 == 0) {
+            continue;
+        }
+
+        CWarp* pOwner = pTimer->field_10;
+
+        if (pOwner == NULL) {
+            continue;
+        }
+
+        if (pTimer->field_C == 0) {
+            continue;
+        }
+
+        POSITION timerPos = pTimer->field_14;
+
+        if (timerPos == NULL) {
+            continue;
+        }
+
+        pTimer->field_C = 0;
+        pOwner->lTimers.RemoveAt(timerPos);
+        pTimer->field_14 = 0;
+    }
 }

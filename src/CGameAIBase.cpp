@@ -2386,8 +2386,10 @@ SHORT CGameAIBase::ClearActions(CGameObject* target)
 // 0x464950
 BOOL CGameAIBase::PlaceItem(CItem* item, BOOL deny, BOOL drop, DWORD count, BOOL feedback)
 {
-    if (item == NULL) return TRUE;
-    if (count > 1) PlaceItem(new CItem(*item), deny, drop, count - 1, TRUE);
+    if (item == NULL)
+        return TRUE;
+    if (count > 1)
+        PlaceItem(new CItem(*item), deny, drop, count - 1, TRUE);
     item->m_flags |= 2;
     CInfGame* game = g_pBaldurChitin->GetObjectGame();
     CGameObjectArray* array = game->GetObjectArray();
@@ -2401,19 +2403,23 @@ BOOL CGameAIBase::PlaceItem(CItem* item, BOOL deny, BOOL drop, DWORD count, BOOL
             static_cast<CGameContainer*>(this)->PlaceItemInBlankSlot(item, TRUE, SHORT_MAX);
             return TRUE;
         }
-        if (drop) delete item;
+        if (drop)
+            delete item;
         return FALSE;
     }
     CGameSprite* sprite = static_cast<CGameSprite*>(this);
     int index;
     if (party) {
         for (index = 0; index < CScreenInventory::PERSONAL_INVENTORY_SIZE; index++) {
-            if (sprite->m_equipment.m_items[index + 18] == NULL) break;
+            if (sprite->m_equipment.m_items[index + 18] == NULL)
+                break;
         }
     } else {
-        if (feedback) game->FeedBack(CInfGame::FEEDBACK_ITEMLOST, 0, TRUE);
+        if (feedback)
+            game->FeedBack(CInfGame::FEEDBACK_ITEMLOST, 0, TRUE);
         for (index = 27; index >= 0; index--) {
-            if (sprite->m_equipment.m_items[index + 15] == NULL) break;
+            if (sprite->m_equipment.m_items[index + 15] == NULL)
+                break;
         }
     }
     if ((party && index < CScreenInventory::PERSONAL_INVENTORY_SIZE) || (!party && index >= 0)) {
@@ -3330,14 +3336,23 @@ SHORT CGameAIBase::FireSpell(const CResRef& resRef, CGameObject* target)
             delete pEffect;
             break;
         case 4:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 5:
+            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 6:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 7:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, target->GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 8:
-            // TODO: The original gives the effect to the area's creatures
-            // through CGameArea 0x46E130 (not ported): 4 all, 5 the party, 6
-            // those of the caster's specific, 7 those of the target's
-            // specific, 8 all but the caster.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
             delete pEffect;
             break;
         default:
@@ -3463,19 +3478,23 @@ SHORT CGameAIBase::FireSpellPoint(const CResRef& resRef, const CPoint& ptTarget)
             delete pEffect;
             break;
         case 4:
-            // TODO: The original gives the effect to all the area's creatures
-            // through CGameArea 0x46E130 (not ported), then deletes it.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
             delete pEffect;
             break;
         case 7:
+            // NOTE: no target at a point; the original just deletes it.
             delete pEffect;
             break;
         case 5:
+            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 6:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 8:
-            // TODO: The original gives the effect to the area's creatures
-            // through CGameArea 0x46E130 (not ported): 5 the party, 6 those
-            // of the caster's specific, 8 all but the caster.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
             delete pEffect;
             break;
         default:
@@ -3690,14 +3709,23 @@ SHORT CGameAIBase::ForceSpell(CGameAIBase* target)
             delete pEffect;
             break;
         case 4:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 5:
+            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 6:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 7:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, target->GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 8:
-            // TODO: The original gives the effect to the area's creatures
-            // through CGameArea 0x46E130 (not ported; vis-probe's file): 4
-            // all, 5 the party, 6 those of the caster's specific, 7 those of
-            // the target's specific, 8 all but the caster. Then it deletes it.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
             delete pEffect;
             break;
         default:
@@ -3902,9 +3930,7 @@ SHORT CGameAIBase::ForceSpellPoint()
             delete pEffect;
             break;
         case 4:
-            // TODO: The original gives the effect to all the area's creatures
-            // through CGameArea 0x46E130 (not ported; vis-probe's file), then
-            // deletes it.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
             delete pEffect;
             break;
         case 7:
@@ -3912,12 +3938,15 @@ SHORT CGameAIBase::ForceSpellPoint()
             delete pEffect;
             break;
         case 5:
+            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
         case 6:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
         case 8:
-            // TODO: The original gives the effect to the area's creatures
-            // through CGameArea 0x46E130 (not ported): 5 the party, 6 those
-            // of the caster's specific, 8 all but the caster. Then it deletes
-            // it.
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
             delete pEffect;
             break;
         default:

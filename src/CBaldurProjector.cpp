@@ -9,6 +9,9 @@
 // 0x8CFF2C
 BOOLEAN CBaldurProjector::byte_8CFF2C;
 
+// 0x8CFF30
+CProjectorSubtitles* CBaldurProjector::pProjectorSubtitles;
+
 // NOTE: Not sure if it's actually part of class. There is a strange mix of
 // `this` vs. instance obtained from global `g_pBaldurChitin`.
 //
@@ -210,8 +213,12 @@ CBaldurProjector::~CBaldurProjector()
         field_14A.Unload();
     }
 
-    // TODO: Incomplete. Destroying some global object and surface, probably
-    // related to subtitles.
+    if (pProjectorSubtitles != NULL) {
+        // The exe inlines FUN_0043f900 here (0x43EAFF-0x43EB7D).
+        pProjectorSubtitles->Unload();
+        ::operator delete(pProjectorSubtitles);
+        pProjectorSubtitles = NULL;
+    }
 
     m_sCurrentMovieFileName = "";
 
@@ -311,7 +318,15 @@ void CBaldurProjector::EngineDeactivated()
             m_hBink = NULL;
         }
 
-        // TODO: Incomplete.
+        if (pProjectorSubtitles != NULL) {
+            pProjectorSubtitles->Unload();
+            ::operator delete(pProjectorSubtitles);
+            pProjectorSubtitles = NULL;
+        }
+
+        if (field_10A != NULL) {
+            field_10A->Release();
+        }
 
         pDimm->Resume();
         pVidMode->m_bPointerEnabled = TRUE;
@@ -529,4 +544,28 @@ void CBaldurProjector::TimerAsynchronousUpdate()
     }
 
     LeaveCriticalSection(&(g_pChitin->field_3AC));
+}
+
+// 0x43F900
+void CProjectorSubtitles::Unload()
+{
+    // The exe destroys the line array with array_destruct/operator_delete
+    // (count at p-4, 8-byte elements, the element destructor 0x428F80 destroys
+    // the CString at +4), releases the surface at pVidMode->pSurfaces[8]
+    // through vtable+8 and nulls the slot, then destroys the text.
+    if (m_pLines != NULL) {
+        delete[] m_pLines;
+        m_pLines = NULL;
+    }
+
+    CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+    if (pVidMode != NULL) {
+        IDirectDrawSurface* pSurface = pVidMode->pSurfaces[8];
+        if (pSurface != NULL) {
+            pSurface->Release();
+            pVidMode->pSurfaces[8] = NULL;
+        }
+    }
+
+    m_sText.~CString();
 }

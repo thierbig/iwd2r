@@ -1,6 +1,7 @@
 #include "CParticle.h"
 
 #include "CChitin.h"
+#include "CUtil.h"
 #include "CVidMode.h"
 #include "CVideo3d.h"
 
@@ -139,20 +140,55 @@ void CParticle::Render(LPVOID pSurface, LONG lPitch, const CRect& rClipRect, USH
     case CONNECT:
         switch (nBpp) {
         case 16:
-            // TODO: Incomplete.
+            if (nLoops > 0) {
+                CRect rDrawClip(rClipRect.left, rClipRect.top, rClipRect.right - 1, rClipRect.bottom - 1);
+                for (SHORT i = nLoops; i > 0; i--) {
+                    pVidMode->DrawLine16((nXPrev - m_vel.x) >> RESOLUTION_INC,
+                        (((nYPrev - m_vel.y) * 3 >> 2) - nZPrev + nZPrevVel) >> RESOLUTION_INC,
+                        nXPrev >> RESOLUTION_INC,
+                        ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC,
+                        reinterpret_cast<WORD*>(pSurface),
+                        lPitch >> 1,
+                        rDrawClip,
+                        static_cast<WORD>(color),
+                        FALSE);
+                    nXPrev -= m_vel.x;
+                    nYPrev -= m_vel.y;
+                    nZPrev -= nZPrevVel;
+                    nZPrevVel += GRAVITY;
+                }
+            }
             break;
         case 24:
-            // TODO: Incomplete.
+            if (nLoops > 0) {
+                CRect rDrawClip(rClipRect.left, rClipRect.top, rClipRect.right - 1, rClipRect.bottom - 1);
+                for (SHORT i = nLoops; i > 0; i--) {
+                    pVidMode->DrawLine24((nXPrev - m_vel.x) >> RESOLUTION_INC,
+                        (((nYPrev - m_vel.y) * 3 >> 2) - nZPrev + nZPrevVel) >> RESOLUTION_INC,
+                        nXPrev >> RESOLUTION_INC,
+                        ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC,
+                        reinterpret_cast<BYTE*>(pSurface),
+                        lPitch,
+                        rDrawClip,
+                        color,
+                        FALSE);
+                    nXPrev -= m_vel.x;
+                    nYPrev -= m_vel.y;
+                    nZPrev -= nZPrevVel;
+                    nZPrevVel += GRAVITY;
+                }
+            }
             break;
         case 32:
             if (nLoops > 0) {
+                CRect rDrawClip(rClipRect.left, rClipRect.top, rClipRect.right - 1, rClipRect.bottom - 1);
                 pVidMode->DrawLine32((nXPrev - m_vel.x) >> RESOLUTION_INC,
-                    (3 * (nYPrev - m_vel.y) / 4 - nZPrev + nZPrevVel) >> RESOLUTION_INC,
+                    (((nYPrev - m_vel.y) * 3 >> 2) - nZPrev + nZPrevVel) >> RESOLUTION_INC,
                     nXPrev >> RESOLUTION_INC,
-                    (3 * nYPrev / 4 - nZPrev) >> RESOLUTION_INC,
+                    ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC,
                     reinterpret_cast<DWORD*>(pSurface),
                     lPitch / 4,
-                    rClipRect,
+                    rDrawClip,
                     color,
                     FALSE);
             }
@@ -162,10 +198,34 @@ void CParticle::Render(LPVOID pSurface, LONG lPitch, const CRect& rClipRect, USH
     case DOTS:
         switch (nBpp) {
         case 16:
-            // TODO: Incomplete.
+            while (nLoops > 0) {
+                CPoint pt(nXPrev >> RESOLUTION_INC, ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC);
+                if (rClipRect.PtInRect(pt)) {
+                    reinterpret_cast<WORD*>(pSurface)[(pt.y - rClipRect.top) * (lPitch >> 1) - rClipRect.left + pt.x]
+                        = static_cast<WORD>(color);
+                }
+                nXPrev -= m_vel.x;
+                nYPrev -= m_vel.y;
+                nZPrev -= nZPrevVel;
+                nZPrevVel += GRAVITY;
+                nLoops--;
+            }
             break;
         case 24:
-            // TODO: Incomplete.
+            while (nLoops > 0) {
+                CPoint pt(nXPrev >> RESOLUTION_INC, ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC);
+                if (rClipRect.PtInRect(pt)) {
+                    BYTE* pPixel = reinterpret_cast<BYTE*>(pSurface)
+                        + (pt.x - rClipRect.left) * 3 + (pt.y - rClipRect.top) * lPitch;
+                    *reinterpret_cast<WORD*>(pPixel) = static_cast<WORD>(color);
+                    pPixel[2] = static_cast<BYTE>(color >> 16);
+                }
+                nXPrev -= m_vel.x;
+                nYPrev -= m_vel.y;
+                nZPrev -= nZPrevVel;
+                nZPrevVel += GRAVITY;
+                nLoops--;
+            }
             break;
         case 32:
             while (nLoops > 0) {
@@ -187,10 +247,36 @@ void CParticle::Render(LPVOID pSurface, LONG lPitch, const CRect& rClipRect, USH
     case BLOB:
         switch (nBpp) {
         case 16:
-            // TODO: Incomplete.
+            while (nLoops > 0) {
+                RenderBlob16(reinterpret_cast<WORD*>(pSurface),
+                    lPitch >> 1,
+                    nXPrev >> RESOLUTION_INC,
+                    ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC,
+                    rClipRect,
+                    nBlobSize,
+                    color);
+                nXPrev -= m_vel.x;
+                nYPrev -= m_vel.y;
+                nZPrev -= nZPrevVel;
+                nZPrevVel += GRAVITY;
+                nLoops--;
+            }
             break;
         case 24:
-            // TODO: Incomplete.
+            while (nLoops > 0) {
+                RenderBlob24(reinterpret_cast<BYTE*>(pSurface),
+                    lPitch,
+                    nXPrev >> RESOLUTION_INC,
+                    ((nYPrev * 3) >> 2) - nZPrev >> RESOLUTION_INC,
+                    rClipRect,
+                    nBlobSize,
+                    color);
+                nXPrev -= m_vel.x;
+                nYPrev -= m_vel.y;
+                nZPrev -= nZPrevVel;
+                nZPrevVel += GRAVITY;
+                nLoops--;
+            }
             break;
         case 32:
             while (nLoops > 0) {
@@ -209,6 +295,111 @@ void CParticle::Render(LPVOID pSurface, LONG lPitch, const CRect& rClipRect, USH
             }
             break;
         }
+        break;
+    }
+}
+
+// 0x7C3CC0
+void CParticle::RenderBlob16(WORD* pSurface, LONG lPitch, LONG lX, LONG lY, const CRect& rClipRect, USHORT nBlobSize, DWORD dwColor)
+{
+    CRect rBlob;
+    rBlob.left = 0;
+    rBlob.top = 0;
+    rBlob.right = rClipRect.right - rClipRect.left;
+    rBlob.bottom = rClipRect.bottom - rClipRect.top;
+
+    const LONG lXPos = lX - rClipRect.left;
+    const LONG lYPos = lY - rClipRect.top;
+    const WORD nColor = static_cast<WORD>(dwColor);
+
+    switch (nBlobSize) {
+    case 5:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos + 1))) {
+            pSurface[(lYPos + 1) * lPitch + lXPos] = nColor;
+        }
+        // fall through
+    case 4:
+        if (rBlob.PtInRect(CPoint(lXPos + 1, lYPos))) {
+            pSurface[lYPos * lPitch + lXPos + 1] = nColor;
+        }
+        // fall through
+    case 3:
+        if (rBlob.PtInRect(CPoint(lXPos - 1, lYPos))) {
+            pSurface[lYPos * lPitch + lXPos - 1] = nColor;
+        }
+        // fall through
+    case 2:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos - 1))) {
+            pSurface[(lYPos - 1) * lPitch + lXPos] = nColor;
+        }
+        // fall through
+    case 1:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos))) {
+            pSurface[lYPos * lPitch + lXPos] = nColor;
+        }
+        break;
+    default:
+        // __FILE__: C:\Projects\Icewind2\src\chitin\ChParticle.cpp
+        // __LINE__: 615
+        UTIL_ASSERT(FALSE);
+        break;
+    }
+}
+
+// 0x7C3E20
+void CParticle::RenderBlob24(BYTE* pSurface, LONG lPitch, LONG lX, LONG lY, const CRect& rClipRect, USHORT nBlobSize, DWORD dwColor)
+{
+    CRect rBlob;
+    rBlob.left = 0;
+    rBlob.top = 0;
+    rBlob.right = rClipRect.right - rClipRect.left;
+    rBlob.bottom = rClipRect.bottom - rClipRect.top;
+
+    const LONG lXPos = lX - rClipRect.left;
+    const LONG lYPos = lY - rClipRect.top;
+    const BYTE nThird = static_cast<BYTE>(dwColor >> 16);
+    const WORD nColor = static_cast<WORD>(dwColor);
+
+    switch (nBlobSize) {
+    case 5:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos + 1))) {
+            BYTE* p = pSurface + (lYPos + 1) * lPitch + lXPos * 3;
+            *reinterpret_cast<WORD*>(p) = nColor;
+            p[2] = nThird;
+        }
+        // fall through
+    case 4:
+        if (rBlob.PtInRect(CPoint(lXPos + 1, lYPos))) {
+            BYTE* p = pSurface + lYPos * lPitch + (lXPos + 1) * 3;
+            *reinterpret_cast<WORD*>(p) = nColor;
+            p[2] = nThird;
+        }
+        // fall through
+    case 3:
+        if (rBlob.PtInRect(CPoint(lXPos - 1, lYPos))) {
+            BYTE* p = pSurface + lYPos * lPitch + (lXPos - 1) * 3;
+            *reinterpret_cast<WORD*>(p) = nColor;
+            p[2] = nThird;
+        }
+        // fall through
+    case 2:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos - 1))) {
+            BYTE* p = pSurface + (lYPos - 1) * lPitch + lXPos * 3;
+            *reinterpret_cast<WORD*>(p) = nColor;
+            p[2] = nThird;
+        }
+        // fall through
+    case 1:
+        if (rBlob.PtInRect(CPoint(lXPos, lYPos))) {
+            BYTE* p = pSurface + lYPos * lPitch + lXPos * 3;
+            *reinterpret_cast<WORD*>(p) = nColor;
+            p[2] = nThird;
+        }
+        break;
+    default:
+        // __FILE__: C:\Projects\Icewind2\src\chitin\ChParticle.cpp
+        // __LINE__: 670
+        UTIL_ASSERT(FALSE);
         break;
     }
 }
@@ -248,6 +439,13 @@ void CParticle::RenderBlob32(DWORD* pSurface, LONG lPitch, LONG lX, LONG lY, con
     pt4.y = lY - rClipRect.top - 1;
     if (rBlob.PtInRect(pt4)) {
         pSurface[pt4.x + lPitch * pt4.y] = color;
+    }
+
+    CPoint pt5;
+    pt5.x = lX - rClipRect.left;
+    pt5.y = lY - rClipRect.top;
+    if (rBlob.PtInRect(pt5)) {
+        pSurface[pt5.x + lPitch * pt5.y] = color;
     }
 }
 

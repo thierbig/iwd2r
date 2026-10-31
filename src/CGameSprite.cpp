@@ -10227,6 +10227,139 @@ void CGameSprite::sub_71A550(CButtonData buttonData, BOOLEAN firstCall)
     }
 }
 
+// 0x7500F0
+SHORT CGameSprite::Rest()
+{
+    // The magical rest effect goes through the message handler like every
+    // other effect application.
+    ITEM_EFFECT effect;
+    CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_MAGICAL_REST);
+    // The original reads the duration type from a global (0x8491aa) that
+    // holds 1.
+    effect.durationType = 1;
+    CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, GetPos(), GetId(),
+        CPoint(-1, -1));
+    CMessage* pMessage = new CMessageAddEffect(pEffect, GetId(), GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+    RemovePortraitIcon(0x27);
+    field_722A = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CAbilityId ability;
+    ability.m_itemType = 1; // spell
+
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+        CGameSpriteGroupedSpellList& spells = m_spells.m_spellsByClass[nClass];
+
+        for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel; nLevel++) {
+            CGameSpriteSpellList& levelList = spells.m_lists[nLevel];
+
+            if (nClass == 0 || nClass == 5) {
+                // Bard and sorcerer lists are restored per level.
+                INT changeAmount = (INT)levelList.field_14 - (INT)levelList.field_18;
+                if (changeAmount > 0) {
+                    spells.sub_726150(nLevel, 0, TRUE);
+                    ability.m_nClass = pGame->GetSpellcasterClass(nClass);
+                    ability.field_1D = (unsigned char)(nLevel + 1);
+                    ability.field_1E = 0;
+                    for (UINT j = 0; j < levelList.m_List.size(); j++) {
+                        ability.m_res = pGame->m_spells.Get636(levelList.m_List[j].m_nID);
+                        CheckQuickLists(&ability, changeAmount, FALSE, FALSE);
+                    }
+                }
+            } else {
+                for (UINT j = 0; j < levelList.m_List.size(); j++) {
+                    CGameSpriteSpellListEntry& entry = levelList.m_List[j];
+                    INT changeAmount = (INT)entry.field_4 - (INT)entry.field_8;
+                    if (changeAmount > 0) {
+                        spells.sub_726060(entry.m_nID, nLevel, 0, TRUE);
+                        ability.m_res = pGame->m_spells.Get636(entry.m_nID);
+                        ability.m_nClass = pGame->GetSpellcasterClass(nClass);
+                        ability.field_1D = (unsigned char)(nLevel + 1);
+                        ability.field_1E = 0;
+                        CheckQuickLists(&ability, changeAmount, FALSE, FALSE);
+                    }
+                }
+            }
+        }
+    }
+
+    // Domain spells. The list restore runs for every entry; the quick list
+    // update only when a use was actually regained.
+    for (UINT nLevel = 0; nLevel < m_domainSpells.m_nHighestLevel; nLevel++) {
+        CGameSpriteSpellList& levelList = m_domainSpells.m_lists[nLevel];
+
+        for (UINT j = 0; j < levelList.m_List.size(); j++) {
+            CGameSpriteSpellListEntry& entry = levelList.m_List[j];
+            INT changeAmount = (INT)entry.field_4 - (INT)entry.field_8;
+            m_domainSpells.sub_726060(entry.m_nID, nLevel, 0, TRUE);
+            if (changeAmount > 0) {
+                ability.m_res = pGame->m_spells.Get636(entry.m_nID);
+                ability.field_1D = (unsigned char)(nLevel + 1);
+                ability.m_nClass = CAIOBJECTTYPE_C_CLERIC;
+                ability.field_1E = pGame->GetRuleTables().GetSpecializationIndex(
+                    CAIOBJECTTYPE_C_CLERIC, m_baseStats.m_specialization);
+                CheckQuickLists(&ability, changeAmount, FALSE, FALSE);
+            }
+        }
+    }
+
+    // Innate abilities.
+    ability.m_nClass = 0;
+    ability.field_1D = 0;
+    ability.field_1E = 0;
+    for (UINT j = 0; j < m_innateSpells.m_List.size(); j++) {
+        CGameSpriteSpellListEntry& entry = m_innateSpells.m_List[j];
+        INT changeAmount = (INT)entry.field_4 - (INT)entry.field_8;
+        m_innateSpells.sub_725C50(entry.m_nID, 0, TRUE);
+        if (changeAmount > 0) {
+            ability.m_res = pGame->m_innateSpells.Get636(entry.m_nID);
+            CheckQuickLists(&ability, changeAmount, FALSE, FALSE);
+        }
+    }
+
+    m_shapeshifts.sub_725D30(0, TRUE);
+
+    // Items with a recharge-on-rest ability get their use counts refilled.
+    for (BYTE nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = m_equipment.m_items[nSlot];
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST || pItem == NULL) {
+            continue;
+        }
+
+        for (INT nAbility = 0; nAbility < pItem->GetAbilityCount(); nAbility++) {
+            pItem->Demand();
+            ITEM_ABILITY* pAbility = pItem->GetAbility(nAbility);
+            if (pAbility != NULL && (pAbility->abilityFlags & 0x800) != 0) {
+                WORD nOldUseCount = pItem->GetUsageCount(nAbility);
+                pItem->SetUsageCount(nAbility, pAbility->maxUsageCount);
+
+                CAbilityId itemAbility;
+                itemAbility.m_itemType = 2; // item
+                itemAbility.m_itemNum = nSlot;
+                itemAbility.m_abilityNum = nAbility;
+                CheckQuickLists(&itemAbility,
+                    pItem->GetUsageCount(nAbility) - nOldUseCount,
+                    FALSE,
+                    FALSE);
+            }
+            pItem->Release();
+        }
+    }
+
+    // NOTE: The original tests the service provider (chitin +0x96E), not
+    // the session.
+    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+        || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID) {
+        CMessage* pUpdate = new CMessageSpriteUpdate(this, GetId(), GetId());
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pUpdate, FALSE);
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x71ABA0
 void CGameSprite::CheckQuickLists(CAbilityId* ability, SHORT changeAmount, BOOL remove, BOOL removeSpellIfZero)
 {
@@ -12435,7 +12568,7 @@ void CGameSpriteLastUpdate::Initialize(BOOL bFullUpdateRequired)
 }
 
 // 0x723BF0
-void CGameSprite::sub_723BF0(BOOLEAN a1, BOOLEAN a2)  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+void CGameSprite::sub_723BF0(BOOLEAN a1, BOOLEAN a2) // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
     // dword_8E752C counts how many party members are currently hidden, so it
     // only moves on a real transition.
@@ -13759,14 +13892,12 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 95:
     case 192:
-        // SpellPoint, SpellPointNoDec
-        // TODO: 0x729E8F-0x729E9F not ported (0x742840).
-        returnValue = ACTION_ERROR;
+        // SpellPoint, SpellPointNoDec (0x729E8F-0x729E9F)
+        returnValue = SpellPoint();
         goto done;
     case 96:
         // Rest
-        // TODO: 0x729E9F-0x729EAF not ported (0x7500F0).
-        returnValue = ACTION_ERROR;
+        returnValue = Rest();
         goto done;
     case 97:
         // UseItemPoint
@@ -15390,7 +15521,7 @@ void CGameSprite::CheckModal()
         // A party member looks for the secret doors around it.
         CTypedPtrList<CPtrList, LONG*> targets;
 
-        INT nSearch = sub_71F6E0();  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        INT nSearch = sub_71F6E0(); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         INT nRoll = CUtil::UtilRandInt(100, -m_derivedStats.m_nLuck);
         SHORT nRange = GetVisualRange() >> 1;
 
@@ -15532,15 +15663,14 @@ void CGameSprite::CheckModal()
                             pEffect->m_source.x = m_pos.x;
                             pEffect->m_source.y = m_pos.y;
                             pEffect->m_sourceID = m_id;
-                            IcewindMisc::sub_5860F0(this, pEffect);  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                            IcewindMisc::sub_5860F0(this, pEffect); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
                             // Re-tag a "Duration"-timed song effect so it expires
                             // a round later (game time + 100), keeping the
                             // per-cycle buff alive instead of letting
                             // ResolveEffect treat it as already past.
                             if (pEffect->m_durationType == 0 && pEffect->m_duration == 7) {
                                 pEffect->m_durationType = 0x1000;
-                                pEffect->m_duration =
-                                    g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime + 100;
+                                pEffect->m_duration = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime + 100;
                             }
 
                             messages.push_back(new CMessageAddEffect(pEffect, m_id, nAllyId));
@@ -15595,9 +15725,9 @@ void CGameSprite::CheckModal()
                             // "Search (detect traps) check. Search skill %d vs.
                             // trap's difficulty %d (searcher's %d INT bonus)."
                             FeedBack(FEEDBACK_ROLL, searchSkill, difficulty / 5,
-                                sub_763E40(CGAMESPRITE_SKILL_SEARCH), 39303, 0, 0);  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                                sub_763E40(CGAMESPRITE_SKILL_SEARCH), 39303, 0, 0); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
                             if (difficulty <= searchSkill * 7 && difficulty != 100
-                                && (pDoor->m_dwFlags & 0x8)) {  // TRAPDETECTABLE
+                                && (pDoor->m_dwFlags & 0x8)) { // TRAPDETECTABLE
                                 CAITrigger trapFound(CAITRIGGER_DETECTED, m_typeAI, 0);
                                 CMessage* message = new CMessageSetTrigger(trapFound,
                                     pDoor->m_id, m_id);
@@ -15622,7 +15752,7 @@ void CGameSprite::CheckModal()
                         if (pTrigger->m_trapDetected == 0) {
                             int difficulty = pTrigger->m_trapDetectionDifficulty;
                             if (difficulty <= searchSkill * 7 && difficulty != 100
-                                && (pTrigger->m_dwFlags & 0x8)) {  // TRAPDETECTABLE
+                                && (pTrigger->m_dwFlags & 0x8)) { // TRAPDETECTABLE
                                 CAITrigger trapFound(CAITRIGGER_DETECTED, m_typeAI, 0);
                                 CMessage* message = new CMessageSetTrigger(trapFound,
                                     pTrigger->m_id, m_id);
@@ -18687,15 +18817,27 @@ SHORT CGameSprite::Swing(CGameSprite* target)
                             delete pEffect;
                             break;
                         case 4:
+                            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+                            delete pEffect;
+                            break;
                         case 5:
+                            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+                            delete pEffect;
+                            break;
                         case 6:
+                            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+                            delete pEffect;
+                            break;
                         case 7:
+                            // NOTE: the original skips the call when the
+                            // target is gone.
+                            if (target != NULL) {
+                                GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, target->GetAIType().m_nSpecific, NULL);
+                            }
+                            delete pEffect;
+                            break;
                         case 8:
-                            // TODO: The original gives the effect to the area's
-                            // creatures through CGameArea 0x46E130 (not ported):
-                            // 4 all, 5 the party, 6 those of the caster's
-                            // specific, 7 those of the target's specific, 8 all
-                            // but the caster.
+                            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
                             delete pEffect;
                             break;
                         default:
@@ -18725,15 +18867,27 @@ SHORT CGameSprite::Swing(CGameSprite* target)
                                 delete pEffect;
                                 break;
                             case 4:
+                                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+                                delete pEffect;
+                                break;
                             case 5:
+                                GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+                                delete pEffect;
+                                break;
                             case 6:
+                                GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+                                delete pEffect;
+                                break;
                             case 7:
+                                // NOTE: the original skips the call when the
+                                // target is gone.
+                                if (target != NULL) {
+                                    GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, target->GetAIType().m_nSpecific, NULL);
+                                }
+                                delete pEffect;
+                                break;
                             case 8:
-                                // TODO: The original gives the effect to the area's
-                                // creatures through CGameArea 0x46E130 (not ported):
-                                // 4 all, 5 the party, 6 those of the caster's
-                                // specific, 7 those of the target's specific, 8 all
-                                // but the caster.
+                                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
                                 delete pEffect;
                                 break;
                             default:
@@ -21575,12 +21729,23 @@ SHORT CGameSprite::Spell(CGameAIBase* target)
                 delete pEffect;
                 break;
             case 4:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+                delete pEffect;
+                break;
             case 5:
+                GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+                delete pEffect;
+                break;
             case 6:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+                delete pEffect;
+                break;
             case 7:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, target->GetAIType().m_nSpecific, NULL);
+                delete pEffect;
+                break;
             case 8:
-                // TODO: The original gives the effect to the area's
-                // creatures through CGameArea 0x46E130 (not ported).
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
                 delete pEffect;
                 break;
             default:
@@ -21621,6 +21786,621 @@ lost:
     FeedBack(55, 0, 0, 0, -1, 0, 0);
     m_curSpell->Release();
     return ACTION_DONE;
+}
+
+// 0x742840
+SHORT CGameSprite::SpellPoint()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    SHORT nSequence = m_nSequence;
+    CString sResRef;
+    CMessage* message;
+    CPoint pt = m_curAction.m_dest;
+
+    if (m_typeAI.m_nGeneral == 3) {
+        return ACTION_DONE;
+    }
+
+    if (m_actionCount == 0) {
+        if (m_curProjectile != NULL) {
+            delete m_curProjectile;
+            m_curProjectile = NULL;
+        }
+
+        if (m_derivedStats.m_bAuraCleansing && m_castCounter != -1) {
+            FeedBack(41, 0, 0, 0, -1, 0, 0);
+            m_castCounter = -1;
+        }
+    }
+
+    if (m_nDirection != GetDirection(pt)) {
+        // 0x74291F: face the point first.
+        message = new CMessageSetDirection(pt, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        return ACTION_NORMAL;
+    }
+
+    // Silenced, without subvocal casting, only Silence (SPWI219) of the
+    // wizard and priest spells can be cast.
+    if (!m_derivedStats.m_spellStates[SPLSTATE_VOCALIZE]
+        && (m_derivedStats.m_generalState & STATE_SILENCED) != 0
+        && !sub_763150(CGAMESPRITE_FEAT_SUBVOCAL_CASTING)) {
+        if (strcmp(m_curAction.GetString1(), "") == 0) {
+            DecodeSpell(m_curAction.m_specificID, sResRef);
+            if (strcmp(sResRef, "") == 0) {
+                return ACTION_ERROR;
+            }
+        } else {
+            sResRef = m_curAction.GetString1();
+        }
+
+        BYTE nSpellType = pGame->GetSpellType(CResRef(sResRef));
+        if ((nSpellType == 1 || nSpellType == 3) && strcmp(sResRef, "SPWI219") != 0) {
+            return ACTION_ERROR;
+        }
+    }
+
+    BYTE nClass = static_cast<BYTE>(m_curAction.m_specificID2);
+    BYTE nDomain = static_cast<BYTE>(m_curAction.m_specificID2 >> 8);
+    DWORD nSpecialization = pGame->GetRuleTables().GetSpecializationMask(nClass, nDomain);
+    LONG nSpellLevel = m_curAction.m_specificID3;
+    SHORT nCasterType = 0;
+
+    if (!m_bStartedCasting) {
+        // In range and sight, or walk to the point.
+        CSpell* pSpell = m_curSpell;
+        BOOL bTemporary;
+        if (pSpell == NULL) {
+            if (strcmp(m_curAction.GetString1(), "") == 0) {
+                DecodeSpell(m_curAction.m_specificID, sResRef);
+                if (strcmp(sResRef, "") == 0) {
+                    return ACTION_ERROR;
+                }
+            } else {
+                sResRef = m_curAction.GetString1();
+            }
+
+            pSpell = new CSpell(CResRef(sResRef));
+            if (pSpell == NULL) {
+                return ACTION_ERROR;
+            }
+            bTemporary = TRUE;
+        } else {
+            bTemporary = FALSE;
+        }
+
+        // NOTE: unlike Spell the range is checked for every spell (no
+        // exemption for the generic names), and the sprite walks to the
+        // point with MoveToPoint instead of MoveToObject.
+        DWORD dwItemFlags = pSpell->GetItemFlags();
+        BOOL bReady = FALSE;
+        if (sub_7567F0(pSpell, pt, nClass, nSpecialization)) {
+            if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)
+                || (dwItemFlags & 0x800) != 0) {
+                message = new CMessageDropPath(m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                bReady = TRUE;
+            }
+        }
+
+        if (!bReady) {
+            SHORT returnValue = MoveToPoint(m_curAction.m_dest, 0);
+            if (returnValue != ACTION_DONE) {
+                if (bTemporary && pSpell != NULL) {
+                    delete pSpell;
+                }
+                return returnValue;
+            }
+        }
+
+        if (bTemporary && pSpell != NULL) {
+            delete pSpell;
+        }
+
+        if (m_castCounter == -1) {
+            m_castCounter = 0;
+            m_bInCasting = TRUE;
+        }
+    }
+
+    if (m_castCounter == 0) {
+        // The cast starts: the spell is taken from the memorized ones.
+        if (!IsVisibleToCaller(FALSE)) {
+            ITEM_EFFECT effect;
+            CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_FORCEVISIBLE);
+            effect.durationType = 1;
+
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+            message = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+
+        // NOTE: unlike Spell the sanctuary is dispelled before the spell
+        // is decoded.
+        if (m_derivedStats.m_spellStates[SPLSTATE_SANCTUARY]) {
+            ITEM_EFFECT effect;
+            CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_DISPELSANCTUARY);
+            effect.durationType = 1;
+
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+            message = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+
+        if (strcmp(m_curAction.GetString1(), "") == 0) {
+            DecodeSpell(m_curAction.m_specificID, sResRef);
+            if (strcmp(sResRef, "") == 0) {
+                return ACTION_ERROR;
+            }
+        } else {
+            sResRef = m_curAction.GetString1();
+        }
+
+        if (m_curSpell != NULL) {
+            delete m_curSpell;
+            m_curSpell = NULL;
+        }
+
+        if (m_curAction.m_actionID == 192) {
+            // SpellPointNoDec: nothing is taken.
+            m_curSpell = new CSpell(CResRef(sResRef));
+            m_cGameStats.RecordSpellUse(CResRef(sResRef));
+            if (m_curSpell == NULL) {
+                return ACTION_ERROR;
+            }
+            nCasterType = m_curSpell->GetCasterType();
+        } else {
+            if (strcmp(sResRef.Left(strlen("**")), "**") == 0) {
+                // NOTE: The original formats "*** %s is trying to cast an
+                // OBSOLETE SPELL: %s." with the name and the resref and
+                // shows it nowhere.
+                return ACTION_ERROR;
+            }
+
+            // NOTE: unlike Spell the use is recorded before the spell is
+            // built (0x743364).
+            m_cGameStats.RecordSpellUse(CResRef(sResRef));
+            m_curSpell = new CSpell(CResRef(sResRef));
+            if (m_curSpell == NULL) {
+                return ACTION_ERROR;
+            }
+
+            nCasterType = m_curSpell->GetCasterType();
+
+            INT nType;
+            if (nCasterType == 1) {
+                nType = 0;
+            } else if (nCasterType == 2) {
+                nType = 1;
+            } else if (nCasterType == 4) {
+                nType = 2;
+            } else {
+                nType = 0;
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                // __LINE__: 13477
+                UTIL_ASSERT_MSG(FALSE, "Invalid spell type");
+            }
+
+            BOOLEAN bDisabled = FALSE;
+            if (m_derivedStats.m_disabledSpellTypes[nType]) {
+                bDisabled = TRUE;
+            }
+
+            BYTE nSpellType = pGame->GetSpellType(CResRef(sResRef));
+            UINT nIndex = 0;
+            UINT nID = 0;
+            BOOLEAN bRefresh = TRUE;
+
+            if (nSpellType == 1) {
+                if (!pGame->m_spells.Find(CResRef(sResRef), nID)) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                    // __LINE__: 13494
+                    UTIL_ASSERT_MSG(FALSE, "Unknown spell");
+                    return ACTION_ERROR;
+                }
+
+                UINT nClassIndex = pGame->GetSpellcasterIndex(nClass);
+                if (nDomain == 0) {
+                    if (nClass == CAIOBJECTTYPE_C_SORCERER || nClass == CAIOBJECTTYPE_C_BARD) {
+                        // A sorcerer or a bard spends a slot of the level.
+                        UINT nLevel = static_cast<BYTE>(nSpellLevel) - 1;
+                        unsigned int a2 = 1;
+                        BOOLEAN a3 = FALSE;
+                        m_spells.Get(nClassIndex)->sub_7261A0(nLevel, a2, a3);
+                        bRefresh = FALSE;
+
+                        // Every spell of the level shares the slot spent:
+                        // each one's quick buttons are refreshed.
+                        CAbilityId abilityId;
+                        abilityId.m_itemType = 1;
+                        abilityId.m_nClass = nClass;
+                        abilityId.field_1D = static_cast<BYTE>(nSpellLevel);
+                        for (UINT nSpell = 0; nSpell < m_spells.Get(nClassIndex)->GetSpellsAtLevel(nLevel)->m_List.size(); nSpell++) {
+                            UINT nSpellID = m_spells.Get(nClassIndex)->GetSpellsAtLevel(nLevel)->Get(nSpell)->m_nID;
+                            abilityId.m_res = pGame->m_spells.Get(nSpellID);
+                            CheckQuickLists(&abilityId, -1, FALSE, FALSE);
+                        }
+                    } else {
+                        UINT nLevel = static_cast<BYTE>(nSpellLevel) - 1;
+                        unsigned int a4 = 1;
+                        unsigned int a5 = 0;
+                        sub_724FD0(nClass, nLevel, CResRef(sResRef), a4, a5);
+                    }
+                } else {
+                    UINT nLevel = static_cast<BYTE>(nSpellLevel) - 1;
+                    unsigned int a4 = 1;
+                    unsigned int a5 = 0;
+                    sub_725110(nLevel, CResRef(sResRef), a4, a5);
+                }
+            } else if (nSpellType == 2) {
+                if (!pGame->m_innateSpells.Find(CResRef(sResRef), nID)) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                    // __LINE__: 13561
+                    UTIL_ASSERT_MSG(FALSE, "Unknown spell");
+                    return ACTION_ERROR;
+                }
+
+                if (m_innateSpells.Find(nID, nIndex) == TRUE) {
+                    CResRef cResSpell(sResRef);
+                    if (cResSpell == SPIN275
+                        || cResSpell == SPIN276
+                        || cResSpell == SPIN277
+                        || cResSpell == SPIN278
+                        || cResSpell == SPIN279) {
+                        bRefresh = FALSE;
+                    } else {
+                        unsigned int a2 = 1;
+                        unsigned int a3 = 0;
+                        sub_725270(cResSpell, a2, a3);
+                    }
+                }
+            } else if (nSpellType == 3) {
+                if (!pGame->m_songs.Find(CResRef(sResRef), nID)) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                    // __LINE__: 13582
+                    UTIL_ASSERT_MSG(FALSE, "Unknown spell");
+                    return ACTION_ERROR;
+                }
+
+                m_songs.Find(nID, nIndex);
+            } else if (nSpellType == 4) {
+                if (!pGame->m_shapeshifts.Find(CResRef(sResRef), nID)) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                    // __LINE__: 13594
+                    UTIL_ASSERT_MSG(FALSE, "Unknown spell");
+                    return ACTION_ERROR;
+                }
+
+                if (m_shapeshifts.Find(nID, nIndex) == TRUE) {
+                    // NOTE: unlike Spell there is no SPIN122 special case
+                    // here (0x743A70): a use of any shapeshift is spent.
+                    unsigned int a1 = 1;
+                    BOOLEAN a2 = FALSE;
+                    m_shapeshifts.sub_725DB0(a1, a2);
+
+                    bRefresh = FALSE;
+
+                    // Each shapeshift's quick buttons are refreshed.
+                    CAbilityId abilityId;
+                    abilityId.m_itemType = 1;
+                    abilityId.m_nClass = nClass;
+                    abilityId.field_1D = static_cast<BYTE>(nSpellLevel);
+                    for (UINT nShape = 0; nShape < m_shapeshifts.m_List.size(); nShape++) {
+                        UINT nShapeID = m_shapeshifts.Get(nShape)->m_nID;
+                        abilityId.m_res = pGame->m_shapeshifts.Get(nShapeID);
+                        CheckQuickLists(&abilityId, -1, FALSE, FALSE);
+                    }
+                }
+            }
+
+            if (bDisabled) {
+                if (m_curSpell != NULL) {
+                    delete m_curSpell;
+                }
+                m_curSpell = NULL;
+                return ACTION_ERROR;
+            }
+
+            if (bRefresh) {
+                // The spell's own quick buttons are refreshed; a class
+                // spell names its class, level and domain.
+                CAbilityId abilityId;
+                abilityId.m_itemType = 1;
+                abilityId.m_res = sResRef;
+                if (nSpellType == 1) {
+                    abilityId.m_nClass = nClass;
+                    abilityId.field_1E = nDomain;
+                    abilityId.field_1D = static_cast<BYTE>(nSpellLevel);
+                }
+                CheckQuickLists(&abilityId, -1, FALSE, FALSE);
+            }
+        }
+    }
+
+    // 0x743CF7: the cast goes on.
+    if (m_curSpell == NULL) {
+        return m_typeAI.m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF ? ACTION_INTERRUPTABLE : ACTION_NORMAL;
+    }
+
+    m_curSpell->Demand();
+
+    // The last ability the caster's level reaches.
+    const SPELL_ABILITY* pAbility = NULL;
+    SHORT nCasterLevel = GetCasterLevel(m_curSpell, nClass, nSpecialization);
+    INT nAbilityIndex = 0;
+    if (m_curSpell->GetAbilityCount() > 0) {
+        do {
+            if (nCasterLevel < m_curSpell->GetAbility(nAbilityIndex)->minCasterLevel) {
+                break;
+            }
+            pAbility = m_curSpell->GetAbility(nAbilityIndex);
+            nAbilityIndex++;
+        } while (nAbilityIndex < m_curSpell->GetAbilityCount());
+    }
+    nAbilityIndex--;
+
+    if (pAbility == NULL) {
+        m_curSpell->Release();
+        return ACTION_ERROR;
+    }
+
+    // NOTE: unlike Spell the casting glow is told by m_castCounter alone
+    // (0x743D9D): m_bStartedCasting is never set, and there is no enemy
+    // concentration or spellcraft identification block.
+    if (m_castCounter == 0) {
+        sub_755A70(m_curSpell, pAbility, pt);
+    }
+
+    // 0x743DCA: the casting time.
+    INT nCastTime = max(pAbility->speedFactor - m_derivedStats.m_nMentalSpeed, 0);
+    m_speedFactor = static_cast<SHORT>(max(m_speedFactor - m_derivedStats.m_nMentalSpeed, 0));
+    INT nTicks = static_cast<SHORT>(nCastTime) * 100 / 10;
+
+    if (m_castCounter < nTicks) {
+        if (field_9D15 != TRUE
+            && (field_5582 == 0 || m_curSpell->GetCasterType() == 4)) {
+            if (nSequence != SEQ_CONJURE && m_castCounter < nTicks - 4) {
+                message = new CMessageSetSequence(SEQ_CONJURE, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            } else if (nSequence != SEQ_CAST && m_castCounter >= nTicks - 4) {
+                message = new CMessageSetSequence(SEQ_CAST, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                ApplyCastingEffectPost(m_curSpell, pAbility);
+            }
+
+            m_curSpell->Release();
+            return ACTION_NORMAL;
+        }
+
+        // Hit while casting: concentration (once).
+        INT nDamage = field_5582;
+        INT nLevel = m_curSpell->GetLevel();
+        if (field_9D15 != TRUE) {
+            if (field_9D14 == 0) {
+                field_9D14 = 1;
+                INT nBonus = GetFeatValue(CGAMESPRITE_FEAT_COMBAT_CASTING) != 0 ? 4 : 0;
+                INT nDC = nLevel + nDamage + 10;
+                INT nRoll = CUtil::UtilRandInt(20, m_derivedStats.m_nLuck) + 1;
+                INT nConcentration = m_derivedStats.m_nSkills[3];
+                if ((m_baseStats.field_2FB & 0x1) != 0) {
+                    nConcentration += 10;
+                }
+                FeedBack(83, nRoll, nConcentration - nBonus, nBonus, 39842, nDamage, nLevel);
+                field_9D15 = nConcentration + nRoll < nDC;
+            }
+
+            if (field_9D15 != TRUE) {
+                m_curSpell->Release();
+                return ACTION_NORMAL;
+            }
+        }
+
+        // 0x743FF1: the spell is lost.
+        FeedBack(55, 0, 0, 0, -1, 0, 0);
+        m_curSpell->Release();
+        return ACTION_DONE;
+    }
+
+    // 0x744016: the cast completes. The spell failure roll first.
+    INT nFailureRoll = rand() % 100;
+    BOOL bFailed = FALSE;
+    nCasterType = m_curSpell->GetCasterType();
+    if (nCasterType != 4) {
+        switch (nClass) {
+        case CAIOBJECTTYPE_C_CLERIC:
+        case CAIOBJECTTYPE_C_DRUID:
+        case CAIOBJECTTYPE_C_PALADIN:
+        case CAIOBJECTTYPE_C_RANGER:
+            nCasterType = 2;
+            if (CheckDivineFailure(nFailureRoll)) {
+                FeedBack(61, 0, 0, 0, -1, 0, 0);
+                bFailed = TRUE;
+            }
+            break;
+        default:
+            nCasterType = 1;
+            if (CheckAranceFailure(nFailureRoll)) {
+                FeedBack(61, 0, 0, 0, -1, 0, 0);
+                bFailed = TRUE;
+            }
+            break;
+        }
+    }
+
+    if ((m_curSpell->GetItemFlags() & 0x2000) != 0
+        && (m_pArea->m_header.m_areaType & 0x1) == 0) {
+        FeedBack(22, 0, 0, 0, -1, 0, 0);
+        bFailed = TRUE;
+    }
+
+    if (field_9D15 == TRUE
+        || (field_5582 != 0 && m_curSpell->GetCasterType() != 4)) {
+        INT nDamage = field_5582;
+        INT nLevel = m_curSpell->GetLevel();
+        if (field_9D15 == TRUE) {
+            goto lost;
+        }
+
+        if (field_9D14 == 0) {
+            field_9D14 = 1;
+            INT nBonus = GetFeatValue(CGAMESPRITE_FEAT_COMBAT_CASTING) != 0 ? 4 : 0;
+            INT nDC = nDamage + nLevel + 10;
+            INT nRoll = CUtil::UtilRandInt(20, m_derivedStats.m_nLuck) + 1;
+            INT nConcentration = m_derivedStats.m_nSkills[3];
+            if ((m_baseStats.field_2FB & 0x1) != 0) {
+                nConcentration += 10;
+            }
+            FeedBack(83, nRoll, nConcentration - nBonus, nBonus, 39842, nDamage, nLevel);
+            field_9D15 = nConcentration + nRoll < nDC;
+        }
+
+        if (field_9D15 == TRUE) {
+            goto lost;
+        }
+    }
+
+    // NOTE: unlike Spell a failure here loses the action as well
+    // (0x7441EA jumps to the ACTION_ERROR release at 0x7442C2).
+    if (bFailed) {
+        m_curSpell->Release();
+        return ACTION_ERROR;
+    }
+
+    if (m_derivedStats.m_spellStates[SPLSTATE_WEB] && m_curSpell->GetCasterType() != 4) {
+        // NOTE: In a web a concentration check that succeeds
+        // loses the spell (0x7442A9 jumps to the loss on `>=`).
+        INT nDamage = field_5582;
+        INT nLevel = m_curSpell->GetLevel();
+        INT nBonus = GetFeatValue(CGAMESPRITE_FEAT_COMBAT_CASTING) != 0 ? 4 : 0;
+        INT nDC = nLevel + 10 + nDamage;
+        INT nRoll = CUtil::UtilRandInt(20, m_derivedStats.m_nLuck) + 1;
+        INT nConcentration = m_derivedStats.m_nSkills[3];
+        if ((m_baseStats.field_2FB & 0x1) != 0) {
+            nConcentration += 10;
+        }
+        FeedBack(83, nRoll, nConcentration - nBonus, nBonus, 39842, nDamage, nLevel);
+        if (nConcentration + nRoll >= nDC) {
+            goto lost;
+        }
+    }
+
+    if ((m_curSpell->GetItemFlags() & 0x2000) != 0
+        && (m_pArea->m_header.m_areaType & 0x1) == 0) {
+        FeedBack(22, 0, 0, 0, -1, 0, 0);
+    } else {
+        FeedBack(FEEDBACK_SPELL, nCasterType != 4 ? 1 : 0, 0, 0, m_curSpell->GetGenericName(), 0, 0);
+
+        if (nSequence != SEQ_CAST) {
+            message = new CMessageSetSequence(SEQ_CAST, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+
+        // NOTE: The original overwrites m_curProjectile without deleting it
+        // (0x7443A4); see Spell's note for the leak.
+        m_curProjectile = CProjectile::DecodeProjectile(pAbility->missileType, this, 0);
+        m_curProjectile->m_sourceRes = m_curSpell->GetResRef();
+        DWORD nLevel = static_cast<BYTE>(nSpellLevel);
+        m_curProjectile->m_nSpellLevel = nLevel;
+
+        for (INT nEffect = 0; nEffect < pAbility->effectCount; nEffect++) {
+            CGameEffect* pEffect = m_curSpell->GetAbilityEffect(nAbilityIndex,
+                nEffect,
+                this,
+                nClass,
+                nSpecialization,
+                0);
+            pEffect->m_source = m_pos;
+            pEffect->m_sourceID = m_id;
+            // NOTE: unlike Spell the effect's target is the ground point.
+            pEffect->m_target = pt;
+
+            if (pEffect->m_spellLevel != 0) {
+                pEffect->m_spellLevel = nLevel;
+            }
+
+            IcewindMisc::sub_5860F0(this, pEffect);
+
+            // The duration modifiers of the arcane and the divine casters.
+            if (pEffect->m_durationType == 0) {
+                if (nCasterType == 1) {
+                    pEffect->m_duration = static_cast<DWORD>(m_derivedStats.m_nSpellDurationModMage * static_cast<INT>(pEffect->m_duration)) / 100;
+                } else if (nCasterType == 2) {
+                    pEffect->m_duration = static_cast<DWORD>(m_derivedStats.m_nSpellDurationModPriest * static_cast<INT>(pEffect->m_duration)) / 100;
+                }
+            }
+
+            switch (pEffect->m_targetType) {
+            case 1:
+                pEffect->m_flags |= 0x2;
+                message = new CMessageAddEffect(pEffect, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                break;
+            case 2:
+                m_curProjectile->AddEffect(pEffect);
+                break;
+            case 3:
+                ApplyEffectToParty(pEffect);
+                delete pEffect;
+                break;
+            case 4:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+                delete pEffect;
+                break;
+            case 5:
+                GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+                delete pEffect;
+                break;
+            case 6:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+                delete pEffect;
+                break;
+            case 7:
+                // NOTE: no target at a point; the original just deletes it
+                // (jump table 0x7446D0 -> 0x74451A).
+                delete pEffect;
+                break;
+            case 8:
+                GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
+                delete pEffect;
+                break;
+            default:
+                delete pEffect;
+                break;
+            }
+        }
+
+        LONG nHeight = m_curProjectile->DetermineHeight(this);
+        CMessageFireProjectile* pFire = new CMessageFireProjectile(m_curProjectile->m_projectileType,
+            CGameObjectArray::INVALID_INDEX,
+            pt,
+            nHeight,
+            m_id,
+            m_id,
+            0);
+
+        if (m_curProjectile->m_projectileType == 304) {
+            INT nRandom = rand() % 1000000;
+            // TODO: The original also stores it in the projectile's +0x356
+            // (not ported yet).
+            pFire->field_20 = nRandom;
+        }
+
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pFire, FALSE);
+
+        m_curProjectile->Fire(m_pArea, m_id, CGameObjectArray::INVALID_INDEX, pt, m_curProjectile->DetermineHeight(this), 0);
+        m_curProjectile = NULL;
+    }
+
+    m_curSpell->Release();
+    AutoPause(0x40);
+    AutoPause(0x400);
+    return ACTION_DONE;
+
+lost:
+    // 0x7442AD. NOTE: unlike Spell the action errors out here.
+    FeedBack(55, 0, 0, 0, -1, 0, 0);
+    m_curSpell->Release();
+    return ACTION_ERROR;
 }
 
 // 0x7446F0
@@ -24024,12 +24804,25 @@ void CGameSprite::sub_755A70(CSpell* pSpell, const SPELL_ABILITY* pAbility, cons
             delete pCastingEffect;
             break;
         case 4:
+            GetArea()->ApplyEffectToSprites(pCastingEffect, FALSE, FALSE, 0, NULL);
+            delete pCastingEffect;
+            break;
         case 5:
+            GetArea()->ApplyEffectToSprites(pCastingEffect, TRUE, FALSE, 0, NULL);
+            delete pCastingEffect;
+            break;
         case 6:
+            GetArea()->ApplyEffectToSprites(pCastingEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pCastingEffect;
+            break;
         case 7:
+            // NOTE: no target here; the original matches the caster's own
+            // specific, read through GetAIType (0x756385).
+            GetArea()->ApplyEffectToSprites(pCastingEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pCastingEffect;
+            break;
         case 8:
-            // TODO: The original gives the effect to the area's creatures
-            // through CGameArea 0x46E130 (not ported).
+            GetArea()->ApplyEffectToSprites(pCastingEffect, FALSE, FALSE, 0, this);
             delete pCastingEffect;
             break;
         default:
@@ -24446,7 +25239,7 @@ SHORT CGameSprite::RemoveTraps(CGameAIBase* pTarget)
 
     int skill = static_cast<char>(m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_DISABLE_DEVICE]);
     int roll = rand() % 20 + 1;
-    int skillModifier = sub_763E40(CGAMESPRITE_SKILL_DISABLE_DEVICE);  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    int skillModifier = sub_763E40(CGAMESPRITE_SKILL_DISABLE_DEVICE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     int check = roll + skill;
 
     if (pTarget->GetObjectType() == TYPE_DOOR
@@ -25215,7 +26008,7 @@ BOOLEAN CGameSprite::CanSaveGame(STRREF& strError)
 }
 
 // 0x75E930
-int CGameSprite::sub_75E930(int a1)  // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+int CGameSprite::sub_75E930(int a1) // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
     // The shipped binary stubs this fighting-style feat query to zero
     // (xor eax, eax; ret 4), which disables the style-bonus branches above.

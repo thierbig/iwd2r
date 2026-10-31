@@ -843,9 +843,36 @@ void CBaldurEngine::OnMouseWheel(BOOL bForward, LONG nTicks, DWORD nLines, WORD 
                 nTicks--;
             }
         }
+
+        return;
     }
 
-    // TODO: Incomplete.
+    // The tail: with no current scroll bar, two remembered bars take the wheel,
+    // the forward one when `bForward` is set and the backward one otherwise.
+    // Both must be non-null before either is consulted.
+    if (field_FE == NULL || field_102 == NULL) {
+        return;
+    }
+
+    CUIControlScrollBar* pScrollBar = bForward ? field_FE : field_102;
+
+    if (pScrollBar->m_pPanel->m_bActive
+        && pScrollBar->m_bActive
+        && nTicks > 0) {
+        do {
+            // NOTE: The exe calls vtable +0x78 (`OnScrollButtonUp`) with no
+            // argument at all (0x428A73/0x428A7E): the slot's function is
+            // `ret 4` in the original, so the shipped path would unbalance the
+            // stack; nothing ever assigns 0xFE/0x102 (only the constructor and
+            // CScreenWorldMap's shutdown clear them), so it never runs. The
+            // port passes 0 (neither UP nor DOWN, a no-op in
+            // `OnScrollButtonUp`'s switch) to keep the call well formed; the
+            // call count and order match the exe's two calls per tick.
+            pScrollBar->OnScrollButtonUp(0);
+            pScrollBar->OnScrollButtonUp(0);
+            nTicks--;
+        } while (nTicks != 0);
+    }
 }
 
 // 0x799E60

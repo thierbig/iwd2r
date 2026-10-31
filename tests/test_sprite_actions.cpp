@@ -176,7 +176,7 @@ private:
     std::thread m_thread;
 };
 
-std::vector<BYTE> FinishedCharacter()
+std::vector<std::vector<BYTE>> FinishedCharacters()
 {
     std::vector<fs::path> files;
     std::error_code ec;
@@ -185,6 +185,7 @@ std::vector<BYTE> FinishedCharacter()
             files.push_back(entry.path());
     }
     std::sort(files.begin(), files.end());
+    std::vector<std::vector<BYTE>> creatures;
     for (const fs::path& file : files) {
         std::ifstream in(file, std::ios::binary);
         const std::string chr((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -192,10 +193,16 @@ std::vector<BYTE> FinishedCharacter()
             const uint32_t offset = Le32(chr, 0x28);
             const uint32_t size = Le32(chr, 0x2C);
             if (offset + size <= chr.size() && chr.compare(offset, 8, "CRE V2.2") == 0)
-                return std::vector<BYTE>(chr.begin() + offset, chr.begin() + offset + size);
+                creatures.emplace_back(chr.begin() + offset, chr.begin() + offset + size);
         }
     }
-    return std::vector<BYTE>();
+    return creatures;
+}
+
+std::vector<BYTE> FinishedCharacter()
+{
+    std::vector<std::vector<BYTE>> creatures = FinishedCharacters();
+    return creatures.empty() ? std::vector<BYTE>() : creatures.front();
 }
 
 // A new game with one party member standing in AR1000, the world screen's
@@ -1778,4 +1785,102 @@ TEST_CASE("object: FloatText floats only in the area on view and clears its text
     pCharacter->field_1C = 0;
     pCharacter->FloatText(0, 10, 5);
     CHECK(pCharacter->field_1C == 0);
+}
+
+TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // The first pregenerated character with a spell, domain or innate list
+    // (the Characters folder holds fighters as well).
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        BOOL bHasSpells = !pProbe->m_innateSpells.m_List.empty();
+        for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES && !bHasSpells; nClass++) {
+            const CGameSpriteGroupedSpellList& spells = pProbe->m_spells.m_spellsByClass[nClass];
+            for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel && !bHasSpells; nLevel++)
+                bHasSpells = !spells.m_lists[nLevel].m_List.empty();
+        }
+        for (UINT nLevel = 0; nLevel < pProbe->m_domainSpells.m_nHighestLevel && !bHasSpells; nLevel++)
+            bHasSpells = !pProbe->m_domainSpells.m_lists[nLevel].m_List.empty();
+        delete pProbe;
+        if (bHasSpells) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with spells, domains or innates");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // The first spell entry of the character: class list, domain list or
+    // innate list, whichever has one.
+    enum { KIND_CLASS,
+        KIND_DOMAIN,
+        KIND_INNATE } kind
+        = KIND_CLASS;
+    CGameSpriteSpellList* pLevelList = NULL;
+    CGameSpriteSpellListEntry* pEntry = NULL;
+    UINT nEntryClass = 0;
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES && pEntry == NULL; nClass++) {
+        CGameSpriteGroupedSpellList& spells = pCharacter->m_spells.m_spellsByClass[nClass];
+        for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel && pEntry == NULL; nLevel++) {
+            if (!spells.m_lists[nLevel].m_List.empty()) {
+                kind = KIND_CLASS;
+                nEntryClass = nClass;
+                pLevelList = &spells.m_lists[nLevel];
+                pEntry = &pLevelList->m_List.front();
+            }
+        }
+    }
+    for (UINT nLevel = 0; nLevel < pCharacter->m_domainSpells.m_nHighestLevel && pEntry == NULL; nLevel++) {
+        if (!pCharacter->m_domainSpells.m_lists[nLevel].m_List.empty()) {
+            kind = KIND_DOMAIN;
+            pLevelList = &pCharacter->m_domainSpells.m_lists[nLevel];
+            pEntry = &pLevelList->m_List.front();
+        }
+    }
+    if (pEntry == NULL && !pCharacter->m_innateSpells.m_List.empty()) {
+        kind = KIND_INNATE;
+        pLevelList = &pCharacter->m_innateSpells;
+        pEntry = &pLevelList->m_List.front();
+    }
+    if (pEntry == NULL) {
+        SKIP("[iwd2r-skip] the character has no spells, domains or innates");
+    }
+
+    // Memorized twice, both spent. Classes 0 and 5 (bard, sorcerer) keep the
+    // counts per level as well as per spell.
+    pEntry->field_4 = 2;
+    pEntry->field_8 = 0;
+    if (kind == KIND_CLASS && (nEntryClass == 0 || nEntryClass == 5)) {
+        pLevelList->field_14 = 2;
+        pLevelList->field_18 = 0;
+    }
+
+    CHECK(pCharacter->Rest() == CGameAIBase::ACTION_DONE);
+
+    // Both memorized spells are castable again.
+    CHECK(pEntry->field_8 == 2);
+    if (kind == KIND_CLASS && (nEntryClass == 0 || nEntryClass == 5)) {
+        CHECK(pLevelList->field_18 == 2);
+    }
 }

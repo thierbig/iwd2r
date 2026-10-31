@@ -33,11 +33,14 @@ public:
     BOOLEAN CheckIncomingQueue();
     BOOLEAN CheckIncomingQueueSpecific(BYTE nSpecMsgType, BYTE nSpecMsgSubType);
     BOOLEAN CheckOutgoingQueueForAppendableMsgs(DWORD dwSize);
+    void FrameSend(BYTE nFrameKind, WORD nFrameNumber);
     void Initialize(INT nIndex);
     void ShutDown();
     void RemoveFromAllQueues();
     BYTE* RemoveFromIncomingQueue(PLAYER_ID& idDPFrom, PLAYER_ID& idDPTo, DWORD& dwDataSize, BOOLEAN& bCompressed);
     BYTE* RemoveFromIncomingQueueSpecific(BYTE nSpecMsgType, BYTE nSpecMsgSubType, PLAYER_ID& idDPFrom, PLAYER_ID& idDPTo, DWORD& dwDataSize, BOOLEAN& bCompressed);
+    void ReceiveCall(BYTE* pData, DWORD dwSize);
+    void TimeoutCall();
 
     void SetPlayerTimeout();
     void SetNoMessageTimeout();
@@ -162,6 +165,7 @@ public:
     INT FindPlayerLocationByName(const CString& sPlayerName, BOOLEAN bInvisible);
     void sub_7A73D0(CString& a1);
     INT ThreadLoop();
+    void SlidingWindowTimeouts();
     BOOLEAN HandleSystemMessage(BYTE* pData, DWORD dwSize);
     void AddMessageToWindow(PLAYER_ID idTo, DWORD dwFlags, BYTE* pData, DWORD dwSize);
     BYTE* CreateCopyMessage(const void* lpData, DWORD dwDataSize, BOOLEAN bCompressed, unsigned char a4, INT nFrame);

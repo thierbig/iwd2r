@@ -194,6 +194,28 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         break;
+    case WM_USER + 2:
+        // The completion of CGameSpy's WSAAsyncGetHostByName (0x4D0980 posts
+        // the 0x402 message): lParam's high word is the error. The original
+        // sets the resolved flag for every error except the ones below, where
+        // the lookup has already failed.
+        switch (HIWORD(lParam)) {
+        case WSAEFAULT:
+        case WSAEWOULDBLOCK:
+        case WSAEINPROGRESS:
+        case WSAENETDOWN:
+        case WSAENOBUFS:
+        case WSANOTINITIALISED:
+        case WSAHOST_NOT_FOUND:
+        case WSATRY_AGAIN:
+        case WSANO_RECOVERY:
+        case WSANO_DATA:
+            break;
+        default:
+            g_pChitin->cGameSpy.m_bHostResolved = TRUE;
+            break;
+        }
+        return 0;
     }
 
     // TODO: Incomplete.

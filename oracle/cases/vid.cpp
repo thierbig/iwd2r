@@ -31,6 +31,7 @@
 #pragma warning(disable : 4121 4201)
 #endif
 #include "CChitin.h"
+#include "CParticle.h"
 #include "CResCell.h"
 #include "CVidBitmap.h"
 #include "CVidCell.h"
@@ -1338,6 +1339,197 @@ void BltBmp24To16(CaseContext& ctx)
                         ctx.Fail(ctx.Inputs() + ", byte " + std::to_string(i), Hex(canvas[i]), Hex(mine[i]));
                         break;
                     }
+                }
+            }
+        }
+    }
+    ::operator delete(oursStorage);
+}
+
+// CVidBitmap::BltBmp8To16 has no address of its own: CVidBitmap::RenderDirect
+// (0x7B3190) carries it inlined in its 16-bpp branch, 0x7B362D-0x7B3735
+// (SetPalette at 0x7B3660, Realize at 0x7B3680, then the loop). The original
+// is therefore reached by calling RenderDirect itself, with an 8-bit
+// CResBitmap in a constructed original CVidBitmap and a fake video mode whose
+// one surface is a fabricated IDirectDrawSurface: its Lock (+0x64) hands back
+// the locked rect's first row in the canvas and the canvas pitch, its Unlock
+// (+0x80) does nothing - all LockSurface (0x799FA0) and UnLockSurface
+// (0x79A820) call. The resource is not demanded (bDemanded = TRUE), so Parse
+// never runs and the case fills the members it would set.
+constexpr uintptr_t kRenderDirect = 0x7B3190;
+// CVidBitmap::CVidBitmap() (0x7B2A40), plain ret: it builds the palette and
+// the palette-affect defaults the arm's SetPalette/Realize read.
+constexpr uintptr_t kVidBitmapCtor = 0x7B2A40;
+constexpr size_t kVidBitmapSize = 0x100;
+constexpr size_t kVidBitmapResOffset = 0xA4;
+constexpr size_t kVidBitmapDoubleSizeOffset = 0xB6;
+// CResBitmap members Parse fills.
+constexpr size_t kResColorsOffset = 0x50;
+constexpr size_t kResParsedOffset = 0x58;
+constexpr size_t kResDataOffset = 0x5C;
+constexpr size_t kResBitmapInfoOffset = 0x64;
+constexpr size_t kResColorTableOffset = 0x68;
+constexpr size_t kResBlockSize = 0x80;
+constexpr size_t kBitmapInfoSize = 0x28;
+constexpr size_t kModeSurfacesOffset = 0x9C;
+constexpr size_t kModeSurfaceArrayOffset = 0xA0;
+// DDSURFACEDESC (DX3): lPitch at 0x10, lpSurface at 0x24.
+constexpr size_t kDescPitchOffset = 0x10;
+constexpr size_t kDescSurfaceOffset = 0x24;
+
+using VidBitmapCtorFn = void*(__fastcall*)(void* self, void* edx);
+using RenderDirectFn = int32_t(__fastcall*)(void* self, void* edx, int32_t nSurface, int32_t x, int32_t y,
+    const int32_t* rClip, uint32_t dwFlags, uint8_t bDemanded);
+
+// The canvas the fabricated surface locks, and its geometry: the locked rect
+// starts at (left, top) and rows are lPitch bytes.
+uint8_t* g_lockedCanvas = nullptr;
+int32_t g_lockedStride = 0;
+int32_t g_lockedPitch = 0;
+
+// IDirectDrawSurface::Lock(rect, desc, flags, hEvent) and Unlock(lpSurface),
+// __stdcall as COM spells them, returning DD_OK.
+int32_t __stdcall FakeLock(void*, const int32_t* rect, void* desc, uint32_t, void*)
+{
+    auto* at = static_cast<uint8_t*>(desc);
+    Put<int32_t>(at, kDescPitchOffset, g_lockedPitch);
+    Put<uint32_t>(at, kDescSurfaceOffset,
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_lockedCanvas)
+            + (rect[1] * g_lockedStride + rect[0]) * 2));
+    return 0;
+}
+
+int32_t __stdcall FakeUnlock(void*, void*) { return 0; }
+
+// Slot +0x64 is Lock and +0x80 Unlock; no other slot is called.
+uintptr_t g_fakeSurfaceVTable[0x84 / 4];
+
+void ResetFakeSurfaceVTable()
+{
+    for (uintptr_t& slot : g_fakeSurfaceVTable) {
+        slot = reinterpret_cast<uintptr_t>(&FakeUnlock);
+    }
+    g_fakeSurfaceVTable[0x64 / 4] = reinterpret_cast<uintptr_t>(&FakeLock);
+}
+
+// 8-bit bitmaps 1 to 32 wide - width 1 takes the original's single-pixel
+// path, 2 the pairs, wider odd widths the leading pixel then pairs - and 1 to
+// 32 high, drawn upward from the last row of a 64x40 16-bit canvas of random
+// bytes, on 5-6-5 and 5-5-5 alternating. The source rows are as long as
+// RenderDirect's own nDataJump makes them; the 256-entry palette is random
+// apart from a pure red, green and blue, so the realized entries exercise the
+// rounding as well as the packing. The whole canvas and the result compare.
+void BltBmp8To16(CaseContext& ctx)
+{
+    VideoFixture video(ctx);
+    constexpr int kW = 64;
+    constexpr int kH = 40;
+    constexpr size_t kSize = kW * kH * 2;
+    constexpr size_t kDataSize = 64 * 32;
+    constexpr int kColors = 256;
+
+    uint8_t* self = nullptr;
+    uint8_t* res = nullptr;
+    uint8_t* info = nullptr;
+    uint8_t* colorTable = nullptr;
+    uint8_t* canvas = nullptr;
+    uint8_t* data = nullptr;
+    uint8_t* surface = nullptr;
+    uint8_t* surfaces = nullptr;
+    ctx.SetInputs("building the original's bitmap, surface and canvas");
+    ctx.CallOriginal([&] {
+        self = OriginalBlock(kVidBitmapSize);
+        reinterpret_cast<VidBitmapCtorFn>(kVidBitmapCtor)(self, nullptr);
+        res = OriginalBlock(kResBlockSize);
+        info = OriginalBlock(kBitmapInfoSize);
+        colorTable = OriginalBlock(kColors * 4);
+        canvas = OriginalBlock(kSize);
+        data = OriginalBlock(kDataSize);
+        surface = OriginalBlock(4);
+        surfaces = OriginalBlock(4);
+        ResetFakeSurfaceVTable();
+        Put<uint32_t>(surface, 0, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_fakeSurfaceVTable)));
+        Put<uint32_t>(surfaces, 0, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(surface)));
+        Put<uint32_t>(video.mode, kModeSurfacesOffset, 1);
+        Put<uint32_t>(video.mode, kModeSurfaceArrayOffset,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(surfaces)));
+        Put<uint32_t>(res, kResParsedOffset, TRUE);
+        Put<int32_t>(res, kResColorsOffset, kColors);
+        Put<uint32_t>(res, kResDataOffset, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(data)));
+        Put<uint32_t>(res, kResBitmapInfoOffset, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(info)));
+        Put<uint32_t>(res, kResColorTableOffset,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(colorTable)));
+        Put<uint16_t>(info, 0x0E, 8); // biBitCount
+        Put<uint32_t>(self, kVidBitmapResOffset, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(res)));
+        Put<uint32_t>(self, kVidBitmapDoubleSizeOffset, 0);
+    });
+
+    // Ours: the resource outlives the call and everything is leaked, as the
+    // other vid cases do.
+    auto* oursStorage = static_cast<unsigned char*>(::operator new(sizeof(CVidBitmap)));
+    auto* ours = new (oursStorage) CVidBitmap;
+    auto* oursRes = new CResBitmap;
+    oursRes->bParsed = TRUE;
+    oursRes->nColors = kColors;
+    RGBQUAD colors[kColors];
+    oursRes->pColorTable = colors;
+    ours->SetRes(oursRes);
+
+    std::vector<uint8_t> mine(kSize);
+    std::vector<uint8_t> pixels(kDataSize);
+    Picks picks(ctx.seed, 0x426D703816000000ull); // "Bmp8"
+    const int count = 600 + ctx.iterations / 10;
+
+    // The same palette on both sides: three pure channels and 253 random.
+    for (int i = 0; i < kColors; ++i) {
+        const uint32_t bits = (i == 0 ? 0x0000FFu : i == 1 ? 0x00FF00u
+                : i == 2                                   ? 0xFF0000u
+                                                           : picks.Bits());
+        std::memcpy(&colors[i], &bits, sizeof(colors[i]));
+    }
+    ctx.CallOriginal([&] { std::memcpy(colorTable, colors, sizeof(colors)); });
+
+    for (int n = 0; n < count; ++n) {
+        SetMode16(video, ctx, (n & 1) == 0);
+        const int32_t cx = picks.Between(1, 32);
+        const int32_t cy = picks.Between(1, 32);
+        const int32_t x = picks.Between(0, kW - cx);
+        const int32_t y = picks.Between(0, kH - cy);
+        // RenderDirect's nDataJump for a 1-byte-per-pixel source.
+        const int32_t jump = (-((cx * 1) & 3)) & 3;
+        for (uint8_t& index : pixels) {
+            index = static_cast<uint8_t>(picks.Bits());
+        }
+        for (uint8_t& b : mine) {
+            b = static_cast<uint8_t>(picks.Bits());
+        }
+        char inputs[200];
+        std::snprintf(inputs, sizeof(inputs),
+            "input %d (%s): %dx%d at (%d,%d), data jump %d, palette entry 0 red", n,
+            (n & 1) == 0 ? "5-6-5" : "5-5-5", cx, cy, x, y, jump);
+        ctx.SetInputs(inputs);
+        const int32_t rClip[4] = { 0, 0, kW, kH };
+        int32_t originalResult = 0;
+        ctx.CallOriginal([&] {
+            std::memcpy(canvas, mine.data(), kSize);
+            std::memcpy(data, pixels.data(), kDataSize);
+            Put<int32_t>(info, 4, cx); // biWidth
+            Put<int32_t>(info, 8, cy); // biHeight
+            g_lockedCanvas = canvas;
+            g_lockedStride = kW;
+            g_lockedPitch = kW * 2;
+            originalResult = reinterpret_cast<RenderDirectFn>(kRenderDirect)(
+                self, nullptr, 0, x, y, rClip, 0, 1);
+        });
+        const BOOL oursResult = ours->BltBmp8To16(
+            reinterpret_cast<WORD*>(mine.data() + ((y + cy - 1) * kW + x) * 2), kW * 2,
+            pixels.data(), CSize(cx, cy), jump, 0);
+        ctx.CountInputs(1);
+        if (oracle::Compare(ctx, originalResult, static_cast<int32_t>(oursResult))) {
+            for (size_t i = 0; i < kSize; ++i) {
+                if (canvas[i] != mine[i]) {
+                    ctx.Fail(ctx.Inputs() + ", byte " + std::to_string(i), Hex(canvas[i]), Hex(mine[i]));
+                    break;
                 }
             }
         }
@@ -4343,6 +4535,158 @@ void PackColor(CaseContext& ctx)
     run("16 bpp, 5-5-5");
 }
 
+// CParticle::Render (0x7C36A0) at 16, 24 and 32 bpp: CONNECT through the
+// mode's DrawLine16/24/32 virtuals (ours against the original's), DOTS and
+// BLOB as plain buffer writes, the two blob helpers (0x7C3CC0, 0x7C3E20) new
+// with the 16/24 arms. A zeroed CParticle block with only the members Render
+// reads - the timestamp and tail length at 0/2, the colour at 6, the position
+// and velocity at 0x12/0x1E - the 3d flag off, and a canvas of random bytes;
+// the clip rect, the flag and the blob size vary. The whole canvas is
+// compared.
+using ParticleRenderFn = void(__fastcall*)(void* self, void* edx, void* pSurface, int32_t lPitch,
+    const void* rClipRect, uint32_t nFlag, uint32_t nBlobSize);
+constexpr uintptr_t kParticleRender = 0x7C36A0;
+constexpr size_t kParticleTimeStampOffset = 0x00;
+constexpr size_t kParticleTailLengthOffset = 0x02;
+constexpr size_t kParticleColorOffset = 0x06;
+constexpr size_t kParticlePosOffset = 0x12;
+constexpr size_t kParticleVelOffset = 0x1E;
+constexpr int kParticleCanvas = 64;
+
+void ParticleRender(CaseContext& ctx)
+{
+    VideoFixture video(ctx);
+    uint8_t* particle = nullptr;
+    uint8_t* rect = nullptr;
+    uint8_t* canvas = nullptr;
+    constexpr int kMaxCanvasBytes = kParticleCanvas * kParticleCanvas * 4;
+    ctx.SetInputs("building the original's particle and canvas");
+    ctx.CallOriginal([&] {
+        particle = OriginalBlock(0x40);
+        rect = OriginalBlock(16);
+        canvas = OriginalBlock(kMaxCanvasBytes);
+    });
+
+    auto* oursStorage = static_cast<unsigned char*>(::operator new(sizeof(CParticle)));
+    std::memset(oursStorage, 0, sizeof(CParticle));
+    auto* ours = reinterpret_cast<CParticle*>(oursStorage);
+    std::vector<uint8_t> mine(kMaxCanvasBytes);
+
+    Picks picks(ctx.seed, 0x5061727469630000ull); // "Partic"
+    const int count = 400 + ctx.iterations / 20;
+    const int32_t kPositions[] = { -2, -1, 0, 1, 3, 7, 30, 62, 65 };
+
+    const auto setDepth = [&](uint16_t nBpp, uint32_t rShift, uint32_t gShift, uint32_t bShift) {
+        ctx.CallOriginal([&] {
+            Put<uint16_t>(video.chitin, kBppOffset, nBpp);
+            Put<uint32_t>(video.mode, kRShiftOffset, rShift);
+            Put<uint32_t>(video.mode, kGShiftOffset, gShift);
+            Put<uint32_t>(video.mode, kBShiftOffset, bShift);
+        });
+        video.oursChitin->cVideo.m_nBpp = nBpp;
+        video.oursMode->m_dwRBitShift = rShift;
+        video.oursMode->m_dwGBitShift = gShift;
+        video.oursMode->m_dwBBitShift = bShift;
+    };
+
+    for (const int bpp : { 16, 24, 32 }) {
+        const int bytes = bpp / 8;
+        const int32_t pitch = kParticleCanvas * bytes;
+        const size_t canvasBytes = static_cast<size_t>(pitch) * kParticleCanvas;
+        if (bpp == 16) {
+            // 5-6-5, as CVidInf::CreateSurfaces sets it.
+            ctx.CallOriginal([&] {
+                Put<uint32_t>(video.mode, kRMaskOffset, 0xF800);
+                Put<uint32_t>(video.mode, kGMaskOffset, 0x07E0);
+                Put<uint32_t>(video.mode, kBMaskOffset, 0x001F);
+                Put<uint32_t>(video.mode, kRDropOffset, 3);
+                Put<uint32_t>(video.mode, kGDropOffset, 2);
+                Put<uint32_t>(video.mode, kBDropOffset, 3);
+                Put<uint16_t>(video.chitin, kBppOffset, 16);
+                Put<uint32_t>(video.mode, kRShiftOffset, 11);
+                Put<uint32_t>(video.mode, kGShiftOffset, 5);
+                Put<uint32_t>(video.mode, kBShiftOffset, 0);
+            });
+            video.oursMode->m_dwRBitMask = 0xF800;
+            video.oursMode->m_dwGBitMask = 0x07E0;
+            video.oursMode->m_dwBBitMask = 0x001F;
+            video.oursMode->field_C2 = 3;
+            video.oursMode->field_C6 = 2;
+            video.oursMode->field_CA = 3;
+            video.oursMode->m_dwRBitShift = 11;
+            video.oursMode->m_dwGBitShift = 5;
+            video.oursMode->m_dwBBitShift = 0;
+            video.oursChitin->cVideo.m_nBpp = 16;
+        } else {
+            setDepth(static_cast<uint16_t>(bpp), 16, 8, 0);
+        }
+
+        for (int n = 0; n < count; n++) {
+            const int16_t nTimeStamp = static_cast<int16_t>(picks.Between(0, 6));
+            const int16_t nTailLength = static_cast<int16_t>(picks.Between(0, 6));
+            const uint32_t rgb = picks.Bits() & 0xFFFFFF;
+            const int32_t x = (kPositions[picks.Between(0, 8)] << 10) | static_cast<int32_t>(picks.Bits() & 0x3FF);
+            const int32_t y = (kPositions[picks.Between(0, 8)] << 10) | static_cast<int32_t>(picks.Bits() & 0x3FF);
+            const int32_t z = picks.Between(-3000, 3000);
+            const int32_t vx = picks.Between(-4000, 4000);
+            const int32_t vy = picks.Between(-4000, 4000);
+            const int32_t vz = picks.Between(-2000, 2000);
+            const int32_t left = picks.Between(0, kParticleCanvas - 1);
+            const int32_t top = picks.Between(0, kParticleCanvas - 1);
+            const int32_t right = picks.Between(left, kParticleCanvas);
+            const int32_t bottom = picks.Between(top, kParticleCanvas);
+            const uint32_t nFlag = static_cast<uint32_t>(picks.Between(0, 2));
+            const uint32_t nBlobSize = static_cast<uint32_t>(picks.Between(1, 5));
+            for (size_t i = 0; i < canvasBytes; i++) {
+                mine[i] = static_cast<uint8_t>(picks.Bits());
+            }
+
+            char inputs[240];
+            std::snprintf(inputs, sizeof(inputs),
+                "%d bpp: input %d, timestamp %d, tail %d, colour 0x%06X, pos (%d,%d,%d), vel (%d,%d,%d), "
+                "clip (%d,%d,%d,%d), flag %u, blob %u",
+                bpp, n, nTimeStamp, nTailLength, rgb, x, y, z, vx, vy, vz, left, top, right, bottom, nFlag, nBlobSize);
+            ctx.SetInputs(inputs);
+            ctx.CallOriginal([&] {
+                Put<int16_t>(particle, kParticleTimeStampOffset, nTimeStamp);
+                Put<int16_t>(particle, kParticleTailLengthOffset, nTailLength);
+                Put<uint32_t>(particle, kParticleColorOffset, rgb);
+                Put<int32_t>(particle, kParticlePosOffset, x);
+                Put<int32_t>(particle, kParticlePosOffset + 4, y);
+                Put<int32_t>(particle, kParticlePosOffset + 8, z);
+                Put<int32_t>(particle, kParticleVelOffset, vx);
+                Put<int32_t>(particle, kParticleVelOffset + 4, vy);
+                Put<int32_t>(particle, kParticleVelOffset + 8, vz);
+                const int32_t r[4] = { left, top, right, bottom };
+                std::memcpy(rect, r, 16);
+                std::memcpy(canvas, mine.data(), canvasBytes);
+                reinterpret_cast<ParticleRenderFn>(kParticleRender)(particle, nullptr, canvas, pitch, rect, nFlag,
+                    nBlobSize);
+            });
+            ours->m_nTimeStamp = nTimeStamp;
+            ours->m_nTailLength = nTailLength;
+            ours->m_rgbColor = rgb;
+            ours->m_pos.x = x;
+            ours->m_pos.y = y;
+            ours->m_pos.z = z;
+            ours->m_vel.x = vx;
+            ours->m_vel.y = vy;
+            ours->m_vel.z = vz;
+            ours->Render(mine.data(), pitch, CRect(left, top, right, bottom), static_cast<USHORT>(nFlag),
+                static_cast<USHORT>(nBlobSize));
+            ctx.CountInputs(1);
+            for (size_t i = 0; i < canvasBytes; i++) {
+                if (canvas[i] != mine[i]) {
+                    ctx.Fail(ctx.Inputs() + ", byte " + std::to_string(i), Hex(canvas[i]), Hex(mine[i]));
+                    break;
+                }
+            }
+        }
+    }
+
+    ::operator delete(oursStorage);
+}
+
 } // namespace
 
 ORACLE_CASE("vid/hline_shaded32", HLineShaded32);
@@ -4401,6 +4745,7 @@ ORACLE_CASE("vid/blt_tile8to24", BltTile8To24);
 ORACLE_CASE("vid/blt_stencil_tile8to24", BltStencilTile8To24);
 ORACLE_CASE("vid/blt_bmp24to24", BltBmp24To24);
 ORACLE_CASE("vid/blt_bmp24to24_tint", BltBmp24To24Tint);
+ORACLE_CASE("vid/blt_bmp8to16", BltBmp8To16);
 ORACLE_CASE("vid/blt_bmp24to16", BltBmp24To16);
 ORACLE_CASE("vid/blt_bmp24to16_tint", BltBmp24To16Tint);
 ORACLE_CASE("vid/draw_ellipse32", Ellipse32);
@@ -4408,3 +4753,4 @@ ORACLE_CASE("vid/draw_recticle32", Recticle32);
 ORACLE_CASE("vid/draw_recticle16", Recticle16);
 ORACLE_CASE("vid/draw_recticle24", Recticle24);
 ORACLE_CASE("vid/pack_color", PackColor);
+ORACLE_CASE("vid/particle_render", ParticleRender);

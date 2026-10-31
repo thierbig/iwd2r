@@ -21,9 +21,13 @@
 # level-4 spell can sit in the list at a time and row 2 never exists.
 # Flame Strike memorizes pre-fight (row 1); Spike Stones memorizes into
 # the slot between the casts (Flame Strike's slot is spent by then) and
-# is cast with F1 as well. No rest is needed: chr_raise_druid never
-# rested, so the file's level-4 slot is empty and filling an empty slot
-# needs no rest -- the casts never depend on the unported ACTION 96.
+# is cast with F1 as well. KNOWN BLOCKER (Task 59c): a newly memorized
+# spell reads 0/1 (memorized, not castable) on both engines until a rest,
+# and AR1000 forbids resting (area flags 0x2; CanRestParty 0x5C1E30 ->
+# "You may not rest at this time.", on ours and by the same test in the
+# exe). So these casts cannot land in AR1000 as written: the fix is a
+# druid file exported after a rest with the spells memorized, or a rest
+# in another area. The scenario stays pending until then.
 #
 # Spellbook geometry (record_tour.txt + notes): key S opens it on the
 # sole member; the level tabs sit at x=761, level 1 (761,81) plus 39 per
@@ -152,24 +156,24 @@ click 456 257
 wait 30
 checkpoint level1_cleared
 shot level1_cleared
-# Level 4 (761,198): Flame Strike (510,222) into slot 1 (307,94) --
-# the only slot druid 7 has (run 20261030-140342's spells_memorized
-# shot: one slot, "Spell Slots Available 0"; the old slot-2 clicks at
-# (307,136) hit nothing). Spike Stones memorizes into this slot later,
-# after Flame Strike is cast. TIMING: run 20261030-140342 memorized
-# with 20-frame waits; run 20261030-141837 ran the identical clicks
-# and left the slot EMPTY ("Spell Slots Available 1") -- the known
-# list was not interactive yet, so the select click missed and the
-# rest no-oped (the stray Yes changed nothing, again). The only lever
-# is the waits: 60 after the tab switch, 40 around each click.
+# Level 4 (761,198): Flame Strike (510,222) into slot 1 -- the only
+# slot druid 7 has (run 20261030-140342's spells_memorized shot: one
+# slot, "Spell Slots Available 0"). A click on a known spell memorizes
+# it at once (CUIControlButtonSpellbookSpell::OnLButtonClick, ids
+# 30-37 -> MemorizeSpell); a click on a filled slot removes it (ids
+# 6-29, directly or through the Yes popup); and the screen drops every
+# mouse click while the memorize/unmemorize flash plays
+# (CScreenSpellbook::OnLButtonDown 0x669700 tests m_bFlashUnmemorize
+# and m_bFlashMemorize, as ours does). The old select/slot/Yes clicks
+# were a race: on the original, 20-frame waits put the slot click
+# inside the memorize flash, so it was dropped and Flame Strike stayed
+# (run 20261030-140342); 40-frame waits let it through and it removed
+# the spell again (run 20261030-141837, and ours in Task 59). So: one
+# click on the known spell, then a wait past the flash.
 click 761 198
 wait 60
 click 510 222
-wait 40
-click 307 94
-wait 40
-click 456 257
-wait 40
+wait 60
 checkpoint spells_memorized
 shot spells_memorized
 key ESCAPE
@@ -351,28 +355,23 @@ shot cast1_after
 # Cast 1 in run 20261030-140342 armed and targeted fine (the reticle
 # sat over the goblin in cast1_after) but froze under an Attacked
 # auto-pause; the burst above re-unpauses inside the casting time.
-# Between the casts: reopen the spellbook and memorize Spike Stones
-# into slot 1 -- druid 7's only 4th-level slot, spent or empty by now.
-# If Flame Strike is still there (the cast never started), the slot
-# click asks and Yes (456,257) removes it; if it is empty the slot
-# click no-ops and the Yes is the stray page click launch 1 already
-# showed harmless (two stray Yes clicks changed nothing there). Then
-# Spike Stones (510,390) into slot 1 (307,94), and row 1 is Spike
-# Stones. Escape closes.
+# Between the casts: reopen the spellbook, empty slot 1 (druid 7's only
+# 4th-level slot, spent or still holding Flame Strike) and memorize
+# Spike Stones (510,390) with one click, as above. The slot click
+# removes Flame Strike directly or asks; Yes (456,257) answers the ask,
+# and with no popup up it is the stray page click launch 1 showed
+# harmless. Each click waits past the flash the one before started.
+# Then row 1 is Spike Stones. Escape closes.
 key S
 wait 60
 click 761 198
 wait 60
 click 307 94
-wait 40
+wait 60
 click 456 257
-wait 40
+wait 60
 click 510 390
-wait 40
-click 307 94
-wait 40
-click 456 257
-wait 40
+wait 60
 key ESCAPE
 wait 60
 checkpoint cast2_before

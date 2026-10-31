@@ -1,0 +1,7 @@
+{
+    "address": "0x75A4B0",
+    "name": "CGameSprite::Berserk",
+    "file": "src/CGameSprite.cpp",
+    "batch": "i054",
+    "needs": "dependency 0x75AAC0 CAIAction::CAIAction (SHORT actionID, LONG specificID) parked (no Frida hook: ambiguous: 8 overloads of CAIAction::CAIAction in our map): parked with it"
+}

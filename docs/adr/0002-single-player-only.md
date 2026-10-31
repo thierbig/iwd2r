@@ -14,7 +14,7 @@ Multiplayer is removed permanently. It cannot sit behind an option, so it is rec
 - `CScreenMultiPlayer` and the DirectPlay headers are deleted, along with the references to the screen. `CScreenConnection` stays as the start screen with its multiplayer entry hidden.
 - `CMessage` is kept whole as the engine's action queue, which single player uses; a later project finishes it against the null-provider network.
 - `CMultiplayerSettings` and `CChatBuffer` are kept because single-player screens load party permissions and chat text through them.
-- `CGameSpy` is kept as the stub it already is.
+- `CGameSpy` is ported (PR #61) but stays inert: its sockets are the platform's, whose `WSAStartup` always fails, and its heartbeat only starts when a multiplayer TCP/IP session is hosted, which this engine never does.
 
 ## Alternatives considered
 

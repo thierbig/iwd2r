@@ -10,6 +10,33 @@
 #include "CVideo.h"
 
 class CKeyInfo;
+class CWarp;
+
+// #guess: the timer CWarp::lTimers holds. Nothing in iwd2.exe ever constructs
+// one and neither IEex's names nor the exports name the class, so the name,
+// the virtual's name and every field's meaning are ours; only the layout is
+// the binary's - CWarp::TimerUpdate (0x7B5550) reads exactly these offsets:
+// +0x04 set fires the timer on every update, +0x08/+0x0C/+0x10/+0x14 gate the
+// self-removal (+0x10 is the owning CWarp, whose lTimers sits at +0xC, and
+// +0x14 is the timer's own POSITION in it), +0x18 is the period and +0x1C the
+// accumulator of 10000 / CChitin::TIMER_UPDATES_PER_SECOND. In release MFC
+// CObject has three virtuals, so the class's first own virtual is at
+// vtable+0xC there; our compat CObject has one (the destructor), so it sits at
+// +0x4 here - every call is by name, so behaviour is the same.
+class CWarpTimer : public CObject {
+public:
+    /* 0004 */ BOOL field_4; // #guess: fires every update
+    /* 0008 */ LONG field_8; // #guess: non-zero allows the self-removal
+    /* 000C */ LONG field_C; // #guess: cleared when the timer removes itself
+    /* 0010 */ CWarp* field_10; // #guess: the owning engine
+    /* 0014 */ POSITION field_14; // #guess: its POSITION in the owner's lTimers
+    /* 0018 */ LONG field_18; // the period, in units of 10000 / updates per second
+    /* 001C */ LONG field_1C; // the accumulator
+
+    // #guess: pure because nothing in the binary implements or constructs a
+    // timer; the class is a declared layout, and a real timer supplies this.
+    virtual void Update() = 0; // #guess: vtable+0xC in the original
+};
 
 class CWarp : public CObject {
 public:

@@ -5,6 +5,7 @@
 #include "CAIScriptFile.h"
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
+#include "CBaldurEngine.h"
 #include "CButtonData.h"
 #include "CChitin.h"
 #include "CDerivedStats.h"
@@ -22,6 +23,7 @@
 #include "CMessage.h"
 #include "CParticle.h"
 #include "CPathSearch.h"
+#include "CResCell.h"
 #include "CResMosaic.h"
 #include "CRuleTables.h"
 #include "CScreenCharacter.h"
@@ -33,10 +35,12 @@
 #include "CScreenWorld.h"
 #include "CScreenWorldMap.h"
 #include "CTimerWorld.h"
+#include "CUIControlScrollBar.h"
 #include "CUIControlTextDisplay.h"
 #include "CUIManager.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
+#include "CVidFont.h"
 #include "CVidMosaic.h"
 #include "CWarp.h"
 #include "CWeather.h"
@@ -2863,4 +2867,253 @@ TEST_CASE("ime: the composition window's rect follows the font, the mosaic and t
     // down to the mosaic's own.
     setMosaic(40, 8);
     CHECK(rect(CPoint(0, 0), CSize(200, 50), CPoint(0, 0), CSize(60, 10), 2) == CRect(20, 10, 60, 18));
+}
+
+// CUtil::SplitString (0x780CF0): the line loop's Double Byte Character
+// Support. With g_pChitin->field_1A0 on, a lead byte takes its trail byte with
+// it (the pair is measured as one unit, and the trail byte is never tested for
+// a break), and the line budget loses 10 px. The font fixture is a BAM with
+// 256 frames: frame 0 (what every single byte uses) is 5 px, frame 0x40 (a
+// lead byte whose trail is 'A') is 100 px, so a pair can overrun the budget
+// while the string left of it does not.
+TEST_CASE("util: SplitString keeps a double-byte pair together and budgets 10 px less", "[uimisc][util]")
+{
+    // A chitin with a constructed m_sFontName: SplitString asks the font's
+    // GetStringLength, which reads the chitin's font name to choose the BAM
+    // path (the table lookup needs the engine's threads, which do not run
+    // here, so a bare chitin like FindOneOf's cannot hold its CString).
+    class SplitStringChitin : public CChitin {
+    public:
+        void MessageThreadMain(void*) override { }
+        void RSThreadMain(void*) override { }
+        void MainAIThread(void*) override { }
+        void MusicThreadMain(void*) override { }
+    };
+    SplitStringChitin chitin;
+    CChitin* pSaved = g_pChitin;
+    g_pChitin = &chitin;
+    struct Restore {
+        CChitin* pChitin;
+        ~Restore()
+        {
+            iwd2r_SetTestLeadBytes(nullptr);
+            g_pChitin = pChitin;
+        }
+    } restore { pSaved };
+    chitin.m_sFontName = "";
+    chitin.field_1A0 = 0;
+
+    const int kFrames = 256;
+    const DWORD nTable = 0x18;
+    const DWORD nSequences = nTable + kFrames * sizeof(FRAMEENTRY);
+    const DWORD nFrameList = nSequences + sizeof(SEQUENCEENTRY);
+    const DWORD nPalette = nFrameList + kFrames * sizeof(WORD);
+    std::vector<BYTE> bytes(nPalette + 1024, 0);
+    BAMHEADER header = {};
+    std::memcpy(&header.nFileType, "BAM ", 4);
+    std::memcpy(&header.nFileVersion, "V1  ", 4);
+    header.nFrames = kFrames;
+    header.nSequences = 1;
+    header.nTableOffset = nTable;
+    header.nPaletteOffset = nPalette;
+    header.nFrameListOffset = nFrameList;
+    std::memcpy(bytes.data(), &header, sizeof(header));
+    for (int i = 0; i < kFrames; i++) {
+        FRAMEENTRY frame = {};
+        frame.nWidth = i == 0x40 ? 100 : 5;
+        frame.nHeight = 7;
+        std::memcpy(bytes.data() + nTable + i * sizeof(FRAMEENTRY), &frame, sizeof(frame));
+        const WORD nFrame = static_cast<WORD>(i);
+        std::memcpy(bytes.data() + nFrameList + i * sizeof(WORD), &nFrame, sizeof(nFrame));
+    }
+    SEQUENCEENTRY sequence = { static_cast<SHORT>(kFrames), 0 };
+    std::memcpy(bytes.data() + nSequences, &sequence, sizeof(sequence));
+
+    CResCell res;
+    res.m_bCacheHeader = FALSE;
+    REQUIRE(res.Parse(bytes.data()));
+    CVidFont font;
+    static_cast<CResHelper<CResCell, 1000>&>(font).pRes = &res;
+
+    // Shift-JIS's lead bytes (0x81-0x9F, 0xE0-0xFC), for the pair below.
+    static bool leadBytes[256] = {};
+    for (int c = 0x81; c <= 0x9F; c++)
+        leadBytes[c] = true;
+    for (int c = 0xE0; c <= 0xFC; c++)
+        leadBytes[c] = true;
+
+    auto split = [&](const char* text, WORD lineLength, BYTE maxStrings, BOOL divideWords, BOOL checkRemainder,
+                     WORD suggested) {
+        CString out[8];
+        const BYTE n = CUtil::SplitString(&font, CString(text), lineLength, maxStrings, out, divideWords, TRUE,
+            checkRemainder, suggested);
+        std::vector<std::string> lines;
+        for (BYTE i = 0; i < n; i++) {
+            lines.push_back(static_cast<const char*>(out[i]));
+        }
+        return lines;
+    };
+
+    // The single-byte arm: 5 px per character.
+    iwd2r_SetTestLeadBytes(nullptr);
+    CHECK(split("abcdef", 10, 3, TRUE, FALSE, 0) == std::vector<std::string> { "ab", "cd", "ef" });
+    CHECK(split("ab\ncd", 100, 3, TRUE, FALSE, 0) == std::vector<std::string> { "ab", "cd" });
+
+    // Double Byte Character Support reserves 10 px: the same string fits two
+    // characters per 15 px instead of three.
+    chitin.field_1A0 = 0;
+    CHECK(split("abcdef", 15, 2, TRUE, FALSE, 0) == std::vector<std::string> { "abc", "def" });
+    chitin.field_1A0 = 1;
+    CHECK(split("abcdef", 15, 2, TRUE, FALSE, 0) == std::vector<std::string> { "a", "bcdef" });
+
+    // Shift-JIS lead byte 0x81 with trail 'A': as a pair it is 100 px, so
+    // with the 5 px budget left it moves to the next line whole. Without the
+    // support the loop would stop on 'A' (the pair measures 100 px there) and
+    // break it into "\x81" and "A"; with the flag off the two bytes are just
+    // 5 px each and both fit.
+    iwd2r_SetTestLeadBytes(leadBytes);
+    chitin.field_1A0 = 1;
+    CHECK(split("\x81"
+                "A",
+              15, 2, TRUE, FALSE, 0)
+        == std::vector<std::string> { "", "\x81"
+                                          "A" });
+    chitin.field_1A0 = 0;
+    CHECK(split("\x81"
+                "A",
+              15, 2, TRUE, FALSE, 0)
+        == std::vector<std::string> { "\x81"
+                                      "A" });
+
+    static_cast<CResHelper<CResCell, 1000>&>(font).pRes = NULL;
+}
+
+// CBaldurEngine::OnMouseWheel (0x4289C0): the tail after the scroll-bar loop.
+// With no current scroll bar the two remembered bars (0xFE/0x102) take the
+// wheel when both exist - the forward one for a forward tick, the backward one
+// otherwise - and only when the chosen bar's panel and the bar itself are
+// active and nTicks is positive; each tick then calls the bar's +0x78 slot
+// twice. The object's vtable is a synthetic array whose entries all point at
+// the recorder below (the oracle case does the same on the original's side):
+// the slot index is the class's own, so this also pins that the port calls
+// OnScrollButtonUp's slot and passes the repaired direction 0. The guards are
+// pinned by poisoned pointers that a wrong branch would dereference.
+namespace {
+
+int sBarCalls;
+const void* sCalledBar;
+int sCalledDirection;
+
+#if defined(_MSC_VER)
+void __fastcall OnScrollButtonUpProbe(void* self, void*, unsigned char nDirection)
+#else
+void OnScrollButtonUpProbe(void* self, unsigned char nDirection)
+#endif
+{
+    sBarCalls++;
+    sCalledBar = self;
+    sCalledDirection = nDirection;
+}
+
+} // namespace
+
+TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
+{
+    std::vector<unsigned char> engineStorage(sizeof(CBaldurEngine), 0);
+    auto* engine = reinterpret_cast<CBaldurEngine*>(engineStorage.data());
+    std::vector<unsigned char> panelStorage(sizeof(CUIPanel), 0);
+    auto* panel = reinterpret_cast<CUIPanel*>(panelStorage.data());
+    std::vector<unsigned char> barStorage(sizeof(CUIControlScrollBar), 0);
+    auto* bar = reinterpret_cast<CUIControlScrollBar*>(barStorage.data());
+    auto* barBase = reinterpret_cast<CUIControlBase*>(bar);
+    barBase->m_pPanel = panel;
+
+    void* vtable[33] = {};
+    for (void*& entry : vtable) {
+        entry = reinterpret_cast<void*>(&OnScrollButtonUpProbe);
+    }
+    *reinterpret_cast<void***>(barStorage.data()) = vtable;
+
+    auto* poison = reinterpret_cast<CUIControlScrollBar*>(static_cast<uintptr_t>(1));
+
+    // nLines == 0 returns before anything is read.
+    engine->m_pCurrentScrollBar = poison;
+    engine->field_FE = poison;
+    engine->field_102 = poison;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 0, 0);
+    CHECK(sBarCalls == 0);
+
+    // A current scroll bar returns after its own loop even when it is inactive:
+    // the tail must not look at the poisoned 0xFE/0x102.
+    engine->m_pCurrentScrollBar = bar;
+    panel->m_bActive = FALSE;
+    barBase->m_bActive = TRUE;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    CHECK(sBarCalls == 0);
+
+    // The tail needs both remembered bars.
+    engine->m_pCurrentScrollBar = NULL;
+    engine->field_FE = bar;
+    engine->field_102 = NULL;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    CHECK(sBarCalls == 0);
+    engine->field_FE = NULL;
+    engine->field_102 = bar;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    CHECK(sBarCalls == 0);
+
+    // A forward tick consults field_FE, a backward one field_102: the other is
+    // poisoned and must not be dereferenced.
+    panel->m_bActive = FALSE;
+    barBase->m_bActive = TRUE;
+    engine->field_FE = bar;
+    engine->field_102 = poison;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    engine->field_FE = poison;
+    engine->field_102 = bar;
+    engine->CBaldurEngine::OnMouseWheel(FALSE, 2, 1, 0);
+    CHECK(sBarCalls == 0);
+
+    // The call path: an active panel and bar with a positive tick count calls
+    // the slot twice a tick, on the bar the direction selects, with the
+    // direction the port passes (0: the exe pushes nothing there).
+    engine->field_FE = bar;
+    engine->field_102 = poison;
+    panel->m_bActive = TRUE;
+    barBase->m_bActive = TRUE;
+    sBarCalls = 0;
+    sCalledBar = NULL;
+    sCalledDirection = -1;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 3, 2, 0);
+    CHECK(sBarCalls == 6);
+    CHECK(sCalledBar == bar);
+    CHECK(sCalledDirection == 0);
+
+    engine->field_FE = poison;
+    engine->field_102 = bar;
+    sBarCalls = 0;
+    engine->CBaldurEngine::OnMouseWheel(FALSE, 2, 2, 0);
+    CHECK(sBarCalls == 4);
+    CHECK(sCalledBar == bar);
+
+    // Neither an inactive panel, nor an inactive bar, nor a non-positive tick
+    // count reaches the calls.
+    sBarCalls = 0;
+    engine->field_FE = bar;
+    engine->field_102 = bar;
+    panel->m_bActive = FALSE;
+    barBase->m_bActive = TRUE;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    panel->m_bActive = TRUE;
+    barBase->m_bActive = FALSE;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 2, 1, 0);
+    barBase->m_bActive = TRUE;
+    engine->CBaldurEngine::OnMouseWheel(TRUE, 0, 1, 0);
+    engine->CBaldurEngine::OnMouseWheel(TRUE, -3, 1, 0);
+    CHECK(sBarCalls == 0);
+
+    // The fields and the bar are left as they were.
+    CHECK(engine->field_FE == bar);
+    CHECK(engine->field_102 == bar);
+    CHECK(barBase->m_bActive == TRUE);
 }

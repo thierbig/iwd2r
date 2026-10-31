@@ -1,6 +1,7 @@
 #include "CProjectile.h"
 
 #include "CBaldurChitin.h"
+#include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
 #include "CGameEffect.h"
@@ -10,6 +11,7 @@
 #include "CMessage.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
+#include "CProjectileSingleTarget.h"
 #include "CUtil.h"
 #include "IcewindCVisualEffect.h"
 #include "IcewindMisc.h"
@@ -654,6 +656,22 @@ SHORT CProjectile::GetDirection(CPoint target)
     return CGameSprite::GetDirection(ptStart, ptTarget);
 }
 
+// 0x536FC0
+// TRUE when the target is immune to this projectile: the projectile type is
+// on the target's projectile-immunity list, or m_nSpellLevel (when it is 8
+// or less) indexes a set slot of the spell-level immunity table (the table
+// CGameEffectImmunityToSpellLevel writes).
+BOOL CProjectile::IsTargetImmune(CGameSprite* pSprite)
+{
+    if (pSprite->GetDerivedStats()->m_cImmunitiesProjectile.OnList(m_projectileType) == 0
+        && ((m_nSpellLevel & 0xFF) > 8
+            || pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel.m_levels[m_nSpellLevel & 0xFF] == 0)) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 // 0x52A640
 void CProjectile::GetSourcePosition(LONG nObjectId, CPoint& pt, BOOLEAN bLaunchOffset)
 {
@@ -809,4 +827,128 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     // NOTE: OnArrival's Delete fails (the projectile was never added to the
     // object array), so the projectile deletes itself here.
     delete this;
+}
+
+// The exe keeps these in the zero-initialized virtual tail of .data — the
+// raw range ends at 0x8C6000, and the elements sit at 0x8E52D4/0x8E52D8/
+// 0x8E52DC with the flag at 0x8E52E8 — so the loaded image starts them all
+// at 0. Default construction matches; the flag is set FALSE explicitly for
+// definedness.
+std::vector<CPoint> IcewindCProjectileScorcher::m_offsets;
+// 0x8E52E8
+BYTE IcewindCProjectileScorcher::m_offsetsInitialized = FALSE;
+
+// 0x57BBC0
+void IcewindCProjectileScorcher::InitializeOffsets()
+{
+    if (m_offsetsInitialized != TRUE) {
+        // count: the exe loads it from the byte at 0x85BB48 (0x10).
+        const size_t count = 16;
+        if (m_offsets.size() < count) {
+            CPoint point;
+            m_offsets.insert(m_offsets.end(), count - m_offsets.size(), point);
+        } else if (count < m_offsets.size()) {
+            m_offsets.erase(m_offsets.begin() + count, m_offsets.end());
+        }
+        // The exe reads each store's element index from the .rdata byte
+        // table at 0x85BB38 (00 02 04 06 08 0a 0c 0e 01 03 05 07 09 0b 0d
+        // 0f) and writes (x, y) as two DWORDs — the same sixteen pairs, in
+        // the same order, as these assignments.
+        m_offsets[12] = CPoint(0, -20);
+        m_offsets[11] = CPoint(-10, -18);
+        m_offsets[10] = CPoint(-19, -14);
+        m_offsets[9] = CPoint(-25, -8);
+        m_offsets[8] = CPoint(-27, 0);
+        m_offsets[7] = CPoint(-25, 8);
+        m_offsets[6] = CPoint(-19, 14);
+        m_offsets[5] = CPoint(-10, 18);
+        m_offsets[4] = CPoint(0, 20);
+        m_offsets[3] = CPoint(10, 18);
+        m_offsets[2] = CPoint(19, 14);
+        m_offsets[1] = CPoint(25, 8);
+        m_offsets[0] = CPoint(-20, 0);
+        m_offsets[15] = CPoint(-24, 8);
+        m_offsets[14] = CPoint(-19, 14);
+        m_offsets[13] = CPoint(-10, 18);
+        // movb $0x1,0x8e52e8
+        m_offsetsInitialized = TRUE;
+    }
+}
+
+// 0x57BE80
+void IcewindCProjectileScorcher::GatherTargets()
+{
+    const CPoint& offset = m_offsets[m_nDirection];
+    CPoint polygon[4] = {
+        CPoint(m_pos.x + offset.x, m_pos.y + offset.y),
+        CPoint(m_pos.x - offset.x, m_pos.y - offset.y),
+        CPoint(m_targetPos.x - offset.x, m_targetPos.y - offset.y),
+        CPoint(m_targetPos.x + offset.x, m_targetPos.y + offset.y)
+    };
+    CRect bounds(polygon[0], polygon[0]);
+    for (INT i = 1; i < 4; ++i) {
+        bounds.left = min(bounds.left, polygon[i].x);
+        bounds.top = min(bounds.top, polygon[i].y);
+        bounds.right = max(bounds.right, polygon[i].x);
+        bounds.bottom = max(bounds.bottom, polygon[i].y);
+    }
+    CTypedPtrList<CPtrList, LONG*> targets;
+    m_pArea->GetAllInPoly(bounds, polygon, 4, CAIObjectType::ANYONE,
+        m_pArea->m_visibleTerrainTable, targets, TRUE);
+    POSITION position = targets.GetHeadPosition();
+    while (position != NULL) {
+        LONG target = static_cast<LONG>(reinterpret_cast<INT_PTR>(targets.GetNext(position)));
+        if (m_struckTargets.find(static_cast<DWORD>(target)) == m_struckTargets.end()
+            && target != m_sourceId) {
+            Strike(target, FALSE);
+            m_struckTargets.insert(static_cast<DWORD>(target));
+        }
+    }
+}
+
+// 0x57C1D0
+void IcewindCProjectileScorcher::Strike(LONG target, BYTE initial)
+{
+    CGameObjectArray* objects = g_pBaldurChitin->GetObjectGame()->GetObjectArray();
+    CGameObject* victim;
+    if (objects->GetShare(target, CGameObjectArray::THREAD_ASYNCH, &victim, INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    if ((victim->GetObjectType() & CGameObject::TYPE_AIBASE) == 0) {
+        objects->ReleaseShare(target, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return;
+    }
+
+    if (victim->GetObjectType() == CGameObject::TYPE_SPRITE
+        && IsTargetImmune(static_cast<CGameSprite*>(victim)) == TRUE) {
+        CGameEffect::FeedBackImmuneToResource(static_cast<CGameSprite*>(victim), m_sourceRes);
+        objects->ReleaseShare(target, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return;
+    }
+
+    CGameObject* source;
+    if (objects->GetShare(m_sourceId, CGameObjectArray::THREAD_ASYNCH, &source, INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        objects->ReleaseShare(target, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return;
+    }
+
+    CPoint origin;
+    GetSourcePosition(m_sourceId, origin, TRUE);
+    if (m_pArea->CheckLOS(origin, victim->GetPos(), m_terrainTable, FALSE)) {
+        std::list<CGameEffect*> effects = IcewindMisc::GetSpellResrefEffects(source,
+            reinterpret_cast<const BYTE*>(initial == TRUE ? "EffAS1" : "EffAS2"),
+            1);
+        for (std::list<CGameEffect*>::iterator it = effects.begin(); it != effects.end(); it++) {
+            CGameEffect* effect = *it;
+            effect->m_sourceRes = CResRef("SpWi217");
+            CMessage* message = new CMessageAddEffect(effect, m_sourceId, target);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    }
+
+    objects->ReleaseShare(target, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    objects->ReleaseShare(m_sourceId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
 }

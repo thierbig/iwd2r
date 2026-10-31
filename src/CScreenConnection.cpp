@@ -3446,7 +3446,7 @@ void CScreenConnection::HandleEMEvent(BYTE nEvent, BYTE nEventStage)
                     m_bEnumeratingAsynchronous = FALSE;
                 }
 
-                if (g_pChitin->cGameSpy.field_0 == 1) {
+                if (g_pChitin->cGameSpy.m_bWSAStarted == 1) {
                     // NOTE: GameSpy is not ported (multiplayer, ADR 0002).
                 }
 

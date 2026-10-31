@@ -2428,13 +2428,15 @@ def status_lock(status_path):
     return _tool('filelock').hold(status_path + '.lock', 'wave.py run')
 
 
-def clear_exception(status_path, batch_id, rerun=False):
+def clear_exception(status_path, batch_id, rerun=False, rerun_frida=False):
     """Remove status['exceptions'][batch_id] under the status lock:
     (0, the removed entry), or (2, None) when there is no such entry.
-    StatusError when the file cannot be read.  The removed stage, problems
-    and `rerun` are kept under status['cleared'][batch_id] for the driver's
-    retry (Task 25: a checks or review exception is re-checked, not
-    re-run, unless `rerun`); the reserved `first` entry keeps none."""
+    StatusError when the file cannot be read.  The removed stage, problems,
+    `rerun` and `rerun_frida` are kept under status['cleared'][batch_id] for
+    the driver's retry (Task 25: a checks or review exception is re-checked,
+    not re-run, unless `rerun`; Task 63: a record or close exception on the
+    import queue re-runs the batch's Frida phase first, only when
+    `rerun_frida`); the reserved `first` entry keeps none."""
     if not os.path.isfile(status_path):
         return 2, None
     with status_lock(status_path):
@@ -2445,6 +2447,7 @@ def clear_exception(status_path, batch_id, rerun=False):
         if batch_id != BASE_TESTS_KEY and isinstance(entry, dict):
             status.setdefault('cleared', {})[batch_id] = {
                 'stage': entry.get('stage'), 'rerun': bool(rerun),
+                'rerun_frida': bool(rerun_frida),
                 'problems': list(entry.get('problems') or [])}
         status['updated_at'] = _now()
         _tool('wave')._save_json(status_path, status)
@@ -2658,6 +2661,7 @@ class Driver:
                  status_path, aoe_session=None, seed=DEFAULT_SEED, budget=None,
                  workers=1, *, push=None, send=None, dry_run=False, gate=True,
                  base='first', log=None, frida=False, frida_map=None,
+                 rerun_frida=False,
                  oracle_run=None, frida_run=None, frida_build=None, pools=None,
                  workers_by_pool=None, reviewers_by_pool=None, budgets=None,
                  queue='wave1', runner=None, clock=None, max_batches=None,
@@ -2728,6 +2732,9 @@ class Driver:
         self.calibration_path = os.path.join(docs, 'truth-calibration.json')
         truth = _tool('truth')
         self.frida = frida
+        # Task 63: --rerun-frida, and nothing else (a plain --clear keeps
+        # R71), makes a record/close retry re-run the batch's Frida phase.
+        self.rerun_frida = rerun_frida
         self.exports_dir = None
         # The host taskkill of the sandbox, behind one seam: tests replace it.
         self._taskkill = _tool('winsandbox').taskkill_sandbox
@@ -2777,6 +2784,7 @@ class Driver:
         self._retry_stage = {}     # cleared batch id -> the stage it failed at
         self._retry_kind = {}      # cleared batch id -> 'recheck' | 'rerun' (checks/review only)
         self._retry_problems = {}  # cleared batch id -> the problems its exception recorded
+        self._retry_frida = {}     # cleared batch id -> --rerun-frida was on at --clear time
         self._halt = False
         self._batch_credits = []   # this run's batches: credits or None
         self._no_transcript = 0    # batch exceptions in a row without one
@@ -3985,32 +3993,39 @@ class Driver:
 
     def _import_rows(self, batch_id, batch, worktree, mb_sha):
         """The functions an import batch's Frida phase measures: its rows
-        that are not parked, plus every function the batch touched against
-        the merge base that carries a `// 0xADDR` marker (a stub dependency
-        imported with a row: it is hooked and held to the same bar), less
-        those whose evidence stands as written (wave.kept_evidence).  For a
-        kept row a frida trace another batch wrote does not stand
-        (wave.other_batch_trace): it measured that batch's body."""
+        that are not parked (a parked row whose body the batch changed
+        against the merge base is unparked first, Task 63: the batch
+        imported it, so its body cannot go back), plus every function the
+        batch touched against the merge base that carries a `// 0xADDR`
+        marker (a stub dependency imported with a row: it is hooked and held
+        to the same bar), less those whose evidence stands as written
+        (wave.kept_evidence).  For a kept row a frida trace another batch
+        wrote does not stand (wave.other_batch_trace): it measured that
+        batch's body."""
         wave = _tool('wave')
         key = wave._addr_key
         parked, bad = wave._parked_rows(worktree)
         if bad:
             self.log('%s: frida: parked rows: %s' % (batch_id, bad))
         kept = {key(a) for a in (getattr(self, '_kept', None) or {})}
-        rows = [dict(r) for r in batch.get('rows', []) if key(r['address']) not in parked]
-        seen = {key(r['address']) for r in batch.get('rows', [])} | set(parked)
         try:
             touched = _tool('check_evidence').touched(worktree, self.base)
         except Exception as e:
             touched = []
             self.log('%s: frida: cannot tell which functions the batch touched (%s)'
                      % (batch_id, _one_line(repr(e), 200)))
+        moved = {key('0x%X' % addr) for _p, addr, _n in touched}
+        # A parked row the batch changed against the merge base is imported,
+        # not parked (Task 63): unparked here, then measured or marked below
+        # like the batch's own rows.
+        parked, cats = self._unpark_imported(batch_id, batch, worktree, parked, moved)
         # A kept row is a base-body row whose body is untouched against the
         # merge base, or an only-theirs row ours already carries a body for
         # (our src labels the address, Task 40); any other row on the list is
         # measured as an import, with no outcome (the mechanical check
         # already tells the worker).
-        moved = {key('0x%X' % addr) for _p, addr, _n in touched}
+        rows = [dict(r) for r in batch.get('rows', []) if key(r['address']) not in parked]
+        seen = {key(r['address']) for r in batch.get('rows', [])} | set(parked)
         for r in rows:
             k = key(r['address'])
             if (k in kept and k not in moved
@@ -4018,12 +4033,21 @@ class Driver:
                          or (r.get('category') == 'only_theirs'
                              and wave._labelled_at(worktree, mb_sha, r['address'])))):
                 r['kept'] = True
+        prior = self._prior_categories() if touched else {}
         for path, addr, name in touched:
             k = key('0x%X' % addr)
             if k not in seen:
                 seen.add(k)
-                rows.append({'address': '0x%X' % addr, 'name': name, 'file': path,
-                             'dependency': True})
+                row = {'address': '0x%X' % addr, 'name': name, 'file': path,
+                       'dependency': True}
+                cat = cats.get(k) or prior.get(k)
+                if cat:
+                    # the category the row was parked under: a stub or
+                    # only-theirs row can be marked unmeasured, not measured
+                    # (a row unparked before this phase keeps the category
+                    # its batch was cut with)
+                    row['category'] = cat
+                rows.append(row)
                 self.log('%s: frida: 0x%X %s imported with the batch; measured like a row'
                          % (batch_id, addr, name))
         out = []
@@ -4062,6 +4086,95 @@ class Driver:
             else:
                 out.append(r)
         return out
+
+    def _prior_categories(self):
+        """The category each address was cut with in any batch of the state
+        (its rows or its unparked list).  A row the batch imported that an
+        earlier batch parked and someone unparked before this phase (wave.py
+        unpark) keeps that category, so rule 1 can mark it unmeasured."""
+        key = _tool('wave')._addr_key
+        out = {}
+        try:
+            state = self.load_state(self.state_path)
+        except Exception:
+            return out
+        for b in (state.get('batches') or {}).values():
+            for e in list(b.get('rows') or []) + list(b.get('unparked') or []):
+                if e.get('address') and e.get('category'):
+                    out.setdefault(key(e['address']), e['category'])
+        return out
+
+    def _unpark_imported(self, batch_id, batch, worktree, parked, moved):
+        """The parked rows this batch imported anyway (Task 63): every parked
+        row whose body the batch changed against its merge base (the `moved`
+        set the close check uses) is unparked the way `wave.py unpark` does
+        it -- the parked file goes, the row moves to the old batch's
+        `unparked` list with reason `imported by <batch>` -- because its body
+        cannot go back to the merge base's (it does not exist there) and the
+        close check will want a trace or the unmeasured marking for it, which
+        only this phase writes.  Returns (parked, categories): the parked map
+        less the unparked rows, and each unparked row's own category (a stub
+        or only-theirs row can be marked unmeasured rather than measured).
+        A row of this batch is not unparked here -- wave.unpark refuses the
+        rows of an assigned batch and is all-or-nothing, so one refusal
+        would undo every unpark -- and on any refusal nothing is unparked:
+        the rows stay parked, as before."""
+        wave = _tool('wave')
+        key = wave._addr_key
+        own = {key(r['address']) for r in batch.get('rows', [])}
+        want = sorted(k for k in parked if k in moved and k not in own)
+        if not want:
+            return parked, {}
+        folder = os.path.join(worktree, wave.IMPORT_PARKED_DIR)
+        rels = {}
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            names = []
+        for name in names:
+            # the file's own spelling is the one to commit the removal of
+            if name.lower().endswith('.json') and wave.parked_stem_key(name) in want:
+                rels[wave.parked_stem_key(name)] = '%s/%s' % (wave.IMPORT_PARKED_DIR, name)
+        with self._lock:
+            rc, text = wave.unpark(['0x' + k.upper() for k in want],
+                                   'imported by %s' % batch_id,
+                                   state_path=self.state_path, repo=worktree)
+        for line in text.splitlines():
+            if line:
+                self.log('%s: %s' % (batch_id, line))
+        if rc != 0:
+            # a refusal (nothing written) or a parked file that would not go:
+            # whatever the worktree still reads as parked stays parked
+            self.log('%s: frida: the parked rows stay parked' % batch_id)
+            return wave._parked_rows(worktree)[0], {}
+        cats = {}
+        for b in (self.load_state(self.state_path).get('batches') or {}).values():
+            # the moved row carries its own category into the unparked list
+            for e in b.get('unparked') or []:
+                k = key(e.get('address', ''))
+                if k in want and e.get('category'):
+                    cats.setdefault(k, e['category'])
+        if rels:
+            self._commit_parked_removals(batch_id, worktree, sorted(rels.values()))
+        return ({k: v for k, v in parked.items() if k not in want}, cats)
+
+    def _commit_parked_removals(self, batch_id, worktree, rels):
+        """Commit the parked-row files the phase removed (Task 63's
+        auto-unpark) on the batch branch: the same plain add+commit as the
+        unmeasured marking, over deletions.  The state's own move is
+        committed at close, with the rest of the state."""
+        def git(*args):
+            return subprocess.run(['git', '-C', worktree, *args],
+                                  capture_output=True, text=True)
+        if not git('status', '--porcelain', '--', *rels).stdout.strip():
+            return
+        git('add', '--', *rels)
+        r = git('commit', '-q', '-m',
+                'frida: unpark %d row(s) imported by %s' % (len(rels), batch_id),
+                '--', *rels)
+        if r.returncode != 0:
+            self.log('%s: unparked files not committed: %s' % (
+                batch_id, _one_line((r.stderr or '') + (r.stdout or ''))))
 
     def _import_outcome(self, batch_id, worktree, row, status, detail, traces, mb, cite):
         """None when an import row measured equal and its evidence is now
@@ -5690,6 +5803,20 @@ class Driver:
                      'are not run again' % (batch_id, stage))
             if self.kind == 'verdicts':
                 self._undecided = self._saved_undecided(batch_id, batch)
+            if self.kind == 'import' and (
+                    self.rerun_frida or self._retry_frida.pop(batch_id, False)):
+                # With --rerun-frida (Task 63) the phase runs again on the
+                # worktree as the worker left it: what the close check asks
+                # for -- a trace, or the unmeasured WSO marking, for a row
+                # the batch imported anyway -- only that phase writes, and
+                # the worker is still not run again.  The kept set a report
+                # parsed is rebuilt from the recorded outcomes.
+                self._kept = {r['address']: 'recorded' for r in batch.get('rows', [])
+                              if r.get('outcome') == 'kept'}
+                findings = self._frida_phase(batch_id, batch, worktree, {})
+                if findings:
+                    # a parking finding needs the worker to apply it
+                    return self._exception(batch_id, 'frida', list(findings))
             return self._land(
                 batch_id, batch, worktree,
                 self._saved_verdicts(batch_id, batch) if stage == 'record' else {},
@@ -6278,6 +6405,10 @@ class Driver:
                 out.append(bid)
                 note = (status.get('cleared') or {}).get(bid)
                 note = note if isinstance(note, dict) else {}
+                if stage in ('record', 'close') and note.get('rerun_frida'):
+                    # --rerun-frida was on at --clear time: that batch's
+                    # retry re-runs its Frida phase (ruling R71 without it)
+                    self._retry_frida[bid] = True
                 if stage in RECHECK_STAGES and note:
                     # plain --clear re-checks the last report; --rerun, or an
                     # exception removed by hand (no note), re-enters at the
@@ -6993,6 +7124,12 @@ def _parse(argv):
     p.add_argument('--rerun', action='store_true',
                    help='with --clear: re-enter a checks or review exception at '
                         'the worker stage (the default re-checks the last report)')
+    p.add_argument('--rerun-frida', action='store_true',
+                   help='with --clear on the import queue: a record or close '
+                        'exception re-runs the batch\'s Frida phase on its '
+                        'worktree before it lands (a plain --clear keeps R71: '
+                        'straight to the stage, no phase, no worker); without '
+                        '--clear it sets the same trigger for that run')
     try:
         args, extra = p.parse_known_args(argv)
     except SystemExit as e:
@@ -7097,7 +7234,8 @@ def _build(args, repo):
         d = Driver(repo, state, worker, reviewer, ledger, status,
                    aoe_session=args.aoe_session, seed=args.seed,
                    budget=args.budget, dry_run=args.dry_run, frida=frida,
-                   frida_map=args.frida_map, frida_cache=args.frida_cache, pools=pools,
+                   frida_map=args.frida_map, rerun_frida=args.rerun_frida,
+                   frida_cache=args.frida_cache, pools=pools,
                    workers_by_pool=workers_by_pool,
                    reviewers_by_pool=reviewers_by_pool,
                    budgets=args.budgets, queue=queue,
@@ -7118,12 +7256,12 @@ def driver_from_args(argv, repo=None):
     return _build(args, repo or _tool('wave').ROOT)
 
 
-def _clear(batch_id, repo, queue='wave1', rerun=False):
+def _clear(batch_id, repo, queue='wave1', rerun=False, rerun_frida=False):
     """`wave.py run --clear <batch_id>`: 0, 2 when the status file holds
     no exception for it, 1 when the file cannot be read."""
     path = os.path.join(repo, status_rel(queue))
     try:
-        rc, entry = clear_exception(path, batch_id, rerun)
+        rc, entry = clear_exception(path, batch_id, rerun, rerun_frida)
     except StatusError as e:
         print('wave.py run --clear: the status file cannot be read: %s' % e,
               file=sys.stderr)
@@ -7189,7 +7327,8 @@ def main(argv=None, repo=None):
     args, err = _parse(sys.argv[1:] if argv is None else argv)
     if err is None:
         if args.clear is not None:
-            return _clear(args.clear, repo, args.queue, args.rerun)
+            return _clear(args.clear, repo, args.queue, args.rerun,
+                          args.rerun_frida)
         d, err = _build(args, repo)
     if err:
         if err[1]:

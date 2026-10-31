@@ -3,12 +3,42 @@
 
 #include "mfc.h"
 
+#include "platform/ddraw_shim.h"
+
 #include "CBaldurEngine.h"
 #include "CKeyInfo.h"
 #include "CResRef.h"
 #include "CVidFont.h"
 
 #define CBALDURPROJECTOR_VIRTUAL_KEYS 2
+
+// #guess: the 8-byte line of the subtitle overlay's list (the list at +0x08 of
+// CProjectorSubtitles): a 4-byte field and the text. The element destructor the
+// exe passes to array_destruct (0x428F80) destroys the CString at +4.
+struct CProjectorSubtitlesLine { // #guess name
+    /* 0000 */ DWORD field_0; // #guess: the line's timing/offset
+    /* 0004 */ CString m_sText;
+};
+
+// #guess: the movie-subtitle overlay at the engine global 0x8CFF30 (0x24
+// bytes). Neither IEex nor WSO names the type or the global; the layout is the
+// disassembly's (ctor FUN_0043f6d0 0x43F6D0, teardown FUN_0043f900 0x43F900)
+// and only the teardown is ported here - the global is created by
+// EngineActivated's subtitle block (0x43EC20), which stays a TODO.
+class CProjectorSubtitles { // #guess name
+public:
+    void Unload(); // 0x43F900
+
+    /* 0000 */ CString m_sText;
+    /* 0004 */ int field_4;
+    /* 0008 */ CProjectorSubtitlesLine* m_pLines; // #guess: a new[] array, count at -4
+    /* 000C */ int field_C;
+    /* 0010 */ COLORREF m_rgbColor;
+    /* 0014 */ int field_14;
+    /* 0018 */ int field_18;
+    /* 001C */ int field_1C;
+    /* 0020 */ int field_20;
+};
 
 // NOTE: Incomplete, but the rest is not used in the code.
 typedef struct {
@@ -36,6 +66,9 @@ typedef void(__stdcall BinkSetVolume)(HBINK bnk, unsigned int trackid, int volum
 class CBaldurProjector : public CBaldurEngine {
 public:
     static BOOLEAN byte_8CFF2C;
+    // #guess: the subtitle overlay global at 0x8CFF30 (created and torn down
+    // only around movies; see CProjectorSubtitles above).
+    static CProjectorSubtitles* pProjectorSubtitles;
 
     CBaldurProjector();
     ~CBaldurProjector();
@@ -59,7 +92,7 @@ public:
     void sub_43E300(HBINK bnk);
 
     /* 0106 */ int field_106;
-    /* 010A */ int field_10A;
+    /* 010A */ IDirectDrawSurface* field_10A; // #guess: released through vtable+8
     /* 0112 */ BOOL m_bDeactivateEngine; // #guess
     /* 0116 */ CKeyInfo m_pVirtualKeys[CBALDURPROJECTOR_VIRTUAL_KEYS];
     /* 0126 */ BYTE m_pVirtualKeysFlags[CBALDURPROJECTOR_VIRTUAL_KEYS];

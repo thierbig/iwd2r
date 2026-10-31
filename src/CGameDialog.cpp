@@ -21,6 +21,16 @@
 CGameDialogSprite::CGameDialogSprite()
 {
     ClearMarshal();
+
+    // The bytes show the constructor (not ClearMarshal) zeroing field_54: at
+    // both inlining sites the ClearMarshal call is followed by a byte store to
+    // +0x54 (CScreenWorld::CScreenWorld 0x6856CD, CScreenStore's local dialog
+    // 0x67C9AA). ClearMarshal itself leaves the byte alone, so `Load`'s empty
+    // case and the destructor keep whatever it held. field_55 is written
+    // nowhere in the original either (and read nowhere here); clearing it too
+    // keeps a fresh dialog fully defined.
+    field_54 = 0;
+    field_55 = 0;
 }
 
 // 0x67CB50

@@ -1,0 +1,7 @@
+{
+    "address": "0x7A7670",
+    "name": "CNetwork::SlidingWindowReceive",
+    "file": "src/CNetwork.cpp",
+    "batch": "i054",
+    "needs": "dependency 0x7A7890 CNetwork::FetchFrame exercised by no scenario (world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map): parked with it"
+}

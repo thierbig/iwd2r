@@ -352,6 +352,81 @@ BOOLEAN CNetworkWindow::CheckOutgoingQueueForAppendableMsgs(DWORD dwSize)
     return FALSE;
 }
 
+// 0x7A2590
+void CNetworkWindow::FrameSend(BYTE nFrameKind, WORD nFrameNumber)
+{
+    BYTE* pData;
+    DWORD dwSize;
+
+    if (nFrameKind != 0) {
+        pData = new BYTE[CNetwork::dword_85E698];
+        dwSize = CNetwork::dword_85E698;
+        pData[5] = 0;
+    } else {
+        pData = m_pOutgoingBuffers[0].pData;
+        dwSize = m_pOutgoingBuffers[0].dwSize;
+    }
+
+    if (pData == NULL) {
+        // __FILE__: C:\Projects\Icewind2\src\chitin\ChNetwork.cpp
+        // __LINE__: 913
+        UTIL_ASSERT_MSG(FALSE, "FrameSend:: Null Message!\n");
+    }
+
+    pData[0] = nFrameKind;
+    pData[1] = static_cast<BYTE>(nFrameNumber >> 8);
+    pData[2] = static_cast<BYTE>(nFrameNumber);
+    pData[3] = static_cast<BYTE>((m_nFrameExpected - 1) >> 8);
+    pData[4] = static_cast<BYTE>(m_nFrameExpected - 1);
+
+    if (dwSize >= 10) {
+        DWORD dwCrc = 0;
+
+        pData[6] = 0;
+        pData[7] = 0;
+        pData[8] = 0;
+        pData[9] = 0;
+
+        for (DWORD k = 0; k < dwSize; k++) {
+            dwCrc = g_pChitin->cNetwork.m_dwCRC32[(dwCrc & 0xFF) ^ pData[k]] ^ (dwCrc >> 8);
+        }
+
+        pData[6] = static_cast<BYTE>(dwCrc >> 24);
+        pData[7] = static_cast<BYTE>(dwCrc >> 16);
+        pData[8] = static_cast<BYTE>(dwCrc >> 8);
+        pData[9] = static_cast<BYTE>(dwCrc);
+    }
+
+    if (nFrameKind == 2) {
+        m_bNoNak = FALSE;
+    }
+
+    // NOTE: Uninline.
+    PLAYER_ID idTo = g_pChitin->cNetwork.GetPlayerID(m_nPlayerNumber);
+
+    // NOTE: iwd2r: The original calls the CNetwork vtable slot `+0x68` (the
+    // DirectPlay `Send` wrapper) inside this critical section,
+    // unconditionally, as `Send(m_idLocalPlayer, idTo, 0, pData, dwSize)`.
+    // DirectPlay is gone, so nothing is sent.
+    EnterCriticalSection(&(g_pChitin->cNetwork.field_F6A));
+    LeaveCriticalSection(&(g_pChitin->cNetwork.field_F6A));
+
+    if (nFrameKind == 0) {
+        m_pbTimeOutSet[0] = TRUE;
+        m_pnTimeOut[0] = m_nPacketTimeout + GetTickCount();
+        if (m_pnTimeOut[0] > CNetwork::MAX_TIMEOUT_TICK_COUNT) {
+            m_pnTimeOut[0] = 0;
+        }
+    } else {
+        delete pData;
+    }
+
+    m_bAckTimerSet = FALSE;
+
+    // NOTE: Uninline.
+    SetNoMessageTimeout();
+}
+
 // #binary-identical
 // 0x7A2770
 void CNetworkWindow::Initialize(INT nIndex)
@@ -939,6 +1014,163 @@ void CNetworkWindow::SetNoMessageTimeout()
         dwMaxTickCount = DWORD_MAX;
     }
     m_nNoMessageTimeout = dwMaxTickCount;
+}
+
+// 0x7A3B50
+void CNetworkWindow::ReceiveCall(BYTE* pData, DWORD dwSize)
+{
+    BOOLEAN v1 = FALSE;
+
+    EnterCriticalSection(&(g_pChitin->cNetwork.field_F52));
+
+    BOOLEAN v2 = TRUE;
+    m_bSomethingHappened = TRUE;
+
+    if (pData[0] == 3) {
+        AddToIncomingQueue(g_pChitin->cNetwork.GetPlayerID(m_nPlayerNumber),
+            g_pChitin->cNetwork.m_idLocalPlayer,
+            pData,
+            dwSize);
+    } else {
+        WORD nFrame = pData[2] + (pData[1] << 8);
+        WORD nAck = pData[4] + (pData[3] << 8);
+
+        if (pData[0] == 0) {
+            if (nFrame != m_nFrameExpected && m_bNoNak == TRUE) {
+                FrameSend(2, 0);
+            }
+
+            if ((m_nFrameExpected <= nFrame && nFrame < m_nTooFar)
+                || (m_nTooFar < m_nFrameExpected && m_nFrameExpected <= nFrame)
+                || (nFrame < m_nTooFar && m_nTooFar < m_nFrameExpected)) {
+                if (!m_pbArrived[0]) {
+                    m_pbArrived[0] = TRUE;
+                    m_pIncomingBuffers[0].idFrom = g_pChitin->cNetwork.GetPlayerID(m_nPlayerNumber);
+                    m_pIncomingBuffers[0].idTo = g_pChitin->cNetwork.m_idLocalPlayer;
+                    m_pIncomingBuffers[0].pData = pData;
+                    m_pIncomingBuffers[0].dwSize = dwSize;
+
+                    v1 = TRUE;
+
+                    while (m_pbArrived[0] == TRUE) {
+                        AddToIncomingQueue(m_pIncomingBuffers[0].idFrom,
+                            m_pIncomingBuffers[0].idTo,
+                            m_pIncomingBuffers[0].pData,
+                            m_pIncomingBuffers[0].dwSize);
+                        m_bNoNak = TRUE;
+                        m_pbArrived[0] = FALSE;
+                        m_pIncomingBuffers[0].pData = NULL;
+                        m_pIncomingBuffers[0].dwSize = 0;
+                        m_nFrameExpected++;
+                        m_nTooFar++;
+                        m_bAckTimerSet = TRUE;
+                        m_nAckTimer = m_nPacketTimeout + GetTickCount();
+                        if (m_nAckTimer > CNetworkWindow::MAX_TIMEOUT_TICK_COUNT) {
+                            m_nAckTimer = 0;
+                        }
+                    }
+                }
+            }
+        } else if (pData[0] == 2) {
+            WORD nAckNext = nAck + 1;
+
+            if ((m_nAckExpected <= nAckNext && nAckNext < m_nNextFrameToSend)
+                || (m_nNextFrameToSend < m_nAckExpected && m_nAckExpected <= nAckNext)
+                || (nAckNext < m_nNextFrameToSend && m_nNextFrameToSend < m_nAckExpected)) {
+                FrameSend(0, nAckNext);
+            }
+        }
+
+        while ((m_nAckExpected <= nAck && nAck < m_nNextFrameToSend)
+            || (m_nNextFrameToSend < m_nAckExpected && m_nAckExpected <= nAck)
+            || (nAck < m_nNextFrameToSend && m_nNextFrameToSend < m_nAckExpected)) {
+            m_nNumBuffered--;
+            m_pbTimeOutSet[0] = FALSE;
+            m_pnTimeOut[0] = 0;
+
+            if (m_pOutgoingBuffers[0].pData != NULL) {
+                delete m_pOutgoingBuffers[0].pData;
+                m_pOutgoingBuffers[0].pData = NULL;
+            }
+
+            m_pOutgoingBuffers[0].dwSize = 0;
+            m_nAckExpected++;
+        }
+
+        v2 = v1;
+    }
+
+    LeaveCriticalSection(&(g_pChitin->cNetwork.field_F52));
+
+    // NOTE: Uninline.
+    SetPlayerTimeout();
+
+    if (!v2) {
+        delete pData;
+    }
+}
+
+// 0x7A3DF0
+void CNetworkWindow::TimeoutCall()
+{
+    DWORD dwTickCount = GetTickCount();
+    BOOLEAN v1 = FALSE;
+    WORD nFrameNumber;
+
+    if (m_pbTimeOutSet[0] && dwTickCount > m_pnTimeOut[0]) {
+        v1 = TRUE;
+        nFrameNumber = m_pOutgoingBuffers[0].pData[2] + (m_pOutgoingBuffers[0].pData[1] << 8);
+    }
+
+    if (v1 == TRUE) {
+        FrameSend(0, nFrameNumber);
+        m_bSomethingHappened = TRUE;
+    }
+
+    if (m_bAckTimerSet == TRUE && GetTickCount() >= m_nAckTimer) {
+        FrameSend(1, 0);
+        m_bSomethingHappened = TRUE;
+    }
+
+    if (m_nNoMessageTimeout < GetTickCount()) {
+        if (g_pChitin->cNetwork.GetPlayerID(m_nPlayerNumber) != g_pChitin->cNetwork.m_idLocalPlayer) {
+            FrameSend(1, 0);
+            m_bSomethingHappened = TRUE;
+        }
+
+        // NOTE: Uninline.
+        SetNoMessageTimeout();
+    }
+
+    if (m_bSomethingHappened == TRUE) {
+        m_nNextEvent = GetTickCount();
+        return;
+    }
+
+    BOOLEAN bHasNextEvent = FALSE;
+    DWORD nNextEvent;
+
+    if (m_bAckTimerSet == TRUE) {
+        bHasNextEvent = TRUE;
+        nNextEvent = m_nAckTimer;
+    }
+
+    if (m_pbTimeOutSet[0] == TRUE) {
+        if (bHasNextEvent) {
+            if (m_pnTimeOut[0] < nNextEvent) {
+                nNextEvent = m_pnTimeOut[0];
+            }
+        } else {
+            nNextEvent = m_pnTimeOut[0];
+            bHasNextEvent = TRUE;
+        }
+    }
+
+    if (!bHasNextEvent) {
+        nNextEvent = -1;
+    }
+
+    m_nNextEvent = nNextEvent;
 }
 
 // -----------------------------------------------------------------------------
@@ -1863,6 +2095,31 @@ INT CNetwork::ThreadLoop()
     }
 
     return nDelta;
+}
+
+// 0x7A77D0
+void CNetwork::SlidingWindowTimeouts()
+{
+    if (m_bConnectionEstablished == TRUE) {
+        for (INT nPlayer = 0; nPlayer < CNETWORK_MAX_PLAYERS; nPlayer++) {
+            if (m_pPlayerID[nPlayer] != 0 && m_pSlidingWindow[nPlayer].m_bInitialized == TRUE) {
+                m_pSlidingWindow[nPlayer].TimeoutCall();
+                if (m_nHostPlayer == m_nLocalPlayer) {
+                    if (m_nHostPlayer != nPlayer && m_pSlidingWindow[nPlayer].m_nPlayerTimeout < GetTickCount()) {
+                        KickPlayer(m_pPlayerID[nPlayer], FALSE);
+                    }
+                } else {
+                    if (m_nHostPlayer == nPlayer && m_pSlidingWindow[nPlayer].m_nPlayerTimeout < GetTickCount()) {
+                        g_pChitin->OnMultiplayerSessionToClose();
+                        SleepEx(1000, FALSE);
+                        if (m_bConnectionEstablished == TRUE) {
+                            OnCloseSession();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // 0x7A7980

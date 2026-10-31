@@ -515,8 +515,101 @@ void iwd2r_SetTestLeadBytes(const bool* table);
 BOOL IsCharAlphaNumericA(CHAR ch);
 // No access checking: only a null pointer with a nonzero size is bad.
 BOOL IsBadReadPtr(const void* pointer, UINT_PTR size);
-// No sockets are started, so there is nothing to clean up; returns 0.
+
+// ---- winsock: the GameSpy heartbeat (CGameSpy) ----
+// Inert by default: WSAStartup fails, so CGameSpy::sub_4D0980 reports failure
+// and the class never opens a socket (ADR 0002 keeps multiplayer out). Tests
+// install fakes with iwd2r_SetGameSpySockets; NULL restores the inert calls.
+// The types are the Win32 ones, defined here because win_types.h includes no
+// SDK header.
+typedef UINT_PTR SOCKET;
+constexpr SOCKET INVALID_SOCKET = static_cast<SOCKET>(-1);
+constexpr int SOCKET_ERROR = -1;
+
+struct WSADATA {
+    WORD wVersion;
+    WORD wHighVersion;
+    char szDescription[257];
+    char szSystemStatus[129];
+    WORD iMaxSockets;
+    WORD iMaxUdpDg;
+    char* lpVendorInfo;
+};
+
+struct in_addr {
+    unsigned long s_addr;
+};
+
+struct sockaddr_in {
+    short sin_family;
+    unsigned short sin_port;
+    struct in_addr sin_addr;
+    char sin_zero[8];
+};
+
+// The socket constants the GameSpy code uses, with the Win32 values.
+constexpr int AF_INET = 2;
+constexpr int SOCK_DGRAM = 2;
+constexpr int IPPROTO_UDP = 17;
+constexpr long FIONBIO = 0x8004667E;
+constexpr int WSAEFAULT = 10014;
+constexpr int WSAEWOULDBLOCK = 10035;
+constexpr int WSAEINPROGRESS = 10036;
+constexpr int WSAENETDOWN = 10050;
+constexpr int WSAENOBUFS = 10055;
+constexpr int WSANOTINITIALISED = 10093;
+constexpr int WSAHOST_NOT_FOUND = 11001;
+constexpr int WSATRY_AGAIN = 11002;
+constexpr int WSANO_RECOVERY = 11003;
+constexpr int WSANO_DATA = 11004;
+
+// The calls CGameSpy makes, so a test can drive the heartbeat without a
+// network. htons/ntohs stay the real (byte-swapping) implementations.
+typedef SOCKET (*IWD2R_GameSpySocketFn)(int af, int type, int protocol);
+typedef HANDLE (*IWD2R_GameSpyAsyncGetHostByNameFn)(HWND window, unsigned message,
+    const char* name, char* buffer, int bufferLength);
+
+struct IWD2R_GameSpySockets {
+    int (*WSAStartup)(WORD versionRequested, WSADATA* data);
+    int (*WSACleanup)();
+    IWD2R_GameSpySocketFn socket;
+    int (*ioctlsocket)(SOCKET socket, long command, unsigned long* argument);
+    int (*bind)(SOCKET socket, const struct sockaddr_in* address, int length);
+    int (*sendto)(SOCKET socket, const char* buffer, int length, int flags,
+        const struct sockaddr_in* to, int toLength);
+    int (*recvfrom)(SOCKET socket, char* buffer, int length, int flags,
+        struct sockaddr_in* from, int* fromLength);
+    int (*closesocket)(SOCKET socket);
+    IWD2R_GameSpyAsyncGetHostByNameFn WSAAsyncGetHostByName;
+    int (*WSACancelAsyncRequest)(HANDLE taskHandle);
+};
+
+void iwd2r_SetGameSpySockets(const IWD2R_GameSpySockets* sockets);
+const IWD2R_GameSpySockets* iwd2r_GameSpySockets();
+
+int WSAStartup(WORD versionRequested, WSADATA* data);
 int WSACleanup();
+SOCKET socket(int af, int type, int protocol);
+int ioctlsocket(SOCKET socket, long command, unsigned long* argument);
+int bind(SOCKET socket, const struct sockaddr_in* address, int length);
+int sendto(SOCKET socket, const char* buffer, int length, int flags,
+    const struct sockaddr_in* to, int toLength);
+int recvfrom(SOCKET socket, char* buffer, int length, int flags, struct sockaddr_in* from,
+    int* fromLength);
+int closesocket(SOCKET socket);
+HANDLE WSAAsyncGetHostByName(HWND window, unsigned message, const char* name, char* buffer,
+    int bufferLength);
+int WSACancelAsyncRequest(HANDLE taskHandle);
+// <sys/_endian.h> (pulled in by the C library on some platforms) defines
+// these as macros; the engine calls the shim's byte-swapping functions.
+#ifdef htons
+#undef htons
+#endif
+#ifdef ntohs
+#undef ntohs
+#endif
+unsigned short htons(unsigned short hostshort);
+unsigned short ntohs(unsigned short netshort);
 // Writes at most 1024 bytes including the terminator, like Win32.
 int wsprintfA(LPSTR buffer, LPCSTR format, ...);
 

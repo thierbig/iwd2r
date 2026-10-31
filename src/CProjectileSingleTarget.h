@@ -7,6 +7,7 @@
 #include "CVidPalette.h"
 #include "IcewindCVisualEffect.h"
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -97,6 +98,51 @@ public:
     /* 032C */ WORD m_nType;
     /* 032E */ LONG m_nFrame;
     /* 0332 */ BOOLEAN m_bDelivered;
+};
+
+// The Icewind Dale II Scorcher (vtable 0x850E84). WillScarlettOhara models
+// the family as IcewindCProjectileScorcher < IcewindCProjectileTravellingVFX
+// < CProjectileTravelling; the exe ctor 0x57AEB0 bases it on
+// CProjectileSingleTarget (0x578110) with CResRef("AScorcT"), which is the
+// anchor used here. Its exe vtable overrides every base slot: dtor 0x57B080,
+// AIUpdate 0x57B210, Render 0x57B780, Fire 0x57B1D0, and DeliverEffects —
+// slot 0x0078 holds 0x799CA0, CProjectileArea85072C::OnArrival, an empty
+// function MSVC ICF-folded with this class's equally empty DeliverEffects.
+// AIUpdate and Render are parked i047 rows 0x57B210/0x57B780, so the base
+// overrides are declarations only; nothing instantiates this class, which
+// keeps them link-safe.
+class IcewindCProjectileScorcher : public CProjectileSingleTarget {
+public:
+    // 0x57B080. Scalar deleting dtor: the delete branch calls
+    // operator_delete 0x7FC984, the body at 0x57B0A0 tears down the
+    // std::set member.
+    /* 0000 */ ~IcewindCProjectileScorcher() override;
+    // 0x57B210 (parked i047).
+    /* 000C */ void AIUpdate() override;
+    // 0x57B780 (parked i047).
+    /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
+    // 0x57B1D0: marshals the seven arguments, calls the base Fire at
+    // 0x5791D0, stores +0x2D2, then invokes slot 0x0078.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+    // 0x799CA0 as an ICF-folded alias; the slot is pinned by CProjectile.h.
+    /* 0078 */ void DeliverEffects() override;
+
+    // 0x57BBC0. Native static direction table.
+    static void InitializeOffsets();
+
+    // exe: _Myfirst/_Mylast/_Myend at 0x8E52D4/0x8E52D8/0x8E52DC; the vector
+    // helper thunks (0x582210 size, 0x57AB70 insert, 0x582230 erase) are
+    // called with the enclosing static base 0x8E52D0.
+    static std::vector<CPoint> m_offsets;
+    // 0x8E52E8
+    static BYTE m_offsetsInitialized;
+
+    /* 0088 */ virtual void GatherTargets();
+    /* 008C */ virtual void Strike(LONG target, BYTE initial);
+
+    // The ids this wave has already struck (exe std::set internals: _Myhead
+    // 0x2BA, _Multi 0x2BE, NIL sentinel 0x8E28C8).
+    /* 02B6 */ std::set<DWORD> m_struckTargets;
 };
 
 #endif /* CPROJECTILESINGLETARGET_H_ */

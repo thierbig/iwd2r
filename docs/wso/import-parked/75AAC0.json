@@ -1,0 +1,7 @@
+{
+    "address": "0x75AAC0",
+    "name": "CAIAction::CAIAction (SHORT actionID, LONG specificID)",
+    "file": "src/CAIAction.cpp",
+    "batch": "i054",
+    "needs": "no Frida hook: ambiguous: 8 overloads of CAIAction::CAIAction in our map"
+}

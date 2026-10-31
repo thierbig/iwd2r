@@ -1,7 +1,0 @@
-{
- "address": "0x7A2590",
- "name": "CNetworkWindow::FrameSend",
- "file": "src/CNetwork.cpp",
- "batch": "i052",
- "needs": "fork body contradicts the exe: (1) the exe zeroes byte 5 of a freshly allocated frame buffer before the CRC walk covers all dwSize bytes (objdump 0x7a25c4: movb $0x0,0x5(%esi), taken whenever nFrameKind != 0; the batch bundle decompile keeps pcVar4[5] = 0), while his body never writes pData[5], so his kind!=0 CRC -- and the bytes that reach the wire -- depend on an uninitialized byte; (2) the exe's kind-2 branch clears the flag at this+0x70 (our CNetwork.h 0070 m_bNoNak; objdump 0x7a267f: movb $0x0,0x70(%ebp)), while his body sets m_bNoNak = TRUE. Everything else in his body matches the exe (packet bytes 0-4 with the m_nFrameExpected-1 0x8000ffff wrap, the >=10 CRC gate over g_pChitin->cNetwork.m_dwCRC32 at +0xB52, GetPlayerID via the +0x10A0/+0x10B8 tables, the field_F6A critical-section pair around the iwd2r-elided DirectPlay send, the kind-0 timeout block with the MAX_TIMEOUT clamp, operator_delete, m_bAckTimerSet = FALSE, the SetNoMessageTimeout tail, UtilAssert line 0x391)."
-}

@@ -1,0 +1,7 @@
+{
+    "address": "0x533F40",
+    "name": "CProjectileFollowUp::Fire",
+    "file": "src/CProjectile.cpp",
+    "batch": "i054",
+    "needs": "no Frida hook: the signature does not parse"
+}

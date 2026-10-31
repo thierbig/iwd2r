@@ -2814,6 +2814,165 @@ TEST_CASE("bk_render_particle_returns_true", "[vid]")
     CHECK(mode.BKRender(&particle, CRect(0, 0, 8, 8), CParticle::DOTS, 1) == FALSE);
 }
 
+// CParticle::Render's 16- and 24-bpp arms (0x7C36A0): the same walk as the
+// 32-bit arms with the drawers' pitch units, the inlined dot writes and the
+// two new blob helpers (0x7C3CC0, 0x7C3E20), whose plus grows with nBlobSize
+// from the centre out (1 centre, 2 + down, 3 + left, 4 + right, 5 + up), each
+// point clipped by the rect moved to its own origin.
+TEST_CASE("particle_render_16_and_24", "[vid]")
+{
+    ChitinScope scope;
+    CVidInf mode;
+    mode.m_dwRBitShift = 16;
+    mode.m_dwGBitShift = 8;
+    mode.m_dwBBitShift = 0;
+    ActiveModeScope active(&mode);
+
+    const COLORREF rgb = RGB(0x11, 0x22, 0x33);
+    const DWORD color = mode.ReduceColor(rgb);
+    const WORD color16 = static_cast<WORD>(color);
+    const BYTE nThird = static_cast<BYTE>(color >> 16);
+
+    for (const int bpp : { 16, 24, 32 }) {
+        INFO("bpp " << bpp);
+        g_pChitin->cVideo.m_nBpp = static_cast<WORD>(bpp);
+
+        // DOTS: a particle at (3, 3) (y = (3 * posY / 4 - posZ) >> 10), one
+        // loop, inside the clip at (1, 1): 16 bpp writes the WORD at
+        // (y - top) * (lPitch >> 1) - left + x, 24 bpp three bytes at
+        // (x - left) * 3 + (y - top) * lPitch.
+        {
+            CParticle particle(3 << 10, 4 << 10, 0, 0, 0, 0, rgb, 0, 0, CParticle::DOTS);
+            if (bpp == 16) {
+                std::vector<WORD> pixels(8 * 8, 0xAAAA);
+                particle.Render(pixels.data(), 8 * 2, CRect(1, 1, 8, 8), CParticle::DOTS, 1);
+                std::vector<WORD> expected(8 * 8, 0xAAAA);
+                expected[(3 - 1) * 8 - 1 + 3] = color16;
+                CHECK(pixels == expected);
+            } else if (bpp == 24) {
+                std::vector<BYTE> pixels(8 * 8 * 3, 0xAA);
+                particle.Render(pixels.data(), 8 * 3, CRect(1, 1, 8, 8), CParticle::DOTS, 1);
+                std::vector<BYTE> expected(8 * 8 * 3, 0xAA);
+                BYTE* p = expected.data() + ((3 - 1) * 8 - 1 + 3) * 3;
+                std::memcpy(p, &color16, 2);
+                p[2] = nThird;
+                CHECK(pixels == expected);
+            } else {
+                std::vector<DWORD> pixels(8 * 8, 0xAAAAAAAA);
+                particle.Render(pixels.data(), 8 * 4, CRect(1, 1, 8, 8), CParticle::DOTS, 1);
+                std::vector<DWORD> expected(8 * 8, 0xAAAAAAAA);
+                expected[(3 - 1) * 8 - 1 + 3] = color;
+                CHECK(pixels == expected);
+            }
+        }
+
+        // BLOB: the plus at (3, 3) of the clip's own origin; each size adds
+        // one point to the previous one's set.
+        const CPoint blobPoints[] = { CPoint(3, 3), CPoint(3, 2), CPoint(2, 3), CPoint(4, 3), CPoint(3, 4) };
+        for (USHORT nBlobSize = 1; nBlobSize <= 5; nBlobSize++) {
+            INFO("blob size " << nBlobSize);
+            CParticle particle(3 << 10, 4 << 10, 0, 0, 0, 0, rgb, 0, 0, CParticle::BLOB);
+            if (bpp == 16) {
+                std::vector<WORD> pixels(8 * 8, 0xAAAA);
+                particle.Render(pixels.data(), 8 * 2, CRect(0, 0, 8, 8), CParticle::BLOB, nBlobSize);
+                std::vector<WORD> expected(8 * 8, 0xAAAA);
+                // Sizes 5,4,3,2,1 fall through to the smaller sets, so a size
+                // draws the points of every case from itself down to 1.
+                for (USHORT j = 1; j <= nBlobSize; j++) {
+                    const CPoint& pt = blobPoints[j - 1];
+                    expected[pt.y * 8 + pt.x] = color16;
+                }
+                CHECK(pixels == expected);
+            } else if (bpp == 32) {
+                std::vector<DWORD> pixels(8 * 8, 0xAAAAAAAA);
+                particle.Render(pixels.data(), 8 * 4, CRect(0, 0, 8, 8), CParticle::BLOB, nBlobSize);
+                std::vector<DWORD> expected(8 * 8, 0xAAAAAAAA);
+                // The 32-bit sibling has no size switch: the five-point cross.
+                for (const CPoint& pt : blobPoints) {
+                    expected[pt.y * 8 + pt.x] = color;
+                }
+                CHECK(pixels == expected);
+            } else {
+                std::vector<BYTE> pixels(8 * 8 * 3, 0xAA);
+                particle.Render(pixels.data(), 8 * 3, CRect(0, 0, 8, 8), CParticle::BLOB, nBlobSize);
+                std::vector<BYTE> expected(8 * 8 * 3, 0xAA);
+                for (USHORT j = 1; j <= nBlobSize; j++) {
+                    const CPoint& pt = blobPoints[j - 1];
+                    BYTE* p = expected.data() + (pt.y * 8 + pt.x) * 3;
+                    std::memcpy(p, &color16, 2);
+                    p[2] = nThird;
+                }
+                CHECK(pixels == expected);
+            }
+        }
+
+        // BLOB at the clip's origin: the left, down and centre points at x or
+        // y -1 fall outside and leave the destination.
+        {
+            CParticle particle(0, 0, 0, 0, 0, 0, rgb, 0, 0, CParticle::BLOB);
+            if (bpp == 16) {
+                std::vector<WORD> pixels(4 * 4, 0xAAAA);
+                particle.Render(pixels.data(), 4 * 2, CRect(0, 0, 4, 4), CParticle::BLOB, 5);
+                std::vector<WORD> expected(4 * 4, 0xAAAA);
+                expected[0] = color16; // the centre
+                expected[0 + 1] = color16; // right
+                expected[1 * 4] = color16; // up
+                CHECK(pixels == expected);
+            } else if (bpp == 24) {
+                std::vector<BYTE> pixels(4 * 4 * 3, 0xAA);
+                particle.Render(pixels.data(), 4 * 3, CRect(0, 0, 4, 4), CParticle::BLOB, 5);
+                std::vector<BYTE> expected(4 * 4 * 3, 0xAA);
+                for (int i : { 0, 1, 4 }) {
+                    BYTE* p = expected.data() + i * 3;
+                    std::memcpy(p, &color16, 2);
+                    p[2] = nThird;
+                }
+                CHECK(pixels == expected);
+            } else {
+                std::vector<DWORD> pixels(4 * 4, 0xAAAAAAAA);
+                particle.Render(pixels.data(), 4 * 4, CRect(0, 0, 4, 4), CParticle::BLOB, 5);
+                std::vector<DWORD> expected(4 * 4, 0xAAAAAAAA);
+                for (int i : { 0, 1, 4 }) {
+                    expected[i] = color;
+                }
+                CHECK(pixels == expected);
+            }
+        }
+
+        // CONNECT: the line the arm hands to the mode's drawer, from
+        // (pos - vel) to pos, clipped by the rect moved in one on its far
+        // edges. The drawers are oracle-proven; this pins the wiring and the
+        // pitch unit.
+        {
+            CParticle particle(5 << 10, 5 << 10, 0, 2 << 10, 4 << 10, 0, rgb, 0, 0, CParticle::CONNECT);
+            const CRect clip(0, 0, 8, 8);
+            const CRect drawClip(0, 0, 7, 7);
+            if (bpp == 16) {
+                std::vector<WORD> pixels(8 * 8, 0xAAAA);
+                particle.Render(pixels.data(), 8 * 2, clip, CParticle::CONNECT, 1);
+                std::vector<WORD> expected(8 * 8, 0xAAAA);
+                // x1 = (5 - 2), y1 = (5 - 4) * 3 / 4, x2 = 5, y2 = 5 * 3 / 4.
+                mode.DrawLine16(3, 0, 5, 3, expected.data(), 8, drawClip, color16, FALSE);
+                CHECK(pixels == expected);
+            } else if (bpp == 24) {
+                std::vector<BYTE> pixels(8 * 8 * 3, 0xAA);
+                particle.Render(pixels.data(), 8 * 3, clip, CParticle::CONNECT, 1);
+                std::vector<BYTE> expected(8 * 8 * 3, 0xAA);
+                mode.DrawLine24(3, 0, 5, 3, expected.data(), 8 * 3, drawClip, color, FALSE);
+                CHECK(pixels == expected);
+            } else {
+                std::vector<DWORD> pixels(8 * 8, 0xAAAAAAAA);
+                particle.Render(pixels.data(), 8 * 4, clip, CParticle::CONNECT, 1);
+                std::vector<DWORD> expected(8 * 8, 0xAAAAAAAA);
+                mode.DrawLine32(3, 0, 5, 3, expected.data(), 8, drawClip, color, FALSE);
+                CHECK(pixels == expected);
+            }
+        }
+    }
+
+    g_pChitin->cVideo.m_nBpp = 32;
+}
+
 // CVisibilityMap::GetSubTileCode (0x5525C0) puts the corners that are not
 // visible in the high nibble (`shl bl, 4` at 0x552668) and the unexplored
 // ones in the low nibble: bit 0x1 the tile, 0x2 the one below, 0x4 below
@@ -3319,8 +3478,6 @@ TEST_CASE("vid: BltBmp24To16 converts 24-bit pixels into the mode's 16-bit field
     CHECK(canvas[index(2, 2)] == 0x001F);
     // The row step of that path is one pixel forward then a full row back.
     CHECK(canvas[index(3, 1)] == 0x07E0);
-
-    ::operator delete(storage);
 }
 
 // CVidBitmap::BltBmp24To24Tint (0x7CCE80): a 24-bit BMP (three bytes, B then
@@ -3707,4 +3864,105 @@ TEST_CASE("vid: BltBmp24To16Tint packs the unkeyed light overflow into the neigh
     CHECK(canvas[3] == 0x3BEE);
 
     ::operator delete(storage);
+}
+
+// CVidBitmap::BltBmp8To16, which has no address of its own: the original
+// inlines it in RenderDirect (0x7B3190, the 16-bpp branch at
+// 0x7B362D-0x7B3735). An 8-bit paletted bitmap is realized into
+// CVidImage::rgbTempPal at 16 bpp and each index's word written to the
+// surface, rows bottom-up; the inlined code stores two pixels per dword
+// (second in the high word), writes an odd width's leading pixel before the
+// pairs, and one pixel per row below width 2.
+TEST_CASE("vid: BltBmp8To16 paints 8-bit indices through the palette into 16-bit fields", "[vid]")
+{
+    // Leaked on purpose: the 24-to-16 tests' harness keeps engine objects out
+    // of destructors, and these own a resource. This path does realize a
+    // palette, so the bitmap is constructed (not the zeroed block those tests
+    // use).
+    const auto& pal = CVidImage::rgbTempPal;
+
+    RGBQUAD colors[4] = {};
+    colors[0].rgbRed = 0xFF; // pure red
+    colors[1].rgbGreen = 0xFF; // pure green
+    colors[2].rgbBlue = 0xFF; // pure blue
+    colors[3].rgbRed = colors[3].rgbGreen = colors[3].rgbBlue = 0x80; // grey
+    auto* res = new CResBitmap;
+    res->bParsed = TRUE;
+    res->nColors = 4;
+    res->pColorTable = colors;
+    auto* bitmap = new CVidBitmap;
+    bitmap->SetRes(res);
+
+    ChitinScope scope;
+    CVidInf mode;
+    ActiveModeScope active(&mode);
+    const auto setMode16 = [&mode](bool green6) {
+        const int gBits = green6 ? 6 : 5;
+        const DWORD rShift = 5 + gBits;
+        mode.m_dwRBitMask = 0x1Fu << rShift;
+        mode.m_dwGBitMask = ((1u << gBits) - 1) << 5;
+        mode.m_dwBBitMask = 0x1F;
+        mode.m_dwRBitShift = rShift;
+        mode.m_dwGBitShift = 5;
+        mode.m_dwBBitShift = 0;
+        mode.field_C2 = 3;
+        mode.field_C6 = 8 - gBits;
+        mode.field_CA = 3;
+        mode.rgbGlobalTint = RGB(255, 255, 255);
+        mode.m_nBrightnessCorrection = 0;
+        mode.m_nGammaCorrection = 0;
+    };
+
+    constexpr int kW = 4;
+    constexpr size_t kPitch = kW * 2;
+    const auto index = [](int x, int y) { return static_cast<size_t>(y) * kW + x; };
+    // Row 0's indices are 0,1,2,3; row 1's are 3,2,1,0.
+    const BYTE data[8] = { 0, 1, 2, 3, 3, 2, 1, 0 };
+
+    // 5-6-5, even width: pairs of indices, rows bottom-up from the pointer
+    // handed in (row 1 first, then row 0). Each pixel is the low WORD of the
+    // realized palette entry - the inlined code reads `word [pal + 4*i]`.
+    setMode16(true);
+    std::vector<WORD> canvas(kW * 2, 0x1111);
+    CHECK(bitmap->BltBmp8To16(&canvas[index(0, 1)], static_cast<LONG>(kPitch), const_cast<BYTE*>(data),
+        CSize(4, 2), 0, 0));
+    CHECK(canvas[index(0, 1)] == static_cast<WORD>(pal[0]));
+    CHECK(canvas[index(1, 1)] == static_cast<WORD>(pal[1]));
+    CHECK(canvas[index(2, 1)] == static_cast<WORD>(pal[2]));
+    CHECK(canvas[index(3, 1)] == static_cast<WORD>(pal[3]));
+    CHECK(canvas[index(0, 0)] == static_cast<WORD>(pal[3])); // the next source row, one row up
+    CHECK(canvas[index(3, 0)] == static_cast<WORD>(pal[0]));
+    CHECK(canvas[index(0, 1)] == 0xF800); // the pack itself: pure red
+
+    // An odd width writes its leading pixel, then pairs through a dword
+    // store; the pixel right of the blit keeps the destination.
+    std::fill(canvas.begin(), canvas.end(), 0x1111);
+    CHECK(bitmap->BltBmp8To16(&canvas[index(0, 1)], static_cast<LONG>(kPitch), const_cast<BYTE*>(data),
+        CSize(3, 2), 0, 0));
+    CHECK(canvas[index(0, 1)] == static_cast<WORD>(pal[0]));
+    CHECK(canvas[index(1, 1)] == static_cast<WORD>(pal[1]));
+    CHECK(canvas[index(2, 1)] == static_cast<WORD>(pal[2]));
+    CHECK(canvas[index(3, 1)] == 0x1111);
+    // Row 0 continues where row 1 stopped: indices 3, 3, 2.
+    CHECK(canvas[index(0, 0)] == static_cast<WORD>(pal[3]));
+    CHECK(canvas[index(2, 0)] == static_cast<WORD>(pal[2]));
+
+    // Below width 2 the original writes one pixel per row whatever the width.
+    std::fill(canvas.begin(), canvas.end(), 0x1111);
+    CHECK(bitmap->BltBmp8To16(&canvas[index(1, 1)], static_cast<LONG>(kPitch), const_cast<BYTE*>(data),
+        CSize(1, 2), 0, 0));
+    CHECK(canvas[index(1, 1)] == static_cast<WORD>(pal[0]));
+    CHECK(canvas[index(0, 1)] == 0x1111);
+    CHECK(canvas[index(1, 0)] == static_cast<WORD>(pal[1]));
+
+    // 5-5-5: the same palette in five bits each.
+    setMode16(false);
+    std::fill(canvas.begin(), canvas.end(), 0x1111);
+    CHECK(bitmap->BltBmp8To16(&canvas[index(0, 1)], static_cast<LONG>(kPitch), const_cast<BYTE*>(data),
+        CSize(4, 2), 0, 0));
+    CHECK(canvas[index(0, 1)] == static_cast<WORD>(pal[0]));
+    CHECK(canvas[index(1, 1)] == static_cast<WORD>(pal[1]));
+    CHECK(canvas[index(2, 1)] == static_cast<WORD>(pal[2]));
+    CHECK(canvas[index(3, 1)] == static_cast<WORD>(pal[3]));
+    CHECK(canvas[index(0, 1)] == 0x7C00); // the pack: pure red, five bits
 }

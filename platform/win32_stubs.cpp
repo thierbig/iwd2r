@@ -303,7 +303,108 @@ BOOL IsCharAlphaNumericA(CHAR ch) { return std::isalnum(static_cast<unsigned cha
 
 BOOL IsBadReadPtr(const void* pointer, UINT_PTR size) { return pointer == NULL && size != 0 ? TRUE : FALSE; }
 
-int WSACleanup() { return 0; }
+namespace {
+// Tests only: the fakes CGameSpy's sockets dispatch through (NULL: inert).
+const IWD2R_GameSpySockets* g_gameSpySockets = nullptr;
+}
+
+void iwd2r_SetGameSpySockets(const IWD2R_GameSpySockets* sockets) { g_gameSpySockets = sockets; }
+
+const IWD2R_GameSpySockets* iwd2r_GameSpySockets() { return g_gameSpySockets; }
+
+int WSAStartup(WORD versionRequested, WSADATA* data)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->WSAStartup(versionRequested, data);
+    }
+    // No winsock: zero the block (wVersion 0, so CGameSpy's check fails).
+    if (data != nullptr) {
+        std::memset(data, 0, sizeof(*data));
+    }
+    return SOCKET_ERROR;
+}
+
+int WSACleanup()
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->WSACleanup();
+    }
+    return 0;
+}
+
+SOCKET socket(int af, int type, int protocol)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->socket(af, type, protocol);
+    }
+    return INVALID_SOCKET;
+}
+
+int ioctlsocket(SOCKET handle, long command, unsigned long* argument)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->ioctlsocket(handle, command, argument);
+    }
+    return SOCKET_ERROR;
+}
+
+int bind(SOCKET handle, const struct sockaddr_in* address, int length)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->bind(handle, address, length);
+    }
+    return SOCKET_ERROR;
+}
+
+int sendto(SOCKET handle, const char* buffer, int length, int flags,
+    const struct sockaddr_in* to, int toLength)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->sendto(handle, buffer, length, flags, to, toLength);
+    }
+    return SOCKET_ERROR;
+}
+
+int recvfrom(SOCKET handle, char* buffer, int length, int flags, struct sockaddr_in* from,
+    int* fromLength)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->recvfrom(handle, buffer, length, flags, from, fromLength);
+    }
+    return SOCKET_ERROR;
+}
+
+int closesocket(SOCKET handle)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->closesocket(handle);
+    }
+    return 0;
+}
+
+HANDLE WSAAsyncGetHostByName(HWND window, unsigned message, const char* name, char* buffer,
+    int bufferLength)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->WSAAsyncGetHostByName(window, message, name, buffer, bufferLength);
+    }
+    return NULL;
+}
+
+int WSACancelAsyncRequest(HANDLE taskHandle)
+{
+    if (g_gameSpySockets != nullptr) {
+        return g_gameSpySockets->WSACancelAsyncRequest(taskHandle);
+    }
+    return SOCKET_ERROR;
+}
+
+unsigned short htons(unsigned short netshort)
+{
+    return static_cast<unsigned short>((netshort >> 8) | (netshort << 8));
+}
+
+unsigned short ntohs(unsigned short netshort) { return htons(netshort); }
 
 int wsprintfA(LPSTR buffer, LPCSTR format, ...)
 {

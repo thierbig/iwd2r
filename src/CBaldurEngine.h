@@ -195,8 +195,8 @@ public:
     /* 002C */ int m_nPickedCharacter;
     /* 0030 */ CUIManager m_cUIManager;
     /* 00FA */ CUIControlScrollBar* m_pCurrentScrollBar;
-    /* 00FE */ int field_FE;
-    /* 0102 */ int field_102;
+    /* 00FE */ CUIControlScrollBar* field_FE;
+    /* 0102 */ CUIControlScrollBar* field_102;
 };
 
 #endif /* CBALDURENGINE_H_ */

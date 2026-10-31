@@ -14229,6 +14229,57 @@ class DriverTest(unittest.TestCase):
         self.assertIn('0x401000: src has uncommitted changes at the Frida phase; trace evidence '
                       'not written', '\n'.join(self.logs))
 
+    def test_driver_import_frida_unparks_a_parked_row_the_batch_imported(self):
+        # Task 63: a parked row whose body the batch changed is unparked at the
+        # Frida phase (file removed and committed, row moved to the old batch's
+        # `unparked` list); a parked row of the batch's own rows is left alone.
+        d, batch = self._import_phase_driver()
+        with open(d.state_path) as f:
+            state = json.load(f)
+        state['batches']['i001'] = {'status': 'closed', 'branch': 'p3/wso-i001',
+                                    'rows': [{'address': '0x404000', 'name': 'Rules::Old',
+                                              'file': 'src/A.cpp'}]}
+        with open(d.state_path, 'w') as f:
+            json.dump(state, f)
+        folder = os.path.join(self.wt, 'docs', 'wso', 'import-parked')
+        for addr, owner in (('404000', 'i001'), ('401000', 'b011')):
+            _write(os.path.join(folder, addr + '.json'), json.dumps(
+                {'address': '0x' + addr, 'name': 'X', 'file': 'src/A.cpp',
+                 'batch': owner, 'needs': 'a missing class'}))
+        self.git('add', '-A', cwd=self.wt)
+        self.git('commit', '-qm', 'parked', cwd=self.wt)
+        wave = driver._tool('wave')
+        parked = wave._parked_rows(self.wt)[0]
+        self.assertEqual(sorted(parked), ['401000', '404000'])
+        left, cats = d._unpark_imported('b011', batch, self.wt, parked, {'404000', '401000'})
+        self.assertEqual(sorted(left), ['401000'])
+        self.assertFalse(os.path.exists(os.path.join(folder, '404000.json')))
+        self.assertTrue(os.path.exists(os.path.join(folder, '401000.json')))
+        self.assertEqual(self.git('status', '--porcelain', '--', 'docs/wso/import-parked',
+                                  cwd=self.wt).stdout.strip(), '')
+        with open(d.state_path) as f:
+            old = json.load(f)['batches']['i001']
+        (u,) = old['unparked']
+        self.assertEqual((u['address'], u['reason']), ('0x404000', 'imported by b011'))
+        # nothing the batch changed: nothing unparked
+        self.assertEqual(d._unpark_imported('b011', batch, self.wt, left, set()), (left, {}))
+
+    def test_driver_prior_categories_reads_rows_and_unparked_lists(self):
+        # A row unparked before the Frida phase (wave.py unpark) keeps the
+        # category its batch was cut with, so rule 1 can mark it unmeasured.
+        d, _batch = self._import_phase_driver()
+        with open(d.state_path) as f:
+            state = json.load(f)
+        state['batches']['i001'] = {'status': 'closed', 'rows': [
+            {'address': '0x405000', 'category': 'only_theirs'}],
+            'unparked': [{'address': '0x406000', 'category': 'theirs_real_ours_stub'}]}
+        with open(d.state_path, 'w') as f:
+            json.dump(state, f)
+        prior = d._prior_categories()
+        self.assertEqual(prior.get('405000'), 'only_theirs')
+        self.assertEqual(prior.get('406000'), 'theirs_real_ours_stub')
+        self.assertNotIn('407000', prior)
+
     def _frida_file_run_all(self):
         trace = TruthTest._trace
         files = os.path.join(self.tmp_dir(), 'traces')
@@ -20230,6 +20281,7 @@ class DriverTest(unittest.TestCase):
         with open(path) as f:
             st = json.load(f)
         self.assertEqual(st['cleared'], {'b011': {'stage': 'checks', 'rerun': False,
+                                                  'rerun_frida': False,
                                                   'problems': ['p1', 'p2']}})
 
     def test_worker_brief_frida_exceptions_keep_the_worker_reentry(self):
@@ -20239,6 +20291,7 @@ class DriverTest(unittest.TestCase):
             d._retry_stage.clear()
             self.assertEqual(d._cleared(), ['b011'])
             self.assertEqual(d._retry_stage['b011'], stage)
+        self.assertFalse(d._retry_frida)     # a plain --clear keeps R71 (Task 63)
         for stage, want in (('checks', 'recheck'), ('review', 'recheck')):
             self._write_cleared(d, stage)
             self.assertEqual(d._cleared(), ['b011'])
@@ -20247,12 +20300,17 @@ class DriverTest(unittest.TestCase):
         d._cleared()
         self.assertEqual(d._retry_stage['b011'], 'review')
         self.assertEqual(d._retry_kind['b011'], 'rerun')
+        self._write_cleared(d, 'close', rerun_frida=True)
+        d._retry_stage.clear()
+        self.assertEqual(d._cleared(), ['b011'])
+        self.assertTrue(d._retry_frida['b011'])   # --rerun-frida at --clear time
 
-    def _write_cleared(self, d, stage, rerun=False):
+    def _write_cleared(self, d, stage, rerun=False, rerun_frida=False):
         os.makedirs(os.path.dirname(d.status_path), exist_ok=True)
         with open(d.status_path, 'w') as f:
             json.dump({'exceptions': {}, 'cleared': {'b011': {
-                'stage': stage, 'rerun': rerun, 'problems': []}},
+                'stage': stage, 'rerun': rerun, 'rerun_frida': rerun_frida,
+                'problems': []}},
                 'batches': {'b011': {'outcome': 'exception', 'stage': stage}}}, f)
 
     def test_a_cleared_push_exception_pushes_again_without_the_worker(self):
