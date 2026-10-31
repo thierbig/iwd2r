@@ -114,12 +114,15 @@ public:
     // tunes the wave: 3-tick strike / 60-tick clear cadence, TRA_M04 fire
     // sound, speed = frameHeight*3/4, life span 110, height enabled.
     IcewindCProjectileScorcher();
-    // 0x57B080. Scalar deleting dtor: the delete branch calls
-    // operator_delete 0x7FC984, the body at 0x57B0A0 tears down the
-    // std::set member.
-    /* 0000 */ ~IcewindCProjectileScorcher() override;
-    // 0x57B210.
-    /* 000C */ void AIUpdate() override;
+    // Slots 0x0000 and 0x000C are not declared: the dtor 0x57B080 and
+    // AIUpdate 0x57B210 are parked (docs/wso/import-parked/57B080.json —
+    // exercised by no scenario — and 57B210.json, whose life-span-0 exit is
+    // `delete this` through the parked dtor), so the class inherits the base
+    // virtuals for those slots; a declared-but-undefined dtor would become
+    // the key function and leave the vtable unemitted, breaking the link
+    // against the 0x57AEB0 ctor's vtable store. 0x57B080's scalar deleting
+    // dtor calls operator_delete 0x7FC984; the body at 0x57B0A0 tears down
+    // the std::set member.
     // 0x57B780.
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
     // 0x57B1D0: marshals the seven arguments, calls the base Fire at
