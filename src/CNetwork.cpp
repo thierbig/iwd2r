@@ -2122,6 +2122,31 @@ void CNetwork::SlidingWindowTimeouts()
     }
 }
 
+// 0x7A7890
+BYTE* CNetwork::FetchFrame(PLAYER_ID& dpIDFrom, DWORD& dwSize)
+{
+    BYTE* pData = new BYTE[MINIMAL_PACKET_SIZE];
+    if (pData == NULL) {
+        return NULL;
+    }
+
+    // NOTE: iwd2r: The original calls the CNetwork vtable slot `+0x64` (the
+    // DirectPlay `Receive` method on m_lpDirectPlay, COM stdcall) in a loop
+    // inside this critical section — `Receive(&dpIDFrom_local, &to_local, 0,
+    // pData, &dwDataSize)` — reallocating pData on DPERR_BUFFERTOOSMALL
+    // (0x8877001E, DPERR_NOMEMORY 0x8007000E on a failed realloc) and
+    // returning the frame on DP_OK. DirectPlay is gone, so no frame can be
+    // received and the function always takes the exe's failure path: the
+    // caller's dwSize is zeroed, the buffer is deleted and NULL is returned.
+    EnterCriticalSection(&(g_pChitin->cNetwork.field_F6A));
+    LeaveCriticalSection(&(g_pChitin->cNetwork.field_F6A));
+
+    dwSize = 0;
+    delete pData;
+
+    return NULL;
+}
+
 // 0x7A7980
 BOOLEAN CNetwork::HandleSystemMessage(BYTE* pData, DWORD dwSize)
 {
