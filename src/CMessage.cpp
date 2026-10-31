@@ -19411,6 +19411,35 @@ void CMessageProjectileImmumityUpdate::Run()
 
 // -----------------------------------------------------------------------------
 
+// 0x504070
+void CMessageRemoveItem::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+    CGameObjectArray* array = g_pBaldurChitin->GetObjectGame()->GetObjectArray();
+    CGameObject* object;
+    BYTE rc;
+    do {
+        rc = array->GetShare(m_targetId, CGameObjectArray::THREAD_ASYNCH, &object, INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+    PLAYER_ID player = object->m_remotePlayerID;
+    LONG id = object->m_remoteObjectID;
+    array->ReleaseShare(m_targetId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    *dwSize = sizeof(player) + sizeof(id) + sizeof(m_slot);
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &id, sizeof(id));
+    cnt += sizeof(id);
+    memcpy(*pData + cnt, &m_slot, sizeof(m_slot));
+    cnt += sizeof(m_slot);
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
 // 0x5041A0
 BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 {
