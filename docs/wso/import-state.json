@@ -4145,14 +4145,6 @@
           "their_len": 32
         },
         {
-          "address": "0x4088A0",
-          "category": "only_theirs",
-          "file": "src/CMessage.cpp",
-          "name": "CMessageProjectileImmumityUpdate::GetCommType",
-          "our_len": 0,
-          "their_len": 25
-        },
-        {
           "address": "0x72DE60",
           "category": "only_theirs",
           "file": "src/CGameSprite.cpp",
@@ -4160,14 +4152,6 @@
           "our_len": 0,
           "outcome": "kept",
           "their_len": 22
-        },
-        {
-          "address": "0x4B2340",
-          "category": "only_theirs",
-          "file": "src/CMessage.cpp",
-          "name": "CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate",
-          "our_len": 0,
-          "their_len": 2
         },
         {
           "address": "0x46CD20",
@@ -4286,6 +4270,28 @@
           "our_len": 0,
           "reason": "imported as i048 dependency of 0x71CC90: the exe body is xor eax, eax; ret 4 (evidence 75E930.md); the i026 park was a one-sided Frida call",
           "their_len": 10
+        },
+        {
+          "address": "0x4088A0",
+          "at": "2026-10-31T05:40:20+00:00",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageProjectileImmumityUpdate::GetCommType",
+          "needs": "dependency outside the batch's files: src/CMessage.h has no CMessageProjectileImmumityUpdate class; the constant body (returns BROADCAST_OTHERS = 3, matching the exe) already exists on our folded siblings labelled 0x4088A0 in src/CMessage.cpp.",
+          "our_len": 0,
+          "reason": "batch i057 added CMessageSpellLevelImmumityUpdate/CMessageProjectileImmumityUpdate/CMessageProjectileTrailingVFX to src/CMessage.h and imported these rows (evidence present); the park needs are met",
+          "their_len": 25
+        },
+        {
+          "address": "0x4B2340",
+          "at": "2026-10-31T05:40:20+00:00",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate",
+          "needs": "dependency outside the batch's files: src/CMessage.h has no CMessageSpellLevelImmumityUpdate class; the fork body is a deleting dtor (empty dtor plus conditional operator delete) with nothing portable to adopt.",
+          "our_len": 0,
+          "reason": "batch i057 added CMessageSpellLevelImmumityUpdate/CMessageProjectileImmumityUpdate/CMessageProjectileTrailingVFX to src/CMessage.h and imported these rows (evidence present); the park needs are met",
+          "their_len": 2
         }
       ],
       "verdicts": {}
@@ -7985,14 +7991,6 @@
           "their_len": 1068
         },
         {
-          "address": "0x516D50",
-          "category": "only_theirs",
-          "file": "src/CMessage.cpp",
-          "name": "CMessageSpellLevelImmumityUpdate::MarshalMessage",
-          "our_len": 0,
-          "their_len": 969
-        },
-        {
           "address": "0x4F8FA0",
           "category": "only_theirs",
           "file": "src/CMessage.cpp",
@@ -8042,6 +8040,19 @@
         }
       ],
       "status": "closed",
+      "unparked": [
+        {
+          "address": "0x516D50",
+          "at": "2026-10-31T05:40:20+00:00",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageSpellLevelImmumityUpdate::MarshalMessage",
+          "needs": "dependency outside the batch's files: src/CMessage.h has no CMessageSpellLevelImmumityUpdate class; his marshal writes that message's payload through it, and the declaration-only header edit the batch is allowed cannot add it.",
+          "our_len": 0,
+          "reason": "batch i057 added CMessageSpellLevelImmumityUpdate/CMessageProjectileImmumityUpdate/CMessageProjectileTrailingVFX to src/CMessage.h and imported these rows (evidence present); the park needs are met",
+          "their_len": 969
+        }
+      ],
       "verdicts": {}
     }
   }
