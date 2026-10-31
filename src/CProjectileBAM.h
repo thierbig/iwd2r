@@ -118,6 +118,18 @@ public:
     /* 02A0 */ WORD m_animationLifetime;
 };
 
+// One cell of a spray area projectile (vtable 0x84E724): registers itself
+// in the area's object list at the front, then plays its fire sound.
+// NOTE: The exe vtable's slot 0x88 is AddVisualToArea (0x533AE0), overriding
+// the slot CProjectileBAM fills with 0x529AB0; the vtable continues past it
+// (0x8C -> 0x533DF0, 0x90 -> 0x45B680, 0x94 -> 0x4C7BE0, 0x98 -> 0x534140)
+// and those virtuals are not part of batch i058, so ours declares none of
+// them.
+class CProjectileSprayCell : public CProjectileBAM {
+public:
+    /* 0088 */ virtual void AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height);
+};
+
 // One magic missile, type 218 (vtable 0x8510A4).
 class CProjectile8510A4 : public CProjectileBAM {
 public:

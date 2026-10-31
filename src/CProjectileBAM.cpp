@@ -1021,6 +1021,24 @@ CProjectileSPBRNHND::CProjectileSPBRNHND()
     field_178 = 50;
 }
 
+// 0x533AE0
+void CProjectileSprayCell::AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height)
+{
+    m_pArea = pArea;
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Add(&m_id, this, INFINITE) != CGameObjectArray::SUCCESS) {
+        delete this;
+        return;
+    }
+    CGameObject::AddToArea(pArea, point, height, CGameObject::LIST_FRONT);
+    m_sound.Stop();
+    if (m_fireSoundRef != "") {
+        m_sound.SetResRef(m_fireSoundRef, TRUE, TRUE);
+        if (m_loopFireSound) m_sound.SetLoopingFlag(TRUE);
+        m_sound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+        m_sound.Play(m_pos.x, m_pos.y, 0, FALSE);
+    }
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x57E030
