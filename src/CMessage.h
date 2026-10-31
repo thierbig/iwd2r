@@ -126,6 +126,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_101;
     static const BYTE MSG_SUBTYPE_CMESSAGE_103;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_TOGGLE_INTERFACE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_107;
@@ -1771,6 +1772,20 @@ public:
     /* 000C */ CImmunitiesWeapon m_weaponImmunities;
 };
 
+class CMessageSpellLevelImmumityUpdate : public CMessage {
+public:
+    CMessageSpellLevelImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target);
+    ~CMessageSpellLevelImmumityUpdate() override;
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CImmunitiesSpellLevel m_spellLevelImmunities;
+};
+
 class CMessage103 : public CMessage {
 public:
     CMessage103(BOOLEAN a1, PLAYER_ID idPlayer, INT nPortrait, LONG caller, LONG target);
@@ -2016,6 +2031,20 @@ public:
     void Run() override;
 
     /* 000C */ std::list<CMessage*> m_messages;
+};
+
+// A message removing an item from a player's inventory slot.
+class CMessageRemoveItem : public CMessage {
+public:
+    CMessageRemoveItem(SHORT slot, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ SHORT m_slot;
 };
 
 #endif /* CMESSAGE_H_ */

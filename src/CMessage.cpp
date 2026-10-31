@@ -357,6 +357,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE = 102;
 // 0x84CF3E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_103 = 103;
 
+// 0x84CF3F
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE = 104;
+
 // 0x84CF40
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_GROUP = 105;
 
@@ -17265,6 +17268,72 @@ void CMessageWeaponImmumityUpdate::Run()
 
 // -----------------------------------------------------------------------------
 
+// 0x516CD0
+CMessageSpellLevelImmumityUpdate::CMessageSpellLevelImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    if (pSprite != NULL) {
+        m_spellLevelImmunities = pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel;
+    }
+}
+
+// 0x516E90
+BOOL CMessageSpellLevelImmumityUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 32378
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    memcpy(m_spellLevelImmunities.m_levels, pData + cnt, sizeof(m_spellLevelImmunities.m_levels));
+    cnt += sizeof(m_spellLevelImmunities.m_levels);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    // NOTE: Missing trailing guard.
+
+    return TRUE;
+}
+
+// 0x516F10
+void CMessageSpellLevelImmumityUpdate::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+            pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel = m_spellLevelImmunities;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x4F6D80
 CMessage103::CMessage103(BOOLEAN a1, PLAYER_ID idPlayer, INT nPortrait, LONG caller, LONG target)
     : CMessage(caller, target)
@@ -18944,6 +19013,21 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
+// 0x4F69B0
+CMessageProjectileTrailingVFX::CMessageProjectileTrailingVFX(const CResRef& resRef,
+    const CString& area, const CPoint& launch, CPoint targetPoint,
+    SHORT launchHeight, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_resRef = resRef;
+    m_resRef2 = area;
+    m_launchX = launch.x;
+    m_launchY = launch.y;
+    m_targetX = targetPoint.x;
+    m_targetY = targetPoint.y;
+    m_launchHeight = launchHeight;
+}
+
 // 0x511D00
 void CMessageProjectileTrailingVFX::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19064,6 +19148,29 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// 0x514F60
+CMessageProjectileImmumityUpdate::CMessageProjectileImmumityUpdate(CGameSprite* pSprite, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    if (pSprite != NULL) {
+        m_projectileImmunities = pSprite->GetDerivedStats()->m_cImmunitiesProjectile;
+    }
+}
+
+// 0x516D40
+BYTE CMessageProjectileImmumityUpdate::GetMsgSubType()
+{
+    // The binary's projectile-immunity GetMsgSubType is folded (/OPT:ICF) with
+    // CMessageSpellLevelImmumityUpdate::GetMsgSubType at 0x516D40: both return
+    // the spell-level subtype (104). The projectile message therefore reports
+    // the same wire subtype as the spell-level message rather than its own.
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
+}
+
 // 0x515010
 void CMessageProjectileImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19182,4 +19289,38 @@ void CMessageProjectileImmumityUpdate::Run()
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x5041A0
+BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15367
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    m_slot = *reinterpret_cast<SHORT*>(pData + cnt);
+    cnt += sizeof(m_slot);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15393
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
 }
