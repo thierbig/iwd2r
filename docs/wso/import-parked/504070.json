@@ -1,1 +1,0 @@
-{"address": "0x504070", "name": "CMessageRemoveItem::MarshalMessage", "file": "src/CMessage.cpp", "batch": "i056", "needs": "dependency outside the batch's files: src/CMessage.h has no CMessageRemoveItem class; his marshal writes that message's item payload through it, and the declaration-only header edit the batch is allowed cannot add it."}
