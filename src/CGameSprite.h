@@ -453,6 +453,8 @@ public:
     void ComputeWaypoint(CPoint& result, LONG** ppPath, SHORT* pnPath, SHORT delay, BYTE* pReachedEnd);
     BOOL ClearBumpPath(const CPoint& start, const CPoint& goal);
     BOOL IsVisibleToCaller(BOOL bSeeInvisible);
+    BOOL CheckSpellTarget(CGameSprite* pTarget, DWORD flags);
+    BOOL CheckSpellUseful(CGameSprite* pTarget, INT nSpellId, DWORD flags);
     BOOL sub_6FB440();
     void AIUpdateFly();
     void ChangeDirection();
