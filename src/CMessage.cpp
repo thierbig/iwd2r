@@ -17277,6 +17277,11 @@ BYTE CMessageSpellLevelImmumityUpdate::GetMsgType()
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
 }
 
+// 0x4B2340
+CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate()
+{
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x4F6D80
