@@ -1984,6 +1984,7 @@ public:
         LONG caller, LONG target);
 
     SHORT GetCommType() override; // returns BROADCAST_OTHERS (3)
+    BYTE GetMsgSubType() override;
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
 

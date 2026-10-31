@@ -19110,6 +19110,12 @@ SHORT CMessageProjectileTrailingVFX::GetCommType()
     return BROADCAST_OTHERS;
 }
 
+// 0x4F6A70
+BYTE CMessageProjectileTrailingVFX::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX;
+}
+
 // 0x511D00
 void CMessageProjectileTrailingVFX::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {

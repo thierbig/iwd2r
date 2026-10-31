@@ -5,11 +5,11 @@
 # docs/evidence/<ADDR>.md).
 
 # docs/wso/disagreements.json (only_theirs): tiny constant-subtype getters of the
-# CMessage hierarchy, named in task-34-report.md §3 rows 3-6; ours defines
-# CMessageSetVariable's inline (53, CMessage.h "NOTE: The BYTE at 0x84CF0C")
-# and none of the other three classes.
+# CMessage hierarchy, named in task-34-report.md §3 rows 3-6. Ours defines
+# CMessageSetVariable's inline (53, CMessage.h "NOTE: The BYTE at 0x84CF0C"),
+# CMessageProjectileTrailingVFX's since the i059 import (0x4F6A70,
+# docs/evidence/4F6A70.md), and none of the other two.
 0x453560 CMessageSetVariable::GetMsgSubType
-0x4F6A70 CMessageProjectileTrailingVFX::GetMsgSubType
 0x4F6FA0 CMessage117::GetMsgSubType
 0x516D40 CMessageProjectileImmumityUpdate::GetMsgSubType
 
