@@ -14040,10 +14040,11 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 137:
     case 198:
-        // StartDialog, StartDialogueNoSet
-        // TODO: 0x72A374-0x72A39B not ported (0x7543B0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // StartDialog, StartDialogueNoSet (0x72A374-0x72A39B)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = StartDialog(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 138:
         // SetDialog (0x72A39B-0x72A3AB)
         returnValue = SetDialog();
@@ -24347,6 +24348,57 @@ SHORT CGameSprite::PlayerDialog(CGameSprite* pTarget)
 denied:
     DisplayTextRef(GetNameRef(), 10945, 0xFF, 0xFF);
     return ACTION_ERROR;
+}
+
+// 0x7543B0
+SHORT CGameSprite::StartDialog(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (!CanSpeak(FALSE, FALSE)) {
+        return ACTION_ERROR;
+    }
+
+    if (!pTarget->CanSpeak(FALSE, TRUE)) {
+        return ACTION_ERROR;
+    }
+
+    if ((m_derivedStats.m_generalState & STATE_CHARMED) != 0) {
+        return ACTION_ERROR;
+    }
+
+    // StartDialogNoSet keeps the current dialog; StartDialog takes the
+    // dialog resource from the action (0x75442C-0x754466).
+    if (m_curAction.m_actionID != CAIAction::STARTDIALOGUENOSET) {
+        m_dialog = m_curAction.GetString1();
+    }
+
+    m_lTalkedTo.Set(pTarget->GetAIType());
+    pTarget->m_lTalkedTo.Set(GetAIType());
+
+    if (m_actionCount == 0) {
+        // NOTE: The original passes the speaker itself (0x754496).
+        PlayDialogSound(this);
+    }
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        BYTE rc = g_pBaldurChitin->m_cBaldurMessage.SendDialogRequestToServer(FALSE);
+        if (rc == CBaldurMessage::DIALOG_REQUESTPENDING) {
+            return ACTION_NORMAL;
+        }
+        if (rc == 0 || rc == CBaldurMessage::DIALOG_NOT_PERMITTED) {
+            return ACTION_ERROR;
+        }
+    }
+
+    if (!g_pBaldurChitin->m_pEngineWorld->StartDialog(pTarget, this, FALSE, FALSE)) {
+        return ACTION_ERROR;
+    }
+
+    DialogStarted(this, pTarget);
+    return ACTION_DONE;
 }
 
 // 0x754870
