@@ -1,5 +1,7 @@
 #include "CGameSprite.h"
 
+#include "CCreatureFile.h"
+
 #include "CAIScript.h"
 #include "CAIUtil.h"
 #include "CBaldurChitin.h"
@@ -14117,9 +14119,8 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 194:
     case 219:
-        // ChangeAnimation
-        // TODO: 0x72A7A9-0x72A7B9 not ported (0x75EC50).
-        returnValue = ACTION_ERROR;
+        // ChangeAnimation (0x72A7A9-0x72A7B9)
+        returnValue = ChangeAnimation();
         goto done;
     case 200:
         // RandomWalkContinuous
@@ -27043,6 +27044,112 @@ void CGameSprite::sub_761AB0(CGameSprite* target)
             g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
         }
     }
+}
+
+
+// 0x75EC50
+// ChangeAnimation (actions 194 and 219): the sprite takes on a new creature
+// file - the action's string1 names a CRE (found in the key table) whose data
+// builds a replacement sprite. The new sprite is placed in this one's area at
+// its position and list type, given this one's hit points and a copy of its
+// timed effects, and the area's named-creature variable for this sprite's
+// script name is pointed at it; action 194 then sends it three visual-spell-hit
+// effects (flags 0xE, 0xC, 0xD), action 219 (the unlisted internal one) does not.
+// NOTE: a null new sprite or a failed deny answers ACTION_INTERRUPTABLE and
+// leaks the sprite, as the original does (0x75EEA3-0x75EF01).
+SHORT CGameSprite::ChangeAnimation()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    BOOL bPortrait = pGame->GetCharacterPortraitNum(m_id) != -1;
+
+    if (!bPortrait) {
+        m_removeFromArea = TRUE;
+    }
+
+    CPoint ptRef = GetPos();
+    CString sResRef = m_curAction.GetString1();
+    CResRef cResRef(sResRef);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(cResRef, 1009, TRUE) == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CCreatureFile creatureFile;
+    creatureFile.SetResRef(cResRef, TRUE, TRUE);
+
+    CGameSprite* pSprite = new CGameSprite(creatureFile.GetData(),
+        creatureFile.GetDataSize(),
+        0,
+        static_cast<WORD>(bPortrait),
+        m_expirationTime,
+        m_huntingRange,
+        m_followRange,
+        m_timeOfDayVisible,
+        m_posStart,
+        m_nDirection);
+
+    // NOTE: The two SetResRef calls (0x75EE94 and 0x75EF1F) are the new
+    // sprite's and this one's, both with the action's string1.
+    pSprite->SetResRef(cResRef);
+    creatureFile.ReleaseData();
+
+    if (pSprite == NULL) {
+        return ACTION_INTERRUPTABLE;
+    }
+
+    CGameObject* pObject;
+    BYTE rc = pGame->GetObjectArray()->GetDeny(pSprite->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        return ACTION_INTERRUPTABLE;
+    }
+
+    SetResRef(cResRef);
+
+    // __FILE__: .\Include\ObjAnimation.h
+    // __LINE__: 2086
+    UTIL_ASSERT(pSprite->m_animation.m_animation != NULL);
+
+    // The animation's list type decides the area list the new sprite joins.
+    pSprite->AddToArea(m_pArea, ptRef, 0, pSprite->m_animation.m_animation->GetListType());
+
+    // The area remembers that this sprite's script is now the new one.
+    CVariable variable;
+    variable.SetName(GetScriptName());
+    variable.m_intValue = pSprite->m_id;
+    m_pArea->m_namedCreatures.AddKey(variable);
+
+    // The hit points carry over.
+    pSprite->m_baseStats.m_hitPoints = m_baseStats.m_hitPoints;
+
+    // The timed effects move over as copies.
+    POSITION pos = m_timedEffectList.GetHeadPosition();
+    while (pos != NULL) {
+        pSprite->m_timedEffectList.AddTail(m_timedEffectList.GetNext(pos)->Copy());
+    }
+
+    pGame->GetObjectArray()->ReleaseDeny(pSprite->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // Action 194 (not 219) marks the change with the three visual hits.
+    if (m_curAction.m_actionID != 219) {
+        // NOTE: The duration type is the WORD constant at 0x8491AA (1).
+        const WORD nFlags[] = { 0xE, 0xC, 0xD };
+        for (const WORD nFlag : nFlags) {
+            ITEM_EFFECT effect;
+            CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_VISUALSPELLHIT);
+            effect.durationType = 1;
+            effect.dwFlags = nFlag;
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+            CMessageAddEffect* pMessage = new CMessageAddEffect(pEffect, m_id, pSprite->m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+        }
+    }
+
+    return ACTION_DONE;
 }
 
 // 0x7618E0

@@ -9,6 +9,7 @@
 #include "CGameArea.h"
 #include "CGameDialog.h"
 #include "CGameDoor.h"
+#include "CGameEffect.h"
 #include "CGameSprite.h"
 #include "CGameTrigger.h"
 #include "CInfGame.h"
@@ -1785,6 +1786,117 @@ TEST_CASE("object: FloatText floats only in the area on view and clears its text
     pCharacter->field_1C = 0;
     pCharacter->FloatText(0, 10, 5);
     CHECK(pCharacter->field_1C == 0);
+}
+
+// CGameSprite::ChangeAnimation (0x75EC50, actions 194 and 219): the action's
+// string1 names a CRE ("10GOB") whose data builds a replacement sprite; it
+// joins this sprite's area at its position and list type, takes its hit points
+// and copies of its timed effects, and the area's named-creature variable for
+// this sprite's script name points at it; action 194 also queues the three
+// visual-spell-hit messages (flags 0xE, 0xC, 0xD), 219 none.
+TEST_CASE("sprite: ChangeAnimation builds the new creature and retargets the script variable", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // A timed effect on the old sprite, to see it copied to the new one.
+    ITEM_EFFECT itemEffect;
+    CGameEffect::ClearItemEffect(&itemEffect, CGAMEEFFECT_VISUALSPELLHIT);
+    itemEffect.durationType = 1;
+    pCharacter->AddEffect(CGameEffect::DecodeEffect(&itemEffect, pCharacter->GetPos(), pCharacter->GetId(), CPoint(-1, -1)),
+        CGameAIBase::EFFECT_LIST_TIMED, FALSE, TRUE);
+    const INT nEffects = pCharacter->m_timedEffectList.GetCount();
+    const SHORT nHitPoints = pCharacter->m_baseStats.m_hitPoints;
+
+    // The action: 194 with the goblin's CRE (tests/test_combat.cpp's 10GOB).
+    CAIAction change(194, CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0);
+    change.m_string1 = "10GOB";
+
+    // A CRE the game does not have: an error, nothing built.
+    ClearMessages();
+    CAIAction missing = change;
+    missing.m_string1 = "NOSUCH";
+    pCharacter->m_curAction = missing;
+    CHECK(pCharacter->ChangeAnimation() == CGameAIBase::ACTION_ERROR);
+
+    // The change.
+    ClearMessages();
+    pCharacter->m_curAction = change;
+    CHECK(pCharacter->ChangeAnimation() == CGameAIBase::ACTION_DONE);
+    pArea->SortLists();
+
+    // The area's variable for the script name now holds another sprite's id.
+    CVariable* pVariable = pArea->m_namedCreatures.FindKey(CString(pCharacter->GetScriptName()));
+    REQUIRE(pVariable != NULL);
+    CHECK(pVariable->m_intValue != pCharacter->GetId());
+
+    CGameObject* pObject = NULL;
+    BYTE rc = pGame->GetObjectArray()->GetShare(pVariable->m_intValue,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+    REQUIRE(rc == CGameObjectArray::SUCCESS);
+    REQUIRE(pObject != NULL);
+    auto* pNew = static_cast<CGameSprite*>(pObject);
+    CHECK(pNew != pCharacter);
+    CHECK(pNew->m_resRef == CResRef("10GOB"));
+    CHECK(pNew->m_pArea == pArea);
+    CHECK(pNew->m_baseStats.m_hitPoints == nHitPoints);
+    CHECK(pNew->m_timedEffectList.GetCount() == nEffects);
+    pGame->GetObjectArray()->ReleaseShare(pVariable->m_intValue,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // The three visual hits, 0xE/0xC/0xD, from the caller to the new sprite.
+    WORD flags = 0;
+    int nVisual = 0;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        auto* pMessage = dynamic_cast<CMessageAddEffect*>(handler.m_messageList.GetNext(pos));
+        if (pMessage == NULL) {
+            continue;
+        }
+        CHECK(pMessage->m_sourceId == pCharacter->GetId());
+        CHECK(pMessage->m_targetId == pNew->GetId());
+        if (pMessage->m_effect != NULL) {
+            flags |= static_cast<WORD>(pMessage->m_effect->GetItemEffect()->dwFlags);
+            nVisual++;
+        }
+    }
+    CHECK(nVisual == 3);
+    CHECK(flags == (0xE | 0xC | 0xD));
+
+    // Action 219 (the unlisted internal one) builds the sprite but marks
+    // nothing.
+    ClearMessages();
+    pCharacter->m_curAction = change;
+    pCharacter->m_curAction.m_actionID = 219;
+    CHECK(pCharacter->ChangeAnimation() == CGameAIBase::ACTION_DONE);
+    int nVisual219 = 0;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        if (dynamic_cast<CMessageAddEffect*>(handler.m_messageList.GetNext(pos)) != NULL) {
+            nVisual219++;
+        }
+    }
+    CHECK(nVisual219 == 0);
+
+    ClearMessages();
 }
 
 TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
