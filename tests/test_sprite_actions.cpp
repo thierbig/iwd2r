@@ -390,6 +390,23 @@ void ClearMessages()
     }
 }
 
+// The queued messages of one kind, oldest first (tests/test_combat.cpp's
+// Queued).
+template <class T>
+std::vector<T*> Queued()
+{
+    std::vector<T*> found;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* message = handler.m_messageList.GetNext(pos);
+        if (T* typed = dynamic_cast<T*>(message)) {
+            found.push_back(typed);
+        }
+    }
+    return found;
+}
+
 }
 
 TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its action clears", "[ai][data]")
@@ -559,6 +576,76 @@ TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog open
     CHECK(dialog.m_talkerIndex == pHedron->GetId());
     // Hedron counts the talk (CMessageSetNumTimesTalkedTo); the party
     // member does not.
+    CHECK(pHedron->m_nNumberOfTimesTalkedTo == 1);
+
+    dialog.m_responseMarker = -2;
+    dialog.AsynchronousUpdate();
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.field_54 == 0);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: Interact (168) records the interaction and opens the actor's dialog", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pGame->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    // The cached DLG's trigger name is spoiled only while
+    // CGameSprite::EvaluateStatusTrigger is missing (as the PlayerDialog
+    // test above; `demanded` puts the byte back).
+    CResHelper<CResDLG, 1011> file;
+    file.SetResRef(CResRef("10HEDRON"), TRUE, TRUE);
+    REQUIRE(file.GetRes() != NULL);
+    BYTE* pData = static_cast<BYTE*>(file.GetRes()->Demand());
+    REQUIRE(pData != NULL);
+    DemandedResource demanded(file.GetRes());
+    if (!pHedron->EvaluateStatusTrigger(CAITrigger(0x4039, 0))) {
+        const DWORD nSize = file.GetRes()->m_nResSizeActual;
+        const std::string sTrigger = "NumTimesTalkedTo(0)";
+        BYTE* pTrigger = std::search(pData, pData + nSize, sTrigger.begin(), sTrigger.end());
+        REQUIRE(pTrigger != pData + nSize);
+        demanded.Patch(&pTrigger[15], 'X');
+    }
+
+    // Interact (168) on the party member: unlike PlayerDialog there is no
+    // reach check, and the actor is the speaker (Interact calls
+    // StartDialog(target, this, FALSE, TRUE)). The interaction resref
+    // (field_56E4) is empty - the constructor is its only writer - so the
+    // dialog load fails, but the interaction is recorded first.
+    CAIObjectType character(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    pHedron->SetCurrAction(CAIAction(168, character, 0, 0, 0));
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pHedron->m_interactingWith.Equal(pCharacter->GetAIType()));
+    CHECK(pHedron->m_lTalkedTo.Equal(pCharacter->GetAIType()));
+    CHECK(pCharacter->m_lTalkedTo.Equal(pHedron->GetAIType()));
+
+    // With the interaction resref set the same call opens Hedron's opening
+    // state, and DialogStarted counts the talk for the non-PC speaker.
+    pHedron->field_56E4 = CResRef("10HEDRON");
+    CHECK(pHedron->Interact(pCharacter) == CGameAIBase::ACTION_DONE);
+    CGameDialogSprite& dialog = pWorld->m_internalLoadedDialog;
+    CHECK(dialog.field_54 == 1);
+    CHECK(dialog.m_talkerIndex == pHedron->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.m_currentEntryIndex == 0);
     CHECK(pHedron->m_nNumberOfTimesTalkedTo == 1);
 
     dialog.m_responseMarker = -2;
@@ -1883,4 +1970,160 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
     if (kind == KIND_CLASS && (nEntryClass == 0 || nEntryClass == 5)) {
         CHECK(pLevelList->field_18 == 2);
     }
+}
+
+// CGameSprite::Help (0x74FF10, action 17): every object within GetHelpRange
+// (twice the visual range, CAIObjectType::ANYONE) gets a Help trigger
+// (TRIGGER.IDS 3) from the caller, its AI type as the cause and no
+// specifics, queued as a CMessageSetTrigger; the handler answers
+// ACTION_DONE.
+TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.empty()) {
+        SKIP("[iwd2r-skip] no finished character");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates.front());
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->m_visibility.SetAreaExplored();
+    pArea->SortLists();
+    ClearMessages();
+
+    CHECK(pCharacter->Help() == CGameAIBase::ACTION_DONE);
+
+    // The character itself is in range (distance 0) and on the area's front
+    // list, so at least one message is queued.
+    const std::vector<CMessageSetTrigger*> messages = Queued<CMessageSetTrigger>();
+    REQUIRE(!messages.empty());
+    bool bSelf = false;
+    for (CMessageSetTrigger* message : messages) {
+        CHECK(message->m_trigger.m_triggerID == CAITrigger::HELP);
+        CHECK(message->m_trigger.m_specificID == 0);
+        CHECK(message->m_trigger.GetCause().Equal(pCharacter->GetAIType()));
+        CHECK(message->GetSource() == pCharacter->GetId());
+        bSelf = bSelf || message->GetTarget() == pCharacter->GetId();
+    }
+    CHECK(bSelf);
+
+    // Running the queued message puts the trigger on the target.
+    pCharacter->m_pendingTriggers.RemoveAll();
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    while (!handler.m_messageList.IsEmpty()) {
+        CMessage* message = handler.m_messageList.RemoveHead();
+        message->Run();
+        delete message;
+    }
+    bool bHeard = false;
+    POSITION pos = pCharacter->m_pendingTriggers.GetHeadPosition();
+    while (pos != NULL) {
+        if (pCharacter->m_pendingTriggers.GetNext(pos)->m_triggerID == CAITrigger::HELP) {
+            bHeard = true;
+        }
+    }
+    CHECK(bHeard);
+}
+
+// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
+// own dialog with the target without Dialog's distance/LOS checks. Action
+// 137 takes the dialog resource from the action (the actor's m_dialog),
+// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
+// talk, the world screen opens the dialog, and the handler is done. A
+// charmed actor, or one of the two unable to speak, is an error.
+TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pGame->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    // The same trigger patch as the PlayerDialog test: the start state's
+    // NumTimesTalkedTo(0) needs EvaluateStatusTrigger (the movement stream),
+    // which is still a TODO.
+    CResHelper<CResDLG, 1011> file;
+    file.SetResRef(CResRef("10HEDRON"), TRUE, TRUE);
+    REQUIRE(file.GetRes() != NULL);
+    BYTE* pData = static_cast<BYTE*>(file.GetRes()->Demand());
+    REQUIRE(pData != NULL);
+    DemandedResource demanded(file.GetRes());
+    if (!pHedron->EvaluateStatusTrigger(CAITrigger(0x4039, 0))) {
+        const DWORD nSize = file.GetRes()->m_nResSizeActual;
+        const std::string sTrigger = "NumTimesTalkedTo(0)";
+        BYTE* pTrigger = std::search(pData, pData + nSize, sTrigger.begin(), sTrigger.end());
+        REQUIRE(pTrigger != pData + nSize);
+        demanded.Patch(&pTrigger[15], 'X');
+    }
+
+    // Hedron (the actor and the dialog's owner) starts its dialog with the
+    // party member (the target); no distance is involved.
+    CAIObjectType pcType(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    pHedron->m_curAction = CAIAction(CAIAction::STARTDIALOG, pcType, CString("10HEDRON"), 0, 0);
+    pHedron->m_actionCount = 1;
+    ClearMessages();
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CGameDialogSprite& dialog = pWorld->m_internalLoadedDialog;
+    CHECK(pHedron->m_dialog == CResRef("10HEDRON")); // action 137 set it
+    CHECK(dialog.field_54 == 1);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.m_currentEntryIndex == 0);
+    CHECK(dialog.m_talkerIndex == pHedron->GetId());
+    CHECK(dialog.field_54 == 1);
+    CHECK(pHedron->m_lTalkedTo.m_nInstance == pCharacter->GetId());
+    CHECK(pCharacter->m_lTalkedTo.m_nInstance == pHedron->GetId());
+    // Hedron counts the talk; the party member does not.
+    CHECK(pHedron->m_nNumberOfTimesTalkedTo == 1);
+    CHECK(pCharacter->m_nNumberOfTimesTalkedTo == 0);
+
+    dialog.m_responseMarker = -2;
+    dialog.AsynchronousUpdate();
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.field_54 == 0);
+    ClearMessages();
+
+    // StartDialogNoSet (198) keeps the actor's dialog even when the action
+    // names another resource.
+    pHedron->m_curAction = CAIAction(CAIAction::STARTDIALOGUENOSET, pcType, CString("XXXX"), 0, 0);
+    pHedron->m_actionCount = 1;
+    ClearMessages();
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_dialog == CResRef("10HEDRON"));
+    CHECK(dialog.field_54 == 1);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    dialog.m_responseMarker = -2;
+    dialog.AsynchronousUpdate();
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.field_54 == 0);
+    ClearMessages();
+
+    // A charmed actor cannot start a dialog.
+    pHedron->m_derivedStats.m_generalState |= STATE_CHARMED;
+    pHedron->m_curAction = CAIAction(CAIAction::STARTDIALOG, pcType, CString("10HEDRON"), 0, 0);
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    pHedron->m_derivedStats.m_generalState &= ~STATE_CHARMED;
+    ClearMessages();
 }
