@@ -998,15 +998,18 @@ void IcewindCProjectileScorcher::Render(CGameArea* pArea, CVidMode* pVidMode, in
     bounds.SetRect(0, 0, size.cx, size.cy);
     for (BYTE index = 0; index < m_nSegments; ++index) {
         SHORT tile = static_cast<SHORT>(static_cast<SHORT>(point.y / CVisibilityMap::SQUARE_SIZEY)
-            * m_pArea->m_visibility.m_nWidth + point.x / CVisibilityMap::SQUARE_SIZEX);
+                * m_pArea->m_visibility.m_nWidth
+            + point.x / CVisibilityMap::SQUARE_SIZEX);
         if (!m_pArea->m_visibility.IsTileVisible(tile)) {
             continue;
         }
         CRect gcBounds;
         gcBounds.left = CGameSprite::DIR_N < field_1DA
-            ? reference.x - bounds.right + point.x + bounds.left : point.x - reference.x;
+            ? reference.x - bounds.right + point.x + bounds.left
+            : point.x - reference.x;
         gcBounds.top = CGameSprite::DIR_W < field_1DA && field_1DA < CGameSprite::DIR_E
-            ? bounds.top - bounds.bottom + reference.y + point.y : point.y - reference.y;
+            ? bounds.top - bounds.bottom + reference.y + point.y
+            : point.y - reference.y;
         gcBounds.right = gcBounds.left + bounds.Width();
         gcBounds.bottom = gcBounds.top + bounds.Height();
         CRect intersection;
