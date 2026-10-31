@@ -1713,6 +1713,7 @@ const AreaType kAreaTypes[] = {
     { 284, 150, "CloudKX", "RNG_M01", "CloudKR", 13, "CloudKA", "ARE_M02", 1, 1, 0, 500, 1000, 10, 0 },
     { 190, 150, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, CAIObjectType::EA_ENEMY },
     { 212, 150, "DFogX", "RNG_M01", "DFogR", 20, "DFogA", "ARE_M02", 1, 1, 0, 250, 1100, 10, 0 },
+    { 213, 150, "SStoneA", "EFF_P48", "", 0x7FFFFFFF, "SStoneA", "ARE_P04", 1, 1, 0, 500, 1200, 10, 0 },
     { 235, 200, "EntangX", "", "", 0x7FFFFFFF, "EntangA", "ARE_P01", 1, 1, 0, 450, 1000, 10, 0 },
     { 236, 250, "Area1X", "EFF_P99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, CAIObjectType::EA_ALLY },
     { 237, 250, "Area1X", "EFF_P99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, CAIObjectType::EA_ENEMY },

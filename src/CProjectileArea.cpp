@@ -856,6 +856,29 @@ void CProjectileArea84FEA4::ApplyToTargets(std::list<LONG>& targets)
 
 // -----------------------------------------------------------------------------
 
+// 0x5747A0
+CProjectileArea84FFDC::CProjectileArea84FFDC()
+    // NOTE: The radius is the WORD at 0x84F1BC (256), then 150.
+    : CProjectileArea(256)
+{
+    m_explosion1.m_animation = "SStoneA";
+    m_explosion1.m_sound = "EFF_P48";
+
+    m_explosion3.m_animation = "SStoneA";
+    m_explosion3.m_sound = "ARE_P04";
+
+    m_nTriggerInterval = 10;
+    m_nHitModulus = 10;
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 500;
+    m_nTriggerCountdown = 0;
+    m_nDuration = 1200;
+    m_nRadius = 150;
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x574B80
 CProjectileArea8501B0::CProjectileArea8501B0()
     // NOTE: The radius is the WORD at 0x84F1BC (256), then 100.

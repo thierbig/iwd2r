@@ -194,6 +194,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Acid Fog.
         pProjectile = new CProjectileArea84F3AC();
         break;
+    case 213:
+        // Spike Stones.
+        pProjectile = new CProjectileArea84FFDC();
+        break;
     case 218:
         // One magic missile. NOTE: The WORD at 0x85E848 is 0.
         pProjectile = new CProjectile8510A4(0);

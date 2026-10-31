@@ -190,6 +190,13 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// Spike Stones (projectile type 213, vtable 0x84FFDC): SStoneA spikes and
+// lingering SStoneA ones, 150 around, 1200 ticks.
+class CProjectileArea84FFDC : public CProjectileArea {
+public:
+    CProjectileArea84FFDC();
+};
+
 // Stinking Cloud (projectile type 95, vtable 0x8501B0): SCloudX, up to 13
 // SCloudR clouds and lingering SCloudA ones, 100 around, 1000 ticks.
 class CProjectileArea8501B0 : public CProjectileArea {

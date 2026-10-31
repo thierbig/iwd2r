@@ -74,8 +74,11 @@ shot imported_chargen
 # disabled until Appearance is done, so the Name click alone did nothing
 # and Finish stayed dim. The imported character finishes the way a fresh
 # one does (chr_raise_druid.txt): Appearance (400,338), Next (536,562) to
-# the sound panel, Next back to the menu, Name (400,373), type, Done
-# (458,268), then Finish (536,562).
+# the sound panel, Next back to the menu, Name (400,373), Done
+# (458,268), then Finish (536,562). NO type step: the import prefills
+# the name field with the file's own name (Rysdrd7), and typing it
+# again appends -- our run's named shot showed "Rysdrd7Rysdrd7" -- so
+# the Name click just opens the panel on the prefilled field.
 click 400 338
 wait 30
 click 536 562
@@ -84,8 +87,6 @@ click 536 562
 wait 30
 click 400 373
 wait 30
-type Rysdrd7
-wait 15
 click 458 268
 wait 30
 checkpoint named
