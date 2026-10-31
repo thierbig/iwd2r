@@ -626,6 +626,7 @@ public:
     SHORT MoveToPoint(const CPoint& dest, LONG range);
     SHORT Dialog(CGameSprite* pTarget);
     SHORT PlayerDialog(CGameSprite* pTarget);
+    SHORT Interact(CGameSprite* pTarget);
     SHORT UseDoor();
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);

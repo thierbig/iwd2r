@@ -14112,10 +14112,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 168:
-        // Interact
-        // TODO: 0x72A5DE-0x72A606 not ported (0x754980).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // Interact (0x72A5DE-0x72A606)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = Interact(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 174:
         // EquipRanged (0x72AE54-0x72AE64)
         returnValue = EquipRanged();
@@ -24358,6 +24359,41 @@ SHORT CGameSprite::SetDialog()
         g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
     }
 
+    return ACTION_DONE;
+}
+
+// 0x754980
+SHORT CGameSprite::Interact(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    // The actor remembers whom it interacts with and both sides who they
+    // talked to (the same pair `Dialog` and `PlayerDialog` set).
+    m_interactingWith.Set(pTarget->GetAIType());
+    m_lTalkedTo.Set(pTarget->GetAIType());
+    pTarget->m_lTalkedTo.Set(GetAIType());
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        BYTE rc = g_pBaldurChitin->m_cBaldurMessage.SendDialogRequestToServer(FALSE);
+        if (rc == CBaldurMessage::DIALOG_REQUESTPENDING) {
+            return ACTION_NORMAL;
+        }
+        if (rc == 0 || rc == CBaldurMessage::DIALOG_NOT_PERMITTED) {
+            return ACTION_ERROR;
+        }
+    }
+
+    // NOTE: Unlike `Dialog` and `PlayerDialog` the interaction flag is set
+    // (the exe pushes 1 at 0x754A48): the actor is the speaker here.
+    if (!g_pBaldurChitin->m_pEngineWorld->StartDialog(pTarget, this, FALSE, TRUE)) {
+        return ACTION_ERROR;
+    }
+
+    // NOTE: Inlined in the original (0x754A5B-0x754D44), the block `Dialog`
+    // and `PlayerDialog` share.
+    DialogStarted(this, pTarget);
     return ACTION_DONE;
 }
 

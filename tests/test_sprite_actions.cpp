@@ -585,6 +585,76 @@ TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog open
     ClearMessages();
 }
 
+TEST_CASE("sprite: Interact (168) records the interaction and opens the actor's dialog", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pGame->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    // The cached DLG's trigger name is spoiled only while
+    // CGameSprite::EvaluateStatusTrigger is missing (as the PlayerDialog
+    // test above; `demanded` puts the byte back).
+    CResHelper<CResDLG, 1011> file;
+    file.SetResRef(CResRef("10HEDRON"), TRUE, TRUE);
+    REQUIRE(file.GetRes() != NULL);
+    BYTE* pData = static_cast<BYTE*>(file.GetRes()->Demand());
+    REQUIRE(pData != NULL);
+    DemandedResource demanded(file.GetRes());
+    if (!pHedron->EvaluateStatusTrigger(CAITrigger(0x4039, 0))) {
+        const DWORD nSize = file.GetRes()->m_nResSizeActual;
+        const std::string sTrigger = "NumTimesTalkedTo(0)";
+        BYTE* pTrigger = std::search(pData, pData + nSize, sTrigger.begin(), sTrigger.end());
+        REQUIRE(pTrigger != pData + nSize);
+        demanded.Patch(&pTrigger[15], 'X');
+    }
+
+    // Interact (168) on the party member: unlike PlayerDialog there is no
+    // reach check, and the actor is the speaker (Interact calls
+    // StartDialog(target, this, FALSE, TRUE)). The interaction resref
+    // (field_56E4) is empty - the constructor is its only writer - so the
+    // dialog load fails, but the interaction is recorded first.
+    CAIObjectType character(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    pHedron->SetCurrAction(CAIAction(168, character, 0, 0, 0));
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pHedron->m_interactingWith.Equal(pCharacter->GetAIType()));
+    CHECK(pHedron->m_lTalkedTo.Equal(pCharacter->GetAIType()));
+    CHECK(pCharacter->m_lTalkedTo.Equal(pHedron->GetAIType()));
+
+    // With the interaction resref set the same call opens Hedron's opening
+    // state, and DialogStarted counts the talk for the non-PC speaker.
+    pHedron->field_56E4 = CResRef("10HEDRON");
+    CHECK(pHedron->Interact(pCharacter) == CGameAIBase::ACTION_DONE);
+    CGameDialogSprite& dialog = pWorld->m_internalLoadedDialog;
+    CHECK(dialog.field_54 == 1);
+    CHECK(dialog.m_talkerIndex == pHedron->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.m_currentEntryIndex == 0);
+    CHECK(pHedron->m_nNumberOfTimesTalkedTo == 1);
+
+    dialog.m_responseMarker = -2;
+    dialog.AsynchronousUpdate();
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(dialog.field_54 == 0);
+    ClearMessages();
+}
+
 TEST_CASE("sprite: UseDoor next to AR1000_Door5 opens it and does nothing from afar", "[ai][data]")
 {
     if (DataDir() == nullptr) {
