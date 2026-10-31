@@ -28617,6 +28617,23 @@ INT CGameSprite::GetMulticlassingPenalty()
     return nPenalty;
 }
 
+// 0x764810
+// #guess name: shared target gate for scripted casting and its status trigger.
+BOOL CGameSprite::CheckSpellTarget(CGameSprite* pTarget, DWORD flags)
+{
+    if ((m_derivedStats.m_generalState & STATE_DEAD) != 0
+        || pTarget == NULL
+        || (pTarget->m_derivedStats.m_generalState & STATE_DEAD) != 0
+        || (pTarget->m_baseStats.m_flags & 0x20000) != 0
+        || m_derivedStats.m_spellStates[SPLSTATE_HELD]
+        || (m_derivedStats.m_generalState & STATE_HELPLESS) != 0) {
+        return FALSE;
+    }
+
+    return pTarget->IsVisibleToCaller(GetCanSeeInvisible())
+        && !pTarget->m_derivedStats.m_spellStates[SPLSTATE_SANCTUARY];
+}
+
 // 0x765BD0
 void CGameSprite::SetColorRange(BYTE rangeValue)
 {
