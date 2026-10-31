@@ -28666,7 +28666,7 @@ BOOL CGameSprite::CheckSpellUseful(CGameSprite* pTarget, INT nSpellId, DWORD fla
     if (spellName == "") {
         return FALSE;
     }
-    CSpell spell(CResRef(spellName));
+    CSpell spell{CResRef(spellName)};
     if (!spell.Demand()) {
         return FALSE;
     }
