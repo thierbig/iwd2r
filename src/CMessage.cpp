@@ -19156,6 +19156,14 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
+// 0x799CA0
+void CMessageProjectileTrailingVFX::Run()
+{
+    // No-op; the message is a data carrier. The actual attachment work
+    // happens in the factory (0x554D20) and the post-dispatch object-flag
+    // modification in IcewindCProjectileTravellingVFX::Fire.
+}
+
 // 0x4088A0
 SHORT CMessageProjectileImmumityUpdate::GetCommType()
 {
