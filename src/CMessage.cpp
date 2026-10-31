@@ -19079,21 +19079,6 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
-// 0x4F69B0
-CMessageProjectileTrailingVFX::CMessageProjectileTrailingVFX(const CResRef& resRef,
-    const CString& area, const CPoint& launch, CPoint targetPoint,
-    SHORT launchHeight, LONG caller, LONG target)
-    : CMessage(caller, target)
-{
-    m_resRef = resRef;
-    m_resRef2 = area;
-    m_launchX = launch.x;
-    m_launchY = launch.y;
-    m_targetX = targetPoint.x;
-    m_targetY = targetPoint.y;
-    m_launchHeight = launchHeight;
-}
-
 // 0x4088A0
 SHORT CMessageProjectileTrailingVFX::GetCommType()
 {
