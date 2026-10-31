@@ -9,14 +9,14 @@
     }
   },
   "recovered": {
-    "functions": 7326,
-    "bytes": 3322768
+    "functions": 7353,
+    "bytes": 3334243
   },
   "verified": {
-    "functions": 555,
-    "bytes": 604533,
+    "functions": 560,
+    "bytes": 608359,
     "by_kind": {
-      "oracle": 203,
+      "oracle": 208,
       "replay": 149,
       "trace": 203
     }
