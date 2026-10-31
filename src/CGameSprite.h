@@ -650,6 +650,7 @@ public:
     void MoveGlobal(const CString& sArea, const CPoint& ptStart);
     SHORT GroupAttack(CGameSprite* pTarget);
     SHORT Enemy();
+    SHORT RandomFly();
     SHORT SetDialog();
     void SelectWeaponAbility(unsigned char buttonNum, unsigned char abilityNum, unsigned char feedBack, unsigned char retry);
     void sub_756930(CItem* pItem, CItem* pLauncher);
