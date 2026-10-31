@@ -17297,12 +17297,6 @@ BYTE CMessageSpellLevelImmumityUpdate::GetMsgType()
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
 }
 
-// 0x516D40
-BYTE CMessageSpellLevelImmumityUpdate::GetMsgSubType()
-{
-    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
-}
-
 // 0x516D50
 void CMessageSpellLevelImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19276,16 +19270,6 @@ SHORT CMessageProjectileImmumityUpdate::GetCommType()
 BYTE CMessageProjectileImmumityUpdate::GetMsgType()
 {
     return CBaldurMessage::MSG_TYPE_CMESSAGE;
-}
-
-// 0x516D40
-BYTE CMessageProjectileImmumityUpdate::GetMsgSubType()
-{
-    // The binary's projectile-immunity GetMsgSubType is folded (/OPT:ICF) with
-    // CMessageSpellLevelImmumityUpdate::GetMsgSubType at 0x516D40: both return
-    // the spell-level subtype (104). The projectile message therefore reports
-    // the same wire subtype as the spell-level message rather than its own.
-    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
 }
 
 // 0x515010
