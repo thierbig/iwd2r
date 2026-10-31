@@ -7349,6 +7349,12 @@ SHORT CMessageRemoveItem::GetCommType()
     return SEND;
 }
 
+// 0x40A0E0
+BYTE CMessageRemoveItem::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
 // 0x464180
 CMessageAddItem::~CMessageAddItem()
 {
