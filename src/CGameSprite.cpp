@@ -10360,6 +10360,141 @@ SHORT CGameSprite::Rest()
     return ACTION_DONE;
 }
 
+// 0x750F10
+SHORT CGameSprite::JoinParty()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // Already in the party (the portrait slot exists): nothing to do.
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        return ACTION_ERROR;
+    }
+
+    if (pGame->AddCharacterToParty(m_id, -1) == 0) {
+        // The party is full: the creature joins the overflow instead. When
+        // even that fails, the action is simply done.
+        if (pGame->AddCharacterToOverflow(m_id) == 0) {
+            return ACTION_DONE;
+        }
+
+        ClearActions(FALSE);
+        DropPath();
+        field_722A = pGame->GetWorldTimer()->m_gameTime;
+        m_baseStats.m_fatigue = 0;
+        m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+        m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+        m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+        SetScript(1, new CAIScript(CResRef("")));
+        SetScript(2, new CAIScript(CResRef("")));
+        SetScript(3, new CAIScript(CResRef("")));
+        SetScript(4, new CAIScript(CResRef("")));
+        SetScript(5, new CAIScript(CResRef("")));
+        SetScript(6, new CAIScript(CResRef((m_baseStats.m_flags & 0x800) != 0 ? "DPLAYER3" : "DPLAYER2")));
+
+        m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::JOIN_DIALOG_FILE,
+            CString(m_scriptName));
+        if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+            m_dialog = "multig";
+        }
+
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageSetDialogResRef(m_dialog, m_id, m_id), FALSE);
+        }
+
+        // Tell every party member the creature joined.
+        CAITrigger trigger(CAITRIGGER_JOINS, m_typeAI, 0);
+        for (INT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageSetTrigger(trigger, m_id, pGame->m_characterPortraits[nIndex]),
+                FALSE);
+        }
+
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+        }
+
+        return ACTION_DONE;
+    }
+
+    // The normal join: the creature's gold moves to the party, its reputation
+    // is reset, the party gold message carries the amount, and it faces south.
+    ClearActions(FALSE);
+    DropPath();
+    field_722A = pGame->GetWorldTimer()->m_gameTime;
+    m_baseStats.m_fatigue = 0;
+    m_baseStats.m_reputation = 100;
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessagePartyGold(TRUE, TRUE, m_baseStats.m_gold, m_id, m_id), FALSE);
+    m_baseStats.m_gold = 0;
+    m_derivedStats.m_nGold = 0;
+    if (m_cGameStats.m_strStrongestKillName == 0) {
+        m_cGameStats.m_strStrongestKillName = static_cast<STRREF>(-1);
+    }
+    m_cGameStats.RecordJoinParty();
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageChangeDirection(1, m_id, m_id), FALSE);
+    m_pArea->m_nCharacters = m_pArea->m_nCharacters == 0xFF
+        ? 1
+        : static_cast<BYTE>(m_pArea->m_nCharacters + 1);
+    m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+    m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+    m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+    SetScript(1, new CAIScript(CResRef("")));
+    SetScript(2, new CAIScript(CResRef("")));
+    {
+        // Slot 3 is the party member's own script, read as a player script.
+        CAIScript* pScript = new CAIScript();
+        pScript->Read(CResRef("DEFAULT"), TRUE);
+        SetScript(3, pScript);
+    }
+    SetScript(4, new CAIScript(CResRef("")));
+    SetScript(5, new CAIScript(CResRef("")));
+    SetScript(6, new CAIScript(CResRef((m_baseStats.m_flags & 0x800) != 0 ? "DPLAYER3" : "DPLAYER2")));
+
+    m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::JOIN_DIALOG_FILE,
+        CString(m_scriptName));
+    if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+        m_dialog = "multig";
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetDialogResRef(m_dialog, m_id, m_id), FALSE);
+    }
+
+    // Tell every party member the creature joined.
+    CAITrigger trigger(CAITRIGGER_JOINS, m_typeAI, 0);
+    for (INT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetTrigger(trigger, m_id, pGame->m_characterPortraits[nIndex]),
+            FALSE);
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+    }
+
+    // A host assigns the new party member to the local player's slot.
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        CMultiplayerSettings& settings = pGame->m_multiplayerSettings;
+        for (INT nSlot = 0; nSlot < CMultiplayerSettings::MAX_CHARACTERS; nSlot++) {
+            if (pGame->GetCharacterSlot(nSlot) == m_id) {
+                settings.SetCharacterControlledByPlayer(nSlot, 0, FALSE, FALSE);
+                settings.SignalCharacterStatus(nSlot,
+                    CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED,
+                    TRUE,
+                    FALSE);
+                settings.SetCharacterReady(nSlot, TRUE, FALSE);
+            }
+        }
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x71ABA0
 void CGameSprite::CheckQuickLists(CAbilityId* ability, SHORT changeAmount, BOOL remove, BOOL removeSpellIfZero)
 {
@@ -13700,8 +13835,7 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 19:
         // JoinParty
-        // TODO: 0x72958D-0x72959D not ported (0x750F10).
-        returnValue = ACTION_ERROR;
+        returnValue = JoinParty();
         goto done;
     case 20:
         // LayHands (0x72959D-0x7295C5): the target is shared and released,
