@@ -17,12 +17,13 @@
 # Marshal/UnmarshalMessage pairs no scenario reaches. Addresses and names from
 # docs/wso/disagreements.json (category only_theirs; the WSO fork's src/
 # CMessage.cpp carries the // 0xADDR comments); evidence under
-# docs/evidence/<ADDR>.md. The i059 import brought in
-# CMessageLoadDialog::MarshalMessage (0x502B40, docs/evidence/502B40.md).
+# docs/evidence/<ADDR>.md. i059 parked 0x502B40: its fork body is a TODO
+# stub (docs/wso/import-parked/502B40.json).
 0x4FD930 CMessageContinueDialog::MarshalMessage
 0x4FDD30 CMessageContinueDialog::UnmarshalMessage
 0x5017E0 CMessageInsertResponse::MarshalMessage
 0x501FE0 CMessageInsertResponse::UnmarshalMessage
+0x502B40 CMessageLoadDialog::MarshalMessage
 0x502D60 CMessageLoadDialog::UnmarshalMessage
 0x504070 CMessageRemoveItem::MarshalMessage
 0x5154E0 CMessage105::MarshalMessage
