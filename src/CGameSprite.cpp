@@ -27137,11 +27137,11 @@ SHORT CGameSprite::RunAwayFromNoLeaveArea(CGameSprite* pTarget)
 
                 ITEM_ABILITY* pAbility = pItem->GetAbility(m_equipment.m_selectedWeaponAbility);
                 if (pAbility == NULL
-                    || pAbility->type == 4
+                    || (pAbility->type & 0xFF) == 4
                     || (pAbility->usageFlags == 3
                         && pItem->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
                         && pAbility->maxUsageCount > 0)
-                    || pAbility->type == 2) {
+                    || (pAbility->type & 0xFF) == 2) {
                     pItem->Release();
                 } else {
                     pItem->Release();
