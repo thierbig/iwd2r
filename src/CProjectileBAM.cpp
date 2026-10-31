@@ -999,6 +999,28 @@ CProjectileDagger::CProjectileDagger()
     field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
+// 0x532CA0
+CProjectileSPBRNHND::CProjectileSPBRNHND()
+    : CProjectileBAM(CResRef("SPBRNHND"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 71, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_E6 |= 0x8;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_animationLifetime = 55;
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    field_174 = 23;
+    field_178 = 50;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x57E030

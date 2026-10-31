@@ -69,6 +69,8 @@ public:
     /* 016C */ SHORT m_nStartHeight;
     /* 016E */ SHORT m_nCurrentHeight;
     /* 0170 */ LONG m_nStartDistance;
+    /* 0174 */ LONG field_174;
+    /* 0178 */ LONG field_178;
     /* 017C */ BYTE field_17C;
     /* 017E */ CString m_sVisualEffect;
     /* 0182 */ LONG field_182;

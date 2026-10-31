@@ -105,6 +105,19 @@ public:
     CProjectileDagger();
 };
 
+// The SPBRNHND projectile (vtable 0x84E69C): a CProjectileBAM on the
+// SPBRNHND animation with the full palette range SetRange(0, 71) off the
+// master bitmap, the field_E6 brightest bit set, and a WORD lifetime of
+// 55 at +0x2A0. The BAM ctor leaves +0x2A0 to the subclasses (it only
+// writes +0x29D/+0x29E there), so — like CProjectile84E030's m_nCount —
+// the derived class names the bytes.
+class CProjectileSPBRNHND : public CProjectileBAM {
+public:
+    CProjectileSPBRNHND();
+
+    /* 02A0 */ WORD m_animationLifetime;
+};
+
 // One magic missile, type 218 (vtable 0x8510A4).
 class CProjectile8510A4 : public CProjectileBAM {
 public:
