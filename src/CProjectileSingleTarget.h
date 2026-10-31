@@ -140,6 +140,7 @@ public:
     /* 02AE */ BYTE m_lifeSpan;
     /* 02AF */ BYTE m_nSegments;
     /* 02B0 */ LONG m_deltaZ;
+    /* 02B4 */ BYTE m_bGlow;
 
     // The ids this wave has already struck (exe std::set internals: _Myhead
     // 0x2BA, _Multi 0x2BE, NIL sentinel 0x8E28C8).

@@ -838,6 +838,34 @@ std::vector<CPoint> IcewindCProjectileScorcher::m_offsets;
 // 0x8E52E8
 BYTE IcewindCProjectileScorcher::m_offsetsInitialized = FALSE;
 
+// 0x57AEB0
+IcewindCProjectileScorcher::IcewindCProjectileScorcher()
+    : CProjectileSingleTarget(CResRef("AScorcT"))
+{
+    m_tickCount = 0;
+    m_strikePeriod = 3;
+    m_clearPeriod = 60;
+    m_deltaZ = 0;
+    m_bGlow = FALSE;
+    m_strikeTarget = 0;
+    InitializeOffsets();
+    m_animation->FrameSet(0);
+    field_1C2 = 0;
+    field_1D4 = 0;
+    field_1D8 = 16;
+    m_fireSoundRef = "TRA_M04";
+    CSize size;
+    m_animation->GetFrameSize(0, 0, size, FALSE);
+    m_speed = static_cast<SHORT>(static_cast<LONG>(static_cast<DWORD>(size.cy) * 3) / 4);
+    m_callBackProjectile = -1;
+    m_sVisualEffect = "";
+    field_182 = -1;
+    m_nSegments = 0;
+    m_lifeSpan = 110;
+    m_bHasHeight = TRUE;
+    field_1C2 = 1;
+}
+
 // 0x57B080
 IcewindCProjectileScorcher::~IcewindCProjectileScorcher()
 {
