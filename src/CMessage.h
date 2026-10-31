@@ -1987,7 +1987,6 @@ public:
     SHORT GetCommType() override;       // returns BROADCAST_OTHERS (3)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
-    void Run() override;                // no-op
 
     // The caller is the projectile's ID before Fire registers it.
     /* 000C */ CResRef m_resRef;        // resource name from field_17E (8 bytes)
