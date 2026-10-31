@@ -28,6 +28,7 @@ int CResTile::GetFixedResourceSize()
     return 5120;
 }
 
+// 0x780770
 BYTE* CResTile::GetTileData()
 {
     if (m_bParsed) {

@@ -3457,6 +3457,12 @@ void CScreenWorld::CancelPopup()
     }
 }
 
+// 0x691130
+int CScreenWorld::GetActivePanelID()
+{
+    return field_EA4;
+}
+
 // 0x691140
 void CScreenWorld::StartCommand()
 {

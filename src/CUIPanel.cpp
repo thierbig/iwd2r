@@ -517,3 +517,10 @@ void CUIPanel::SetBackgroundResRef(CResRef cNewResRef, BOOL bDoubleSize)
     m_mosBackground.SetResRef(cNewResRef, TRUE, TRUE);
     m_mosBackground.m_bDoubleSize = bDoubleSize;
 }
+
+// 0x68BFD0
+void CUIPanel::OffsetPosFromOriginal(const CPoint& pt)
+{
+    m_ptOrigin.x = m_ptBaseOrigin.x + pt.x;
+    m_ptOrigin.y = m_ptBaseOrigin.y + pt.y;
+}

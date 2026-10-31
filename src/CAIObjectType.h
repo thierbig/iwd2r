@@ -398,6 +398,7 @@ public:
     ~CAIObjectType();
     BOOL OfType(const CAIObjectType& type, BOOL bCheckForNonSprites, BOOL bNoNonSprites) const;
     void Set(const CAIObjectType& type);
+    CAIObjectType* SetAndReturn(const CAIObjectType& type);
     void Decode(CGameAIBase* caller);
     CString GetName() const;
     CGameObject* sub_40CB20(CGameAIBase* caller, BYTE type, BOOL checkBackList) const;

@@ -271,7 +271,7 @@ CKeyInfo* CScreenConnection::GetVirtualKeys()
     return m_pVirtualKeys;
 }
 
-// 0x5FA8D0
+// 0x5FA8E0
 BYTE* CScreenConnection::GetVirtualKeysFlags()
 {
     return m_pVirtualKeysFlags;

@@ -446,6 +446,13 @@ CAIObjectType::CAIObjectType(const CAIObjectType& type)
     Set(type);
 }
 
+// 0x45B370
+CAIObjectType* CAIObjectType::SetAndReturn(const CAIObjectType& type)
+{
+    Set(type);
+    return this;
+}
+
 // 0x40AD00
 CAIObjectType::CAIObjectType(BYTE nEnemyAlly, BYTE nGeneral, BYTE nRace, BYTE nSubRace, BYTE nClass, BYTE nSpecific, BYTE nGender, BYTE nAlignment, int nInstance, const BYTE* SpecialCase, const CString& sName, BYTE nAvClass, int nClassMask)
 {

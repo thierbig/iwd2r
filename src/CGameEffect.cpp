@@ -17,6 +17,7 @@
 #include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
+#include "CProjectileBAM.h"
 #include "CProjectileShaft.h"
 #include "CResEffect.h"
 #include "CScreenWorld.h"
@@ -16577,9 +16578,129 @@ CGameEffect* CGameEffectFindFamiliar::Copy()
 // 0x4B9EB0
 BOOL CGameEffectFindFamiliar::ApplyEffect(CGameSprite* pSprite)
 {
-    // TODO: Incomplete. Not ported yet (the familiar summoning); until then
-    // the override only keeps the effect from reaching the asserting base
-    // ApplyEffect.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (pSprite->GetId() != pGame->GetProtagonist()) {
+        pSprite->DisplayTextRef(-1, 0x215a, 0xff, 0xff);
+        m_done = TRUE;
+        return TRUE;
+    }
+    if (pGame->field_4204 != 0) {
+        pSprite->DisplayTextRef(-1, 0x2159, 0xff, 0xff);
+        m_done = TRUE;
+        return TRUE;
+    }
+
+    // TODO: Incomplete (0x5AF540). The CInfGame helper that picks and pops the
+    // familiar resref for the caster's class/level is not ported: it reads the
+    // resref lists at +0x390c (the ported CInfGame layout has +0x3928) and
+    // posts an unidentified message class (vtbl 0x84d1a0). Until then the name
+    // stays empty. The original trips its UtilAssert(0x47fc, "FALSE") on an
+    // empty resref and continues; asserts are not ported, so neither is the
+    // call.
+    CString sFamiliar;
+
+    CCreatureFile cfile;
+    CResRef tempResRef(sFamiliar);
+    cfile.SetResRef(tempResRef, TRUE, TRUE);
+
+    CGameSprite* pFamiliar = new CGameSprite(cfile.GetData(), cfile.GetDataSize(), 0, 0, (DWORD)-1, 0, 0, 0x7fffffff, CPoint(-1, -1), 0);
+    if (pFamiliar == NULL) {
+        // 0x480a "FALSE" assert, then the failure return.
+        cfile.ReleaseData();
+        return FALSE;
+    }
+
+    // NOTE: the exe reaches the resref through a call Ghidra labels
+    // GetEllipseRect (0x4699e0); semantically it is &cfile.cResRef.
+    pFamiliar->SetResRef(CResRef(cfile.cResRef.GetResRefStr()));
+    cfile.ReleaseData();
+    // 0x4ba16b: the original then SetResRefs a default (empty) CString.
+    pFamiliar->SetResRef(CResRef(""));
+
+    pGame->AddCharacterToFamiliars(pFamiliar->GetId());
+    pFamiliar->MakeGlobal();
+
+    // CAIOBJECTTYPE_EA_FAMILIAR (the rdata byte at 0x847c36): all three
+    // familiar AI-type copies get the EA replaced.
+    CAIObjectType typeFamiliarEA(pFamiliar->m_liveTypeAI);
+    typeFamiliarEA.m_nEnemyAlly = CAIOBJECTTYPE_EA_FAMILIAR;
+    pFamiliar->m_startTypeAI.Set(typeFamiliarEA);
+
+    typeFamiliarEA.Set(pFamiliar->GetAIType());
+    typeFamiliarEA.m_nEnemyAlly = CAIOBJECTTYPE_EA_FAMILIAR;
+    pFamiliar->SetAIType(typeFamiliarEA, FALSE, FALSE);
+
+    typeFamiliarEA.Set(pFamiliar->m_liveTypeAI);
+    typeFamiliarEA.m_nEnemyAlly = CAIOBJECTTYPE_EA_FAMILIAR;
+    pFamiliar->m_liveTypeAI.Set(typeFamiliarEA);
+
+    // NOTE: the original asserts the caster's animation pointer inline (0x82d)
+    // and the familiar's (0x826); the ported accessors handle a missing one.
+    // NOTE: the exe divides the effect's target x by 16 and y by 12 ([+0x84]
+    // and [+0x88] against the rdata bytes 0x84d6a0/0x84d6a1). Those fields are
+    // m_target.x/m_target.y in the ported header (see evidence 4B9EB0).
+    BYTE nPersonalSpace = pSprite->m_animation.GetPersonalSpace();
+    CPoint ptOpen = pSprite->m_pArea->m_search.GetNearestOpenSquare(CPoint(m_target.x / 16, m_target.y / 12), pSprite->GetTerrainTable(), nPersonalSpace, -1);
+    BYTE nListType = pFamiliar->m_animation.GetListType();
+    CPoint ptPlaced(ptOpen.x * 16, ptOpen.y * 12);
+    pFamiliar->AddToArea(pSprite->m_pArea, ptPlaced, 0, nListType);
+    pFamiliar->SetFacing(rand() % 16);
+
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(0x90, pFamiliar, 0);
+    // NOTE: the exe calls SetColorRange directly on the CProjectileBAM built
+    // for projectile 0x90; the ported DecodeProjectile has no case 144 yet
+    // (its default DEVIATION returns the instant projectile).
+    static_cast<CProjectileBAM*>(pProjectile)->SetColorRange(0, 0x33);
+    // TODO: the exe then calls the projectile's vtbl+0x88 virtual with
+    // (pFamiliar->m_pArea, ptPlaced.x, ptPlaced.y + 1); CProjectileBAM
+    // declares no virtual in that slot — unported pending identification.
+    CMessageFireProjectile* pFire = new CMessageFireProjectile(pProjectile->m_projectileType,
+        pFamiliar->GetId(),
+        ptPlaced,
+        0x1e,
+        pFamiliar->GetId(),
+        pFamiliar->GetId(),
+        0);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pFire, FALSE);
+
+    // Effect 1: HITPOINTS on the caster (the familiar's full hit points).
+    ITEM_EFFECT* effect = new ITEM_EFFECT;
+    memset(effect, 0, sizeof(ITEM_EFFECT));
+    effect->effectID = CGAMEEFFECT_HITPOINTS;
+    effect->effectAmount = pFamiliar->m_baseStats.m_hitPoints;
+    effect->durationType = 1;
+    effect->probabilityUpper = 100;
+    CGameEffect* pEffect = CGameEffect::DecodeEffect(effect, pSprite->GetPos(), pSprite->GetId(), CPoint(-1, -1));
+    CMessage* message = new CMessageAddEffect(pEffect, pSprite->GetId(), pSprite->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    delete effect;
+
+    // Effect 2: HITPOINTSONDEATH on the familiar (undoes effect 1, doubled).
+    effect = new ITEM_EFFECT;
+    memset(effect, 0, sizeof(ITEM_EFFECT));
+    effect->effectID = CGAMEEFFECT_HITPOINTSONDEATH;
+    effect->effectAmount = -(SHORT)pFamiliar->m_baseStats.m_hitPoints * 2;
+    effect->dwFlags = 0x400000;
+    effect->durationType = 1;
+    effect->probabilityUpper = 100;
+    pEffect = CGameEffect::DecodeEffect(effect, pFamiliar->GetPos(), pSprite->GetId(), CPoint(-1, -1));
+    message = new CMessageAddEffect(pEffect, pFamiliar->GetId(), pSprite->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    delete effect;
+
+    // Effect 3: FAMILIARBLOCK on the familiar.
+    effect = new ITEM_EFFECT;
+    memset(effect, 0, sizeof(ITEM_EFFECT));
+    effect->effectID = CGAMEEFFECT_FAMILIARBLOCK;
+    effect->durationType = 1;
+    effect->probabilityUpper = 100;
+    pEffect = CGameEffect::DecodeEffect(effect, pFamiliar->GetPos(), pSprite->GetId(), CPoint(-1, -1));
+    message = new CMessageAddEffect(pEffect, pFamiliar->GetId(), pSprite->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    delete effect;
+
+    m_done = TRUE;
     return TRUE;
 }
 

@@ -17,6 +17,7 @@ public:
     BOOL GetPixelColor(int x, int y, RGBQUAD& color, BOOL bDoubleSize);
     BYTE GetPixelValue(int x, int y, BOOL bDoubleSize);
     int Release();
+    void DecrementDemands();
     BOOL Parse(void* pData);
     BOOL DemandLoadedBitmap();
     void ReleaseLoadedBitmap();

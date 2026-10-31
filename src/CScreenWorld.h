@@ -100,6 +100,7 @@ public:
     void SetNewViewSize(CRect newViewSize, BOOL bForceViewSize);
     void StartDeath();
     void StopDeath();
+    int GetActivePanelID();
     DWORD GetPanel_21_7();
     DWORD GetPanel_22_0();
     DWORD GetPanel_21_0();

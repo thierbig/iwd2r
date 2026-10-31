@@ -209,6 +209,7 @@ BOOL CUIControlBase::GetInactiveRender()
     return m_bInactiveRender;
 }
 
+// 0x4D25A0
 void CUIControlBase::SetInactiveRender(BOOL bInactiveRender)
 {
     m_bInactiveRender = bInactiveRender;

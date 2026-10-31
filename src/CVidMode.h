@@ -175,6 +175,7 @@ public:
     void SetFade(BOOL bFadeTo, COLORREF rgbFade);
 
     // NOTE: Can be seen via assertion in `CVidMosaic::Render`.
+    // 0x799F80
     INT GetNumSurfaces() { return m_nSurfaces; }
 
     /* 0004 */ INT m_nPrintFile;

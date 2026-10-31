@@ -27,6 +27,7 @@ public:
     static CProjectile* DecodeSpellHitProjectile(DWORD nType, CGameSprite* pSprite, BOOLEAN bPriest);
 
     void AddEffect(CGameEffect* pEffect);
+    void AddEffect2(CGameEffect* pEffect);
     void ClearEffects();
     LONG DetermineHeight(CGameSprite* pSprite);
     SHORT GetDirection(CPoint target);

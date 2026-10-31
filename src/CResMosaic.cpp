@@ -37,7 +37,7 @@ WORD CResMosaic::GetMosaicHeight(BOOL bDoubleSize)
     return m_pHeader->nHeight;
 }
 
-// 0x780340
+// 0x780370
 WORD CResMosaic::GetTileSize(BOOL bDoubleSize)
 {
     if (bDoubleSize) {

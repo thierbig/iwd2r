@@ -1,5 +1,6 @@
 #include "CResBitmap.h"
 
+#include "CChitin.h"
 #include "CUtil.h"
 
 // 0x77EB90
@@ -250,6 +251,17 @@ int CResBitmap::Release()
         pBitmapInfoHeader = NULL;
     }
     return rc;
+}
+
+// 0x77F190
+void CResBitmap::DecrementDemands()
+{
+    g_pChitin->cDimm.Release(this);
+    if (GetDemands() <= 0) {
+        bParsed = FALSE;
+        pBitmapFileHeader = NULL;
+        pBitmapInfoHeader = NULL;
+    }
 }
 
 // 0x77F1C0

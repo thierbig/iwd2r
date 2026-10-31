@@ -325,6 +325,31 @@ TEST_CASE("priest spell slots (62) add known spells for the flagged level", "[ef
     CHECK(pSprite->m_spells.m_spellsByClass[pGame->GetSpellcasterIndex(CAIObjectType::C_DRUID)].m_lists[0].m_List.size() == 0);
 }
 
+TEST_CASE("find familiar (192) refuses non-protagonists and a second familiar", "[effects][data]")
+{
+    REQUIRE_ENGINE();
+    CGameSprite* pSprite = MakeSprite();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // A caster that is not the protagonist is refused after the strref 0x215a
+    // message, with m_done set and no familiar created (0x4b9eb0).
+    pSprite->m_id = pGame->GetProtagonist() + 1;
+    int nFamiliars = pGame->m_familiars.GetCount();
+    CHECK(Apply(pSprite, CGAMEEFFECT_FINDFAMILIAR, 0, 0, 0) == TRUE);
+    CHECK(pGame->m_familiars.GetCount() == nFamiliars);
+
+    // With the game-wide familiar flag (field_4204) set, even the protagonist
+    // is refused (strref 0x2159). The flag is restored afterwards: the summon
+    // path itself needs an area to place the familiar in and is not reachable
+    // from this fixture.
+    pSprite->m_id = pGame->GetProtagonist();
+    pGame->field_4204 = 1;
+    CHECK(Apply(pSprite, CGAMEEFFECT_FINDFAMILIAR, 0, 0, 0) == TRUE);
+    CHECK(pGame->m_familiars.GetCount() == nFamiliars);
+    pGame->field_4204 = 0;
+}
+
 TEST_CASE("maximum hit point effects (18)", "[effects][data]")
 {
     REQUIRE_ENGINE();
