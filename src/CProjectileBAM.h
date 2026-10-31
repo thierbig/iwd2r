@@ -96,6 +96,15 @@ public:
     CProjectile84E0C4(WORD nCount, WORD nPaletteType);
 };
 
+// The thrown-dagger projectile (vtable 0x84E47C): a CProjectileBAM on the
+// DAGGER animation with the palette ranges SetRange(5, 27) and SetRange(4, 30)
+// off the master bitmap and its speed doubled. It adds no members of its own —
+// the ctor writes only inherited fields.
+class CProjectileDagger : public CProjectileBAM {
+public:
+    CProjectileDagger();
+};
+
 // One magic missile, type 218 (vtable 0x8510A4).
 class CProjectile8510A4 : public CProjectileBAM {
 public:

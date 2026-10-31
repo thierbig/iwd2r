@@ -979,6 +979,28 @@ CProjectile84E0C4::CProjectile84E0C4(WORD nCount, WORD nPaletteType)
 
 // -----------------------------------------------------------------------------
 
+// 0x532000
+CProjectileDagger::CProjectileDagger()
+    : CProjectileBAM(CResRef("DAGGER"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(5, 27, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(4, 30, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x57E030
 CProjectile8510A4::CProjectile8510A4(WORD nPaletteType)
     : CProjectileBAM(CResRef("MMissiT"))
