@@ -932,6 +932,15 @@ void IcewindCProjectileScorcher::AIUpdate()
     m_sound.SetCoordinates(m_pos.x, m_pos.y, m_posZ);
 }
 
+// 0x57B1D0
+void IcewindCProjectileScorcher::Fire(CGameArea* pArea, LONG source, LONG target,
+    CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    CProjectileSingleTarget::Fire(pArea, source, target, targetPos, nHeight, nType);
+    m_strikeTarget = target;
+    DeliverEffects();
+}
+
 // 0x57B780
 void IcewindCProjectileScorcher::Render(CGameArea* pArea, CVidMode* pVidMode, int nSurface)
 {
