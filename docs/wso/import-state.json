@@ -8291,6 +8291,47 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i060": {
+      "assigned_at": "2026-10-31T18:19:54+00:00",
+      "branch": "p3/wso-i060",
+      "closed_at": "2026-10-31T21:36:08+00:00",
+      "files": [
+        "src/CMessage.cpp",
+        "src/CGameSprite.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x4F5C70",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageRemoveItem::CMessageRemoveItem",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x764880",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::CheckSpellUseful",
+          "our_len": 0,
+          "their_len": 9266
+        },
+        {
+          "address": "0x764810",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::CheckSpellTarget",
+          "our_len": 0,
+          "their_len": 390
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
