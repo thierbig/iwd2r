@@ -1039,6 +1039,27 @@ void CProjectileSprayCell::AddVisualToArea(CGameArea* pArea, const CPoint& point
     }
 }
 
+// 0x533CB0
+CProjectileFollowUp::CProjectileFollowUp(USHORT childType, CResRef resRef, SHORT remaining, SHORT interval, BOOL keepSource, CAIObjectType type)
+    : CProjectileBAM(resRef)
+{
+    m_launchHeight = 0;
+    m_launchKind = 0;
+    m_checkLOS = FALSE;
+    m_delay = 0;
+    m_animation->SequenceSet(0);
+    m_childType = childType;
+    m_remainingShots = remaining;
+    m_interval = interval;
+    m_keepSource = keepSource;
+    m_ready = FALSE;
+    m_targetType.Set(type);
+    m_nextProjectile = CProjectile::DecodeProjectile(static_cast<WORD>(m_childType + 1), NULL, 0);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x57E030

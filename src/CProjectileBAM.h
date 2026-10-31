@@ -2,6 +2,7 @@
 #define CPROJECTILEBAM_H_
 
 #include "CProjectile.h"
+#include "CAIObjectType.h"
 #include "CVidBitmap.h"
 #include "CVidCell.h"
 #include "CVidPalette.h"
@@ -128,6 +129,29 @@ public:
 class CProjectileSprayCell : public CProjectileBAM {
 public:
     /* 0088 */ virtual void AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height);
+};
+
+// The projectile that fires child projectiles of type m_childType + 1 on an
+// interval until m_remainingShots runs out (vtable 0x84E7B0): Melf's Magic
+// Missile and its kin are built on it.
+// NOTE: The exe vtable overrides Fire (slot 0x6C -> 0x533F40) and AIUpdate
+// (slot 0x0C -> 0x534140); neither is part of batch i058, so ours inherits
+// CProjectileBAM's.
+class CProjectileFollowUp : public CProjectileBAM {
+public:
+    CProjectileFollowUp(USHORT childType, CResRef resRef, SHORT remaining, SHORT interval, BOOL keepSource, CAIObjectType type);
+
+    /* 02A0 */ WORD m_remainingShots;
+    /* 02A2 */ WORD m_interval;
+    /* 02A4 */ BOOL m_keepSource;
+    /* 02A8 */ WORD m_childType;
+    /* 02AA */ CProjectile* m_nextProjectile;
+    /* 02AE */ BOOL m_ready;
+    /* 02B2 */ CAIObjectType m_targetType;
+    /* 02EE */ LONG m_launchHeight;
+    /* 02F2 */ WORD m_launchKind;
+    /* 02F4 */ DWORD m_checkLOS;
+    /* 02F8 */ WORD m_delay;
 };
 
 // One magic missile, type 218 (vtable 0x8510A4).
