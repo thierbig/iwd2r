@@ -110,6 +110,10 @@ public:
 // function MSVC ICF-folded with this class's equally empty DeliverEffects.
 class IcewindCProjectileScorcher : public CProjectileSingleTarget {
 public:
+    // 0x57AEB0. Bases on CProjectileSingleTarget(CResRef("AScorcT")), then
+    // tunes the wave: 3-tick strike / 60-tick clear cadence, TRA_M04 fire
+    // sound, speed = frameHeight*3/4, life span 110, height enabled.
+    IcewindCProjectileScorcher();
     // 0x57B080. Scalar deleting dtor: the delete branch calls
     // operator_delete 0x7FC984, the body at 0x57B0A0 tears down the
     // std::set member.
