@@ -14157,8 +14157,9 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 224:
-        // TODO: 0x72A9A7-0x72A9B7 not ported (0x757720).
-        returnValue = ACTION_ERROR;
+        // Engine-internal action 224 (0x72A9A7-0x72A9B7), no ACTION.IDS
+        // entry.
+        returnValue = GiveEquipmentToParty();
         goto done;
     case 225:
         // TODO: 0x72A976-0x72A9A7 not ported (JumpToArea).
@@ -31521,6 +31522,65 @@ SHORT CGameSprite::GiveItem(CGameAIBase* pTarget)
 
         CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, pTarget->GetId());
         g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+    }
+
+    return ACTION_DONE;
+}
+
+// 0x757720
+// The engine-internal action 224 (no ACTION.IDS entry; the issue calls it so):
+// every equipped item whose ITM file flags carry 0x4 (the droppable bit
+// DropItem and DropInventory test), the fist's excluded, is unequipped and
+// given to the first party member whose object share comes back, one
+// CMessageAddItem each, on the same tail as GiveItem.
+// NOTE: 0x757853 tests m_equipment.m_items[SLOT_AMULET] - the original's own
+// condition, kept: with an amulet equipped nothing is handed out.
+SHORT CGameSprite::GiveEquipmentToParty()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    for (int nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = m_equipment.m_items[nSlot];
+        if (pItem == NULL
+            || nSlot == CGameSpriteEquipment::SLOT_FIST
+            || (pItem->GetFlagsFile() & 0x4) == 0) {
+            continue;
+        }
+
+        Unequip(nSlot);
+        m_equipment.m_items[nSlot] = NULL;
+
+        BOOL bFound = FALSE;
+        for (SHORT nIndex = pGame->m_nCharacters - 1; nIndex >= 0 && !bFound; nIndex--) {
+            LONG nId = nIndex < pGame->m_nCharacters
+                ? pGame->m_characterPortraits[nIndex]
+                : CGameObjectArray::INVALID_INDEX;
+            CGameObject* pObject;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                continue;
+            }
+
+            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_AMULET] == NULL) {
+                bFound = TRUE;
+                pGame->AddDisposableItem(pItem);
+
+                CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, nId);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
     }
 
     return ACTION_DONE;

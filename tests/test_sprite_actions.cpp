@@ -1787,6 +1787,116 @@ TEST_CASE("object: FloatText floats only in the area on view and clears its text
     CHECK(pCharacter->field_1C == 0);
 }
 
+// The engine-internal action 224 (0x757720, ExecuteAction's case 224):
+// every equipped item whose ITM file flags carry 0x4, the fist's excluded, is
+// unequipped and given to the first party member the object array shares,
+// with GiveItem's CMessageAddItem tail; the original hands them out only
+// while the amulet slot is empty (0x757853).
+TEST_CASE("sprite: action 224 gives the droppable equipped items to the party", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // The first pregenerated character with a droppable (file flag 0x4)
+    // equipped item somewhere but the fist's slot.
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        BOOL bHas = FALSE;
+        for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT && !bHas; nSlot++) {
+            if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+                continue;
+            }
+            CItem* pItem = pProbe->GetEquipment()->m_items[nSlot];
+            if (pItem != NULL) {
+                bHas = (pItem->GetFlagsFile() & 0x4) != 0;
+            }
+        }
+        delete pProbe;
+        if (bHas) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with a droppable equipped item");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+
+    // The droppable slots and their resrefs.
+    std::vector<SHORT> slots;
+    std::vector<CString> resrefs;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        CItem* pItem = pEquipment->m_items[nSlot];
+        if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) != 0) {
+            slots.push_back(nSlot);
+            resrefs.push_back(pItem->GetResRef().GetResRefStr());
+        }
+    }
+    REQUIRE(!slots.empty());
+
+    // The amulet guard: an amulet the character draws nothing through
+    // (0x757853 tests the slot, and a droppable one would be unequipped
+    // first). Only when the character wears one and it is not droppable.
+    CItem* pAmulet = pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET];
+    if (pAmulet != NULL && (pAmulet->GetFlagsFile() & 0x4) == 0) {
+        ClearMessages();
+        CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        for (SHORT nSlot : slots) {
+            CHECK(pEquipment->m_items[nSlot] != NULL);
+        }
+        pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] = NULL;
+    } else if (pAmulet != NULL) {
+        pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] = NULL;
+    }
+
+    // The handout: every droppable slot empties and its item lands in the
+    // party member's inventory (the character is the only member), through
+    // the CMessageAddItem the action queues.
+    ClearMessages();
+    CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    for (SHORT nSlot : slots) {
+        INFO("slot " << nSlot);
+        CHECK(pEquipment->m_items[nSlot] == NULL);
+    }
+    for (const CString& sResRef : resrefs) {
+        BOOL bFound = FALSE;
+        for (INT n = 18; n < 42 && !bFound; n++) {
+            CItem* pItem = pEquipment->m_items[n];
+            if (pItem != NULL) {
+                bFound = pItem->GetResRef() == CResRef(sResRef);
+            }
+        }
+        INFO("resref " << static_cast<const char*>(sResRef));
+        CHECK(bFound);
+    }
+
+    // The fist's slot is never touched (a weapon there stays).
+    ClearMessages();
+}
+
 TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
 {
     if (DataDir() == nullptr) {
