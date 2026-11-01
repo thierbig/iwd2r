@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CAIAction.h"
+#include "CAIGroup.h"
 #include "CAIScript.h"
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
@@ -481,6 +482,74 @@ TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its a
     CAIAction next;
     pCharacter->SetCurrAction(pCharacter->GetNextAction(next));
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::NO_ACTION);
+}
+
+TEST_CASE("sprite: action 215 asks for a formation slot around the target sprite", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pGame->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    // Action 215 (engine-internal, no ACTION.IDS name): formation type 0 (the
+    // low byte of specificID), slot 2 (specificID2; slot 0 is the target's own
+    // cell, whose offset is zero). The handler must ask the search for a point
+    // in the mover's formation slot around the target, not for the target
+    // itself.
+    CAIObjectType hedron(0, 0, 0, 0, 0, 0, 0, 0, pHedron->GetId(), 0, 0);
+    pCharacter->SetCurrAction(CAIAction(215, hedron, 0, 2, 0));
+    pCharacter->m_actionCount = 1;
+    // The search is issued when the call counter is a multiple of 8.
+    pCharacter->field_5616 = 0;
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+
+    // The destination the handler computed: the target's waypoint cell plus
+    // the formation offset, centred in the cell.
+    CPoint ptWaypoint;
+    pHedron->GetNextWaypoint(&ptWaypoint);
+    const SHORT nAngle = static_cast<SHORT>(
+        ((static_cast<SHORT>(pHedron->m_nDirection) + 8) * 360) / 16 % 360);
+    CPoint* pOffsets = pGame->m_group.GetOffsets(0, nAngle, TRUE);
+    REQUIRE(pOffsets != NULL);
+    const CPoint ptSlot(
+        (ptWaypoint.x / CPathSearch::GRID_SQUARE_SIZEX
+            + pOffsets[2].x / CAIGroup::OFFSET_MULTIPLIER)
+                * CPathSearch::GRID_SQUARE_SIZEX
+            + CPathSearch::GRID_SQUARE_SIZEX / 2,
+        (pOffsets[2].y / CAIGroup::OFFSET_MULTIPLIER
+            + ptWaypoint.y / CPathSearch::GRID_SQUARE_SIZEY)
+                * CPathSearch::GRID_SQUARE_SIZEY
+            + CPathSearch::GRID_SQUARE_SIZEY / 2);
+    delete[] pOffsets;
+
+    CHECK(pCharacter->m_curDest == ptSlot);
+    REQUIRE(pCharacter->m_currentSearchRequest != NULL);
+    CHECK(pCharacter->m_currentSearchRequest->m_nTargetPoints == 1);
+    REQUIRE(pCharacter->m_currentSearchRequest->m_targetPoints != NULL);
+    CHECK(pCharacter->m_currentSearchRequest->m_targetPoints[0].x == ptSlot.x);
+    CHECK(pCharacter->m_currentSearchRequest->m_targetPoints[0].y == ptSlot.y);
+    CHECK(pCharacter->m_currentSearchRequest->m_sourceSide == pCharacter->m_typeAI.GetEnemyAlly());
+
+    // The same destination on the next call does not ask again.
+    CSearchRequest* pRequest = pCharacter->m_currentSearchRequest;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_currentSearchRequest == pRequest);
 }
 
 TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog opens on arrival", "[ai][data]")
