@@ -159,4 +159,30 @@ public:
     /* 02D2 */ LONG m_strikeTarget;
 };
 
+// The chain-lightning carrier (vtable 0x850F14): each strike of a chain
+// lightning spawns one of these, which re-strikes a growing set of targets.
+// WillScarlettOhara models the family as IcewindCProjectileChainLightning
+// < IcewindCProjectileTravellingVFX < CProjectileTravelling with the
+// struck-id std::set at +0x2AE; the exe ctor 0x57C510 bases it on
+// CProjectileSingleTarget (0x578110) with CResRef("CLightT"), which is the
+// anchor used here.
+class IcewindCProjectileChainLightning : public CProjectileSingleTarget {
+public:
+    // 0x57C510. Copies the struck-target set (its sole argument), then
+    // retunes the carrier: CLightT cell at sequence 0, 16 directions,
+    // TRA_09 fire sound, speed doubled with a native WORD shift, and both
+    // height gates cleared. DecodeProjectile's chain-lightning case
+    // (0x5250B0) news 0x2BE bytes — the native class size — and hands the
+    // ctor a set freshly built on its stack.
+    explicit IcewindCProjectileChainLightning(const std::set<LONG>& struckTargets);
+    // Slot 0x0078 is not declared: DeliverEffects (0x57C7B0) is parked
+    // (docs/wso/import-parked/57C7B0.json), so the class inherits the base
+    // virtual for that slot.
+    // The ids this carrier has already struck (exe std::set internals: _Myhead
+    // 0x2B2, _Multi 0x2B6, _Mysize 0x2BA, NIL sentinel 0x8D48B4, refcount
+    // 0x8D48B0; native size 0x2BE). It is the last member, so the VC6-vs-ours
+    // std::set size drift stays inside sizeof.
+    /* 02AE */ std::set<LONG> m_struckTargets;
+};
+
 #endif /* CPROJECTILESINGLETARGET_H_ */

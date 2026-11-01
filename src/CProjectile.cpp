@@ -837,6 +837,12 @@ CProjectile84D8B8::CProjectile84D8B8()
 {
 }
 
+// 0x5297B0
+CProjectileSparkleExplosion::CProjectileSparkleExplosion(CResRef resRef)
+    : CProjectileBAM(resRef)
+{
+}
+
 // 0x529950
 void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
 {
@@ -850,6 +856,23 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     // NOTE: OnArrival's Delete fails (the projectile was never added to the
     // object array), so the projectile deletes itself here.
     delete this;
+}
+
+// 0x531360
+CProjectileBolt::CProjectileBolt()
+    : CProjectileBAM(CResRef("BOLT"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
 // 0x531570
@@ -938,6 +961,12 @@ CProjectileAcidBlob::CProjectileAcidBlob()
     m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
     m_sVisualEffect = "";
     field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x533DE0
+void CProjectileFollowUp::CallBack()
+{
+    m_ready = TRUE;
 }
 
 // 0x534600
@@ -1201,4 +1230,17 @@ void IcewindCProjectileScorcher::Strike(LONG target, BYTE initial)
 // vtable slot 0x0078 points here.
 void IcewindCProjectileScorcher::DeliverEffects()
 {
+}
+
+// 0x57C510
+IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::set<LONG>& struckTargets)
+    : CProjectileSingleTarget(CResRef("CLightT")), m_struckTargets(struckTargets)
+{
+    m_animation->SequenceSet(0);
+    field_1D8 = 16;
+    m_fireSoundRef = "TRA_09";
+    m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
+    m_visualEffect.sub_586A90(TRUE);
+    m_bHasHeight = FALSE;
+    field_1C2 = FALSE;
 }

@@ -64,6 +64,14 @@ public:
 // so ours inherits CProjectileBAM::Fire.
 class CProjectileSparkleExplosion : public CProjectileBAM {
 public:
+    // 0x5297B0. The exe ctor forwards the resref to the exploding
+    // intermediate 0x52CCE0 — which bases on CProjectileBAM (0x52AD60),
+    // stores vtable 0x84DBDC, and initializes the exploding fields our
+    // anchor does not model (the CVidCells at +0x2FA and +0x3D8, the
+    // CAIObjectType at +0x2B4, and +0x2A4 = 78) — then stores 0x84D938.
+    // Ours forwards straight to CProjectileBAM; the resref is passed by
+    // value in the exe (ret 0x8).
+    CProjectileSparkleExplosion(CResRef resRef);
     /* 0088 */ virtual void Explode();
 };
 
@@ -95,6 +103,14 @@ public:
 class CProjectile84E0C4 : public CProjectile84E030 {
 public:
     CProjectile84E0C4(WORD nCount, WORD nPaletteType);
+};
+
+// The bolt projectile (vtable 0x84E14C): a CProjectileBAM on the BOLT
+// animation with 16 directions and its speed times 5. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileBolt : public CProjectileBAM {
+public:
+    CProjectileBolt();
 };
 
 // The boulder projectile (vtable 0x84E1D4): a CProjectileBAM on the BOULDER
@@ -182,6 +198,8 @@ public:
 class CProjectileFollowUp : public CProjectileBAM {
 public:
     CProjectileFollowUp(USHORT childType, CResRef resRef, SHORT remaining, SHORT interval, BOOL keepSource, CAIObjectType type);
+    // 0x533DE0: the slot 0x7C callback AIUpdate waits on — it sets m_ready.
+    /* 007C */ void CallBack() override;
 
     /* 02A0 */ WORD m_remainingShots;
     /* 02A2 */ WORD m_interval;
