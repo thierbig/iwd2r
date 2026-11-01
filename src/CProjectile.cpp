@@ -969,7 +969,7 @@ void CProjectileExplodingFlame::Explode()
 void CProjectileSkullTrap::Explode()
 {
     CSound sound;
-    CString sSound("");
+    CString sSound(""); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
     // NOTE: the exe passes a stack buffer it never writes here.
     BYTE colorRangeValues[7];
 
@@ -1473,8 +1473,8 @@ CProjectileBigBoulder::CProjectileBigBoulder()
 // 0x5778A0
 //
 // Everything the spell is lives in the first explosion: the SoPainX burst
-// on the EFF_P49 sound with the copy-from-back mode on the visual effect
-// (sub_586A90) — the same first-explosion shape the spell-hit cases of
+// on the EFF_P49 sound with the copy-from-back mode set on the visual
+// effect — the same first-explosion shape the spell-hit cases of
 // DecodeProjectile build inline. The base is handed 256, then the radius
 // is widened to 300.
 CProjectileSymbolOfDeath::CProjectileSymbolOfDeath()
@@ -1482,7 +1482,7 @@ CProjectileSymbolOfDeath::CProjectileSymbolOfDeath()
 {
     m_explosion1.m_animation = "SoPainX";
     m_explosion1.m_sound = "EFF_P49";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nRadius = 300;
 }
 
