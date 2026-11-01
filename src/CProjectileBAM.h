@@ -127,6 +127,30 @@ public:
     /* 03D8 */ CVidCell m_explodeCell2;
 };
 
+// The exploding weapon missile (vtable 0x84DC68): Explode (slot 0x0088) is
+// the fireball burst (CGameObject85BFE8, 0x7105B0) at the missile position —
+// the strike range around, expanding at half the flight speed — coloured by
+// the leaf's own explosion colour range byte. The ctor (0x52E230) is parked
+// from i065 on this class, so only the virtual and the byte it reads are
+// declared.
+class CProjectileExplodingWeapon : public CProjectileExploding {
+public:
+    /* 0088 */ virtual void Explode();
+
+    // Native exe offset, past the tail of m_explodeCell2; ours lay out after
+    // the base under the reduced packing.
+    /* 04BA */ BYTE m_explodeColorRange;
+};
+
+// The exploding flame missile (vtable 0x84DCF4): Explode (slot 0x0088) is
+// the same fireball burst with the colour ranges hardwired to 0x43. The ctor
+// (0x52E9F0) is parked from i065 on this class, so only the virtual is
+// declared. It adds no members of its own.
+class CProjectileExplodingFlame : public CProjectileExploding {
+public:
+    /* 0088 */ virtual void Explode();
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {

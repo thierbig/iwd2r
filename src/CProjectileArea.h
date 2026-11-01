@@ -49,6 +49,9 @@ public:
 
 class CProjectileAreaExplosion3 : public CProjectileAreaExplosion {
 public:
+    // 0x56FE30
+    CProjectileAreaExplosion3();
+
     LONG GetChanceRange();
 
     /* 002C */ CProjectileAreaPoints* m_pPoints;
@@ -149,6 +152,15 @@ public:
     /* 0098 */ void CreateSecondary(LONG nTargetId) override;
 };
 
+// Circle of Death (vtable 0x84F448): the DSpellX burst on EFF_M42, both
+// copy-from-back; the trigger interval pinned at 10000 (one burst) with hit
+// modulus 10, for 45 ticks, 300 around. It adds no members of its own — the
+// ctor writes only inherited fields.
+class CProjectileCircleOfDeath : public CProjectileArea {
+public:
+    CProjectileCircleOfDeath();
+};
+
 // Entangle (projectile type 235, vtable 0x84F4E4): EntangX and lingering
 // EntangA vines, 200 around, 1000 ticks.
 class CProjectileArea84F4E4 : public CProjectileArea {
@@ -185,12 +197,37 @@ public:
     CProjectileArea84F7F0();
 };
 
+// Hold Animal (vtable 0x84F88C): the EnchanX burst on ARE_M21, both
+// copy-from-back; the trigger interval pinned at 10000 (one burst) with hit
+// modulus 10, for 45 ticks, 200 around — the same EnchanX shape Hold Person
+// (0x84F9C4) shares. It adds no members of its own.
+class CProjectileHoldAnimal : public CProjectileArea {
+public:
+    CProjectileHoldAnimal();
+};
+
+// Hold Monster (vtable 0x84F928): the same EnchanX burst on ARE_M21, one
+// burst with hit modulus 10, for 45 ticks, 200 around. It adds no members
+// of its own.
+class CProjectileHoldMonster : public CProjectileArea {
+public:
+    CProjectileHoldMonster();
+};
+
 // Hold Person (projectile type 190, vtable 0x84F9C4): EnchanX, 150 around;
 // it holds every sprite found up to 1 to 4 humanoids.
 class CProjectileArea84F9C4 : public CProjectileArea {
 public:
     CProjectileArea84F9C4();
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
+// Halt Undead (vtable 0x84FA60): the EnchanX burst on ARE_M21, both
+// copy-from-back; one burst with hit modulus 10, for 45 ticks, 150 around.
+// It adds no members of its own.
+class CProjectileHaltUndead : public CProjectileArea {
+public:
+    CProjectileHaltUndead();
 };
 
 // Ice Storm (vtable 0x84FAFC): the IStormX burst (no sound of its own),
@@ -222,6 +259,14 @@ public:
 class CProjectileInsectPlague : public CProjectileArea {
 public:
     CProjectileInsectPlague();
+};
+
+// Power Word Kill (vtable 0x84FD6C): the PWKillX burst on EFF_M39, both
+// copy-from-back; one burst with hit modulus 10, for 45 ticks, 150 around.
+// It adds no members of its own.
+class CProjectilePowerWordKill : public CProjectileArea {
+public:
+    CProjectilePowerWordKill();
 };
 
 // Produce Fire (vtable 0x84FE08): the PFireX burst on EFF_P45, then the
