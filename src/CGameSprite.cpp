@@ -23188,7 +23188,7 @@ SHORT CGameSprite::LeaveAreaLUA()
     CResRef cAreaResRef(m_curAction.GetString2());
 
     if (m_pArea != NULL) {
-        m_pArea->sub_47A190();
+        m_pArea->sub_47A190(); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     }
 
     if (!m_bGlobal) {
@@ -23250,6 +23250,8 @@ SHORT CGameSprite::LeaveAreaLUA()
 
     g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(TRUE);
 
+    Icewind586B70::Instance()->sub_5872C0(this); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
     // The area is not loaded: the progress screen names it (the second
     // string's resref) and the load fills it.
     BOOLEAN bNotLoadedAgain = FALSE;
@@ -23265,12 +23267,12 @@ SHORT CGameSprite::LeaveAreaLUA()
         pGame->m_nTravelScreenImageToUse = static_cast<BYTE>(rand() % 5);
     }
 
-    CString sAreaResRef("");
+    CString sAreaResRef;
     cAreaResRef.CopyToString(sAreaResRef);
-    STRREF nAreaCaption = pGame->sub_5C3770(sAreaResRef);
+    STRREF nAreaCaption = pGame->sub_5C3770(sAreaResRef); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 
     if (bNotLoadedAgain == TRUE) {
-        pGame->sub_59FA00(TRUE);
+        pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         g_pChitin->SetProgressBar(TRUE, 9891, 0, 0, TRUE, nAreaCaption, FALSE, 0, FALSE, FALSE, 255);
         g_pChitin->cProgressBar.m_nActionProgress = 0;
         g_pChitin->cProgressBar.m_nActionTarget = CInfGame::PROGRESSBAR_AREA_ADDITIONAL + CInfGame::PROGRESSBAR_CACHING_ADDITIONAL;
@@ -23308,6 +23310,12 @@ SHORT CGameSprite::LeaveAreaLUA()
 
     BOOLEAN bMarshalled = FALSE;
 
+    // The area's resource, requested for the marshal and released at the
+    // end (0x74B9E1).
+    CResRef cCachedAreaResRef;
+    CRes* pCachedRes = NULL;
+    BOOL bRequested = FALSE;
+
     CGameArea* pOldArea = m_pArea;
     if (pOldArea != NULL
         && (!g_pChitin->cNetwork.m_bConnectionEstablished || g_pChitin->cNetwork.m_bIsHost == TRUE)
@@ -23317,7 +23325,7 @@ SHORT CGameSprite::LeaveAreaLUA()
             // The progress screen comes up for the saving.
             pObjectArray->ReleaseDeny(m_id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
 
-            pGame->sub_59FA00(TRUE);
+            pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
             g_pChitin->SetProgressBar(TRUE, 9891, 0, 0, TRUE, nAreaCaption, FALSE, 0, FALSE, FALSE, 255);
             g_pChitin->cProgressBar.m_nActionProgress = 0;
             g_pChitin->cProgressBar.m_nActionTarget = CInfGame::PROGRESSBAR_AREA_ADDITIONAL;
@@ -23331,19 +23339,34 @@ SHORT CGameSprite::LeaveAreaLUA()
             } while (rc == CGameObjectArray::SHARED);
         }
 
-        CAreaFile cAreaFile;
         BYTE* pData = NULL;
         DWORD nSize = 0;
         pOldArea->Marshal(&pData, &nSize, TRUE);
         if (pData != NULL) {
-            cAreaFile.SetResRef(pOldArea->m_resRef, TRUE, TRUE);
+            if (pOldArea->m_resRef != cCachedAreaResRef) {
+                if (pCachedRes != NULL
+                    && cCachedAreaResRef != CResRef()
+                    && bRequested) {
+                    pCachedRes->CancelRequest();
+                }
 
-            // NOTE: The original writes through the resource without a test;
-            // it is NULL when the area file is missing. Bounded (P4-10), as
-            // LeaveAreaNameMoveSprite does.
-            if (cAreaFile.pRes != NULL) {
-                static_cast<CRes*>(cAreaFile.pRes)->Write(pGame->m_sTempDir, pData, nSize);
+                if (pOldArea->m_resRef == CResRef()) {
+                    pCachedRes = NULL;
+                    cCachedAreaResRef = CResRef();
+                } else {
+                    pCachedRes = g_pChitin->cDimm.GetResObject(pOldArea->m_resRef, 1010, TRUE);
+                    if (pCachedRes == NULL) {
+                        cCachedAreaResRef = CResRef();
+                    } else {
+                        bRequested = TRUE;
+                        pCachedRes->Request();
+                        cCachedAreaResRef = pOldArea->m_resRef;
+                    }
+                }
             }
+
+            // NOTE: The original writes through the resource without a test.
+            pCachedRes->Write(pGame->m_sTempDir, pData, nSize);
 
             pOldArea->field_436 = 1;
             pOldArea->field_438 = pGame->m_worldTime.m_gameTime;
@@ -23419,7 +23442,7 @@ SHORT CGameSprite::LeaveAreaLUA()
             g_pChitin->cProgressBar.m_nActionTarget - g_pChitin->cProgressBar.m_nActionProgress;
         g_pChitin->cProgressBar.m_bDisableMinibars = TRUE;
         g_pChitin->m_bDisplayStale = TRUE;
-        pGame->sub_59FA00(TRUE);
+        pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         g_pChitin->SetProgressBar(FALSE, 0, 0, 0, FALSE, 0, FALSE, 0, FALSE, FALSE, 255);
     }
 
@@ -23427,6 +23450,17 @@ SHORT CGameSprite::LeaveAreaLUA()
     g_pChitin->cSoundMixer.UpdateSoundList();
 
     g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(FALSE);
+
+    if (pCachedRes != NULL && cCachedAreaResRef != CResRef()) {
+        if (bRequested) {
+            pCachedRes->CancelRequest();
+            bRequested = FALSE;
+        }
+
+        g_pChitin->cDimm.ReleaseResObject(pCachedRes);
+    }
+
+    pCachedRes = NULL;
 
     return ACTION_DONE;
 }
