@@ -10227,6 +10227,36 @@ void CGameSprite::sub_71A550(CButtonData buttonData, BOOLEAN firstCall)
     }
 }
 
+// 0x74FF10
+SHORT CGameSprite::Help()
+{
+    CTypedPtrList<CPtrList, LONG*> targets;
+
+    // Every object within the help range (GetHelpRange is twice the visual
+    // range) hears the call. The original evaluates GetTerrainTable first
+    // and the range second; both are calls in the argument list, so the
+    // trailing arguments sit under them on the stack.
+    m_pArea->GetAllInRange(m_pos,
+        CAIObjectType::ANYONE,
+        GetHelpRange(),
+        GetTerrainTable(),
+        targets,
+        FALSE,
+        FALSE);
+
+    CAITrigger trigger(CAITrigger::HELP, m_typeAI, 0);
+
+    POSITION pos = targets.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(targets.GetNext(pos)));
+
+        CMessage* message = new CMessageSetTrigger(trigger, m_id, nId);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x7500F0
 SHORT CGameSprite::Rest()
 {
@@ -13689,9 +13719,8 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = GiveItem(static_cast<CGameAIBase*>(pTarget));
         goto release;
     case 17:
-        // Help
-        // TODO: 0x72955F-0x72956F not ported (0x74FF10).
-        returnValue = ACTION_ERROR;
+        // Help (0x72955F-0x72956F)
+        returnValue = Help();
         goto done;
     case 18:
         // Hide
@@ -14011,10 +14040,11 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 137:
     case 198:
-        // StartDialog, StartDialogueNoSet
-        // TODO: 0x72A374-0x72A39B not ported (0x7543B0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // StartDialog, StartDialogueNoSet (0x72A374-0x72A39B)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = StartDialog(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 138:
         // SetDialog (0x72A39B-0x72A3AB)
         returnValue = SetDialog();
@@ -14084,10 +14114,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 168:
-        // Interact
-        // TODO: 0x72A5DE-0x72A606 not ported (0x754980).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // Interact (0x72A5DE-0x72A606)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = Interact(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 174:
         // EquipRanged (0x72AE54-0x72AE64)
         returnValue = EquipRanged();
@@ -24320,6 +24351,57 @@ denied:
     return ACTION_ERROR;
 }
 
+// 0x7543B0
+SHORT CGameSprite::StartDialog(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (!CanSpeak(FALSE, FALSE)) {
+        return ACTION_ERROR;
+    }
+
+    if (!pTarget->CanSpeak(FALSE, TRUE)) {
+        return ACTION_ERROR;
+    }
+
+    if ((m_derivedStats.m_generalState & STATE_CHARMED) != 0) {
+        return ACTION_ERROR;
+    }
+
+    // StartDialogNoSet keeps the current dialog; StartDialog takes the
+    // dialog resource from the action (0x75442C-0x754466).
+    if (m_curAction.m_actionID != CAIAction::STARTDIALOGUENOSET) {
+        m_dialog = m_curAction.GetString1();
+    }
+
+    m_lTalkedTo.Set(pTarget->GetAIType());
+    pTarget->m_lTalkedTo.Set(GetAIType());
+
+    if (m_actionCount == 0) {
+        // NOTE: The original passes the speaker itself (0x754496).
+        PlayDialogSound(this);
+    }
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        BYTE rc = g_pBaldurChitin->m_cBaldurMessage.SendDialogRequestToServer(FALSE);
+        if (rc == CBaldurMessage::DIALOG_REQUESTPENDING) {
+            return ACTION_NORMAL;
+        }
+        if (rc == 0 || rc == CBaldurMessage::DIALOG_NOT_PERMITTED) {
+            return ACTION_ERROR;
+        }
+    }
+
+    if (!g_pBaldurChitin->m_pEngineWorld->StartDialog(pTarget, this, FALSE, FALSE)) {
+        return ACTION_ERROR;
+    }
+
+    DialogStarted(this, pTarget);
+    return ACTION_DONE;
+}
+
 // 0x754870
 SHORT CGameSprite::SetDialog()
 {
@@ -24330,6 +24412,41 @@ SHORT CGameSprite::SetDialog()
         g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
     }
 
+    return ACTION_DONE;
+}
+
+// 0x754980
+SHORT CGameSprite::Interact(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    // The actor remembers whom it interacts with and both sides who they
+    // talked to (the same pair `Dialog` and `PlayerDialog` set).
+    m_interactingWith.Set(pTarget->GetAIType());
+    m_lTalkedTo.Set(pTarget->GetAIType());
+    pTarget->m_lTalkedTo.Set(GetAIType());
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        BYTE rc = g_pBaldurChitin->m_cBaldurMessage.SendDialogRequestToServer(FALSE);
+        if (rc == CBaldurMessage::DIALOG_REQUESTPENDING) {
+            return ACTION_NORMAL;
+        }
+        if (rc == 0 || rc == CBaldurMessage::DIALOG_NOT_PERMITTED) {
+            return ACTION_ERROR;
+        }
+    }
+
+    // NOTE: Unlike `Dialog` and `PlayerDialog` the interaction flag is set
+    // (the exe pushes 1 at 0x754A48): the actor is the speaker here.
+    if (!g_pBaldurChitin->m_pEngineWorld->StartDialog(pTarget, this, FALSE, TRUE)) {
+        return ACTION_ERROR;
+    }
+
+    // NOTE: Inlined in the original (0x754A5B-0x754D44), the block `Dialog`
+    // and `PlayerDialog` share.
+    DialogStarted(this, pTarget);
     return ACTION_DONE;
 }
 
@@ -28308,7 +28425,6 @@ INT CGameSprite::GetSkillCost(UINT iSkillNumber, BYTE nClass)
     return 0;
 }
 
-// 0x764520
 // The paladin and ranger fall check: a character below reputation 70 whose
 // class mask has the paladin (or ranger) bit loses the fallen class's innate
 // spells and levels (they move to fighter) and its state gains 0x200 (0x400).
@@ -28431,6 +28547,7 @@ void CGameSprite::CheckReputation()
     }
 }
 
+// 0x764520
 INT CGameSprite::GetEffectiveCharacterLevel()
 {
     INT nLevel = m_derivedStats.m_nLevel;
@@ -28613,6 +28730,198 @@ INT CGameSprite::GetMulticlassingPenalty()
     }
 
     return nPenalty;
+}
+
+// 0x764810
+// #guess name: shared target gate for scripted casting and its status trigger.
+BOOL CGameSprite::CheckSpellTarget(CGameSprite* pTarget, DWORD flags)
+{
+    if ((m_derivedStats.m_generalState & STATE_DEAD) != 0
+        || pTarget == NULL
+        || (pTarget->m_derivedStats.m_generalState & STATE_DEAD) != 0
+        || (pTarget->m_baseStats.m_flags & 0x20000) != 0
+        || m_derivedStats.m_spellStates[SPLSTATE_HELD]
+        || (m_derivedStats.m_generalState & STATE_HELPLESS) != 0) {
+        return FALSE;
+    }
+
+    return pTarget->IsVisibleToCaller(GetCanSeeInvisible())
+        && !pTarget->m_derivedStats.m_spellStates[SPLSTATE_SANCTUARY];
+}
+
+// 0x764880
+// #guess name: effect usefulness query shared by scripted casting and triggers.
+BOOL CGameSprite::CheckSpellUseful(CGameSprite* pTarget, INT nSpellId, DWORD flags)
+{
+    if (pTarget == NULL) {
+        CString caster(m_scriptName, sizeof(m_scriptName));
+        CString area(m_pArea->m_header.m_areaName);
+        CString diagnostic;
+        diagnostic.Format("Target is NULL -- Area=%s  Caster=%s  SpellId=%d  Flags=%d",
+            (LPCTSTR)area, (LPCTSTR)caster, nSpellId, flags);
+        return FALSE;
+    }
+    if (nSpellId == 0) {
+        CString caster(m_scriptName, sizeof(m_scriptName));
+        CString target(pTarget->m_scriptName, sizeof(pTarget->m_scriptName));
+        CString area(m_pArea->m_header.m_areaName);
+        CString diagnostic;
+        diagnostic.Format("Spell Id not found -- Area=%s  Caster=%s  Target=%s  Flags==%d",
+            (LPCTSTR)area, (LPCTSTR)caster, (LPCTSTR)target, flags);
+        return FALSE;
+    }
+    if (!m_derivedStats.m_spellStates.test(SPLSTATE_VOCALIZE)
+        && (m_derivedStats.m_generalState & STATE_SILENCED) != 0
+        && !sub_763150(CGAMESPRITE_FEAT_SUBVOCAL_CASTING)
+        && nSpellId != 2219) {
+        return FALSE;
+    }
+    CString spellName;
+    DecodeSpell(nSpellId, spellName);
+    if (spellName == "") {
+        return FALSE;
+    }
+    CSpell spell{CResRef(spellName)};
+    if (!spell.Demand()) {
+        return FALSE;
+    }
+    BYTE level = spell.GetLevel();
+    SHORT casterType = spell.GetCasterType();
+    if (((spell.GetItemFlags() & 0x2000) != 0 && (m_pArea->m_header.m_areaType & 1) == 0)
+        || m_derivedStats.m_disabledSpellTypes[casterType] == TRUE
+        || (casterType == 1 && m_derivedStats.m_nSpellFailureArcane >= 100)
+        || (casterType == 2 && m_derivedStats.m_nSpellFailureDivine >= 100)) {
+        spell.Release();
+        return FALSE;
+    }
+    std::string immunityName((LPCTSTR)spellName);
+    if (pTarget->m_derivedStats.m_resourceImmunities.find(immunityName)
+        != pTarget->m_derivedStats.m_resourceImmunities.end()) {
+        spell.Release();
+        return FALSE;
+    }
+    if (level < 9 && pTarget->m_derivedStats.m_cImmunitiesSpellLevel.m_levels[level] != FALSE) {
+        UINT id = 0;
+        CInfGame* game = g_pBaldurChitin->GetObjectGame();
+        if (level != 1
+            || (!game->m_innateSpells.Find(CResRef(spellName), id)
+                && !game->m_songs.Find(CResRef(spellName), id)
+                && !game->m_shapeshifts.Find(CResRef(spellName), id))) {
+            spell.Release();
+            return FALSE;
+        }
+    }
+    const SPELL_ABILITY* ability = NULL;
+    SHORT casterLevel = GetCasterLevel(&spell, 0, 0);
+    for (INT index = 0; index < spell.GetAbilityCount(); ++index) {
+        if (spell.GetAbility(index)->minCasterLevel > casterLevel) {
+            break;
+        }
+        ability = spell.GetAbility(index);
+    }
+    if (ability == NULL) {
+        spell.Release();
+        return FALSE;
+    }
+    BOOL useful = TRUE;
+    for (INT index = 0; index < ability->effectCount; ++index) {
+        // PE 0x764DFA pushes ability zero, even when the count comes from a
+        // later ability. This query builds effects but never applies them.
+        CGameEffect* effect = spell.GetAbilityEffect(0, index, this, 0, 0, 0);
+        if (effect == NULL) {
+            continue;
+        }
+        switch (effect->m_effectID) {
+        case CGAMEEFFECT_BERSERK: useful = (pTarget->m_derivedStats.m_generalState & STATE_BERSERK) == 0; break;
+        case CGAMEEFFECT_CHARM: useful = (pTarget->m_derivedStats.m_generalState & STATE_CHARMED) == 0; break;
+        case CGAMEEFFECT_HASTE: useful = (pTarget->m_derivedStats.m_generalState & STATE_HASTED) == 0; break;
+        case CGAMEEFFECT_PANIC: useful = (pTarget->m_derivedStats.m_generalState & STATE_PANIC) == 0; break;
+        case CGAMEEFFECT_POISON: useful = (pTarget->m_derivedStats.m_generalState & STATE_POISONED) == 0; break;
+        case CGAMEEFFECT_SILENCE: useful = (pTarget->m_derivedStats.m_generalState & STATE_SILENCED) == 0; break;
+        case ICEWIND_CGAMEEFFECT_UNCONSCIOUSNESS:
+        case CGAMEEFFECT_SLEEP: useful = (pTarget->m_derivedStats.m_generalState & STATE_SLEEPING) == 0; break;
+        case CGAMEEFFECT_SLOW: useful = (pTarget->m_derivedStats.m_generalState & STATE_SLOWED) == 0; break;
+        case CGAMEEFFECT_STUN: useful = (pTarget->m_derivedStats.m_generalState & STATE_STUNNED) == 0; break;
+        case CGAMEEFFECT_INFRAVISION: useful = (pTarget->m_derivedStats.m_generalState & STATE_INFRAVISION) == 0; break;
+        case CGAMEEFFECT_BLUR: useful = (pTarget->m_derivedStats.m_generalState & STATE_BLUR) == 0; break;
+        case CGAMEEFFECT_NONDETECTION: useful = (pTarget->m_derivedStats.m_generalState & STATE_NONDETECTION) == 0; break;
+        case CGAMEEFFECT_BLINDNESS: useful = (pTarget->m_derivedStats.m_generalState & STATE_BLIND) == 0; break;
+        case CGAMEEFFECT_DISEASE: useful = (pTarget->m_derivedStats.m_generalState & STATE_DISEASED) == 0; break;
+        case CGAMEEFFECT_MIRRORIMAGE: useful = (pTarget->m_derivedStats.m_generalState & STATE_MIRRORIMAGE) == 0; break;
+        case CGAMEEFFECT_CONFUSION: useful = (pTarget->m_derivedStats.m_generalState & STATE_CONFUSED) == 0; break;
+        case CGAMEEFFECT_NON_CUMULATIVEAID: useful = (pTarget->m_derivedStats.m_generalState & STATE_AID) == 0; break;
+        case CGAMEEFFECT_NON_CUMULATIVEBLESS: useful = (pTarget->m_derivedStats.m_generalState & STATE_BLESS) == 0; break;
+        case CGAMEEFFECT_NON_CUMULATIVECHANT: useful = (pTarget->m_derivedStats.m_generalState & STATE_CHANT) == 0; break;
+        case CGAMEEFFECT_DEAFNESS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_DEAFENED); break;
+        case CGAMEEFFECT_NON_CUMULATIVEDRAWUPONHOLYMIGHT: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_DRAW_UPON_HOLY_MIGHT); break;
+        case CGAMEEFFECT_SANCTUARY: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_SANCTUARY); break;
+        case CGAMEEFFECT_ENTANGLE: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ENTANGLE); break;
+        case CGAMEEFFECT_WEBHOLD: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_WEB); break;
+        case CGAMEEFFECT_GREASEPOOL: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_GREASE); break;
+        case CGAMEEFFECT_STONESKINS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_STONESKIN); break;
+        case ICEWIND_CGAMEEFFECT_PRAYER: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_BENEFICIAL_PRAYER); break;
+        case ICEWIND_CGAMEEFFECT_RECITATION: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_BENEFICIAL_RECITATION); break;
+        case ICEWIND_CGAMEEFFECT_CLOAKOFFEAR: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_CLOAK_OF_FEAR); break;
+        case ICEWIND_CGAMEEFFECT_SHROUDOFFLAME: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_SHROUD_OF_FLAME); break;
+        case ICEWIND_CGAMEEFFECT_HOPELESSNESS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_HOPELESSNESS); break;
+        case ICEWIND_CGAMEEFFECT_PROTECTIONFROMEVIL: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_PROTECTION_FROM_EVIL); break;
+        case ICEWIND_CGAMEEFFECT_ARMOROFFAITH: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ARMOR_OF_FAITH); break;
+        case ICEWIND_CGAMEEFFECT_NAUSEA: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_NAUSEA); break;
+        case ICEWIND_CGAMEEFFECT_DEATHWARD: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_DEATH_WARD); break;
+        case ICEWIND_CGAMEEFFECT_HOLYPOWER: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_HOLY_POWER); break;
+        case ICEWIND_CGAMEEFFECT_CONTROLUNDEAD:
+        case ICEWIND_CGAMEEFFECT_CHARM: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_CONTROLLED); break;
+        case ICEWIND_CGAMEEFFECT_OTILUKESRESILIENTSPHERE: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_OTILUKES_RESILIENT_SPHERE); break;
+        case ICEWIND_CGAMEEFFECT_BARKSKIN: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_BARKSKIN); break;
+        case ICEWIND_CGAMEEFFECT_FREEACTION: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_FREE_ACTION); break;
+        case ICEWIND_CGAMEEFFECT_ENTROPYSHIELD: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ENTROPY_SHIELD); break;
+        case ICEWIND_CGAMEEFFECT_STORMSHELL: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_STORM_SHELL); break;
+        case ICEWIND_CGAMEEFFECT_PROTECTIONFROMELEMENTS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_PROTECTION_FROM_THE_ELEMENTS); break;
+        case ICEWIND_CGAMEEFFECT_HOLDUNDEAD:
+        case CGAMEEFFECT_HOLDCREATURE: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_HELD); break;
+        case ICEWIND_CGAMEEFFECT_AEGIS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_AEGIS); break;
+        case ICEWIND_CGAMEEFFECT_EXECUTIONERSEYES: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_EXECUTIONERS_EYES); break;
+        case ICEWIND_CGAMEEFFECT_TORTOISESHELL: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_TORTOISE_SHELL); break;
+        case ICEWIND_CGAMEEFFECT_BLINK: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_BLINK); break;
+        case ICEWIND_CGAMEEFFECT_PROTECTIONFORMARROWS: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_PROTECTION_FROM_NORMAL_MISSILES); break;
+        case ICEWIND_CGAMEEFFECT_TENSERSTRANSFORMATION: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_TENSERS_TRANSFORMATION); break;
+        case ICEWIND_CGAMEEFFECT_GLOBEOFINVULNERABILITY: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_GLOBE_OF_INVULNERABILITY); break;
+        case ICEWIND_CGAMEEFFECT_LOWERRESISTANCE: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_LOWER_RESISTANCE); break;
+        case ICEWIND_CGAMEEFFECT_BANE: useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_BANE); break;
+        case CGAMEEFFECT_INVISIBLE:
+            useful = pTarget->IsVisibleToCaller(FALSE);
+            break;
+        case CGAMEEFFECT_FEEBLEMINDEDNESS:
+        case ICEWIND_CGAMEEFFECT_ENFEEBLEMENT:
+            useful = (pTarget->m_derivedStats.m_generalState & STATE_FEEBLEMINDED) == 0
+                && !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ENFEEBLED);
+            break;
+        case ICEWIND_CGAMEEFFECT_FIRESHIELD:
+            useful = !pTarget->m_derivedStats.m_spellStates.test(
+                effect->m_dwFlags != 0 ? SPLSTATE_BLUE_FIRESHIELD : SPLSTATE_RED_FIRESHIELD);
+            break;
+        case ICEWIND_CGAMEEFFECT_RIGHTEOUSWRATHOFFAITHFUL:
+            useful = !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ALLIED_RIGHTEOUS_WRATH_OF_THE_FAITHFUL)
+                && !pTarget->m_derivedStats.m_spellStates.test(SPLSTATE_ALLIED_AND_SAME_ALIGNMENT_RIGHTEOUS_WRATH_OF_THE_FAITHFUL);
+            break;
+        case ICEWIND_CGAMEEFFECT_SETSPELLSTATE:
+            useful = !pTarget->m_derivedStats.m_spellStates.test(effect->m_dwFlags);
+            break;
+        case CGAMEEFFECT_IMMUNITYSPELL:
+        case ICEWIND_CGAMEEFFECT_IMMUNITYSPELL:
+            if (effect->m_dwFlags != 0) {
+                useful = static_cast<CGameEffectImmunitySpell*>(effect)->Evaluate(pTarget) == TRUE;
+            }
+            break;
+        }
+        delete effect;
+        if (!useful) {
+            spell.Release();
+            return FALSE;
+        }
+    }
+    spell.Release();
+    return useful;
 }
 
 // 0x765BD0

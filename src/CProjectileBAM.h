@@ -2,6 +2,7 @@
 #define CPROJECTILEBAM_H_
 
 #include "CProjectile.h"
+#include "CAIObjectType.h"
 #include "CVidBitmap.h"
 #include "CVidCell.h"
 #include "CVidPalette.h"
@@ -53,6 +54,27 @@ public:
     /* 02A1 */ BYTE field_2A1;
 };
 
+// The sparkle-burst projectile: Explode decodes the child projectile its
+// sparkle colour maps to (types 196 to 203) and fires it at the target
+// (vtable 0x84D938, which sits immediately before CProjectileBAM's).
+// NOTE: The exe's vtable for this class overrides Fire too (slot 0x6C
+// -> 0x52D9F0, shared with the sibling class at vtable 0x84DC68 — the
+// exploding-projectile intermediate whose ctor 0x52CCE0 this class's
+// ctor 0x5297B0 calls). That Fire override is not part of batch i058,
+// so ours inherits CProjectileBAM::Fire.
+class CProjectileSparkleExplosion : public CProjectileBAM {
+public:
+    // 0x5297B0. The exe ctor forwards the resref to the exploding
+    // intermediate 0x52CCE0 — which bases on CProjectileBAM (0x52AD60),
+    // stores vtable 0x84DBDC, and initializes the exploding fields our
+    // anchor does not model (the CVidCells at +0x2FA and +0x3D8, the
+    // CAIObjectType at +0x2B4, and +0x2A4 = 78) — then stores 0x84D938.
+    // Ours forwards straight to CProjectileBAM; the resref is passed by
+    // value in the exe (ret 0x8).
+    CProjectileSparkleExplosion(CResRef resRef);
+    /* 0088 */ virtual void Explode();
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {
@@ -81,6 +103,126 @@ public:
 class CProjectile84E0C4 : public CProjectile84E030 {
 public:
     CProjectile84E0C4(WORD nCount, WORD nPaletteType);
+};
+
+// The bolt projectile (vtable 0x84E14C): a CProjectileBAM on the BOLT
+// animation with 16 directions and its speed times 5. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileBolt : public CProjectileBAM {
+public:
+    CProjectileBolt();
+};
+
+// The boulder projectile (vtable 0x84E1D4): a CProjectileBAM on the BOULDER
+// animation with 16 directions and its speed times 3/2. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileBoulder : public CProjectileBAM {
+public:
+    CProjectileBoulder();
+};
+
+// The sling-stone projectile (vtable 0x84E2E4): a CProjectileBAM on the
+// MAGICSTN animation with the full palette range SetRange(0, 27) off the
+// master bitmap, one direction, and its speed times 5. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileSlingStone : public CProjectileBAM {
+public:
+    CProjectileSlingStone();
+};
+
+// The axe projectile (vtable 0x84E36C): a CProjectileBAM on the AXE
+// animation with 16 directions and its speed doubled. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileAxe : public CProjectileBAM {
+public:
+    CProjectileAxe();
+};
+
+// The spear projectile (vtable 0x84E3F4): a CProjectileBAM on the SPEAR
+// animation with 16 directions and its speed doubled. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileSpear : public CProjectileBAM {
+public:
+    CProjectileSpear();
+};
+
+// The thrown-dagger projectile (vtable 0x84E47C): a CProjectileBAM on the
+// DAGGER animation with the palette ranges SetRange(5, 27) and SetRange(4, 30)
+// off the master bitmap and its speed doubled. It adds no members of its own —
+// the ctor writes only inherited fields.
+class CProjectileDagger : public CProjectileBAM {
+public:
+    CProjectileDagger();
+};
+
+// The acid-blob projectile (vtable 0x84E504): a CProjectileBAM on the
+// ACIDBLOB animation with the full palette range SetRange(0, 73) off the
+// master bitmap and 16 directions. It adds no members of its own — the ctor
+// writes only inherited fields.
+class CProjectileAcidBlob : public CProjectileBAM {
+public:
+    CProjectileAcidBlob();
+};
+
+// The SPBRNHND projectile (vtable 0x84E69C): a CProjectileBAM on the
+// SPBRNHND animation with the full palette range SetRange(0, 71) off the
+// master bitmap, the field_E6 brightest bit set, and a WORD lifetime of
+// 55 at +0x2A0. The BAM ctor leaves +0x2A0 to the subclasses (it only
+// writes +0x29D/+0x29E there), so — like CProjectile84E030's m_nCount —
+// the derived class names the bytes.
+class CProjectileSPBRNHND : public CProjectileBAM {
+public:
+    CProjectileSPBRNHND();
+
+    /* 02A0 */ WORD m_animationLifetime;
+};
+
+// One cell of a spray area projectile (vtable 0x84E724): registers itself
+// in the area's object list at the front, then plays its fire sound.
+// NOTE: The exe vtable's slot 0x88 is AddVisualToArea (0x533AE0), overriding
+// the slot CProjectileBAM fills with 0x529AB0; the vtable continues past it
+// (0x8C -> 0x533DF0, 0x90 -> 0x45B680, 0x94 -> 0x4C7BE0, 0x98 -> 0x534140)
+// and those virtuals are not part of batch i058, so ours declares none of
+// them.
+class CProjectileSprayCell : public CProjectileBAM {
+public:
+    /* 0088 */ virtual void AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height);
+};
+
+// The projectile that fires child projectiles of type m_childType + 1 on an
+// interval until m_remainingShots runs out (vtable 0x84E7B0): Melf's Magic
+// Missile and its kin are built on it.
+// NOTE: The exe vtable overrides Fire (slot 0x6C -> 0x533F40) and AIUpdate
+// (slot 0x0C -> 0x534140); neither is part of batch i058, so ours inherits
+// CProjectileBAM's.
+class CProjectileFollowUp : public CProjectileBAM {
+public:
+    CProjectileFollowUp(USHORT childType, CResRef resRef, SHORT remaining, SHORT interval, BOOL keepSource, CAIObjectType type);
+    // 0x533DE0: the slot 0x7C callback AIUpdate waits on — it sets m_ready.
+    /* 007C */ void CallBack() override;
+
+    /* 02A0 */ WORD m_remainingShots;
+    /* 02A2 */ WORD m_interval;
+    /* 02A4 */ BOOL m_keepSource;
+    /* 02A8 */ WORD m_childType;
+    /* 02AA */ CProjectile* m_nextProjectile;
+    /* 02AE */ BOOL m_ready;
+    /* 02B2 */ CAIObjectType m_targetType;
+    /* 02EE */ LONG m_launchHeight;
+    /* 02F2 */ WORD m_launchKind;
+    /* 02F4 */ DWORD m_checkLOS;
+    /* 02F8 */ WORD m_delay;
+};
+
+// The Magic Missile barrage (vtable 0x84E838): a CProjectileFollowUp on the
+// MAGMISS animation that keeps its source alive and launches one child of
+// type 23 every 300 ticks until count runs out. The ctor mirrors the
+// missile (field_1C6, mirror fields +0x1CA/+0x1CE = 10/7, one direction,
+// leaf render param 0x80) and points m_targetType at the hostile side with
+// LOS checks on.
+class CProjectileMAGMISS : public CProjectileFollowUp {
+public:
+    CProjectileMAGMISS(SHORT count, USHORT /*unused*/);
 };
 
 // One magic missile, type 218 (vtable 0x8510A4).
