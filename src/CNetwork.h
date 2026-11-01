@@ -121,6 +121,7 @@ public:
 
     CNetwork();
     ~CNetwork();
+    void AddModemAddressToList(LPCSTR lpAddress);
     void AddServiceProviderToList(const CString& sServiceProviderName, const GUID& sServiceProviderGuid, LPVOID lpConnection, size_t size);
     BOOLEAN EnumerateServiceProviders();
     INT FindModemAddress(const CString& sAddress);
