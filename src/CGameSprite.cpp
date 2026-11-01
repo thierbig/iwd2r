@@ -26,6 +26,7 @@
 #include "CScreenInventory.h"
 #include "CScreenMap.h"
 #include "CScreenStore.h"
+#include "CScreenChapter.h"
 #include "CScreenWorld.h"
 #include "CScreenWorldMap.h"
 #include "CSpawn.h"
@@ -14127,8 +14128,7 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 110:
         // LeaveAreaLUA
-        // TODO: 0x7295C5-0x7295D5 not ported (0x74B340).
-        returnValue = ACTION_ERROR;
+        returnValue = LeaveAreaLUA();
         goto done;
     case 111:
         // DestroySelf (0x72A1A7-0x72A1C9)
@@ -23553,6 +23553,304 @@ static void LeaveAreaNameMoveSprite(CGameSprite* pLeader,
             g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
         }
     }
+}
+
+// 0x74B340
+SHORT CGameSprite::LeaveAreaLUA()
+{
+    // The party member's travel to an area that is already named (the action
+    // LeaveAreaLUA, 110, which CScreenWorld::MoveToArea gives the group and
+    // CScreenWorld::LeaveAreaLuaPanic gives a character left behind): the
+    // destination area is loaded, the area left behind is marshalled, and
+    // the member is put at its own point in the new area.
+    //
+    // NOTE: The client's request through CBaldurMessage 0x4373E0 is not
+    // ported (0x74B491-0x74B5E9); a single-player game never gets there.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameObjectArray* pObjectArray = pGame->GetObjectArray();
+
+    // The name in the first string, and the resref the travel screen is
+    // chosen for in the second (0x74B37F-0x74B3B2).
+    CString sArea = m_curAction.GetString1();
+    SHORT nSpecificID = static_cast<SHORT>(m_curAction.m_specificID);
+    CResRef cAreaResRef(m_curAction.GetString2());
+
+    if (m_pArea != NULL) {
+        m_pArea->sub_47A190(); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    }
+
+    if (!m_bGlobal) {
+        return ACTION_ERROR;
+    }
+
+    BOOL bClientLoad = m_curAction.m_specificID2 == 0
+        && g_pChitin->cNetwork.m_bConnectionEstablished == TRUE;
+
+    BOOLEAN bNotLoaded = FALSE;
+    if (pGame->GetArea(sArea) == NULL) {
+        bNotLoaded = TRUE;
+    }
+
+    BOOL bLocal = g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+        || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID;
+
+    pObjectArray->ReleaseDeny(m_id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+
+    if (bClientLoad && bNotLoaded) {
+        // TODO: 0x4373E0 not ported: the client asks the host for the area
+        // (CBaldurMessage 0x4373E0, the destination's name and resref) and
+        // takes the answer: 2 or 4 is ACTION_NORMAL, 0 ACTION_ERROR, 1
+        // ACTION_DONE, anything else goes on below after re-denying the
+        // sprite.
+        return ACTION_ERROR;
+    }
+
+    if (pGame->GetArea(sArea) != NULL && bLocal) {
+        if (!pGame->GetArea(sArea)->field_AE6) {
+            CGameObject* pObject;
+            BYTE rc;
+            do {
+                rc = pObjectArray->GetDeny(m_id,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED);
+            return ACTION_NORMAL;
+        }
+    }
+
+    g_pBaldurChitin->GetBaldurMessage()->CleanLeaveAreaLuaRequest();
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE
+        && g_pChitin->pActiveEngine == g_pBaldurChitin->m_pEngineMap) {
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE
+        && g_pChitin->cNetwork.m_bIsHost == TRUE
+        && g_pChitin->pActiveEngine != g_pBaldurChitin->m_pEngineWorld
+        && g_pChitin->pActiveEngine != g_pBaldurChitin->m_pEngineChapter) {
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    g_pChitin->cSoundMixer.m_nActiveArea = static_cast<DWORD_PTR>(-1);
+    g_pChitin->cSoundMixer.UpdateSoundList();
+
+    g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(TRUE);
+
+    Icewind586B70::Instance()->sub_5872C0(this); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    // The area is not loaded: the progress screen names it (the second
+    // string's resref) and the load fills it.
+    BOOLEAN bNotLoadedAgain = FALSE;
+    if (pGame->GetArea(sArea) == NULL) {
+        bNotLoadedAgain = TRUE;
+    }
+
+    if (cAreaResRef != CResRef()) {
+        pGame->m_nTravelScreenImageToUse = 5;
+        pGame->m_cTravelScreenArea = cAreaResRef;
+        pGame->m_nTravelScreenImageToUse = 5;
+    } else {
+        pGame->m_nTravelScreenImageToUse = static_cast<BYTE>(rand() % 5);
+    }
+
+    CString sAreaResRef;
+    cAreaResRef.CopyToString(sAreaResRef);
+    STRREF nAreaCaption = pGame->sub_5C3770(sAreaResRef); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    if (bNotLoadedAgain == TRUE) {
+        pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        g_pChitin->SetProgressBar(TRUE, 9891, 0, 0, TRUE, nAreaCaption, FALSE, 0, FALSE, FALSE, 255);
+        g_pChitin->cProgressBar.m_nActionProgress = 0;
+        g_pChitin->cProgressBar.m_nActionTarget = CInfGame::PROGRESSBAR_AREA_ADDITIONAL + CInfGame::PROGRESSBAR_CACHING_ADDITIONAL;
+        g_pChitin->cProgressBar.m_bDisableMinibars = TRUE;
+    }
+
+    CGameArea* pArea = pGame->LoadArea(sArea, 5, FALSE, bNotLoadedAgain);
+
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        rc = pObjectArray->GetDeny(m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED);
+
+    if (rc != CGameObjectArray::SUCCESS || pObject != this) {
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+        // __LINE__: 17053
+        UTIL_ASSERT(FALSE);
+
+        if (bNotLoadedAgain == TRUE) {
+            g_pChitin->SetProgressBar(FALSE, 0, 0, 0, FALSE, 0, FALSE, 0, FALSE, FALSE, 255);
+        }
+        return ACTION_ERROR;
+    }
+
+    // 0x74B9B4: the member goes at its own point (in search squares).
+    m_clearAIOnRemoveFromArea = FALSE;
+
+    CPoint ptEntry = m_pos;
+    ptEntry.x /= CPathSearch::GRID_SQUARE_SIZEX;
+    ptEntry.y /= CPathSearch::GRID_SQUARE_SIZEY;
+
+    BOOLEAN bMarshalled = FALSE;
+
+    // The area's resource, requested for the marshal and released at the
+    // end (0x74B9E1).
+    CResRef cCachedAreaResRef;
+    CRes* pCachedRes = NULL;
+    BOOL bRequested = FALSE;
+
+    CGameArea* pOldArea = m_pArea;
+    if (pOldArea != NULL
+        && (!g_pChitin->cNetwork.m_bConnectionEstablished || g_pChitin->cNetwork.m_bIsHost == TRUE)
+        && (pOldArea->m_header.m_flags & 0x1) == 0
+        && !pOldArea->field_436) {
+        if (!bNotLoadedAgain) {
+            // The progress screen comes up for the saving.
+            pObjectArray->ReleaseDeny(m_id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+
+            pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+            g_pChitin->SetProgressBar(TRUE, 9891, 0, 0, TRUE, nAreaCaption, FALSE, 0, FALSE, FALSE, 255);
+            g_pChitin->cProgressBar.m_nActionProgress = 0;
+            g_pChitin->cProgressBar.m_nActionTarget = CInfGame::PROGRESSBAR_AREA_ADDITIONAL;
+            g_pChitin->cProgressBar.m_bDisableMinibars = TRUE;
+
+            do {
+                rc = pObjectArray->GetDeny(m_id,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED);
+        }
+
+        BYTE* pData = NULL;
+        DWORD nSize = 0;
+        pOldArea->Marshal(&pData, &nSize, TRUE);
+        if (pData != NULL) {
+            if (pOldArea->m_resRef != cCachedAreaResRef) {
+                if (pCachedRes != NULL
+                    && cCachedAreaResRef != CResRef()
+                    && bRequested) {
+                    pCachedRes->CancelRequest();
+                }
+
+                if (pOldArea->m_resRef == CResRef()) {
+                    pCachedRes = NULL;
+                    cCachedAreaResRef = CResRef();
+                } else {
+                    pCachedRes = g_pChitin->cDimm.GetResObject(pOldArea->m_resRef, 1010, TRUE);
+                    if (pCachedRes == NULL) {
+                        cCachedAreaResRef = CResRef();
+                    } else {
+                        bRequested = TRUE;
+                        pCachedRes->Request();
+                        cCachedAreaResRef = pOldArea->m_resRef;
+                    }
+                }
+            }
+
+            // NOTE: The original writes through the resource without a test.
+            pCachedRes->Write(pGame->m_sTempDir, pData, nSize);
+
+            pOldArea->field_436 = 1;
+            pOldArea->field_438 = pGame->m_worldTime.m_gameTime;
+
+            delete pData;
+
+            bMarshalled = TRUE;
+        }
+    }
+
+    pGame->m_bInAreaTransition = TRUE;
+
+    CPoint ptCenter(-1, -1);
+    if (m_pArea != NULL) {
+        RemoveFromArea();
+        m_clearAIOnRemoveFromArea = TRUE;
+
+        if (m_animation.m_animation == NULL) {
+            // __FILE__: .\Include\ObjAnimation.h
+            // __LINE__: 2093
+            UTIL_ASSERT(FALSE);
+        }
+
+        BYTE nPersonalSpace = m_animation.GetPersonalSpace();
+
+        CPoint ptOpen = pArea->m_search.GetNearestOpenSquare(ptEntry,
+            GetTerrainTable(),
+            nPersonalSpace,
+            nSpecificID);
+
+        ptCenter.x = ptOpen.x * CPathSearch::GRID_SQUARE_SIZEX + CPathSearch::GRID_SQUARE_SIZEX / 2;
+        ptCenter.y = ptOpen.y * CPathSearch::GRID_SQUARE_SIZEY + CPathSearch::GRID_SQUARE_SIZEY / 2;
+
+        AddToArea(pArea, ptCenter, 0, CGameObject::LIST_FRONT);
+    }
+
+    pGame->m_bInAreaTransition = FALSE;
+
+    SetFacing(nSpecificID);
+
+    if (pGame->m_gameAreas[pGame->m_visibleArea] == m_pArea || m_pArea == NULL) {
+        if (pArea == m_pArea) {
+            const CRect& rView = pArea->m_cInfinity.rViewPort;
+            pArea->m_cInfinity.SetViewPosition(ptCenter.x - rView.Width() / 2,
+                ptCenter.y - rView.Height() / 2,
+                TRUE);
+        }
+    } else {
+        CRect rView = g_pBaldurChitin->m_pEngineWorld->GetNewViewSize();
+        if (!EqualRect(&rView, &m_pArea->m_cInfinity.rViewPort)) {
+            g_pBaldurChitin->m_pEngineWorld->SetNewViewSize(rView, FALSE);
+        }
+
+        pArea->m_cInfinity.SetViewPosition(ptCenter.x - rView.Width() / 2,
+            ptCenter.y - rView.Height() / 2,
+            TRUE);
+
+        if (bLocal) {
+            pGame->UnselectAll();
+        }
+    }
+
+    pGame->SelectCharacter(m_id, FALSE);
+    pGame->SelectToolbar();
+
+    if ((m_pos.x != -1 || m_pos.y != -1 || m_pArea != NULL) && bLocal) {
+        CMessage* message = new CMessageSpriteUpdate(this, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    if (bNotLoadedAgain == TRUE || bMarshalled == TRUE) {
+        g_pChitin->cProgressBar.m_nActionProgress +=
+            g_pChitin->cProgressBar.m_nActionTarget - g_pChitin->cProgressBar.m_nActionProgress;
+        g_pChitin->cProgressBar.m_bDisableMinibars = TRUE;
+        g_pChitin->m_bDisplayStale = TRUE;
+        pGame->sub_59FA00(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        g_pChitin->SetProgressBar(FALSE, 0, 0, 0, FALSE, 0, FALSE, 0, FALSE, FALSE, 255);
+    }
+
+    g_pChitin->cSoundMixer.m_nActiveArea = reinterpret_cast<DWORD_PTR>(pGame->m_gameAreas[pGame->m_visibleArea]);
+    g_pChitin->cSoundMixer.UpdateSoundList();
+
+    g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(FALSE);
+
+    if (pCachedRes != NULL && cCachedAreaResRef != CResRef()) {
+        if (bRequested) {
+            pCachedRes->CancelRequest();
+            bRequested = FALSE;
+        }
+
+        g_pChitin->cDimm.ReleaseResObject(pCachedRes);
+    }
+
+    pCachedRes = NULL;
+
+    return ACTION_DONE;
 }
 
 // 0x74CDB0

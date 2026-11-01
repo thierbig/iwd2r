@@ -674,6 +674,7 @@ public:
     SHORT sub_75F240();
     SHORT sub_75F3D0(int a1);
     SHORT LeaveArea();
+    SHORT LeaveAreaLUA();
     SHORT LeaveAreaName();
     SHORT Help();
     SHORT Rest();
