@@ -2,6 +2,7 @@
 
 #include "CBaldurChitin.h"
 #include "CGameArea.h"
+#include "CGameChunk.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
 #include "CGameEffect.h"
@@ -923,6 +924,32 @@ CProjectileExploding::CProjectileExploding(CResRef resRef)
     m_burstType = 0xFF;
 }
 
+// 0x52E940
+//
+// The weapon missile's burst: the fireball (CGameObject85BFE8) with its
+// colour ranges set from the leaf's own explosion colour range — the strike
+// range around, expanding at half the flight speed, destroyed by the first
+// wall it meets, no duration of its own.
+void CProjectileExplodingWeapon::Explode()
+{
+    BYTE colorRangeValues[7];
+    memset(colorRangeValues, m_explodeColorRange, sizeof(colorRangeValues));
+    new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
+        static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
+// 0x52F1C0
+//
+// The flame missile's burst: the same fireball with the colour ranges
+// hardwired to 0x43.
+void CProjectileExplodingFlame::Explode()
+{
+    BYTE colorRangeValues[7];
+    memset(colorRangeValues, 0x43, sizeof(colorRangeValues));
+    new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
+        static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
 // 0x531360
 CProjectileBolt::CProjectileBolt()
     : CProjectileBAM(CResRef("BOLT"))
@@ -1117,6 +1144,28 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     m_checkLOS = TRUE;
 }
 
+// 0x56FE30
+//
+// The third explosion description's ctor: no burned points yet, the two
+// chance bytes and the trailing flags clear, a 250 density base, a 6-tick
+// emission period and a 30 density-ramp divisor. (The exe also stores
+// uninitialized stack bytes into the two string flags at +0x00/+0x10 — a
+// VC6 artifact our default-constructed string members cover; our
+// CProjectileArea ctor at 0x56EDD0 stores these same values again after the
+// member ctor has run, so the net construction is unchanged.)
+CProjectileAreaExplosion3::CProjectileAreaExplosion3()
+{
+    m_pPoints = NULL;
+    field_30 = 0;
+    field_34 = 0;
+    field_35 = 0;
+    field_36 = 0;
+    field_38 = 250;
+    field_3C = 6;
+    field_40 = 30;
+    field_44 = 0;
+}
+
 // 0x571170
 CProjectileAcidStorm::CProjectileAcidStorm()
     : CProjectileArea(0x100)
@@ -1134,6 +1183,62 @@ CProjectileAcidStorm::CProjectileAcidStorm()
     m_nDuration = 45;
     field_1D8 = 1;
     m_nRadius = 200;
+}
+
+// 0x571930
+CProjectileCircleOfDeath::CProjectileCircleOfDeath()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "DSpellX";
+    m_explosion1.m_sound = "EFF_M42";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 300;
+}
+
+// 0x572830
+CProjectileHoldAnimal::CProjectileHoldAnimal()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 200;
+}
+
+// 0x572B30
+CProjectileHoldMonster::CProjectileHoldMonster()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 200;
+}
+
+// 0x573160
+CProjectileHaltUndead::CProjectileHaltUndead()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 150;
 }
 
 // 0x573460
@@ -1201,6 +1306,20 @@ CProjectileInsectPlague::CProjectileInsectPlague()
     m_nDuration = 1500;
     field_1D8 = 1;
     m_nRadius = 250;
+}
+
+// 0x573E90
+CProjectilePowerWordKill::CProjectilePowerWordKill()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "PWKillX";
+    m_explosion1.m_sound = "EFF_M39";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 150;
 }
 
 // 0x574140

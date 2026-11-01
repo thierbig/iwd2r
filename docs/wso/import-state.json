@@ -8775,6 +8775,92 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i067": {
+      "assigned_at": "2026-11-01T14:07:47+00:00",
+      "branch": "p3/wso-i067",
+      "closed_at": "2026-11-01T14:53:19+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x56FE30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitEmissionRanged::IcewindCSpellHitEmissionRanged",
+          "our_len": 0,
+          "their_len": 271
+        },
+        {
+          "address": "0x52E940",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingWeapon::Explode",
+          "our_len": 0,
+          "their_len": 260
+        },
+        {
+          "address": "0x52F1C0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingFlame::Explode",
+          "our_len": 0,
+          "their_len": 245
+        },
+        {
+          "address": "0x573160",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHaltUndead::CProjectileHaltUndead",
+          "our_len": 0,
+          "their_len": 206
+        },
+        {
+          "address": "0x573E90",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectilePowerWordKill::CProjectilePowerWordKill",
+          "our_len": 0,
+          "their_len": 206
+        },
+        {
+          "address": "0x571930",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCircleOfDeath::CProjectileCircleOfDeath",
+          "our_len": 0,
+          "their_len": 205
+        },
+        {
+          "address": "0x572830",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHoldAnimal::CProjectileHoldAnimal",
+          "our_len": 0,
+          "their_len": 205
+        },
+        {
+          "address": "0x572B30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHoldMonster::CProjectileHoldMonster",
+          "our_len": 0,
+          "their_len": 205
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
