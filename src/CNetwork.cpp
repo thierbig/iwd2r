@@ -1287,7 +1287,7 @@ CNetwork::~CNetwork()
 }
 
 // 0x7A4660
-void CNetwork::AddModemAddressToList(LPCSTR lpAddress)
+void CNetwork::AddModemAddressToList(LPCTSTR lpAddress)
 {
     m_psModemAddress[m_nTotalModemAddresses] = CString(lpAddress, strlen(lpAddress));
     m_nTotalModemAddresses++;
