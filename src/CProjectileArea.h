@@ -112,6 +112,17 @@ public:
     /* 064E */ std::set<LONG> m_excludedTargets;
 };
 
+// Acid Storm (vtable 0x84F274): the AStormX burst (no sound of its own),
+// then the persistent AStormA cloud on ARE_M04, both copy-from-back. It is
+// the one leaf setting both the +0x575 and +0x576 flips on the third
+// explosion, striking every 10 ticks for 45 with the hit modulus pinned at
+// 10000, 200 around. It adds no members of its own — the ctor writes only
+// inherited fields.
+class CProjectileAcidStorm : public CProjectileArea {
+public:
+    CProjectileAcidStorm();
+};
+
 // Fireball (projectile type 38, vtable 0x84F580): it flies as FirebaT to
 // the target point and explodes there in FirebaX, throwing up to 20
 // FirebaR flames and leaving FirebaA embers that wander over the burned
@@ -182,6 +193,16 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// Ice Storm (vtable 0x84FAFC): the IStormX burst (no sound of its own),
+// then the persistent IStormA cloud on ARE_M04, both copy-from-back, with
+// the +0x574 and +0x575 flips on the third explosion — the same shape as
+// Acid Storm but for 100 ticks instead of 45. It adds no members of its
+// own — the ctor writes only inherited fields.
+class CProjectileIceStorm : public CProjectileArea {
+public:
+    CProjectileIceStorm();
+};
+
 // Fiery Cloud (SPWI802, projectile type 214, vtable 0x84FB98): ICloudX burst,
 // ICloudR ring and the persistent ICloudA fire cloud (EFF_M40 / ARE_M05), all
 // copy-from-back; 100 around for 1050 ticks. Unique among the recovered cloud
@@ -201,6 +222,16 @@ public:
 class CProjectileInsectPlague : public CProjectileArea {
 public:
     CProjectileInsectPlague();
+};
+
+// Produce Fire (vtable 0x84FE08): the PFireX burst on EFF_P45, then the
+// persistent PFireA fire on ARE_P03, both copy-from-back, with the +0x574
+// and +0x575 flips and a 750 linger (+0x578) on the third explosion;
+// strikes every 10 ticks for 100, 60 around. It adds no members of its
+// own — the ctor writes only inherited fields.
+class CProjectileProduceFire : public CProjectileArea {
+public:
+    CProjectileProduceFire();
 };
 
 // Sleep (projectile type 42, vtable 0x84FEA4): EnchanX, 150 around; it puts
@@ -249,6 +280,16 @@ class CProjectileArea850A38 : public CProjectileArea {
 public:
     CProjectileArea850A38();
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
+// Big Boulder (vtable 0x850AD4): it travels to the point on BIGBOLDR
+// (radius 100, speed 7) with the fire and arrival sounds AM6103e and
+// AM5101e, and bursts with the +0x574 flip set and +0x575 clear, striking
+// every 10th find (hit modulus 10). It adds no members of its own — the
+// ctor writes only inherited fields.
+class CProjectileBigBoulder : public CProjectileArea {
+public:
+    CProjectileBigBoulder();
 };
 
 // Dispel Magic (projectile type 246, vtable 0x850C0C): AbjuraX, 150 around;

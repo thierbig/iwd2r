@@ -2,6 +2,7 @@
 #define CPROJECTILESINGLETARGET_H_
 
 #include "CProjectile.h"
+#include "CSound.h"
 #include "CVidBitmap.h"
 #include "CVidCell.h"
 #include "CVidPalette.h"
@@ -207,6 +208,41 @@ public:
     // Distance the shot is pushed past the picked target: the radius handed
     // to IcewindMisc::sub_5847B0 in Fire (a DWORD read at +0x2AE in the exe).
     /* 02AE */ LONG m_beamRange;
+};
+
+// The whirlwind (vtable 0x851444): a tornado that wanders the area on a
+// seeded course, playing ARE_P23 over its whole life and striking the
+// sprites it passes. WillScarlettOhara models the family as
+// CProjectileWhirlwind < IcewindCProjectileTravellingVFX <
+// CProjectileTravelling; the exe Fire 0x57FF80 closes with
+// CProjectileSingleTarget::Fire (0x5791D0), which is the anchor used here
+// (the same substitution as the classes above). The ctor 0x57F640 is parked
+// (docs/wso/import-parked/57F640.json — it wires the fork-only
+// IcewindCProjectileTargetMap strike tracker at +0x2BA), as are AIUpdate
+// 0x57F8D0 (docs/wso/import-parked/57F8D0.json) and PickWanderPoint
+// 0x5800E0 (docs/wso/import-parked/5800E0.json, unblocked by this class
+// existing); the fork's dtor (0x57F760) and OnArrival (0x580270) have not
+// been queued. None of those slots is declared — a declared-but-undefined
+// virtual would become the key function and leave the vtable unemitted —
+// so the class inherits the base virtuals for them.
+class CProjectileWhirlwind : public CProjectileSingleTarget {
+public:
+    // 0x57FF80. Points the loop sound at ARE_P23, makes it fire-and-forget
+    // on channel 15 of the area, starts it at the tornado's position, then
+    // launches through the base Fire with INVALID_INDEX for the target —
+    // the tornado never homes.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+
+    // +0x2BA..+0x2EF is the strike tracker the parked ctor builds (the
+    // fork-only IcewindCProjectileTargetMap); kept as raw bytes until that
+    // type is imported.
+    /* 02AE */ LONG m_nLifetime;
+    /* 02B2 */ LONG m_nLegBudget;
+    /* 02B6 */ LONG field_2B6;
+    /* 02BA */ BYTE field_2BA[0x36];
+    /* 02F0 */ CSound m_loopSound;
+    /* 0354 */ BYTE m_bFinishing;
+    /* 0356 */ LONG m_wanderSeed;
 };
 
 #endif /* CPROJECTILESINGLETARGET_H_ */

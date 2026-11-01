@@ -88,6 +88,45 @@ public:
     CProjectileSparkle(SHORT nPaletteType);
 };
 
+// The exploding-projectile intermediate (vtable 0x84DBDC): the delayed-burst
+// carrier. The ctor arms a child projectile (type 78) with an anyone filter
+// and a 0x100 strike and pre-check range, and readies two CVidCell explosion
+// slots; the parked virtuals (Render 0x52CF80, AIUpdate 0x52DD60, Fire
+// 0x52D9F0, OnArrival 0x52D7F0, AreaEffect 0x52D430 — all in
+// docs/wso/import-parked/) decode and fire the child in bursts around the
+// hit. WillScarlettOhara models it as CProjectileExploding <
+// CProjectileTravelling < CProjectileBAM; the exe ctor 0x52CCE0 bases
+// directly on CProjectileBAM (0x52AD60 — the resref by value, ret 0x8),
+// which is the anchor used here. None of the fork's virtual set (nor its
+// slot 0x0088 Explode override, COMDAT-folded with 0x78E730 in the exe) is
+// declared: a declared-but-undefined virtual would become the key function
+// and leave the vtable unemitted, so ours inherits the base slots.
+class CProjectileExploding : public CProjectileBAM {
+public:
+    // 0x52CCE0 (the resref is passed by value in the exe — ret 0x8)
+    CProjectileExploding(CResRef resRef);
+
+    // Native exe offsets; ours lay out after sizeof(CProjectileBAM) = 0x2A2
+    // under the reduced packing — the same drift as CProjectile84E030's
+    // WORD m_nCount at +0x2A0, which spans the base's field_2A0/field_2A1.
+    /* 02A0 */ SHORT m_strikeRange;
+    /* 02A2 */ SHORT m_preCheckRange;
+    /* 02A4 */ SHORT m_childProjectileType;
+    /* 02A6 */ SHORT m_strikesLeft;
+    /* 02A8 */ int m_nState;
+    /* 02AC */ SHORT m_lingerPeriod;
+    /* 02AE */ SHORT m_lingerCountdown;
+    /* 02B0 */ int m_bPreScan;
+    /* 02B4 */ CAIObjectType m_targetType;
+    /* 02F0 */ BYTE m_bBurstPending;
+    /* 02F1 */ BYTE m_burstType;
+    /* 02F2 */ int m_bCheckNonSprites;
+    /* 02F6 */ int m_bExplodeCell1Active;
+    /* 02FA */ CVidCell m_explodeCell1;
+    /* 03D4 */ int m_bExplodeCell2Active;
+    /* 03D8 */ CVidCell m_explodeCell2;
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {
@@ -132,6 +171,14 @@ public:
 class CProjectileBoulder : public CProjectileBAM {
 public:
     CProjectileBoulder();
+};
+
+// The dart projectile (vtable 0x84E25C): a CProjectileBAM on the DART
+// animation with 16 directions and its speed tripled. It adds no members of
+// its own — the ctor writes only inherited fields.
+class CProjectileDart : public CProjectileBAM {
+public:
+    CProjectileDart();
 };
 
 // The sling-stone projectile (vtable 0x84E2E4): a CProjectileBAM on the

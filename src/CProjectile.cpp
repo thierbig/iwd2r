@@ -898,6 +898,31 @@ CProjectileSparkle::CProjectileSparkle(SHORT nPaletteType)
     field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
+// 0x52CCE0
+CProjectileExploding::CProjectileExploding(CResRef resRef)
+    : CProjectileBAM(resRef)
+    , m_targetType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0)
+{
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    m_childProjectileType = 0x4E;
+    m_strikesLeft = 1;
+    m_nState = 0;
+    m_lingerPeriod = 100;
+    m_lingerCountdown = 0;
+    m_targetType.Set(CAIObjectType::ANYONE);
+    m_strikeRange = 0x100;
+    m_preCheckRange = 0x100;
+    m_bPreScan = 0;
+    m_bBurstPending = 0;
+    field_1BE = 0;
+    m_bExplodeCell1Active = 0;
+    m_bExplodeCell2Active = 0;
+    m_bCheckNonSprites = 0;
+    m_burstType = 0xFF;
+}
+
 // 0x531360
 CProjectileBolt::CProjectileBolt()
     : CProjectileBAM(CResRef("BOLT"))
@@ -927,6 +952,23 @@ CProjectileBoulder::CProjectileBoulder()
     field_1D8 = 16;
     m_fireSoundRef = "";
     m_speed = static_cast<SHORT>(m_speed * 3 / 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x531790
+CProjectileDart::CProjectileDart()
+    : CProjectileBAM(CResRef("DART"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 3);
     m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
     m_sVisualEffect = "";
     field_182 = CGameObjectArray::INVALID_INDEX;
@@ -1075,6 +1117,44 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     m_checkLOS = TRUE;
 }
 
+// 0x571170
+CProjectileAcidStorm::CProjectileAcidStorm()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "AStormX";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "AStormA";
+    m_explosion3.m_sound = "ARE_M04";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_36 = TRUE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 45;
+    field_1D8 = 1;
+    m_nRadius = 200;
+}
+
+// 0x573460
+CProjectileIceStorm::CProjectileIceStorm()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "IStormX";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "IStormA";
+    m_explosion3.m_sound = "ARE_M04";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 100;
+    field_1D8 = 1;
+    m_nRadius = 200;
+}
+
 // 0x573600
 CProjectileFieryCloud::CProjectileFieryCloud()
     : CProjectileArea(0x100)
@@ -1123,6 +1203,27 @@ CProjectileInsectPlague::CProjectileInsectPlague()
     m_nRadius = 250;
 }
 
+// 0x574140
+CProjectileProduceFire::CProjectileProduceFire()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "PFireX";
+    m_explosion1.m_sound = "EFF_P45";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "PFireA";
+    m_explosion3.m_sound = "ARE_P03";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 750;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 100;
+    field_1D8 = 1;
+    m_nRadius = 60;
+}
+
 // 0x576BA0
 void CProjectileDBFireball::AIUpdate()
 {
@@ -1159,6 +1260,32 @@ void CProjectileDBFireball::AIUpdate()
 std::vector<CPoint> IcewindCProjectileScorcher::m_offsets;
 // 0x8E52E8
 BYTE IcewindCProjectileScorcher::m_offsetsInitialized = FALSE;
+
+// 0x577590
+CProjectileBigBoulder::CProjectileBigBoulder()
+    : CProjectileArea(100)
+{
+    const char* szTravel = "BIGBOLDR";
+    if (strlen(szTravel) != 0) {
+        field_1DE = TRUE;
+        SetTravelAnimation(CResRef(szTravel));
+        m_bTravels = TRUE;
+    } else {
+        field_1DE = FALSE;
+        m_bTravels = FALSE;
+    }
+
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = FALSE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    field_1D8 = 1;
+    m_nRadius = 100;
+    m_speed = 7;
+    m_fireSoundRef = CResRef("AM6103e");
+    m_arrivalSoundRef = CResRef("AM5101e");
+}
 
 // 0x57AEB0
 IcewindCProjectileScorcher::IcewindCProjectileScorcher()
@@ -1402,6 +1529,22 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE);
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x57FF80
+// The tornado's own launch: it starts the ARE_P23 loop (fire-and-forget on
+// channel 15 of the area, at the tornado's position) and goes through the
+// base with INVALID_INDEX for the target — the tornado never homes.
+void CProjectileWhirlwind::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)target;
+
+    m_loopSound.SetResRef(CResRef("ARE_P23"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    CProjectileSingleTarget::Fire(pArea, source, CGameObjectArray::INVALID_INDEX, targetPos, nHeight, nType);
 }
 
 // 0x580B30
