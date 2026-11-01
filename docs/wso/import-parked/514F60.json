@@ -1,0 +1,7 @@
+{
+  "address": "0x514F60",
+  "name": "CMessageProjectileImmumityUpdate::CMessageProjectileImmumityUpdate",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "Not measurable on its own: no scenario that the batch's measurements ran ever builds a CMessageProjectileImmumityUpdate. Parked with its dependencies, imported with the batch and parked back to the merge base's text alongside it: rows 0x40A0E0 CMessageProjectileImmumityUpdate::GetMsgType and 0x514FF0 CMessageProjectileImmumityUpdate dtor. The header keeps all merge-base declarations (the declared-but-undefined dtor stays the class's key function, so no vtable is emitted); the class's kept rows (0x4088A0 GetCommType, 0x515010 MarshalMessage, 0x515180 UnmarshalMessage, 0x515210 Run) remain imported."
+}
