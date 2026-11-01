@@ -8861,6 +8861,92 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i068": {
+      "assigned_at": "2026-11-01T14:57:24+00:00",
+      "branch": "p3/wso-i068",
+      "closed_at": "2026-11-01T18:06:09+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x56F1F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::~IcewindCProjectileSpellHit",
+          "our_len": 0,
+          "their_len": 203
+        },
+        {
+          "address": "0x52F760",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSkullTrap::Explode",
+          "our_len": 0,
+          "their_len": 181
+        },
+        {
+          "address": "0x579DE0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::~CProjectileCone",
+          "our_len": 0,
+          "their_len": 168
+        },
+        {
+          "address": "0x56FDC0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitEmission::IcewindCSpellHitEmission",
+          "our_len": 0,
+          "their_len": 167
+        },
+        {
+          "address": "0x5778A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSymbolOfDeath::CProjectileSymbolOfDeath",
+          "our_len": 0,
+          "their_len": 128
+        },
+        {
+          "address": "0x580270",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::OnArrival",
+          "our_len": 0,
+          "their_len": 121
+        },
+        {
+          "address": "0x5806C0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::CProjectileLightningBolt",
+          "our_len": 0,
+          "their_len": 106
+        },
+        {
+          "address": "0x5295D0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::SetVidCell",
+          "our_len": 0,
+          "their_len": 78
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
