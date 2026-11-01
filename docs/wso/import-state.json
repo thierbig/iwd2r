@@ -8517,6 +8517,92 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i064": {
+      "assigned_at": "2026-11-01T07:19:17+00:00",
+      "branch": "p3/wso-i064",
+      "closed_at": "2026-11-01T11:27:18+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5808A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::AIUpdate",
+          "our_len": 0,
+          "their_len": 1516
+        },
+        {
+          "address": "0x576990",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDBFireball::CProjectileDBFireball",
+          "our_len": 0,
+          "their_len": 797
+        },
+        {
+          "address": "0x5800E0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::PickWanderPoint",
+          "our_len": 0,
+          "their_len": 698
+        },
+        {
+          "address": "0x5745E0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSnowballSwarm::CProjectileSnowballSwarm",
+          "our_len": 0,
+          "their_len": 634
+        },
+        {
+          "address": "0x52CA10",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSparkle::CProjectileSparkle",
+          "our_len": 0,
+          "their_len": 623
+        },
+        {
+          "address": "0x529660",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::SetTravelPalette",
+          "our_len": 0,
+          "their_len": 589
+        },
+        {
+          "address": "0x52D7F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::OnArrival",
+          "our_len": 0,
+          "their_len": 585
+        },
+        {
+          "address": "0x580B30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::Fire",
+          "our_len": 0,
+          "their_len": 550
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
