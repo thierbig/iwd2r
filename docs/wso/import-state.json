@@ -8603,6 +8603,92 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i065": {
+      "assigned_at": "2026-11-01T11:28:32+00:00",
+      "branch": "p3/wso-i065",
+      "closed_at": "2026-11-01T12:41:59+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x576BA0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDBFireball::AIUpdate",
+          "our_len": 0,
+          "their_len": 547
+        },
+        {
+          "address": "0x5324A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileArrow::CProjectileArrow",
+          "our_len": 0,
+          "their_len": 520
+        },
+        {
+          "address": "0x532720",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSPFLMARR::CProjectileSPFLMARR",
+          "our_len": 0,
+          "their_len": 513
+        },
+        {
+          "address": "0x52F260",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSkullTrap::CProjectileSkullTrap",
+          "our_len": 0,
+          "their_len": 499
+        },
+        {
+          "address": "0x573AF0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileInsectPlague::CProjectileInsectPlague",
+          "our_len": 0,
+          "their_len": 485
+        },
+        {
+          "address": "0x573600",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFieryCloud::CProjectileFieryCloud",
+          "our_len": 0,
+          "their_len": 474
+        },
+        {
+          "address": "0x52E230",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingWeapon::CProjectileExplodingWeapon",
+          "our_len": 0,
+          "their_len": 473
+        },
+        {
+          "address": "0x52E9F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingFlame::CProjectileExplodingFlame",
+          "our_len": 0,
+          "their_len": 470
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
