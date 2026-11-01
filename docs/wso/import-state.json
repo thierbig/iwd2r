@@ -8340,10 +8340,11 @@
     "i061": {
       "assigned_at": "2026-11-01T00:43:14+00:00",
       "branch": "p3/wso-i061",
-      "closed_at": null,
+      "closed_at": "2026-11-01T04:03:11+00:00",
       "files": [
         "src/CProjectile.cpp"
       ],
+      "gate": "full",
       "pool": "glm",
       "rows": [
         {
@@ -8411,7 +8412,7 @@
           "their_len": 290
         }
       ],
-      "status": "assigned",
+      "status": "closed",
       "verdicts": {}
     },
     "i062": {
