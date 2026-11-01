@@ -1906,6 +1906,49 @@ class LabelsTest(unittest.TestCase):
                          [(0x401010, 'Helper'), (0x401020, 'CFoo::~CFoo'),
                           (0x401030, 'CResRef::operator!=')])
 
+    def test_ours_skips_comment_block_between_marker_and_definition(self):
+        # ApplyTriggers-style: a full paragraph of explanation between the
+        # marker and the signature. The lookahead used to cap this at 3 lines.
+        self.write('src/a.cpp',
+                   '// 0x401000\n'
+                   '// The trigger loop: one line.\n'
+                   '// A second line.\n'
+                   '// A third line.\n'
+                   '// A fourth line.\n'
+                   '// A fifth line.\n'
+                   '// A sixth line.\n'
+                   'void CFoo::ApplyTriggers()\n{\n}\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x401000, 'CFoo::ApplyTriggers')])
+
+    def test_ours_reads_wrapped_signature(self):
+        # A first signature line ending in `,` is a signature that wraps, not
+        # data, when its `(` is unclosed; the name comes from that line.
+        self.write('src/b.cpp',
+                   '// 0x402000\n'
+                   'void CFoo::Fire(CGameArea* pArea, LONG nSource, LONG nTarget,\n'
+                   '    LONG nLevel)\n{\n}\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x402000, 'CFoo::Fire')])
+        # A `,`-ending line whose parens balance is no wrapped signature.
+        self.write('src/b2.cpp',
+                   '// 0x402100\n'
+                   'CFoo::Bar(1), CFoo::Baz(2),\n'
+                   '    CFoo::Qux(3);\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x402000, 'CFoo::Fire')])
+
+    def test_ours_still_rejects_data_after_comments(self):
+        # Comment lines between marker and definition do not turn a data line
+        # into a definition.
+        self.write('src/c.cpp',
+                   '// 0x403000\n'
+                   '// a note\n'
+                   '// another\n'
+                   '// a third\n'
+                   'static const LONG CFoo::K = 5;\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')), [])
+
     def test_ieex_skips_placeholders(self):
         path = self.write('function_names.db',
                           '0x401000 FUN_00401000\r\n'
@@ -7476,6 +7519,20 @@ class XrecTest(unittest.TestCase):
         self.assertEqual(sorted(f), ['CThing::Alpha', 'CThing::Beta'])
         self.assertEqual(f['CThing::Alpha'], (None, '{returnx+1;}'))
         self.assertEqual(f['CThing::Beta'], ('0x401000', '{return2;}'))
+
+    def test_xrec_address_above_comment_block(self):
+        # The marker may sit above a comment block: the address is read from
+        # the nearest line above with text on it, as labels.definitions does.
+        f = xrec.funcs(
+            '// 0x402000\n'
+            '// The wrapper: a note,\n'
+            '// a second line,\n'
+            '// a third line.\n'
+            'int CThing::Beta(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CThing::Beta'], ('0x402000', '{return2;}'))
 
     def test_xrec_matches_renamed_function_by_address(self):
         real = '{ints=m_x;s+=x;s+=m_y;s-=x;return s==0&&x!=0;}'
@@ -26129,6 +26186,30 @@ class ReStatusTest(unittest.TestCase):
             self.assertNotIn(a, got)
         for a in ('0x100A', '0x100C', '0x100D'):
             self.assertTrue(got[a][1], a)
+
+    def test_marker_parser_comment_blocks_and_wrapped_signatures(self):
+        # The same two layouts labels.definitions reads: a comment block of
+        # any length between marker and signature, and a signature that wraps
+        # with its first line ending in `,` (unclosed paren). A data line
+        # behind comments is still no definition.
+        rs = load_tool('re_status')
+        body = 'int total = x * 2 + 1;\n    total += x;\n    return total + 12345;\n'
+        src = (
+            '// 0x1000\n'
+            '// one\n// two\n// three\n// four\n// five\n// six\n'
+            'void A::ApplyTriggers()\n{\n    ' + body + '}\n'
+            '// 0x1001\n'
+            'void A::Fire(CGameArea* pArea, LONG nSource, LONG nTarget,\n'
+            '    LONG nLevel)\n{\n    ' + body + '}\n'
+            '// 0x1002\n'
+            '// a note\n'
+            'static const LONG A::K = 5;\n')
+        got = {a: (n, s) for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, (n, s) in got.items() if not s},
+                         {'0x1000', '0x1001'})
+        self.assertEqual(got['0x1000'][0], 'A::ApplyTriggers')
+        self.assertEqual(got['0x1001'][0], 'A::Fire')
+        self.assertNotIn('0x1002', got)
 
     def test_operator_definitions_and_brace_initializers(self):
         rs = load_tool('re_status')
