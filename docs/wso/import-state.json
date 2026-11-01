@@ -8336,6 +8336,105 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i061": {
+      "assigned_at": "2026-11-01T00:43:14+00:00",
+      "branch": "p3/wso-i061",
+      "closed_at": null,
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5319A0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSlingStone::CProjectileSlingStone",
+          "our_len": 0,
+          "their_len": 397
+        },
+        {
+          "address": "0x534600",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileMAGMISS::CProjectileMAGMISS",
+          "our_len": 0,
+          "their_len": 389
+        },
+        {
+          "address": "0x532260",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAcidBlob::CProjectileAcidBlob",
+          "our_len": 0,
+          "their_len": 372
+        },
+        {
+          "address": "0x533A50",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSprayLifetime::AIUpdate",
+          "our_len": 0,
+          "their_len": 365
+        },
+        {
+          "address": "0x536F40",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectile::CompressTime",
+          "our_len": 0,
+          "their_len": 292
+        },
+        {
+          "address": "0x531570",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBoulder::CProjectileBoulder",
+          "our_len": 0,
+          "their_len": 292
+        },
+        {
+          "address": "0x531BE0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAxe::CProjectileAxe",
+          "our_len": 0,
+          "their_len": 290
+        },
+        {
+          "address": "0x531DF0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSpear::CProjectileSpear",
+          "our_len": 0,
+          "their_len": 290
+        }
+      ],
+      "status": "assigned",
+      "verdicts": {}
+    },
+    "i062": {
+      "assigned_at": "2026-11-01T00:43:14+00:00",
+      "branch": "p3/wso-i062",
+      "closed_at": "2026-11-01T01:42:56+00:00",
+      "files": [
+        "src/CNetwork.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7A4660",
+          "category": "only_theirs",
+          "file": "src/CNetwork.cpp",
+          "name": "CNetwork::AddModemAddressToList",
+          "our_len": 0,
+          "their_len": 105
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }

@@ -1286,6 +1286,13 @@ CNetwork::~CNetwork()
     DeleteCriticalSection(&field_F52);
 }
 
+// 0x7A4660
+void CNetwork::AddModemAddressToList(LPCTSTR lpAddress)
+{
+    m_psModemAddress[m_nTotalModemAddresses] = CString(lpAddress, strlen(lpAddress));
+    m_nTotalModemAddresses++;
+}
+
 // 0x7A46E0
 void CNetwork::AddServiceProviderToList(const CString& sServiceProviderName, const GUID& sServiceProviderGuid, LPVOID lpConnection, size_t size)
 {
