@@ -121,6 +121,7 @@ public:
 
     CNetwork();
     ~CNetwork();
+    void AddModemAddressToList(LPCTSTR lpAddress);
     void AddServiceProviderToList(const CString& sServiceProviderName, const GUID& sServiceProviderGuid, LPVOID lpConnection, size_t size);
     BOOLEAN EnumerateServiceProviders();
     INT FindModemAddress(const CString& sAddress);
@@ -166,6 +167,7 @@ public:
     void sub_7A73D0(CString& a1);
     INT ThreadLoop();
     void SlidingWindowTimeouts();
+    BYTE* FetchFrame(PLAYER_ID& dpIDFrom, DWORD& dwSize);
     BOOLEAN HandleSystemMessage(BYTE* pData, DWORD dwSize);
     void AddMessageToWindow(PLAYER_ID idTo, DWORD dwFlags, BYTE* pData, DWORD dwSize);
     BYTE* CreateCopyMessage(const void* lpData, DWORD dwDataSize, BOOLEAN bCompressed, unsigned char a4, INT nFrame);
