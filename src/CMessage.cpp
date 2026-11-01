@@ -318,6 +318,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STOP_ESCAPE_AREA = 82;
 // 0x84CF2C
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TIME_STOP = 85;
 
+// 0x84CF2D
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX = 86;
+
 // 0x84CF2E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_RELEASE = 87;
 
@@ -356,6 +359,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE = 102;
 
 // 0x84CF3E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_103 = 103;
+
+// 0x84CF3F
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE = 104;
 
 // 0x84CF40
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_GROUP = 105;
@@ -6425,7 +6431,7 @@ BOOL CMessageAddEffect::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
     if (rc == CGameObjectArray::SUCCESS) {
         if ((object->GetObjectType() & CGameObject::TYPE_AIBASE) != 0
-                && object->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            && object->GetObjectType() == CGameObject::TYPE_SPRITE) {
             auto* sprite = static_cast<CGameSprite*>(object);
             m_effect->m_casterLevel = static_cast<LONG>(sprite->GetCasterLevel(&spell, 0, 0));
             m_effect->m_spellPenetrationBonus = static_cast<DWORD>(sprite->GetFeatValue(0x40)) << 1;
@@ -7378,16 +7384,22 @@ void CMessageAddItem::MarshalMessage(BYTE** pData, DWORD* dwSize)
     *dwSize = 21 + length;
     UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
     DWORD cnt = 0;
-    memcpy(*pData + cnt, &player, sizeof(player)); cnt += sizeof(player);
-    memcpy(*pData + cnt, &id, sizeof(id)); cnt += sizeof(id);
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &id, sizeof(id));
+    cnt += sizeof(id);
     (*pData)[cnt++] = length;
-    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), name.GetLength()); cnt += name.GetLength();
+    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), name.GetLength());
+    cnt += name.GetLength();
     for (INT ability = 0; ability < 3; ability++) {
         WORD uses = m_item.GetUsageCount(ability);
-        memcpy(*pData + cnt, &uses, sizeof(uses)); cnt += sizeof(uses);
+        memcpy(*pData + cnt, &uses, sizeof(uses));
+        cnt += sizeof(uses);
     }
-    memcpy(*pData + cnt, &m_item.m_wear, sizeof(m_item.m_wear)); cnt += sizeof(m_item.m_wear);
-    memcpy(*pData + cnt, &m_item.m_flags, sizeof(m_item.m_flags)); cnt += sizeof(m_item.m_flags);
+    memcpy(*pData + cnt, &m_item.m_wear, sizeof(m_item.m_wear));
+    cnt += sizeof(m_item.m_wear);
+    memcpy(*pData + cnt, &m_item.m_flags, sizeof(m_item.m_flags));
+    cnt += sizeof(m_item.m_flags);
     UTIL_ASSERT(cnt == *dwSize);
 }
 
@@ -7398,18 +7410,25 @@ BOOL CMessageAddItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
     PLAYER_ID player;
     LONG id, local;
-    memcpy(&player, pData + cnt, sizeof(player)); cnt += sizeof(player);
-    memcpy(&id, pData + cnt, sizeof(id)); cnt += sizeof(id);
-    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, id, local) != TRUE) return FALSE;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&id, pData + cnt, sizeof(id));
+    cnt += sizeof(id);
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, id, local) != TRUE)
+        return FALSE;
     m_targetId = local;
     BYTE length = pData[cnt++];
-    char name[9] = {0};
-    memcpy(name, pData + cnt, length); cnt += length;
+    char name[9] = { 0 };
+    memcpy(name, pData + cnt, length);
+    cnt += length;
     WORD uses[3], wear;
     DWORD flags;
-    memcpy(uses, pData + cnt, sizeof(uses)); cnt += sizeof(uses);
-    memcpy(&wear, pData + cnt, sizeof(wear)); cnt += sizeof(wear);
-    memcpy(&flags, pData + cnt, sizeof(flags)); cnt += sizeof(flags);
+    memcpy(uses, pData + cnt, sizeof(uses));
+    cnt += sizeof(uses);
+    memcpy(&wear, pData + cnt, sizeof(wear));
+    cnt += sizeof(wear);
+    memcpy(&flags, pData + cnt, sizeof(flags));
+    cnt += sizeof(flags);
     {
         CItem item(CResRef(reinterpret_cast<BYTE*>(name)), uses[0], uses[1], uses[2], wear, flags);
         m_item.SetResRef(item.cResRef, TRUE);
@@ -16203,19 +16222,26 @@ void CMessageFireProjectile::MarshalMessage(BYTE** pData, DWORD* dwSize)
     UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
     DWORD cnt = 0;
     auto write = [&](const void* value, DWORD size) { memcpy(*pData + cnt, value, size); cnt += size; };
-    write(&player, sizeof(player)); write(&remote, sizeof(remote)); write(&m_projectileType, sizeof(WORD));
+    write(&player, sizeof(player));
+    write(&remote, sizeof(remote));
+    write(&m_projectileType, sizeof(WORD));
     do {
         rc = objects->GetShare(m_projectileTargetId, CGameObjectArray::THREAD_ASYNCH, &object, INFINITE);
     } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
     if (rc == CGameObjectArray::SUCCESS) {
-        player = object->m_remotePlayerID; remote = object->m_remoteObjectID;
+        player = object->m_remotePlayerID;
+        remote = object->m_remoteObjectID;
         objects->ReleaseShare(m_projectileTargetId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
     } else {
-        player = 0; remote = CGameObjectArray::INVALID_INDEX;
+        player = 0;
+        remote = CGameObjectArray::INVALID_INDEX;
     }
-    write(&player, sizeof(player)); write(&remote, sizeof(remote));
-    write(&m_projectileTarget, sizeof(CPoint)); write(&m_height, sizeof(LONG));
-    write(&field_20, sizeof(field_20)); write(&field_1E, sizeof(field_1E));
+    write(&player, sizeof(player));
+    write(&remote, sizeof(remote));
+    write(&m_projectileTarget, sizeof(CPoint));
+    write(&m_height, sizeof(LONG));
+    write(&field_20, sizeof(field_20));
+    write(&field_1E, sizeof(field_1E));
     UTIL_ASSERT(cnt == *dwSize);
 }
 
@@ -16225,18 +16251,25 @@ BOOL CMessageFireProjectile::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     UTIL_ASSERT(pData != NULL);
     DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
     auto read = [&](void* value, DWORD size) { memcpy(value, pData + cnt, size); cnt += size; };
-    PLAYER_ID player; LONG remote, local;
-    read(&player, sizeof(player)); read(&remote, sizeof(remote));
+    PLAYER_ID player;
+    LONG remote, local;
+    read(&player, sizeof(player));
+    read(&remote, sizeof(remote));
     auto* remotes = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
     m_targetId = remotes->Find(player, remote, local) == TRUE ? local : CGameObjectArray::INVALID_INDEX;
-    read(&m_projectileType, sizeof(WORD)); read(&player, sizeof(player)); read(&remote, sizeof(remote));
+    read(&m_projectileType, sizeof(WORD));
+    read(&player, sizeof(player));
+    read(&remote, sizeof(remote));
     if (remotes->Find(player, remote, local) != TRUE) {
-        if (player != 0 || remote != CGameObjectArray::INVALID_INDEX) return FALSE;
+        if (player != 0 || remote != CGameObjectArray::INVALID_INDEX)
+            return FALSE;
         local = CGameObjectArray::INVALID_INDEX;
     }
     m_projectileTargetId = local;
-    read(&m_projectileTarget, sizeof(CPoint)); read(&m_height, sizeof(LONG));
-    read(&field_20, sizeof(field_20)); read(&field_1E, sizeof(field_1E));
+    read(&m_projectileTarget, sizeof(CPoint));
+    read(&m_height, sizeof(LONG));
+    read(&field_20, sizeof(field_20));
+    read(&field_1E, sizeof(field_1E));
     UTIL_ASSERT(cnt == dwSize);
     return TRUE;
 }
@@ -17258,6 +17291,131 @@ void CMessageWeaponImmumityUpdate::Run()
         }
 
         g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// NOTE: The original folds this destructor into 0x4B2340, a body it shares
+// with the other message classes whose destructors do nothing of their own
+// (the original calls it 121-411 times per scenario, ours never calls this
+// copy), so the address is not this copy's to claim.
+CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate()
+{
+}
+
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageSpellLevelImmumityUpdate::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
+// 0x516D50
+void CMessageSpellLevelImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 32328
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
+        LONG remoteObjectID = pObject->m_remoteObjectID;
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+
+        *dwSize = sizeof(PLAYER_ID)
+            + sizeof(LONG)
+            + sizeof(m_spellLevelImmunities.m_levels);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 32349
+        UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+        DWORD cnt = 0;
+
+        *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+        cnt += sizeof(LONG);
+
+        memcpy(*pData + cnt, m_spellLevelImmunities.m_levels, sizeof(m_spellLevelImmunities.m_levels));
+        cnt += sizeof(m_spellLevelImmunities.m_levels);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 32363
+        UTIL_ASSERT(cnt == *dwSize);
+    } else {
+        *dwSize = 0;
+    }
+}
+
+// 0x516E90
+BOOL CMessageSpellLevelImmumityUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 32378
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    memcpy(m_spellLevelImmunities.m_levels, pData + cnt, sizeof(m_spellLevelImmunities.m_levels));
+    cnt += sizeof(m_spellLevelImmunities.m_levels);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    // NOTE: Missing trailing guard.
+
+    return TRUE;
+}
+
+// 0x516F10
+void CMessageSpellLevelImmumityUpdate::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+            pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel = m_spellLevelImmunities;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
@@ -18944,6 +19102,14 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageProjectileTrailingVFX::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
 // 0x511D00
 void CMessageProjectileTrailingVFX::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19032,7 +19198,8 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
     LONG localObjectID;
     if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
-            remoteObjectID, localObjectID) == TRUE) {
+            remoteObjectID, localObjectID)
+        == TRUE) {
         m_targetId = localObjectID;
     } else {
         m_targetId = CGameObjectArray::INVALID_INDEX;
@@ -19062,6 +19229,35 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     cnt += sizeof(LONG);
     m_launchHeight = *reinterpret_cast<SHORT*>(pData + cnt);
     return TRUE;
+}
+
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageProjectileImmumityUpdate::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
+// 0x514FF0
+CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
+{
+}
+
+// NOTE: The original's slot holds 0x40A0E0, the one GetMsgType body every
+// CMessage subclass shares (identical-code folding), so the address stays on
+// the copies the tree already labels.
+BYTE CMessageProjectileImmumityUpdate::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// NOTE: The original's slot holds 0x516D40, one body for both immunity
+// messages (vtables 0x84D548 and 0x84D580): it returns the spell-level
+// immunities subtype (the byte at 0x84CF3F) for this message too.
+BYTE CMessageProjectileImmumityUpdate::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
 }
 
 // 0x515010
@@ -19150,7 +19346,8 @@ BOOL CMessageProjectileImmumityUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSiz
 
     LONG localObjectID;
     if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
-            remoteObjectID, localObjectID) != TRUE) {
+            remoteObjectID, localObjectID)
+        != TRUE) {
         return FALSE;
     }
 
@@ -19182,4 +19379,38 @@ void CMessageProjectileImmumityUpdate::Run()
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x5041A0
+BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15367
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    m_slot = *reinterpret_cast<SHORT*>(pData + cnt);
+    cnt += sizeof(m_slot);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15393
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
 }

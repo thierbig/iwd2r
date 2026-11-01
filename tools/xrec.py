@@ -15,8 +15,9 @@ integration waves work from.
 
 A function is matched between the trees by its // 0xADDR comment first (a
 renamed function is still the function) and by name second; the address is
-read from the signature's own line or the line just above it, the convention
-of both trees. An address two functions of one tree carry (shared thunks and
+read from the signature's own line or the nearest line above with text on it
+(comment and blank lines between the marker and the signature are skipped, as
+labels.definitions skips them), the convention of both trees. An address two functions of one tree carry (shared thunks and
 unknown addresses get stamped alike) is no key; those functions match by
 name. Bodies are compared brace-matched, whitespace and comments
 stripped: rough but symmetric, so the noise lands on both sides alike.
@@ -65,11 +66,17 @@ def blank_comments(text):
 
 def signature_addr(text, masked, m):
     """The // 0xADDR comment of one signature match: on its own line, or on
-    the line just above it. Read from the unmasked text."""
+    the nearest line above with text on it — comment and blank lines between
+    the marker and the signature are skipped, as labels.definitions skips
+    them. Read from the unmasked text."""
     line = masked.rfind('\n', 0, m.start()) + 1
     windows = [(line, m.end())]
-    if line:
-        windows.append((masked.rfind('\n', 0, line - 1) + 1, line - 1))
+    while line:
+        start = masked.rfind('\n', 0, line - 1) + 1
+        windows.append((start, line - 1))
+        if masked[start:line - 1].strip():
+            break
+        line = start
     for a, b in windows:
         hit = addr.search(text[a:b])
         if hit:

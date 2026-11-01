@@ -108,18 +108,22 @@ public:
 // AIUpdate 0x57B210, Render 0x57B780, Fire 0x57B1D0, and DeliverEffects —
 // slot 0x0078 holds 0x799CA0, CProjectileArea85072C::OnArrival, an empty
 // function MSVC ICF-folded with this class's equally empty DeliverEffects.
-// AIUpdate and Render are parked i047 rows 0x57B210/0x57B780, so the base
-// overrides are declarations only; nothing instantiates this class, which
-// keeps them link-safe.
 class IcewindCProjectileScorcher : public CProjectileSingleTarget {
 public:
-    // 0x57B080. Scalar deleting dtor: the delete branch calls
-    // operator_delete 0x7FC984, the body at 0x57B0A0 tears down the
-    // std::set member.
-    /* 0000 */ ~IcewindCProjectileScorcher() override;
-    // 0x57B210 (parked i047).
-    /* 000C */ void AIUpdate() override;
-    // 0x57B780 (parked i047).
+    // 0x57AEB0. Bases on CProjectileSingleTarget(CResRef("AScorcT")), then
+    // tunes the wave: 3-tick strike / 60-tick clear cadence, TRA_M04 fire
+    // sound, speed = frameHeight*3/4, life span 110, height enabled.
+    IcewindCProjectileScorcher();
+    // Slots 0x0000 and 0x000C are not declared: the dtor 0x57B080 and
+    // AIUpdate 0x57B210 are parked (docs/wso/import-parked/57B080.json —
+    // exercised by no scenario — and 57B210.json, whose life-span-0 exit is
+    // `delete this` through the parked dtor), so the class inherits the base
+    // virtuals for those slots; a declared-but-undefined dtor would become
+    // the key function and leave the vtable unemitted, breaking the link
+    // against the 0x57AEB0 ctor's vtable store. 0x57B080's scalar deleting
+    // dtor calls operator_delete 0x7FC984; the body at 0x57B0A0 tears down
+    // the std::set member.
+    // 0x57B780.
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
     // 0x57B1D0: marshals the seven arguments, calls the base Fire at
     // 0x5791D0, stores +0x2D2, then invokes slot 0x0078.
@@ -140,9 +144,45 @@ public:
     /* 0088 */ virtual void GatherTargets();
     /* 008C */ virtual void Strike(LONG target, BYTE initial);
 
+    /* 02AE */ BYTE m_lifeSpan;
+    /* 02AF */ BYTE m_nSegments;
+    /* 02B0 */ LONG m_deltaZ;
+    /* 02B4 */ BYTE m_bGlow;
+
     // The ids this wave has already struck (exe std::set internals: _Myhead
     // 0x2BA, _Multi 0x2BE, NIL sentinel 0x8E28C8).
     /* 02B6 */ std::set<DWORD> m_struckTargets;
+
+    /* 02C6 */ LONG m_tickCount;
+    /* 02CA */ LONG m_strikePeriod;
+    /* 02CE */ LONG m_clearPeriod;
+    /* 02D2 */ LONG m_strikeTarget;
+};
+
+// The chain-lightning carrier (vtable 0x850F14): each strike of a chain
+// lightning spawns one of these, which re-strikes a growing set of targets.
+// WillScarlettOhara models the family as IcewindCProjectileChainLightning
+// < IcewindCProjectileTravellingVFX < CProjectileTravelling with the
+// struck-id std::set at +0x2AE; the exe ctor 0x57C510 bases it on
+// CProjectileSingleTarget (0x578110) with CResRef("CLightT"), which is the
+// anchor used here.
+class IcewindCProjectileChainLightning : public CProjectileSingleTarget {
+public:
+    // 0x57C510. Copies the struck-target set (its sole argument), then
+    // retunes the carrier: CLightT cell at sequence 0, 16 directions,
+    // TRA_09 fire sound, speed doubled with a native WORD shift, and both
+    // height gates cleared. DecodeProjectile's chain-lightning case
+    // (0x5250B0) news 0x2BE bytes — the native class size — and hands the
+    // ctor a set freshly built on its stack.
+    explicit IcewindCProjectileChainLightning(const std::set<LONG>& struckTargets);
+    // Slot 0x0078 is not declared: DeliverEffects (0x57C7B0) is parked
+    // (docs/wso/import-parked/57C7B0.json), so the class inherits the base
+    // virtual for that slot.
+    // The ids this carrier has already struck (exe std::set internals: _Myhead
+    // 0x2B2, _Multi 0x2B6, _Mysize 0x2BA, NIL sentinel 0x8D48B4, refcount
+    // 0x8D48B0; native size 0x2BE). It is the last member, so the VC6-vs-ours
+    // std::set size drift stays inside sizeof.
+    /* 02AE */ std::set<LONG> m_struckTargets;
 };
 
 #endif /* CPROJECTILESINGLETARGET_H_ */
