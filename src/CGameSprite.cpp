@@ -10390,6 +10390,141 @@ SHORT CGameSprite::Rest()
     return ACTION_DONE;
 }
 
+// 0x750F10
+SHORT CGameSprite::JoinParty()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // Already in the party (the portrait slot exists): nothing to do.
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        return ACTION_ERROR;
+    }
+
+    if (pGame->AddCharacterToParty(m_id, -1) == 0) {
+        // The party is full: the creature joins the overflow instead. When
+        // even that fails, the action is simply done.
+        if (pGame->AddCharacterToOverflow(m_id) == 0) {
+            return ACTION_DONE;
+        }
+
+        ClearActions(FALSE);
+        DropPath();
+        field_722A = pGame->GetWorldTimer()->m_gameTime;
+        m_baseStats.m_fatigue = 0;
+        m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+        m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+        m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+        SetScript(1, new CAIScript(CResRef("")));
+        SetScript(2, new CAIScript(CResRef("")));
+        SetScript(3, new CAIScript(CResRef("")));
+        SetScript(4, new CAIScript(CResRef("")));
+        SetScript(5, new CAIScript(CResRef("")));
+        SetScript(6, new CAIScript(CResRef((m_baseStats.m_flags & 0x800) != 0 ? "DPLAYER3" : "DPLAYER2")));
+
+        m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::JOIN_DIALOG_FILE,
+            CString(m_scriptName));
+        if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+            m_dialog = "multig";
+        }
+
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageSetDialogResRef(m_dialog, m_id, m_id), FALSE);
+        }
+
+        // Tell every party member the creature joined.
+        CAITrigger trigger(CAITRIGGER_JOINS, m_typeAI, 0);
+        for (INT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageSetTrigger(trigger, m_id, pGame->m_characterPortraits[nIndex]),
+                FALSE);
+        }
+
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+        }
+
+        return ACTION_DONE;
+    }
+
+    // The normal join: the creature's gold moves to the party, its reputation
+    // is reset, the party gold message carries the amount, and it faces south.
+    ClearActions(FALSE);
+    DropPath();
+    field_722A = pGame->GetWorldTimer()->m_gameTime;
+    m_baseStats.m_fatigue = 0;
+    m_baseStats.m_reputation = 100;
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessagePartyGold(TRUE, TRUE, m_baseStats.m_gold, m_id, m_id), FALSE);
+    m_baseStats.m_gold = 0;
+    m_derivedStats.m_nGold = 0;
+    if (m_cGameStats.m_strStrongestKillName == 0) {
+        m_cGameStats.m_strStrongestKillName = static_cast<STRREF>(-1);
+    }
+    m_cGameStats.RecordJoinParty();
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageChangeDirection(1, m_id, m_id), FALSE);
+    m_pArea->m_nCharacters = m_pArea->m_nCharacters == 0xFF
+        ? 1
+        : static_cast<BYTE>(m_pArea->m_nCharacters + 1);
+    m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+    m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+    m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+    SetScript(1, new CAIScript(CResRef("")));
+    SetScript(2, new CAIScript(CResRef("")));
+    {
+        // Slot 3 is the party member's own script, read as a player script.
+        CAIScript* pScript = new CAIScript();
+        pScript->Read(CResRef("DEFAULT"), TRUE);
+        SetScript(3, pScript);
+    }
+    SetScript(4, new CAIScript(CResRef("")));
+    SetScript(5, new CAIScript(CResRef("")));
+    SetScript(6, new CAIScript(CResRef((m_baseStats.m_flags & 0x800) != 0 ? "DPLAYER3" : "DPLAYER2")));
+
+    m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::JOIN_DIALOG_FILE,
+        CString(m_scriptName));
+    if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+        m_dialog = "multig";
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetDialogResRef(m_dialog, m_id, m_id), FALSE);
+    }
+
+    // Tell every party member the creature joined.
+    CAITrigger trigger(CAITRIGGER_JOINS, m_typeAI, 0);
+    for (INT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetTrigger(trigger, m_id, pGame->m_characterPortraits[nIndex]),
+            FALSE);
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+    }
+
+    // A host assigns the new party member to the local player's slot.
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        CMultiplayerSettings& settings = pGame->m_multiplayerSettings;
+        for (INT nSlot = 0; nSlot < CMultiplayerSettings::MAX_CHARACTERS; nSlot++) {
+            if (pGame->GetCharacterSlot(nSlot) == m_id) {
+                settings.SetCharacterControlledByPlayer(nSlot, 0, FALSE, FALSE);
+                settings.SignalCharacterStatus(nSlot,
+                    CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED,
+                    TRUE,
+                    FALSE);
+                settings.SetCharacterReady(nSlot, TRUE, FALSE);
+            }
+        }
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x71ABA0
 void CGameSprite::CheckQuickLists(CAbilityId* ability, SHORT changeAmount, BOOL remove, BOOL removeSpellIfZero)
 {
@@ -13729,8 +13864,7 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 19:
         // JoinParty
-        // TODO: 0x72958D-0x72959D not ported (0x750F10).
-        returnValue = ACTION_ERROR;
+        returnValue = JoinParty();
         goto done;
     case 20:
         // LayHands (0x72959D-0x7295C5): the target is shared and released,
@@ -13943,9 +14077,8 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_INTERRUPTABLE;
         goto done;
     case 100:
-        // RandomFly
-        // TODO: 0x729ED8-0x729EE8 not ported (0x7526D0).
-        returnValue = ACTION_ERROR;
+        // RandomFly (0x729ED8-0x729EE8)
+        returnValue = RandomFly();
         goto done;
     case 101:
         // TODO: 0x729048-0x7290BB not ported (SetTargetFly).
@@ -14075,10 +14208,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 148:
-        // BashDoor
-        // TODO: 0x72A50E-0x72A536 not ported (0x75CBD0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // BashDoor (0x72A50E-0x72A536)
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = TryBash(pTarget);
+        goto release;
     case 149:
         // EquipMostDamagingMelee (0x72A536-0x72A546)
         returnValue = EquipMostDamagingMelee();
@@ -14158,9 +14292,13 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 215:
-        // TODO: 0x72962C-0x729654 not ported (0x73EA80).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // Engine-internal action 215 (ACTION.IDS has no entry for 205-228 and
+        // neither IEex nor WSO names it): the sprite-target formation move,
+        // the twin of MoveToObject (0x72962C-0x729654, 0x73EA80).
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = MoveToObjectFormation(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 221:
         // (0x72A7B9-0x72A7F6)
         field_72DE = m_curAction.m_specificID;
@@ -14245,10 +14383,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 250:
-        // RunAwayFromNoLeaveArea
-        // TODO: 0x72AB5C-0x72AB84 not ported (0x760C50).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // RunAwayFromNoLeaveArea (0x72AB5C-0x72AB84)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = RunAwayFromNoLeaveArea(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 255:
         // SetBestWeapon (0x72AB84-0x72ACB5): within the action's range (in
         // search squares) of the target, the best melee weapon unless the
@@ -20707,6 +20846,103 @@ CGameEffect* CGameSprite::Damage(CItem* curWeapon, CItem* pLauncher, SHORT nAbil
     return pDamage;
 }
 
+// 0x73EA80
+SHORT CGameSprite::MoveToObjectFormation(CGameSprite* pTarget)
+{
+    // #guess name: engine-internal action 215, unnamed in ACTION.IDS (the
+    // shipped file has no 205-228 entries) and in IEex; the sprite-target
+    // formation twin of MoveToObject (0x73EDD0). The mover walks to its
+    // formation slot around the target, oriented by the target's direction;
+    // the action's m_specificID's low byte is the formation type and
+    // m_specificID2's the mover's slot.
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (m_derivedStats.m_nEncumberance == 2) {
+        FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The slot is clamped by the party size (the group list's count, at least
+    // 6); an out-of-range slot takes the first offset.
+    BYTE nSlot = static_cast<BYTE>(m_curAction.m_specificID2);
+    BYTE nMaxSlot = static_cast<BYTE>(pGame->m_group.GetCount());
+    if (nMaxSlot <= 6) {
+        nMaxSlot = 6;
+    }
+    if (nSlot >= nMaxSlot) {
+        nSlot = 0;
+    }
+
+    SHORT nFormation = static_cast<SHORT>(m_curAction.m_specificID & 0xFF);
+    SHORT nAngle = static_cast<SHORT>(
+        ((static_cast<SHORT>(pTarget->m_nDirection) + 8) * 360) / 16 % 360);
+    CPoint* pOffsets = pGame->m_group.GetOffsets(nFormation, nAngle, TRUE);
+    if (pOffsets == NULL) {
+        UTIL_ASSERT(pOffsets != NULL);
+    }
+
+    CPoint ptWaypoint;
+    pTarget->GetNextWaypoint(&ptWaypoint);
+
+    // The target's waypoint cell plus the mover's formation offset, centred
+    // in the cell (the grid size's halves).
+    CPoint ptDest;
+    ptDest.x = (ptWaypoint.x / CPathSearch::GRID_SQUARE_SIZEX
+                   + pOffsets[nSlot].x / CAIGroup::OFFSET_MULTIPLIER)
+        * CPathSearch::GRID_SQUARE_SIZEX
+        + CPathSearch::GRID_SQUARE_SIZEX / 2;
+    ptDest.y = (pOffsets[nSlot].y / CAIGroup::OFFSET_MULTIPLIER
+                   + ptWaypoint.y / CPathSearch::GRID_SQUARE_SIZEY)
+        * CPathSearch::GRID_SQUARE_SIZEY
+        + CPathSearch::GRID_SQUARE_SIZEY / 2;
+
+    delete[] pOffsets;
+
+    if ((ptDest.x / CPathSearch::GRID_SQUARE_SIZEX != m_pos.x / CPathSearch::GRID_SQUARE_SIZEX
+            || ptDest.y / CPathSearch::GRID_SQUARE_SIZEY != m_pos.y / CPathSearch::GRID_SQUARE_SIZEY)
+        && ((ptDest.x / CPathSearch::GRID_SQUARE_SIZEX != m_curDest.x / CPathSearch::GRID_SQUARE_SIZEX
+                || ptDest.y / CPathSearch::GRID_SQUARE_SIZEY != m_curDest.y / CPathSearch::GRID_SQUARE_SIZEY
+                || field_5618 == 0)
+            || (m_pPath == NULL && m_currentSearchRequest == NULL))) {
+        field_5618 = 0;
+
+        // A new path every eighth call (the same cadence as MoveToObject).
+        if (field_5616 % 8 == 0) {
+            m_curDest = ptDest;
+
+            CSearchRequest* pSearchRequest = new CSearchRequest();
+            if (pSearchRequest == NULL) {
+                return ACTION_ERROR;
+            }
+
+            pSearchRequest->m_searchBitmap = &(m_pArea->m_search);
+            memcpy(pSearchRequest->m_terrainTable, m_terrainTable, sizeof(m_terrainTable));
+            pSearchRequest->m_pathSmooth = m_animation.GetPathSmooth();
+            pSearchRequest->m_sourceId = m_id;
+            pSearchRequest->m_nTargetPoints = 1;
+
+            pSearchRequest->m_targetPoints = new POINT[1];
+            if (pSearchRequest->m_targetPoints == NULL) {
+                delete pSearchRequest;
+                return ACTION_ERROR;
+            }
+
+            pSearchRequest->m_targetPoints[0] = ptDest;
+            pSearchRequest->m_sourceSide = m_typeAI.GetEnemyAlly();
+            field_5618 = 1;
+            SetTarget(pSearchRequest, FALSE, LIST_FRONT);
+        }
+
+        field_5616++;
+    }
+
+    return ACTION_INTERRUPTABLE;
+}
+
 // 0x73EDD0
 SHORT CGameSprite::MoveToObject(CGameObject* pTarget)
 {
@@ -24056,6 +24292,140 @@ SHORT CGameSprite::Enemy()
     return ACTION_DONE;
 }
 
+// 0x7526D0
+SHORT CGameSprite::RandomFly()
+{
+    // Keep flying: the action is queued again first, so the sprite hops once
+    // more when this one is done (0x7527E8-0x7527FF).
+    CAIAction action(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+    AddAction(action);
+
+    // The facing is rounded to a multiple of 4 and wrapped to 0..15
+    // (0x752802-0x75282F).
+    SHORT nDirection = static_cast<SHORT>(4 * ((m_nNewDirection + 2) / 4) % 16);
+    m_nDirection = nDirection;
+    m_nNewDirection = nDirection;
+
+    SHORT nTries;
+    LONG nX;
+    LONG nY;
+    SHORT nCircleType;
+    SHORT nCircleFacing;
+    LONG nRadius;
+
+    for (nTries = 1;; nTries++) {
+        nCircleType = static_cast<SHORT>(rand() % (FLY_360 + 1));
+        nCircleFacing = rand() % 2 == 1 ? FLY_LEFT : FLY_RIGHT;
+        nRadius = rand() % FLY_RADIUS_RANDOM + FLY_RADIUS_BASE;
+
+        nX = m_pos.x;
+        nY = m_pos.y;
+
+        if (nCircleType == FLY_0) {
+            // A straight hop along the facing (0x752897-0x752900).
+            switch (nDirection) {
+            case 0:
+                nY += 3 * nRadius / 4;
+                break;
+            case 4:
+                nX -= nRadius;
+                break;
+            case 8:
+                nY += -3 * nRadius / 4;
+                break;
+            case 12:
+                nX += nRadius;
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                // __LINE__: 19851
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+        } else {
+            // An arc to the facing's side (0x752905-0x752A3B).
+            switch (nDirection) {
+            case 0:
+                nX += nRadius * nCircleFacing;
+                break;
+            case 4:
+                nY += 3 * nRadius * nCircleFacing / 4;
+                break;
+            case 8:
+                nX -= nRadius * nCircleFacing;
+                break;
+            case 12:
+                nY += -3 * nRadius * nCircleFacing / 4;
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                // __LINE__: 19875
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+
+            double angle = static_cast<double>(8 - nDirection) * 3.1415926535 / 8.0;
+            if (nCircleFacing == FLY_RIGHT) {
+                angle += 3.1415926535;
+            }
+            angle += static_cast<double>(nCircleFacing * nCircleType) * 3.1415926535 / 2.0;
+
+            // NOTE: The original's x87 __ftol (0x7E812C) truncates toward
+            // zero, as the cast does for these bounded values. The same
+            // product appears in AIUpdateFly (0x6FB630).
+            nX += static_cast<LONG>(cos(angle) * static_cast<double>(nRadius));
+            nY += static_cast<LONG>(sin(angle) * static_cast<double>(nRadius) * -3.0 / 4.0);
+        }
+
+        if (nTries > 999) {
+            break;
+        }
+
+        if (nX >= 0
+            && nX < m_pArea->GetInfinity()->nAreaX
+            && nY >= 0
+            && nY < m_pArea->GetInfinity()->nAreaY) {
+            break;
+        }
+    }
+
+    if (nTries < 1000) {
+        // The arc to fly (0x752ADD-0x752CF0): the dispatcher's SetTargetFly
+        // (0x729048) takes its circle type and facing from the action's
+        // actee AI type and its radius from the action's specific ID.
+        CAIAction flyAction(CAIAction::SETTARGETFLY, CPoint(-1, -1), 0, -1);
+
+        CAIObjectType objectType;
+        objectType.m_nEnemyAlly = static_cast<BYTE>(nCircleFacing);
+        objectType.m_nGeneral = static_cast<BYTE>(nCircleType);
+
+        flyAction.m_specificID = nRadius;
+        flyAction.m_acteeID.Set(objectType);
+
+        AddAction(flyAction);
+    } else {
+        // A thousand tries without a point inside the area: jump to the
+        // clamped one (0x752A7E-0x752AD8).
+        if (nX < 0) {
+            nX = 10;
+        } else if (m_pArea->GetInfinity()->nAreaX <= nX) {
+            nX = m_pArea->GetInfinity()->nAreaX - 10;
+        }
+
+        if (nY < 0) {
+            JumpToPoint(CPoint(nX, 10), FALSE);
+        } else {
+            if (m_pArea->GetInfinity()->nAreaY <= nY) {
+                nY = m_pArea->GetInfinity()->nAreaY - 10;
+            }
+
+            JumpToPoint(CPoint(nX, nY), FALSE);
+        }
+    }
+
+    return ACTION_DONE;
+}
+
 // NOTE: Inlined in `Dialog` and `PlayerDialog` after a dialog starts: the
 // target's dialog actions are cleared, both sides count the talk, and both
 // get the Said trigger (0x75307D-0x7532B8 and 0x753B5F-0x753D7E).
@@ -25647,6 +26017,120 @@ SHORT CGameSprite::UseDoor()
     return ACTION_DONE;
 }
 
+// 0x75CBD0
+SHORT CGameSprite::TryBash(CGameObject* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (pTarget->GetObjectType() != CGameObject::TYPE_DOOR
+        && pTarget->GetObjectType() != CGameObject::TYPE_CONTAINER) {
+        return ACTION_ERROR;
+    }
+
+    CMessage* message = new CMessageSetForceActionPick(TRUE, m_id, pTarget->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+    // Walk to the door or container first when it is more than three squares
+    // away.
+    const CPoint& ptTarget = pTarget->GetPos();
+    LONG dy = ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY - m_pos.y / CPathSearch::GRID_SQUARE_SIZEY;
+    LONG dx = ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX - m_pos.x / CPathSearch::GRID_SQUARE_SIZEX;
+    SHORT returnValue = ACTION_DONE;
+    if (dx * dx + dy * dy > 9) {
+        m_curAction.m_dest = ptTarget;
+        returnValue = MoveToPoint(ptTarget, 0);
+    }
+
+    if (returnValue != ACTION_DONE) {
+        return returnValue;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    INT nModifier = pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nSTR);
+
+    // A d20 roll against the lock's difficulty, on top of the STR modifier.
+    INT nRoll = rand() % 20 + 1;
+
+    CAITrigger trigger(CAITrigger::NO_TRIGGER, 0);
+
+    if (pTarget->GetObjectType() == CGameObject::TYPE_DOOR) {
+        CGameDoor* pDoor = static_cast<CGameDoor*>(pTarget);
+        SHORT nDifficulty = static_cast<SHORT>(pDoor->m_lockDifficulty / 6 + 9);
+
+        if ((pDoor->m_dwFlags & 0x2) == 0) {
+            FeedBack(FEEDBACK_BASHDOORSUCCEEDED, 0, 0, 0, -1, 0, 0);
+        } else {
+            if (nDifficulty < nRoll + nModifier && pDoor->m_lockDifficulty != 100) {
+                trigger = CAITrigger(CAITrigger::UNLOCKED, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x2) | 0x10;
+                FeedBack(FEEDBACK_BASHDOORSUCCEEDED, 0, 0, 0, -1, 0, 0);
+
+                message = new CMessageUnlock(pDoor->m_dwFlags, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                if ((pDoor->m_dwFlags & 0x1) == 0) {
+                    if (g_pChitin->cNetwork.m_nServiceProvider == 0
+                        || g_pChitin->cNetwork.m_idLocalPlayer == pTarget->m_remotePlayerID) {
+                        pDoor->ToggleDoor(m_typeAI, FALSE);
+                    } else {
+                        // TODO: 0x75CF8A-0x75CFD7 not ported: a multiplayer
+                        // client asks the door's owner to toggle it (message
+                        // vtable 0x848C58, the open state's inverse); a
+                        // single-player game never gets here.
+                    }
+                }
+            } else {
+                FeedBack(FEEDBACK_BASHDOORFAILED, 0, 0, 0, -1, 0, 0);
+            }
+
+            if (pDoor->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_ROLL, nRoll, nModifier, nDifficulty, 0x4FEC, 0, 0);
+            }
+        }
+    }
+
+    if (pTarget->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+        CGameContainer* pContainer = static_cast<CGameContainer*>(pTarget);
+        SHORT nDifficulty = static_cast<SHORT>(pContainer->m_lockDifficulty / 6 + 9);
+
+        if ((pContainer->m_dwFlags & 0x1) == 0) {
+            FeedBack(FEEDBACK_BASHCHESTSUCCEEDED, 0, 0, 0, -1, 0, 0);
+        } else {
+            if (nDifficulty < nRoll + nModifier && pContainer->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_BASHCHESTSUCCEEDED, 0, 0, 0, -1, 0, 0);
+
+                trigger = CAITrigger(CAITrigger::UNLOCKED, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                message = new CMessageUnlock(pContainer->m_dwFlags & ~0x1, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            } else {
+                // 0x60 is PickLockFailed (TRIGGER.IDS), no named constant yet.
+                trigger = CAITrigger(0x60, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                FeedBack(FEEDBACK_BASHCHESTFAILED, 0, 0, 0, -1, 0, 0);
+            }
+
+            if (pContainer->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_ROLL, nRoll, nModifier, nDifficulty, 0x4FEC, 0, 0);
+            }
+        }
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x75D450
 BOOL CGameSprite::CheckIfUsedUp(SHORT nSlot, SHORT nAbility)
 {
@@ -27064,6 +27548,254 @@ SHORT CGameSprite::SetAtOffset(DWORD stat, DWORD value, BOOL modify)
     }
 
     return 0;
+}
+
+// 0x760C50
+SHORT CGameSprite::RunAwayFromNoLeaveArea(CGameSprite* pTarget)
+{
+    // NOTE: The body is shared with 184, RunAwayFromNoInterrupt (the exe
+    // tests the action id at 0x760C6D): that variant answers ACTION_NORMAL
+    // where this one answers ACTION_INTERRUPTABLE.
+    SHORT returnValue = m_curAction.m_actionID == 184
+        ? ACTION_NORMAL
+        : ACTION_INTERRUPTABLE;
+
+    if (pTarget == NULL || pTarget->m_pArea != m_pArea) {
+        returnValue = ACTION_ERROR;
+    } else {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+        SHORT nCounter = field_5614;
+        field_5614 = static_cast<SHORT>(nCounter + 1);
+
+        if (nCounter > m_curAction.m_specificID) {
+            // The action's duration (m_specificID calls) is spent: stop and
+            // take the idle pose, dropping the path first.
+            field_5614 = 0;
+            if (m_nSequence != SEQ_READY) {
+                CMessage* message = new CMessageDropPath(m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                message = new CMessageSetSequence(static_cast<BYTE>(GetIdleSequence()), m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+            returnValue = ACTION_DONE;
+        } else {
+            CPoint ptTarget = pTarget->GetPos();
+            LONG nDeltaX = ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX
+                - m_pos.x / CPathSearch::GRID_SQUARE_SIZEX;
+            LONG nDeltaY = ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY
+                - m_pos.y / CPathSearch::GRID_SQUARE_SIZEY;
+
+            // The threshold is the WORD at 0x85BC88 (8), squared.
+            if (nDeltaX * nDeltaX + nDeltaY * nDeltaY <= 8 * 8) {
+                // Too close: every 15th call run to the point opposite the
+                // target, twice this position minus the target's.
+                if (field_5614 % 15 == 0) {
+                    CInfinity* pInfinity = m_pArea->GetInfinity();
+                    m_curDest.x = m_pos.x * 2 - ptTarget.x;
+                    if (m_curDest.x < 0) {
+                        m_curDest.x = 0;
+                    }
+                    if (m_curDest.x >= pInfinity->nAreaX) {
+                        m_curDest.x = pInfinity->nAreaX;
+                    }
+                    m_curDest.y = m_pos.y * 2 - ptTarget.y;
+                    if (m_curDest.y < 0) {
+                        m_curDest.y = 0;
+                    }
+                    if (m_curDest.y >= pInfinity->nAreaY) {
+                        m_curDest.y = pInfinity->nAreaY;
+                    }
+                    SetTarget(m_curDest, FALSE);
+                }
+            } else if (m_pPath == NULL && m_currentSearchRequest == NULL) {
+                CInfinity* pInfinity = m_pArea->GetInfinity();
+
+                // Three tries at a random point away from the target: to
+                // the side, one axis randomly flipped, then the opposite
+                // side. The counts are 0x85BC8A (120) and twice it.
+                SHORT nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x + nRandomX, m_pos.y + nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 120);
+
+                nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+                    if (rand() % 2 == 0) {
+                        nRandomX = -nRandomX;
+                    } else {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x + nRandomX, m_pos.y + nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 2 * 120);
+
+                nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x - nRandomX, m_pos.y - nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 120);
+            }
+
+            // Cornered: swing at the enemy of this sprite with the selected
+            // weapon, if it is a melee one with uses left.
+            CAIObjectType enemy = m_typeAI.GetEnemyOf();
+            CItem* pItem = m_equipment.m_items[m_equipment.m_selectedWeapon];
+            if (pItem != NULL) {
+                pItem->Demand();
+
+                ITEM_ABILITY* pAbility = pItem->GetAbility(m_equipment.m_selectedWeaponAbility);
+                if (pAbility == NULL
+                    || (pAbility->type & 0xFF) == 4
+                    || (pAbility->usageFlags == 3
+                        && pItem->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+                        && pAbility->maxUsageCount > 0)
+                    || (pAbility->type & 0xFF) == 2) {
+                    pItem->Release();
+                } else {
+                    pItem->Release();
+
+                    // The reach: the weapon's range plus one and both
+                    // personal spaces, in search squares (a byte sum, as in
+                    // PlayerDialog).
+                    SHORT nRange = static_cast<SHORT>(pAbility->range + 1);
+                    BYTE nPersonalSpace = m_animation.GetPersonalSpace();
+                    BYTE nTargetPersonalSpace = pTarget->m_animation.GetPersonalSpace();
+                    nRange = static_cast<SHORT>(nRange
+                        + static_cast<BYTE>(((nTargetPersonalSpace - 1) >> 1)
+                            + ((nPersonalSpace - 1) >> 1) - 1));
+                    nRange = static_cast<SHORT>(nRange * CPathSearch::GRID_SQUARE_SIZEX);
+
+                    LONG nId = m_pArea->GetNearest(m_id,
+                        enemy,
+                        nRange,
+                        m_terrainTable,
+                        TRUE,
+                        GetCanSeeInvisible(),
+                        FALSE,
+                        0,
+                        FALSE);
+                    if (nId != CGameObjectArray::INVALID_INDEX) {
+                        CGameObject* pObject = NULL;
+                        BYTE rc;
+                        do {
+                            rc = pGame->GetObjectArray()->GetShare(nId,
+                                CGameObjectArray::THREAD_ASYNCH,
+                                &pObject,
+                                INFINITE);
+                        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                        if (rc == CGameObjectArray::SUCCESS) {
+                            if (m_attackFrame == -2) {
+                                m_attackFrame = -1;
+                            }
+
+                            Swing(static_cast<CGameSprite*>(pObject));
+
+                            pGame->GetObjectArray()->ReleaseShare(nId,
+                                CGameObjectArray::THREAD_ASYNCH,
+                                INFINITE);
+                        }
+                    }
+                }
+            }
+
+            returnValue = ACTION_DONE;
+        }
+    }
+
+    return returnValue;
 }
 
 // 0x761470

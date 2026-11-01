@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CAIAction.h"
+#include "CAIGroup.h"
 #include "CAIScript.h"
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
@@ -390,6 +391,38 @@ void ClearMessages()
     }
 }
 
+// The number of VC6 rand() draws that lead from `before` to `after` (the
+// generator's state), or -1 beyond `limit` (tests/test_combat.cpp's).
+int RandDraws(unsigned int before, unsigned int after, int limit = 5000)
+{
+    unsigned int state = before;
+    for (int n = 0; n <= limit; n++) {
+        if (state == after) {
+            return n;
+        }
+        state = state * 214013u + 2531011u;
+    }
+    return -1;
+}
+
+// The values rand() returns from the state `state` on.
+std::vector<int> RandValues(unsigned int state, int count)
+{
+    std::vector<int> values;
+    for (int n = 0; n < count; n++) {
+        state = state * 214013u + 2531011u;
+        values.push_back(static_cast<int>((state >> 16) & 0x7FFF));
+    }
+    return values;
+}
+
+// A seed for the n-th case: consecutive small seeds start the generator
+// with nearly equal first values.
+unsigned int RandSeed(unsigned int n)
+{
+    return n * 0x9E3779B1u;
+}
+
 // The queued messages of one kind, oldest first (tests/test_combat.cpp's
 // Queued).
 template <class T>
@@ -481,6 +514,74 @@ TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its a
     CAIAction next;
     pCharacter->SetCurrAction(pCharacter->GetNextAction(next));
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::NO_ACTION);
+}
+
+TEST_CASE("sprite: action 215 asks for a formation slot around the target sprite", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pGame->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    // Action 215 (engine-internal, no ACTION.IDS name): formation type 0 (the
+    // low byte of specificID), slot 2 (specificID2; slot 0 is the target's own
+    // cell, whose offset is zero). The handler must ask the search for a point
+    // in the mover's formation slot around the target, not for the target
+    // itself.
+    CAIObjectType hedron(0, 0, 0, 0, 0, 0, 0, 0, pHedron->GetId(), 0, 0);
+    pCharacter->SetCurrAction(CAIAction(215, hedron, 0, 2, 0));
+    pCharacter->m_actionCount = 1;
+    // The search is issued when the call counter is a multiple of 8.
+    pCharacter->field_5616 = 0;
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+
+    // The destination the handler computed: the target's waypoint cell plus
+    // the formation offset, centred in the cell.
+    CPoint ptWaypoint;
+    pHedron->GetNextWaypoint(&ptWaypoint);
+    const SHORT nAngle = static_cast<SHORT>(
+        ((static_cast<SHORT>(pHedron->m_nDirection) + 8) * 360) / 16 % 360);
+    CPoint* pOffsets = pGame->m_group.GetOffsets(0, nAngle, TRUE);
+    REQUIRE(pOffsets != NULL);
+    const CPoint ptSlot(
+        (ptWaypoint.x / CPathSearch::GRID_SQUARE_SIZEX
+            + pOffsets[2].x / CAIGroup::OFFSET_MULTIPLIER)
+                * CPathSearch::GRID_SQUARE_SIZEX
+            + CPathSearch::GRID_SQUARE_SIZEX / 2,
+        (pOffsets[2].y / CAIGroup::OFFSET_MULTIPLIER
+            + ptWaypoint.y / CPathSearch::GRID_SQUARE_SIZEY)
+                * CPathSearch::GRID_SQUARE_SIZEY
+            + CPathSearch::GRID_SQUARE_SIZEY / 2);
+    delete[] pOffsets;
+
+    CHECK(pCharacter->m_curDest == ptSlot);
+    REQUIRE(pCharacter->m_currentSearchRequest != NULL);
+    CHECK(pCharacter->m_currentSearchRequest->m_nTargetPoints == 1);
+    REQUIRE(pCharacter->m_currentSearchRequest->m_targetPoints != NULL);
+    CHECK(pCharacter->m_currentSearchRequest->m_targetPoints[0].x == ptSlot.x);
+    CHECK(pCharacter->m_currentSearchRequest->m_targetPoints[0].y == ptSlot.y);
+    CHECK(pCharacter->m_currentSearchRequest->m_sourceSide == pCharacter->m_typeAI.GetEnemyAlly());
+
+    // The same destination on the next call does not ask again.
+    CSearchRequest* pRequest = pCharacter->m_currentSearchRequest;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_currentSearchRequest == pRequest);
 }
 
 TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog opens on arrival", "[ai][data]")
@@ -582,6 +683,118 @@ TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog open
     dialog.AsynchronousUpdate();
     g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
     CHECK(dialog.field_54 == 0);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: RunAwayFromNoLeaveArea (250) runs for the action's duration and then stops", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    ClearMessages();
+
+    CAIObjectType character(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+
+    // No target, or a target in another area (none): the action fails.
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(NULL) == CGameAIBase::ACTION_ERROR);
+    CGameArea* pCharacterArea = pCharacter->m_pArea;
+    pCharacter->m_pArea = NULL;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_pArea = pCharacterArea;
+
+    // Duration spent (specificID 0, the counter at 5): the counter resets,
+    // the path is dropped and the idle sequence takes over.
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_WALK;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->field_5614 == 0);
+    REQUIRE(handler.m_messageList.GetCount() == 2);
+    auto* pDrop = dynamic_cast<CMessageDropPath*>(handler.m_messageList.GetHead());
+    REQUIRE(pDrop != NULL);
+    CHECK(pDrop->GetSource() == pHedron->GetId());
+    auto* pSequence = dynamic_cast<CMessageSetSequence*>(handler.m_messageList.GetTail());
+    REQUIRE(pSequence != NULL);
+    CHECK(pSequence->m_sequence == static_cast<BYTE>(pHedron->GetIdleSequence()));
+    CHECK(pSequence->GetTarget() == pHedron->GetId());
+    ClearMessages();
+
+    // Already in the idle pose: no messages.
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_READY;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(handler.m_messageList.IsEmpty());
+
+    // Too far (more than 8 squares) and no path: the first random point
+    // clamps to the area's corner, which is this position itself, so no
+    // move is started and the action stays interruptable. The corner is the
+    // area's 0,0 with empty bounds.
+    CPoint ptHedron = pHedron->m_pos;
+    CPoint ptCharacter = pCharacter->m_pos;
+    int nAreaX = pArea->GetInfinity()->nAreaX;
+    int nAreaY = pArea->GetInfinity()->nAreaY;
+    pArea->GetInfinity()->nAreaX = 0;
+    pArea->GetInfinity()->nAreaY = 0;
+    pHedron->m_pos = CPoint(0, 0);
+    pCharacter->m_pos = CPoint(1000, 700);
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+    pHedron->field_5614 = 0;
+    pHedron->SetCurrAction(CAIAction(250, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->field_5614 == 1);
+    CHECK(pHedron->m_curDest.x == 0);
+    CHECK(pHedron->m_curDest.y == 0);
+
+    // The 184 variant (RunAwayFromNoInterrupt) answers ACTION_NORMAL from
+    // the same body.
+    pHedron->field_5614 = 0;
+    pHedron->SetCurrAction(CAIAction(184, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_NORMAL);
+
+    // Too close and the counter at its 15th call: the point opposite the
+    // target (twice this position minus the target's) is this position
+    // when both stand together, so the move starts; the empty weapon slot
+    // then ends the action done.
+    CItem* pSavedItem = pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon];
+    pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon] = NULL;
+    pArea->GetInfinity()->nAreaX = nAreaX;
+    pArea->GetInfinity()->nAreaY = nAreaY;
+    pHedron->m_pos = ptHedron;
+    pCharacter->m_pos = ptHedron;
+    pHedron->field_5614 = 14;
+    pHedron->SetCurrAction(CAIAction(250, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->field_5614 == 15);
+    CHECK(pHedron->m_curDest.x == ptHedron.x);
+    CHECK(pHedron->m_curDest.y == ptHedron.y);
+    pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon] = pSavedItem;
+    pCharacter->m_pos = ptCharacter;
+
+    // Through the dispatcher: the target is shared as a sprite, the action
+    // runs and the share is released.
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_READY;
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_curAction.m_actionID == 250);
     ClearMessages();
 }
 
@@ -703,6 +916,96 @@ TEST_CASE("sprite: UseDoor next to AR1000_Door5 opens it and does nothing from a
     CHECK((pDoor->m_dwFlags & 0x1) != 0);
     pCharacter->m_actionCount = 1;
     CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: BashDoor rolls against a locked door and opens it", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door5");
+    REQUIRE(pDoor != NULL);
+
+    // Stand on the door's own point, so BashDoor does not walk first (the
+    // walk would draw from rand too).
+    pCharacter->m_pos = pDoor->GetPos();
+    if (!pCharacter->m_bSelected) {
+        pGame->SelectCharacter(pCharacter->GetId(), FALSE);
+    }
+    REQUIRE(pCharacter->m_bSelected);
+
+    CAIObjectType doorId(0, 0, 0, 0, 0, 0, 0, 0, pDoor->GetId(), 0, 0);
+
+    // Locked, difficulty 0 (9): pick a seed whose d20 roll plus the STR
+    // modifier beats it.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x1) | 0x2;
+    pDoor->m_lockDifficulty = 0;
+    const INT nModifier = pGame->GetRuleTables().GetAbilityScoreModifier(pCharacter->m_derivedStats.m_nSTR);
+    INT nRoll = 0;
+    UINT nSeed = 0;
+    for (nSeed = 1; nSeed < 1000; nSeed++) {
+        iwd2r_srand(nSeed);
+        nRoll = iwd2r_rand() % 20 + 1;
+        if (nRoll + nModifier > 9) {
+            break;
+        }
+    }
+    REQUIRE(nRoll + nModifier > 9);
+    INFO("roll " << nRoll << " modifier " << nModifier << " seed " << nSeed);
+
+    INFO("character " << pCharacter->m_pos.x << "," << pCharacter->m_pos.y
+                      << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    // The lock bit is cleared, the 0x10 bit and the door's open bit are set.
+    CHECK((pDoor->m_dwFlags & 0x2) == 0);
+    CHECK((pDoor->m_dwFlags & 0x10) != 0);
+    CHECK((pDoor->m_dwFlags & 0x1) != 0);
+    ClearMessages();
+
+    // A 100 lock is unpickable: the best roll leaves it locked and shut.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x3) | 0x2;
+    pDoor->m_lockDifficulty = 100;
+    INFO("character " << pCharacter->m_pos.x << "," << pCharacter->m_pos.y
+                      << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    CHECK((pDoor->m_dwFlags & 0x1) == 0);
+    ClearMessages();
+
+    // More than three squares away it walks first (whatever the walk answers)
+    // and leaves the lock alone.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x3) | 0x2;
+    pDoor->m_lockDifficulty = 0;
+    pCharacter->m_pos = CPoint(pDoor->GetPos().x + CPathSearch::GRID_SQUARE_SIZEX * 5,
+        pDoor->GetPos().y + CPathSearch::GRID_SQUARE_SIZEY * 5);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() != CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
     ClearMessages();
 }
 
@@ -1972,6 +2275,150 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
     }
 }
 
+// CGameSprite::RandomFly (0x7526D0, action 100): the sprite rounds its
+// facing, then draws a circle type (0..4), a side and a radius and hops to
+// the point they make, retrying up to 999 times for a point inside the
+// area. On success it queues the RANDOMFLY that brought it here and the
+// SETTARGETFLY whose arc it will fly (the dispatcher's SetTargetFly reads
+// the circle type and facing from the action's actee AI type and the radius
+// from its specific ID); after a thousand tries it jumps to the clamped
+// point. The draws are the compat VC6 rand(), so a seed fixes the case.
+TEST_CASE("sprite: RandomFly queues the fly arc, rounds the facing and jumps after a thousand tries", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CInfinity* pInfinity = pArea->GetInfinity();
+    const int nAreaX = pInfinity->nAreaX;
+    const int nAreaY = pInfinity->nAreaY;
+
+    // The first seeds whose first draw takes the straight (circle type 0)
+    // and the arc branch (circle type 1..4).
+    unsigned int nStraightSeed = 0;
+    unsigned int nArcSeed = 0;
+    for (unsigned int n = 1; n < 10000 && (nStraightSeed == 0 || nArcSeed == 0); n++) {
+        srand(RandSeed(n));
+        const int value = RandValues(iwd2r_rand_state(), 1)[0];
+        if (value % 5 == 0) {
+            if (nStraightSeed == 0) {
+                nStraightSeed = n;
+            }
+        } else if (nArcSeed == 0) {
+            nArcSeed = n;
+        }
+    }
+    REQUIRE(nStraightSeed != 0);
+    REQUIRE(nArcSeed != 0);
+
+    // With the area on this enormous box every first point is inside it, so
+    // exactly the three draws of the first try happen, and the queued arc's
+    // fields are those of the first try.
+    pInfinity->nAreaX = 1 << 20;
+    pInfinity->nAreaY = 1 << 20;
+    pCharacter->m_pos = CPoint(3000, 3000);
+
+    const unsigned int seeds[] = { nStraightSeed, nArcSeed };
+    for (const unsigned int nSeed : seeds) {
+        pCharacter->m_queuedActions.RemoveAll();
+        pCharacter->m_curAction = CAIAction(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+        // (6 + 2) / 4 * 4 = 8: the facing is rounded to the next multiple of 4.
+        pCharacter->m_nNewDirection = 6;
+        pCharacter->m_nDirection = 0;
+
+        srand(RandSeed(nSeed));
+        const unsigned int nBefore = iwd2r_rand_state();
+        const SHORT nReturn = pCharacter->ExecuteAction();
+        const unsigned int nAfter = iwd2r_rand_state();
+        const std::vector<int> values = RandValues(nBefore, 3);
+
+        CHECK(nReturn == CGameAIBase::ACTION_DONE);
+        CHECK(RandDraws(nBefore, nAfter) == 3);
+        CHECK(pCharacter->m_nDirection == 8);
+        CHECK(pCharacter->m_nNewDirection == 8);
+
+        CHECK(pCharacter->m_queuedActions.GetCount() == 2);
+        POSITION pos = pCharacter->m_queuedActions.GetHeadPosition();
+        CAIAction* pFly = pCharacter->m_queuedActions.GetNext(pos);
+        CAIAction* pAgain = pCharacter->m_queuedActions.GetNext(pos);
+        if (pFly != NULL) {
+            CHECK(pFly->m_actionID == CAIAction::SETTARGETFLY);
+            // The draws: circle type, side (1 left, -1 right), radius.
+            CHECK(pFly->m_acteeID.m_nGeneral == values[0] % 5);
+            CHECK(pFly->m_acteeID.m_nEnemyAlly == (values[1] % 2 == 1 ? 1 : 0xFF));
+            CHECK(pFly->m_specificID == values[2] % 0x380 + 0x80);
+            CHECK(pFly->m_specificID2 == -1);
+            CHECK(pFly->m_specificID3 == 0);
+            CHECK(pFly->m_dest == CPoint(-1, -1));
+            CHECK(pFly->m_internalFlags == 0);
+            CHECK(pFly->m_string1 == CString(""));
+            if (values[0] % 5 == 0) {
+                CHECK(pFly->m_acteeID.m_nGeneral == 0);
+            } else {
+                CHECK(pFly->m_acteeID.m_nGeneral != 0);
+            }
+        }
+        if (pAgain != NULL) {
+            CHECK(pAgain->m_actionID == CAIAction::RANDOMFLY);
+            CHECK(pAgain->m_specificID == 0);
+            CHECK(pAgain->m_specificID2 == -1);
+            CHECK(pAgain->m_specificID3 == 0);
+            CHECK(pAgain->m_dest == CPoint(-1, -1));
+            CHECK(pAgain->m_internalFlags == 0);
+        }
+        ClearMessages();
+    }
+
+    pInfinity->nAreaX = nAreaX;
+    pInfinity->nAreaY = nAreaY;
+
+    // A position above the top-left corner: every try is out of the area, so
+    // the thousandth try's point is clamped to (10, 10) and jumped to.
+    // m_activeAI is off so JumpToPoint does not take the out-of-area square
+    // off the search bitmap.
+    pCharacter->m_queuedActions.RemoveAll();
+    pCharacter->m_curAction = CAIAction(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+    pCharacter->m_nNewDirection = 0;
+    pCharacter->m_nDirection = 0;
+    pCharacter->m_pos = CPoint(-10000, -10000);
+    const BOOL bActiveAI = pCharacter->m_activeAI;
+    pCharacter->m_activeAI = FALSE;
+
+    srand(RandSeed(7));
+    const unsigned int nBefore = iwd2r_rand_state();
+    const SHORT nReturn = pCharacter->ExecuteAction();
+    const unsigned int nAfter = iwd2r_rand_state();
+    pCharacter->m_activeAI = bActiveAI;
+
+    CHECK(nReturn == CGameAIBase::ACTION_DONE);
+    CHECK(RandDraws(nBefore, nAfter) == 3000); // a thousand tries of three draws
+    CHECK(pCharacter->m_nDirection == 0);
+    CHECK(pCharacter->m_nNewDirection == 0);
+    CHECK(pCharacter->m_queuedActions.GetCount() == 1);
+    CAIAction* pAgain = pCharacter->m_queuedActions.GetHead();
+    if (pAgain != NULL) {
+        CHECK(pAgain->m_actionID == CAIAction::RANDOMFLY);
+    }
+    // JumpToPoint(10, 10) leaves the sprite on an open square inside the
+    // area (0, 0) or one near it, not at the far point it started from.
+    CHECK(pCharacter->m_pos.x >= 0);
+    CHECK(pCharacter->m_pos.x < nAreaX);
+    CHECK(pCharacter->m_pos.y >= 0);
+    CHECK(pCharacter->m_pos.y < nAreaY);
+    ClearMessages();
+}
+
 // CGameSprite::Help (0x74FF10, action 17): every object within GetHelpRange
 // (twice the visual range, CAIObjectType::ANYONE) gets a Help trigger
 // (TRIGGER.IDS 3) from the caller, its AI type as the cause and no
@@ -2032,12 +2479,6 @@ TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][d
     CHECK(bHeard);
 }
 
-// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
-// own dialog with the target without Dialog's distance/LOS checks. Action
-// 137 takes the dialog resource from the action (the actor's m_dialog),
-// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
-// talk, the world screen opens the dialog, and the handler is done. A
-// charmed actor, or one of the two unable to speak, is an error.
 TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
 {
     if (DataDir() == nullptr) {
@@ -2126,4 +2567,153 @@ TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the t
     CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
     pHedron->m_derivedStats.m_generalState &= ~STATE_CHARMED;
     ClearMessages();
+}
+
+TEST_CASE("sprite: JoinParty puts the creature in the party and moves its gold", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    std::vector<BYTE> cre = candidates[0];
+    std::vector<BYTE> creJoiner = candidates[1];
+
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+    const BYTE nAreaCharacters = pArea->m_nCharacters;
+
+    // The creature from the second CHR, standing in the party's area and not
+    // in the party yet.
+    CGameSprite* pJoiner = new CGameSprite(creJoiner.data(),
+        static_cast<LONG>(creJoiner.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pJoiner->m_pArea = pArea;
+    pJoiner->m_baseStats.m_gold = 500;
+    pJoiner->m_derivedStats.m_nGold = 500;
+    pJoiner->m_baseStats.m_fatigue = 7;
+    const LONG nJoinerId = pJoiner->GetId();
+    REQUIRE(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+
+    // Action 19 (JoinParty) through the sprite's dispatcher.
+    CAIAction joinParty;
+    joinParty.m_actionID = 19;
+    pJoiner->SetCurrAction(joinParty);
+    CHECK(pJoiner->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // In the party: a portrait slot and a character slot, and the area counts
+    // it.
+    CHECK(pGame->GetCharacterPortraitNum(nJoinerId) != -1);
+    CHECK(pGame->m_nCharacters == 2);
+    CHECK(pArea->m_nCharacters == static_cast<BYTE>(nAreaCharacters + 1));
+
+    // A party member: the three AI types are PC, the gold moved out (the
+    // message carries it), the reputation and fatigue are reset.
+    CHECK(pJoiner->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_liveTypeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_startTypeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_baseStats.m_gold == 0);
+    CHECK(pJoiner->m_derivedStats.m_nGold == 0);
+    CHECK(pJoiner->m_baseStats.m_reputation == 100);
+    CHECK(pJoiner->m_baseStats.m_fatigue == 0);
+
+    // The join dialog came from the table (or is the "multig" fallback), and
+    // the six scripts are set.
+    CHECK(pJoiner->m_dialog.IsValid());
+    CHECK(pJoiner->m_special1Script != NULL);
+    CHECK(pJoiner->m_teamScript != NULL);
+    CHECK(pJoiner->m_special2Script != NULL);
+    CHECK(pJoiner->m_combatScript != NULL);
+    CHECK(pJoiner->m_special3Script != NULL);
+    CHECK(pJoiner->m_movementScript != NULL);
+
+    // Joining twice is an error: the portrait slot already exists.
+    CHECK(pJoiner->JoinParty() == CGameAIBase::ACTION_ERROR);
+}
+
+TEST_CASE("sprite: JoinParty overflows a full party without moving the gold", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    const auto newSprite = [&](const std::vector<BYTE>& bytes) {
+        CGameSprite* pSprite = new CGameSprite(const_cast<BYTE*>(bytes.data()),
+            static_cast<LONG>(bytes.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        pSprite->m_pArea = pArea;
+        return pSprite;
+    };
+
+    // Fill the party to its six-character limit.
+    for (size_t n = 1; n < candidates.size() && pGame->m_nCharacters < CINFGAME_MAXCHARACTERS; n++) {
+        CGameSprite* pMember = newSprite(candidates[n]);
+        pMember->m_sName = "Member";
+        REQUIRE(pGame->AddCharacterToParty(pMember->GetId(), -1) == TRUE);
+    }
+    if (pGame->m_nCharacters < CINFGAME_MAXCHARACTERS) {
+        SKIP("[iwd2r-skip] fewer than six CHR V2.2 files for a full party");
+    }
+
+    CGameSprite* pJoiner = newSprite(candidates[1]);
+    pJoiner->m_baseStats.m_gold = 500;
+    pJoiner->m_derivedStats.m_nGold = 500;
+    const LONG nJoinerId = pJoiner->GetId();
+    REQUIRE(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+
+    // Action 19 (JoinParty) through the sprite's dispatcher.
+    CAIAction joinParty;
+    joinParty.m_actionID = 19;
+    pJoiner->SetCurrAction(joinParty);
+    CHECK(pJoiner->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // The party stays at six; the creature waits in the overflow and its gold
+    // stays with it (the overflow path has no party-gold message).
+    CHECK(pGame->m_nCharacters == CINFGAME_MAXCHARACTERS);
+    CHECK(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+    REQUIRE(pGame->m_nCharacterOverflowCount == 1);
+    CHECK(static_cast<int>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow[0])) == nJoinerId);
+    CHECK(pJoiner->m_baseStats.m_gold == 500);
+    CHECK(pJoiner->m_derivedStats.m_nGold == 500);
+    CHECK(pJoiner->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_baseStats.m_fatigue == 0);
+    CHECK(pJoiner->m_dialog.IsValid());
+    CHECK(pJoiner->m_special1Script != NULL);
+    CHECK(pJoiner->m_movementScript != NULL);
 }
