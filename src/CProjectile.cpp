@@ -838,6 +838,15 @@ CProjectile84D8B8::CProjectile84D8B8()
 {
 }
 
+// 0x5295D0
+void CProjectileBAM::SetVidCell(CResRef resRef)
+{
+    if (m_animation != NULL) {
+        delete m_animation;
+    }
+    m_animation = new CVidCell(resRef, FALSE);
+}
+
 // 0x5297B0
 CProjectileSparkleExplosion::CProjectileSparkleExplosion(CResRef resRef)
     : CProjectileBAM(resRef)
@@ -948,6 +957,38 @@ void CProjectileExplodingFlame::Explode()
     memset(colorRangeValues, 0x43, sizeof(colorRangeValues));
     new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
         static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
+// 0x52F760
+//
+// The skull trap's burst: the ShSkull sound (the resref the parked ctor
+// stored at +0x4B4) fire-and-forget on channel 14, then the bone chunk
+// spray the shatter effect throws — one CGameChunk per count, sized by the
+// trap's own child type, thrown sideways at up to 5 either way and upwards
+// at one of three speeds, the chunk lifetime the shatter effect uses.
+void CProjectileSkullTrap::Explode()
+{
+    CSound sound;
+    CString sSound("");
+    // NOTE: the exe passes a stack buffer it never writes here.
+    BYTE colorRangeValues[7];
+
+    sound.SetResRef(m_explodeSound, TRUE, TRUE);
+    sound.SetFireForget(TRUE);
+    sound.SetChannel(14, reinterpret_cast<DWORD_PTR>(m_pArea));
+    sound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    BYTE nChunks = static_cast<BYTE>(rand() % 16 + 10);
+    while (nChunks != 0) {
+        LONG nPosZDelta = rand() % 3 * 3 + 3; // the exe draws this one first
+        CPoint ptVelocity;
+        ptVelocity.y = rand() % 11 - 5; // …then y…
+        ptVelocity.x = rand() % 11 - 5; // …then x
+        new CGameChunk(m_nType, colorRangeValues, sSound, m_pArea, m_pos,
+            ptVelocity, -m_posZ, nPosZDelta, (CHUNK_DURATION + 1) << 2,
+            CHUNK_DURATION + 1);
+        nChunks--;
+    }
 }
 
 // 0x531360

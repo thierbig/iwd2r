@@ -23,6 +23,8 @@ public:
     void CalculateFxRect(CRect& rFx, CPoint& ptReference, CVidCell* pVidCell);
     void SetColorRange(USHORT nRange, USHORT nColor);
     void SetSequenceDirection(CVidCell* pVidCell);
+    // 0x5295D0 (the resref is passed by value in the exe — ret 0x8)
+    void SetVidCell(CResRef resRef);
 
     /* 0192 */ CVidCell* m_animation;
     /* 0196 */ CVidCell* m_shadow;
@@ -149,6 +151,22 @@ public:
 class CProjectileExplodingFlame : public CProjectileExploding {
 public:
     /* 0088 */ virtual void Explode();
+};
+
+// The skull trap missile (vtable 0x84DD80): Explode (slot 0x0088) is the
+// ShSkull burst sound fire-and-forget on channel 14 followed by the bone
+// chunk spray the shatter effect throws (CGameChunk, sized by the trap's
+// own child type). The ctor (0x52F260, three resrefs) and AIUpdate
+// (0x52F9E0) are parked from i065 on this class, so only the virtual and
+// the members Explode reads are declared.
+class CProjectileSkullTrap : public CProjectileExploding {
+public:
+    /* 0088 */ virtual void Explode();
+
+    // Native exe offsets, past the tail of m_explodeCell2; ours lay out after
+    // the base under the reduced packing.
+    /* 04B2 */ SHORT m_nType;
+    /* 04B4 */ CResRef m_explodeSound;
 };
 
 // The invisible projectile an area projectile fires at each target, type 79
