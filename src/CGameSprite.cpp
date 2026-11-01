@@ -10315,7 +10315,6 @@ SHORT CGameSprite::RemoveSpell()
     return ACTION_DONE;
 }
 
-
 // 0x7500F0
 SHORT CGameSprite::Rest()
 {
