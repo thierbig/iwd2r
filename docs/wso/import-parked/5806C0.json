@@ -1,0 +1,7 @@
+{
+  "address": "0x5806C0",
+  "name": "CProjectileLightningBolt::CProjectileLightningBolt",
+  "file": "src/CProjectile.cpp",
+  "batch": "i068",
+  "needs": "dependency outside the batch's files: IcewindCProjectileTargetMap (fork src/IcewindCProjectileTargetMap.{h,cpp}) -- the ctor takes one CResRef by value (ret 0x4; the temp is built through 0x78A9D0), bases on CProjectileSingleTarget through 0x578110 (exe 0x5806F4), sets m_beamRange 400 at +0x2AE, stores the vtable 0x8513BC, then calls the map ctor 0x55ACC0 on +0x2B2 and self-wires the strike tracker (owner back-pointer this at +0x2B6, service period 2 at +0x2CA, strike interval 33 at +0x2D2), so the row imports only after that map class is built and verified (its dtor 0x580770 and AIUpdate 0x5808A0 park on the same dependency)"
+}

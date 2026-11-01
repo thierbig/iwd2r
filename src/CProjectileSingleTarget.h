@@ -200,13 +200,16 @@ public:
     // m_beamRange past the target along the caster->target heading, then
     // launches through the base Fire.
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
-    // The ctor 0x5806C0 and the dtor (vtable slot 0, exe entry 0x580750)
-    // are not part of the batch, and slot 0x000C (AIUpdate 0x5808A0) is
-    // parked (docs/wso/import-parked/5808A0.json — the strike tracker it
-    // walks is the fork-only IcewindCProjectileTargetMap at +0x2BE), so the
-    // class inherits the base virtuals for those slots; a declared-but-
-    // undefined dtor would become the key function and leave the vtable
-    // unemitted, breaking the link.
+    // The ctor 0x5806C0 is parked (docs/wso/import-parked/5806C0.json — it
+    // embeds the fork-only IcewindCProjectileTargetMap at +0x2B2 through its
+    // ctor 0x55ACC0, self-wiring the owner back-pointer at +0x2B6 and the
+    // service period 2 / strike interval 33 stamps at +0x2CA/+0x2D2), as are
+    // the dtor body 0x580770 (docs/wso/import-parked/580770.json) and slot
+    // 0x000C (AIUpdate 0x5808A0, docs/wso/import-parked/5808A0.json — the
+    // strike tracker it walks is that same map), so the class inherits the
+    // base virtuals for those slots; a declared-but-undefined dtor would
+    // become the key function and leave the vtable unemitted, breaking the
+    // link.
     // Distance the shot is pushed past the picked target: the radius handed
     // to IcewindMisc::sub_5847B0 in Fire (a DWORD read at +0x2AE in the exe).
     /* 02AE */ LONG m_beamRange;
