@@ -10258,6 +10258,64 @@ SHORT CGameSprite::Help()
     return ACTION_DONE;
 }
 
+// Removes the action's spell from the list that holds it: the `removeknown`
+// case erases the memorized entry (and the domain entry too when the spell was
+// found there), `removeinnate` / `removesong` erase the innate/song entry and
+// the shapeshift entry is removed. The spell is the action's string1, or the
+// resref DecodeSpell builds from its id when the string is empty.
+//
+// 0x75C980
+SHORT CGameSprite::RemoveSpell()
+{
+    CString sSpell;
+
+    if (strcmp(m_curAction.GetString1(), "") == 0) {
+        // The id path: DecodeSpell turns the id into a resref (SPPR/SPWI/SPIN
+        // plus the three digits), and an empty result means there is nothing
+        // to remove.
+        DecodeSpell(m_curAction.m_specificID, sSpell);
+        if (strcmp(sSpell, "") == 0) {
+            return ACTION_ERROR;
+        }
+    } else {
+        sSpell = m_curAction.GetString1();
+    }
+
+    CResRef res(sSpell);
+
+    // sub_727720 fills the class, the specialization mask and the level of the
+    // list entry that holds the spell (nLevel is 1-based there; the removers
+    // take a 0-based level).
+    BYTE nClass = 0;
+    DWORD nSpecialization = 0;
+    BYTE nLevel = 0;
+    sub_727720(res, nClass, nSpecialization, nLevel);
+
+    switch (g_pBaldurChitin->GetObjectGame()->GetSpellType(res)) {
+    case 1:
+        // A memorized spell: erase the entry, and the domain entry too when
+        // sub_727720 found it in the domain list (nSpecialization is the
+        // caster's specialization mask then).
+        RemoveKnownSpell(nClass, static_cast<UINT>(nLevel - 1), res, 1, 0, 0);
+        if (nSpecialization != 0) {
+            RemoveDomainSpell(static_cast<UINT>(nLevel - 1), res, 1, 0, 0);
+        }
+        break;
+    case 2:
+        RemoveInnateSpell(res, 1, 0, 0);
+        break;
+    case 3:
+        RemoveSong(res, 1, 0, 0);
+        break;
+    case 4:
+        RemoveShapeshift(res);
+        break;
+    }
+
+    return ACTION_DONE;
+}
+
+
 // 0x7500F0
 SHORT CGameSprite::Rest()
 {
@@ -14204,8 +14262,7 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 147:
         // RemoveSpell
-        // TODO: 0x72A4FE-0x72A50E not ported (0x75C980).
-        returnValue = ACTION_ERROR;
+        returnValue = RemoveSpell();
         goto done;
     case 148:
         // BashDoor (0x72A50E-0x72A536)

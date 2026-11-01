@@ -680,6 +680,7 @@ public:
     SHORT Help();
     SHORT Rest();
     SHORT JoinParty();
+    SHORT RemoveSpell();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
     SHORT RunAwayFromNoLeaveArea(CGameSprite* pTarget);
     SHORT ForceHide(CGameSprite* pSprite);
