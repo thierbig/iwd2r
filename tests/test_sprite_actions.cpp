@@ -391,6 +391,38 @@ void ClearMessages()
     }
 }
 
+// The number of VC6 rand() draws that lead from `before` to `after` (the
+// generator's state), or -1 beyond `limit` (tests/test_combat.cpp's).
+int RandDraws(unsigned int before, unsigned int after, int limit = 5000)
+{
+    unsigned int state = before;
+    for (int n = 0; n <= limit; n++) {
+        if (state == after) {
+            return n;
+        }
+        state = state * 214013u + 2531011u;
+    }
+    return -1;
+}
+
+// The values rand() returns from the state `state` on.
+std::vector<int> RandValues(unsigned int state, int count)
+{
+    std::vector<int> values;
+    for (int n = 0; n < count; n++) {
+        state = state * 214013u + 2531011u;
+        values.push_back(static_cast<int>((state >> 16) & 0x7FFF));
+    }
+    return values;
+}
+
+// A seed for the n-th case: consecutive small seeds start the generator
+// with nearly equal first values.
+unsigned int RandSeed(unsigned int n)
+{
+    return n * 0x9E3779B1u;
+}
+
 // The queued messages of one kind, oldest first (tests/test_combat.cpp's
 // Queued).
 template <class T>
@@ -2129,6 +2161,150 @@ TEST_CASE("sprite: Rest refills a memorized but spent spell", "[ai][data]")
     if (kind == KIND_CLASS && (nEntryClass == 0 || nEntryClass == 5)) {
         CHECK(pLevelList->field_18 == 2);
     }
+}
+
+// CGameSprite::RandomFly (0x7526D0, action 100): the sprite rounds its
+// facing, then draws a circle type (0..4), a side and a radius and hops to
+// the point they make, retrying up to 999 times for a point inside the
+// area. On success it queues the RANDOMFLY that brought it here and the
+// SETTARGETFLY whose arc it will fly (the dispatcher's SetTargetFly reads
+// the circle type and facing from the action's actee AI type and the radius
+// from its specific ID); after a thousand tries it jumps to the clamped
+// point. The draws are the compat VC6 rand(), so a seed fixes the case.
+TEST_CASE("sprite: RandomFly queues the fly arc, rounds the facing and jumps after a thousand tries", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CInfinity* pInfinity = pArea->GetInfinity();
+    const int nAreaX = pInfinity->nAreaX;
+    const int nAreaY = pInfinity->nAreaY;
+
+    // The first seeds whose first draw takes the straight (circle type 0)
+    // and the arc branch (circle type 1..4).
+    unsigned int nStraightSeed = 0;
+    unsigned int nArcSeed = 0;
+    for (unsigned int n = 1; n < 10000 && (nStraightSeed == 0 || nArcSeed == 0); n++) {
+        srand(RandSeed(n));
+        const int value = RandValues(iwd2r_rand_state(), 1)[0];
+        if (value % 5 == 0) {
+            if (nStraightSeed == 0) {
+                nStraightSeed = n;
+            }
+        } else if (nArcSeed == 0) {
+            nArcSeed = n;
+        }
+    }
+    REQUIRE(nStraightSeed != 0);
+    REQUIRE(nArcSeed != 0);
+
+    // With the area on this enormous box every first point is inside it, so
+    // exactly the three draws of the first try happen, and the queued arc's
+    // fields are those of the first try.
+    pInfinity->nAreaX = 1 << 20;
+    pInfinity->nAreaY = 1 << 20;
+    pCharacter->m_pos = CPoint(3000, 3000);
+
+    const unsigned int seeds[] = { nStraightSeed, nArcSeed };
+    for (const unsigned int nSeed : seeds) {
+        pCharacter->m_queuedActions.RemoveAll();
+        pCharacter->m_curAction = CAIAction(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+        // (6 + 2) / 4 * 4 = 8: the facing is rounded to the next multiple of 4.
+        pCharacter->m_nNewDirection = 6;
+        pCharacter->m_nDirection = 0;
+
+        srand(RandSeed(nSeed));
+        const unsigned int nBefore = iwd2r_rand_state();
+        const SHORT nReturn = pCharacter->ExecuteAction();
+        const unsigned int nAfter = iwd2r_rand_state();
+        const std::vector<int> values = RandValues(nBefore, 3);
+
+        CHECK(nReturn == CGameAIBase::ACTION_DONE);
+        CHECK(RandDraws(nBefore, nAfter) == 3);
+        CHECK(pCharacter->m_nDirection == 8);
+        CHECK(pCharacter->m_nNewDirection == 8);
+
+        CHECK(pCharacter->m_queuedActions.GetCount() == 2);
+        POSITION pos = pCharacter->m_queuedActions.GetHeadPosition();
+        CAIAction* pFly = pCharacter->m_queuedActions.GetNext(pos);
+        CAIAction* pAgain = pCharacter->m_queuedActions.GetNext(pos);
+        if (pFly != NULL) {
+            CHECK(pFly->m_actionID == CAIAction::SETTARGETFLY);
+            // The draws: circle type, side (1 left, -1 right), radius.
+            CHECK(pFly->m_acteeID.m_nGeneral == values[0] % 5);
+            CHECK(pFly->m_acteeID.m_nEnemyAlly == (values[1] % 2 == 1 ? 1 : 0xFF));
+            CHECK(pFly->m_specificID == values[2] % 0x380 + 0x80);
+            CHECK(pFly->m_specificID2 == -1);
+            CHECK(pFly->m_specificID3 == 0);
+            CHECK(pFly->m_dest == CPoint(-1, -1));
+            CHECK(pFly->m_internalFlags == 0);
+            CHECK(pFly->m_string1 == CString(""));
+            if (values[0] % 5 == 0) {
+                CHECK(pFly->m_acteeID.m_nGeneral == 0);
+            } else {
+                CHECK(pFly->m_acteeID.m_nGeneral != 0);
+            }
+        }
+        if (pAgain != NULL) {
+            CHECK(pAgain->m_actionID == CAIAction::RANDOMFLY);
+            CHECK(pAgain->m_specificID == 0);
+            CHECK(pAgain->m_specificID2 == -1);
+            CHECK(pAgain->m_specificID3 == 0);
+            CHECK(pAgain->m_dest == CPoint(-1, -1));
+            CHECK(pAgain->m_internalFlags == 0);
+        }
+        ClearMessages();
+    }
+
+    pInfinity->nAreaX = nAreaX;
+    pInfinity->nAreaY = nAreaY;
+
+    // A position above the top-left corner: every try is out of the area, so
+    // the thousandth try's point is clamped to (10, 10) and jumped to.
+    // m_activeAI is off so JumpToPoint does not take the out-of-area square
+    // off the search bitmap.
+    pCharacter->m_queuedActions.RemoveAll();
+    pCharacter->m_curAction = CAIAction(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+    pCharacter->m_nNewDirection = 0;
+    pCharacter->m_nDirection = 0;
+    pCharacter->m_pos = CPoint(-10000, -10000);
+    const BOOL bActiveAI = pCharacter->m_activeAI;
+    pCharacter->m_activeAI = FALSE;
+
+    srand(RandSeed(7));
+    const unsigned int nBefore = iwd2r_rand_state();
+    const SHORT nReturn = pCharacter->ExecuteAction();
+    const unsigned int nAfter = iwd2r_rand_state();
+    pCharacter->m_activeAI = bActiveAI;
+
+    CHECK(nReturn == CGameAIBase::ACTION_DONE);
+    CHECK(RandDraws(nBefore, nAfter) == 3000); // a thousand tries of three draws
+    CHECK(pCharacter->m_nDirection == 0);
+    CHECK(pCharacter->m_nNewDirection == 0);
+    CHECK(pCharacter->m_queuedActions.GetCount() == 1);
+    CAIAction* pAgain = pCharacter->m_queuedActions.GetHead();
+    if (pAgain != NULL) {
+        CHECK(pAgain->m_actionID == CAIAction::RANDOMFLY);
+    }
+    // JumpToPoint(10, 10) leaves the sprite on an open square inside the
+    // area (0, 0) or one near it, not at the far point it started from.
+    CHECK(pCharacter->m_pos.x >= 0);
+    CHECK(pCharacter->m_pos.x < nAreaX);
+    CHECK(pCharacter->m_pos.y >= 0);
+    CHECK(pCharacter->m_pos.y < nAreaY);
+    ClearMessages();
 }
 
 // CGameSprite::Help (0x74FF10, action 17): every object within GetHelpRange

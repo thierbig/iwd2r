@@ -14077,9 +14077,8 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_INTERRUPTABLE;
         goto done;
     case 100:
-        // RandomFly
-        // TODO: 0x729ED8-0x729EE8 not ported (0x7526D0).
-        returnValue = ACTION_ERROR;
+        // RandomFly (0x729ED8-0x729EE8)
+        returnValue = RandomFly();
         goto done;
     case 101:
         // TODO: 0x729048-0x7290BB not ported (SetTargetFly).
@@ -24288,6 +24287,140 @@ SHORT CGameSprite::Enemy()
     m_equipedEffectList.RemoveAllOfType(this, CGAMEEFFECT_SETAISCRIPT, m_equipedEffectList.m_posCurrent, -1);
     g_pBaldurChitin->GetObjectGame()->RemoveCharacterFromAllies(m_id);
     g_pBaldurChitin->GetObjectGame()->RemoveCharacterFromFamiliars(m_id);
+
+    return ACTION_DONE;
+}
+
+// 0x7526D0
+SHORT CGameSprite::RandomFly()
+{
+    // Keep flying: the action is queued again first, so the sprite hops once
+    // more when this one is done (0x7527E8-0x7527FF).
+    CAIAction action(CAIAction::RANDOMFLY, CPoint(-1, -1), 0, -1);
+    AddAction(action);
+
+    // The facing is rounded to a multiple of 4 and wrapped to 0..15
+    // (0x752802-0x75282F).
+    SHORT nDirection = static_cast<SHORT>(4 * ((m_nNewDirection + 2) / 4) % 16);
+    m_nDirection = nDirection;
+    m_nNewDirection = nDirection;
+
+    SHORT nTries;
+    LONG nX;
+    LONG nY;
+    SHORT nCircleType;
+    SHORT nCircleFacing;
+    LONG nRadius;
+
+    for (nTries = 1;; nTries++) {
+        nCircleType = static_cast<SHORT>(rand() % (FLY_360 + 1));
+        nCircleFacing = rand() % 2 == 1 ? FLY_LEFT : FLY_RIGHT;
+        nRadius = rand() % FLY_RADIUS_RANDOM + FLY_RADIUS_BASE;
+
+        nX = m_pos.x;
+        nY = m_pos.y;
+
+        if (nCircleType == FLY_0) {
+            // A straight hop along the facing (0x752897-0x752900).
+            switch (nDirection) {
+            case 0:
+                nY += 3 * nRadius / 4;
+                break;
+            case 4:
+                nX -= nRadius;
+                break;
+            case 8:
+                nY += -3 * nRadius / 4;
+                break;
+            case 12:
+                nX += nRadius;
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                // __LINE__: 19851
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+        } else {
+            // An arc to the facing's side (0x752905-0x752A3B).
+            switch (nDirection) {
+            case 0:
+                nX += nRadius * nCircleFacing;
+                break;
+            case 4:
+                nY += 3 * nRadius * nCircleFacing / 4;
+                break;
+            case 8:
+                nX -= nRadius * nCircleFacing;
+                break;
+            case 12:
+                nY += -3 * nRadius * nCircleFacing / 4;
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
+                // __LINE__: 19875
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+
+            double angle = static_cast<double>(8 - nDirection) * 3.1415926535 / 8.0;
+            if (nCircleFacing == FLY_RIGHT) {
+                angle += 3.1415926535;
+            }
+            angle += static_cast<double>(nCircleFacing * nCircleType) * 3.1415926535 / 2.0;
+
+            // NOTE: The original's x87 __ftol (0x7E812C) truncates toward
+            // zero, as the cast does for these bounded values. The same
+            // product appears in AIUpdateFly (0x6FB630).
+            nX += static_cast<LONG>(cos(angle) * static_cast<double>(nRadius));
+            nY += static_cast<LONG>(sin(angle) * static_cast<double>(nRadius) * -3.0 / 4.0);
+        }
+
+        if (nTries > 999) {
+            break;
+        }
+
+        if (nX >= 0
+            && nX < m_pArea->GetInfinity()->nAreaX
+            && nY >= 0
+            && nY < m_pArea->GetInfinity()->nAreaY) {
+            break;
+        }
+    }
+
+    if (nTries < 1000) {
+        // The arc to fly (0x752ADD-0x752CF0): the dispatcher's SetTargetFly
+        // (0x729048) takes its circle type and facing from the action's
+        // actee AI type and its radius from the action's specific ID.
+        CAIAction flyAction(CAIAction::SETTARGETFLY, CPoint(-1, -1), 0, -1);
+
+        CAIObjectType objectType;
+        objectType.m_nEnemyAlly = static_cast<BYTE>(nCircleFacing);
+        objectType.m_nGeneral = static_cast<BYTE>(nCircleType);
+
+        flyAction.m_specificID = nRadius;
+        flyAction.m_acteeID.Set(objectType);
+
+        AddAction(flyAction);
+    } else {
+        // A thousand tries without a point inside the area: jump to the
+        // clamped one (0x752A7E-0x752AD8).
+        if (nX < 0) {
+            nX = 10;
+        } else if (m_pArea->GetInfinity()->nAreaX <= nX) {
+            nX = m_pArea->GetInfinity()->nAreaX - 10;
+        }
+
+        if (nY < 0) {
+            JumpToPoint(CPoint(nX, 10), FALSE);
+        } else {
+            if (m_pArea->GetInfinity()->nAreaY <= nY) {
+                nY = m_pArea->GetInfinity()->nAreaY - 10;
+            }
+
+            JumpToPoint(CPoint(nX, nY), FALSE);
+        }
+    }
 
     return ACTION_DONE;
 }
