@@ -686,6 +686,118 @@ TEST_CASE("sprite: PlayerDialog out of range walks to Hedron and the dialog open
     ClearMessages();
 }
 
+TEST_CASE("sprite: RunAwayFromNoLeaveArea (250) runs for the action's duration and then stops", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    ClearMessages();
+
+    CAIObjectType character(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+
+    // No target, or a target in another area (none): the action fails.
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(NULL) == CGameAIBase::ACTION_ERROR);
+    CGameArea* pCharacterArea = pCharacter->m_pArea;
+    pCharacter->m_pArea = NULL;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_pArea = pCharacterArea;
+
+    // Duration spent (specificID 0, the counter at 5): the counter resets,
+    // the path is dropped and the idle sequence takes over.
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_WALK;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->field_5614 == 0);
+    REQUIRE(handler.m_messageList.GetCount() == 2);
+    auto* pDrop = dynamic_cast<CMessageDropPath*>(handler.m_messageList.GetHead());
+    REQUIRE(pDrop != NULL);
+    CHECK(pDrop->GetSource() == pHedron->GetId());
+    auto* pSequence = dynamic_cast<CMessageSetSequence*>(handler.m_messageList.GetTail());
+    REQUIRE(pSequence != NULL);
+    CHECK(pSequence->m_sequence == static_cast<BYTE>(pHedron->GetIdleSequence()));
+    CHECK(pSequence->GetTarget() == pHedron->GetId());
+    ClearMessages();
+
+    // Already in the idle pose: no messages.
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_READY;
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(handler.m_messageList.IsEmpty());
+
+    // Too far (more than 8 squares) and no path: the first random point
+    // clamps to the area's corner, which is this position itself, so no
+    // move is started and the action stays interruptable. The corner is the
+    // area's 0,0 with empty bounds.
+    CPoint ptHedron = pHedron->m_pos;
+    CPoint ptCharacter = pCharacter->m_pos;
+    int nAreaX = pArea->GetInfinity()->nAreaX;
+    int nAreaY = pArea->GetInfinity()->nAreaY;
+    pArea->GetInfinity()->nAreaX = 0;
+    pArea->GetInfinity()->nAreaY = 0;
+    pHedron->m_pos = CPoint(0, 0);
+    pCharacter->m_pos = CPoint(1000, 700);
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+    pHedron->field_5614 = 0;
+    pHedron->SetCurrAction(CAIAction(250, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->field_5614 == 1);
+    CHECK(pHedron->m_curDest.x == 0);
+    CHECK(pHedron->m_curDest.y == 0);
+
+    // The 184 variant (RunAwayFromNoInterrupt) answers ACTION_NORMAL from
+    // the same body.
+    pHedron->field_5614 = 0;
+    pHedron->SetCurrAction(CAIAction(184, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_NORMAL);
+
+    // Too close and the counter at its 15th call: the point opposite the
+    // target (twice this position minus the target's) is this position
+    // when both stand together, so the move starts; the empty weapon slot
+    // then ends the action done.
+    CItem* pSavedItem = pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon];
+    pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon] = NULL;
+    pArea->GetInfinity()->nAreaX = nAreaX;
+    pArea->GetInfinity()->nAreaY = nAreaY;
+    pHedron->m_pos = ptHedron;
+    pCharacter->m_pos = ptHedron;
+    pHedron->field_5614 = 14;
+    pHedron->SetCurrAction(CAIAction(250, character, 100, 0, 0));
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->field_5614 == 15);
+    CHECK(pHedron->m_curDest.x == ptHedron.x);
+    CHECK(pHedron->m_curDest.y == ptHedron.y);
+    pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon] = pSavedItem;
+    pCharacter->m_pos = ptCharacter;
+
+    // Through the dispatcher: the target is shared as a sprite, the action
+    // runs and the share is released.
+    pHedron->field_5614 = 5;
+    pHedron->m_nSequence = CGameSprite::SEQ_READY;
+    pHedron->SetCurrAction(CAIAction(250, character, 0, 0, 0));
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_curAction.m_actionID == 250);
+    ClearMessages();
+}
+
 TEST_CASE("sprite: Interact (168) records the interaction and opens the actor's dialog", "[ai][data]")
 {
     if (DataDir() == nullptr) {

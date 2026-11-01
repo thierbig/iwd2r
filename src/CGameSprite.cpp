@@ -14383,10 +14383,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 250:
-        // RunAwayFromNoLeaveArea
-        // TODO: 0x72AB5C-0x72AB84 not ported (0x760C50).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // RunAwayFromNoLeaveArea (0x72AB5C-0x72AB84)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = RunAwayFromNoLeaveArea(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 255:
         // SetBestWeapon (0x72AB84-0x72ACB5): within the action's range (in
         // search squares) of the target, the best melee weapon unless the
@@ -27547,6 +27548,254 @@ SHORT CGameSprite::SetAtOffset(DWORD stat, DWORD value, BOOL modify)
     }
 
     return 0;
+}
+
+// 0x760C50
+SHORT CGameSprite::RunAwayFromNoLeaveArea(CGameSprite* pTarget)
+{
+    // NOTE: The body is shared with 184, RunAwayFromNoInterrupt (the exe
+    // tests the action id at 0x760C6D): that variant answers ACTION_NORMAL
+    // where this one answers ACTION_INTERRUPTABLE.
+    SHORT returnValue = m_curAction.m_actionID == 184
+        ? ACTION_NORMAL
+        : ACTION_INTERRUPTABLE;
+
+    if (pTarget == NULL || pTarget->m_pArea != m_pArea) {
+        returnValue = ACTION_ERROR;
+    } else {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+        SHORT nCounter = field_5614;
+        field_5614 = static_cast<SHORT>(nCounter + 1);
+
+        if (nCounter > m_curAction.m_specificID) {
+            // The action's duration (m_specificID calls) is spent: stop and
+            // take the idle pose, dropping the path first.
+            field_5614 = 0;
+            if (m_nSequence != SEQ_READY) {
+                CMessage* message = new CMessageDropPath(m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                message = new CMessageSetSequence(static_cast<BYTE>(GetIdleSequence()), m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+            returnValue = ACTION_DONE;
+        } else {
+            CPoint ptTarget = pTarget->GetPos();
+            LONG nDeltaX = ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX
+                - m_pos.x / CPathSearch::GRID_SQUARE_SIZEX;
+            LONG nDeltaY = ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY
+                - m_pos.y / CPathSearch::GRID_SQUARE_SIZEY;
+
+            // The threshold is the WORD at 0x85BC88 (8), squared.
+            if (nDeltaX * nDeltaX + nDeltaY * nDeltaY <= 8 * 8) {
+                // Too close: every 15th call run to the point opposite the
+                // target, twice this position minus the target's.
+                if (field_5614 % 15 == 0) {
+                    CInfinity* pInfinity = m_pArea->GetInfinity();
+                    m_curDest.x = m_pos.x * 2 - ptTarget.x;
+                    if (m_curDest.x < 0) {
+                        m_curDest.x = 0;
+                    }
+                    if (m_curDest.x >= pInfinity->nAreaX) {
+                        m_curDest.x = pInfinity->nAreaX;
+                    }
+                    m_curDest.y = m_pos.y * 2 - ptTarget.y;
+                    if (m_curDest.y < 0) {
+                        m_curDest.y = 0;
+                    }
+                    if (m_curDest.y >= pInfinity->nAreaY) {
+                        m_curDest.y = pInfinity->nAreaY;
+                    }
+                    SetTarget(m_curDest, FALSE);
+                }
+            } else if (m_pPath == NULL && m_currentSearchRequest == NULL) {
+                CInfinity* pInfinity = m_pArea->GetInfinity();
+
+                // Three tries at a random point away from the target: to
+                // the side, one axis randomly flipped, then the opposite
+                // side. The counts are 0x85BC8A (120) and twice it.
+                SHORT nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x + nRandomX, m_pos.y + nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 120);
+
+                nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+                    if (rand() % 2 == 0) {
+                        nRandomX = -nRandomX;
+                    } else {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x + nRandomX, m_pos.y + nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 2 * 120);
+
+                nAttempt = 0;
+                do {
+                    LONG nRandomX = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEX;
+                    if (m_pos.x - ptTarget.x < 0) {
+                        nRandomX = -nRandomX;
+                    }
+                    LONG nRandomY = rand() % 200 + CPathSearch::GRID_SQUARE_SIZEY;
+                    if (m_pos.y - ptTarget.y < 0) {
+                        nRandomY = -nRandomY;
+                    }
+
+                    CPoint pt(m_pos.x - nRandomX, m_pos.y - nRandomY);
+                    if (pt.x < 0) {
+                        pt.x = 0;
+                    }
+                    if (pt.x >= pInfinity->nAreaX) {
+                        pt.x = pInfinity->nAreaX;
+                    }
+                    if (pt.y < 0) {
+                        pt.y = 0;
+                    }
+                    if (pt.y >= pInfinity->nAreaY) {
+                        pt.y = pInfinity->nAreaY;
+                    }
+
+                    if (m_pArea->CheckLOS(m_pos, pt, m_visibleTerrainTable, FALSE)) {
+                        m_curDest = pt;
+                        if (m_curDest.x != m_pos.x || m_curDest.y != m_pos.y) {
+                            SetTarget(pt, FALSE);
+                        }
+                        return returnValue;
+                    }
+
+                    nAttempt++;
+                } while (nAttempt < 120);
+            }
+
+            // Cornered: swing at the enemy of this sprite with the selected
+            // weapon, if it is a melee one with uses left.
+            CAIObjectType enemy = m_typeAI.GetEnemyOf();
+            CItem* pItem = m_equipment.m_items[m_equipment.m_selectedWeapon];
+            if (pItem != NULL) {
+                pItem->Demand();
+
+                ITEM_ABILITY* pAbility = pItem->GetAbility(m_equipment.m_selectedWeaponAbility);
+                if (pAbility == NULL
+                    || (pAbility->type & 0xFF) == 4
+                    || (pAbility->usageFlags == 3
+                        && pItem->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+                        && pAbility->maxUsageCount > 0)
+                    || (pAbility->type & 0xFF) == 2) {
+                    pItem->Release();
+                } else {
+                    pItem->Release();
+
+                    // The reach: the weapon's range plus one and both
+                    // personal spaces, in search squares (a byte sum, as in
+                    // PlayerDialog).
+                    SHORT nRange = static_cast<SHORT>(pAbility->range + 1);
+                    BYTE nPersonalSpace = m_animation.GetPersonalSpace();
+                    BYTE nTargetPersonalSpace = pTarget->m_animation.GetPersonalSpace();
+                    nRange = static_cast<SHORT>(nRange
+                        + static_cast<BYTE>(((nTargetPersonalSpace - 1) >> 1)
+                            + ((nPersonalSpace - 1) >> 1) - 1));
+                    nRange = static_cast<SHORT>(nRange * CPathSearch::GRID_SQUARE_SIZEX);
+
+                    LONG nId = m_pArea->GetNearest(m_id,
+                        enemy,
+                        nRange,
+                        m_terrainTable,
+                        TRUE,
+                        GetCanSeeInvisible(),
+                        FALSE,
+                        0,
+                        FALSE);
+                    if (nId != CGameObjectArray::INVALID_INDEX) {
+                        CGameObject* pObject = NULL;
+                        BYTE rc;
+                        do {
+                            rc = pGame->GetObjectArray()->GetShare(nId,
+                                CGameObjectArray::THREAD_ASYNCH,
+                                &pObject,
+                                INFINITE);
+                        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                        if (rc == CGameObjectArray::SUCCESS) {
+                            if (m_attackFrame == -2) {
+                                m_attackFrame = -1;
+                            }
+
+                            Swing(static_cast<CGameSprite*>(pObject));
+
+                            pGame->GetObjectArray()->ReleaseShare(nId,
+                                CGameObjectArray::THREAD_ASYNCH,
+                                INFINITE);
+                        }
+                    }
+                }
+            }
+
+            returnValue = ACTION_DONE;
+        }
+    }
+
+    return returnValue;
 }
 
 // 0x761470
