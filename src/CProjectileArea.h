@@ -21,6 +21,9 @@ public:
 
 class CProjectileAreaExplosion2 : public CProjectileAreaExplosion {
 public:
+    // 0x56FDC0
+    CProjectileAreaExplosion2();
+
     /* 002C */ BYTE field_2C;
     /* 002E */ LONG field_2E;
 };
@@ -72,6 +75,8 @@ public:
 class CProjectileArea : public CProjectileSingleTarget {
 public:
     CProjectileArea(WORD nRadius);
+    // 0x56F1F0
+    /* 0000 */ ~CProjectileArea() override;
     /* 000C */ void AIUpdate() override;
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
@@ -335,6 +340,14 @@ public:
 class CProjectileBigBoulder : public CProjectileArea {
 public:
     CProjectileBigBoulder();
+};
+
+// Symbol of Death (SPPR726, projectile type 365, vtable 0x850B70): the
+// SoPainX burst on the EFF_P49 sound, copy-from-back, 300 around. It adds
+// no members of its own — the ctor writes only inherited fields.
+class CProjectileSymbolOfDeath : public CProjectileArea {
+public:
+    CProjectileSymbolOfDeath();
 };
 
 // Dispel Magic (projectile type 246, vtable 0x850C0C): AbjuraX, 150 around;

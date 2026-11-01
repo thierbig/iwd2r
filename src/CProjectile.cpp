@@ -1185,6 +1185,29 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     m_checkLOS = TRUE;
 }
 
+// 0x56F1F0
+//
+// The exe's body is the compiler-generated member destruction — the set,
+// the two CSounds, the three explosion strings (third to first), the
+// target-hits map, the two embedded CVidCells, the target filter's CString,
+// then the CProjectileSingleTarget dtor (0x5783E0). Ours is the empty
+// braces the compiler emits the same destruction from.
+CProjectileArea::~CProjectileArea()
+{
+}
+
+// 0x56FDC0
+//
+// The second explosion's description: the base (two empty strings and the
+// visual effect), then the animation-mode byte clear and the field_2E
+// sentinel INT_MAX (the fork names them m_animMode and m_maxMovingSpawn —
+// the cap on moving pieces the emission may still spawn).
+CProjectileAreaExplosion2::CProjectileAreaExplosion2()
+{
+    field_2C = 0;
+    field_2E = 0x7FFFFFFF;
+}
+
 // 0x56FE30
 //
 // The third explosion description's ctor: no burned points yet, the two
@@ -1445,6 +1468,22 @@ CProjectileBigBoulder::CProjectileBigBoulder()
     m_speed = 7;
     m_fireSoundRef = CResRef("AM6103e");
     m_arrivalSoundRef = CResRef("AM5101e");
+}
+
+// 0x5778A0
+//
+// Everything the spell is lives in the first explosion: the SoPainX burst
+// on the EFF_P49 sound with the copy-from-back mode on the visual effect
+// (sub_586A90) — the same first-explosion shape the spell-hit cases of
+// DecodeProjectile build inline. The base is handed 256, then the radius
+// is widened to 300.
+CProjectileSymbolOfDeath::CProjectileSymbolOfDeath()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "SoPainX";
+    m_explosion1.m_sound = "EFF_P49";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nRadius = 300;
 }
 
 // 0x57AEB0
