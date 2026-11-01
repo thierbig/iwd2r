@@ -1486,6 +1486,21 @@ CProjectileSymbolOfDeath::CProjectileSymbolOfDeath()
     m_nRadius = 300;
 }
 
+// 0x579DE0
+//
+// The exe's body is the compiler-generated member destruction: the vector
+// buffer freed through the triple at +0x2F6/+0x2FA/+0x2FE, then the
+// refcounted puff name released at +0x2E2 (count byte at ptr−1, the block
+// freed when the count reaches 0 or was the 0xFF sentinel), then the
+// CProjectileSingleTarget dtor (0x5783E0). Ours is the empty braces the
+// compiler emits the same destruction from — m_puffPoints is declared
+// after m_sPuff, so it dies first. Neither this body nor the deleting
+// wrapper 0x579DC0 stores the vtable: the cone is a leaf, and no virtual
+// dispatch happens during the teardown.
+CProjectile850DDC::~CProjectile850DDC()
+{
+}
+
 // 0x57AEB0
 IcewindCProjectileScorcher::IcewindCProjectileScorcher()
     : CProjectileSingleTarget(CResRef("AScorcT"))

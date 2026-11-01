@@ -71,6 +71,8 @@ public:
 class CProjectile850DDC : public CProjectileSingleTarget {
 public:
     CProjectile850DDC(const char* szAnimation, const char* szPuff);
+    // 0x579DE0
+    /* 0000 */ ~CProjectile850DDC() override;
     /* 000C */ void AIUpdate() override;
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
     /* 0070 */ void OnArrival() override;
