@@ -124,6 +124,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_101;
     static const BYTE MSG_SUBTYPE_CMESSAGE_103;
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
@@ -136,6 +137,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_EXPLORED;
     static const BYTE MSG_SUBTYPE_CMESSAGE_CHANGE_STAT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_120;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX;
     static const BYTE MSG_SUBTYPE_CMESSAGE_END_GAME;
 
     static const BYTE MSG_TYPE_DIALOG;
@@ -1771,6 +1773,17 @@ public:
     /* 000C */ CImmunitiesWeapon m_weaponImmunities;
 };
 
+class CMessageSpellLevelImmumityUpdate : public CMessage {
+public:
+    ~CMessageSpellLevelImmumityUpdate() override;
+    SHORT GetCommType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CImmunitiesSpellLevel m_spellLevelImmunities;
+};
+
 class CMessage103 : public CMessage {
 public:
     CMessage103(BOOLEAN a1, PLAYER_ID idPlayer, INT nPortrait, LONG caller, LONG target);
@@ -1970,21 +1983,18 @@ public:
         const CPoint& launch, CPoint targetPoint, SHORT launchHeight,
         LONG caller, LONG target);
 
-    SHORT GetCommType() override;       // returns SEND (3)
-    BYTE GetMsgType() override;         // returns MSG_TYPE_CMESSAGE (0x43)
-    BYTE GetMsgSubType() override;      // returns MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX (0x56)
+    SHORT GetCommType() override; // returns BROADCAST_OTHERS (3)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
-    void Run() override;                // no-op
 
     // The caller is the projectile's ID before Fire registers it.
-    /* 000C */ CResRef m_resRef;        // resource name from field_17E (8 bytes)
-    /* 0014 */ CString m_resRef2;       // area resource name
-    /* 0018 */ LONG m_launchX;          // launch position x
-    /* 001C */ LONG m_launchY;          // launch position y
-    /* 0020 */ LONG m_targetX;          // original Fire target point x
-    /* 0024 */ LONG m_targetY;          // original Fire target point y
-    /* 0028 */ SHORT m_launchHeight;    // launch height (from DetermineHeight, SHORT copy)
+    /* 000C */ CResRef m_resRef; // resource name from field_17E (8 bytes)
+    /* 0014 */ CString m_resRef2; // area resource name
+    /* 0018 */ LONG m_launchX; // launch position x
+    /* 001C */ LONG m_launchY; // launch position y
+    /* 0020 */ LONG m_targetX; // original Fire target point x
+    /* 0024 */ LONG m_targetY; // original Fire target point y
+    /* 0028 */ SHORT m_launchHeight; // launch height (from DetermineHeight, SHORT copy)
 };
 
 // A message replacing a sprite's projectile immunities before a projectile
@@ -2016,6 +2026,20 @@ public:
     void Run() override;
 
     /* 000C */ std::list<CMessage*> m_messages;
+};
+
+// A message removing an item from a player's inventory slot.
+class CMessageRemoveItem : public CMessage {
+public:
+    CMessageRemoveItem(SHORT slot, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ SHORT m_slot;
 };
 
 #endif /* CMESSAGE_H_ */

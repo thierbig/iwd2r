@@ -8061,10 +8061,11 @@
     "i057": {
       "assigned_at": "2026-10-31T01:03:10+00:00",
       "branch": "p3/wso-i057",
-      "closed_at": null,
+      "closed_at": "2026-10-31T14:55:36+00:00",
       "files": [
         "src/CMessage.cpp"
       ],
+      "gate": "full",
       "pool": "glm",
       "rows": [
         {
@@ -8132,7 +8133,389 @@
           "their_len": 75
         }
       ],
-      "status": "assigned",
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i058": {
+      "assigned_at": "2026-10-31T13:34:33+00:00",
+      "branch": "p3/wso-i058",
+      "closed_at": "2026-11-01T00:14:36+00:00",
+      "files": [
+        "src/CNetwork.cpp",
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "measured_deps": {
+        "531120": "750c0ce0f8bc1e106d89a5a3748587c305ec8b8706e4a7e593c52d7456b26db0"
+      },
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7A7890",
+          "category": "only_theirs",
+          "file": "src/CNetwork.cpp",
+          "name": "CNetwork::FetchFrame",
+          "our_len": 0,
+          "their_len": 536
+        },
+        {
+          "address": "0x57D390",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileReboundingBolt::CProjectileReboundingBolt",
+          "our_len": 0,
+          "their_len": 492
+        },
+        {
+          "address": "0x57AEB0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileScorcher::IcewindCProjectileScorcher",
+          "our_len": 0,
+          "their_len": 465
+        },
+        {
+          "address": "0x532000",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDagger::CProjectileDagger",
+          "our_len": 0,
+          "their_len": 458
+        },
+        {
+          "address": "0x532CA0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSPBRNHND::CProjectileSPBRNHND",
+          "our_len": 0,
+          "their_len": 444
+        },
+        {
+          "address": "0x533AE0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSprayCell::AddVisualToArea",
+          "our_len": 0,
+          "their_len": 433
+        },
+        {
+          "address": "0x533CB0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFollowUp::CProjectileFollowUp",
+          "our_len": 0,
+          "their_len": 418
+        },
+        {
+          "address": "0x52E160",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSparkleExplosion::Explode",
+          "our_len": 0,
+          "their_len": 401
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i059": {
+      "assigned_at": "2026-10-31T14:56:47+00:00",
+      "branch": "p3/wso-i059",
+      "closed_at": "2026-10-31T18:18:43+00:00",
+      "files": [
+        "src/CMessage.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x4F6A70",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageProjectileTrailingVFX::GetMsgSubType",
+          "our_len": 0,
+          "their_len": 69
+        },
+        {
+          "address": "0x501FE0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageInsertResponse::UnmarshalMessage",
+          "our_len": 0,
+          "their_len": 39
+        },
+        {
+          "address": "0x4FD930",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageContinueDialog::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x5017E0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageInsertResponse::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x502B40",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageLoadDialog::MarshalMessage",
+          "our_len": 0,
+          "their_len": 27
+        },
+        {
+          "address": "0x431560",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CBaldurMessage::SwapItemRequest",
+          "our_len": 0,
+          "their_len": 14
+        },
+        {
+          "address": "0x4F6FA0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage117::GetMsgSubType",
+          "our_len": 0,
+          "their_len": 12
+        },
+        {
+          "address": "0x514FF0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate",
+          "our_len": 0,
+          "their_len": 2
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i060": {
+      "assigned_at": "2026-10-31T18:19:54+00:00",
+      "branch": "p3/wso-i060",
+      "closed_at": "2026-10-31T21:36:08+00:00",
+      "files": [
+        "src/CMessage.cpp",
+        "src/CGameSprite.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x4F5C70",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageRemoveItem::CMessageRemoveItem",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x764880",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::CheckSpellUseful",
+          "our_len": 0,
+          "their_len": 9266
+        },
+        {
+          "address": "0x764810",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::CheckSpellTarget",
+          "our_len": 0,
+          "their_len": 390
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i061": {
+      "assigned_at": "2026-11-01T00:43:14+00:00",
+      "branch": "p3/wso-i061",
+      "closed_at": "2026-11-01T04:03:11+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5319A0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSlingStone::CProjectileSlingStone",
+          "our_len": 0,
+          "their_len": 397
+        },
+        {
+          "address": "0x534600",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileMAGMISS::CProjectileMAGMISS",
+          "our_len": 0,
+          "their_len": 389
+        },
+        {
+          "address": "0x532260",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAcidBlob::CProjectileAcidBlob",
+          "our_len": 0,
+          "their_len": 372
+        },
+        {
+          "address": "0x533A50",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSprayLifetime::AIUpdate",
+          "our_len": 0,
+          "their_len": 365
+        },
+        {
+          "address": "0x536F40",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectile::CompressTime",
+          "our_len": 0,
+          "their_len": 292
+        },
+        {
+          "address": "0x531570",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBoulder::CProjectileBoulder",
+          "our_len": 0,
+          "their_len": 292
+        },
+        {
+          "address": "0x531BE0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAxe::CProjectileAxe",
+          "our_len": 0,
+          "their_len": 290
+        },
+        {
+          "address": "0x531DF0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSpear::CProjectileSpear",
+          "our_len": 0,
+          "their_len": 290
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i062": {
+      "assigned_at": "2026-11-01T00:43:14+00:00",
+      "branch": "p3/wso-i062",
+      "closed_at": "2026-11-01T01:42:56+00:00",
+      "files": [
+        "src/CNetwork.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7A4660",
+          "category": "only_theirs",
+          "file": "src/CNetwork.cpp",
+          "name": "CNetwork::AddModemAddressToList",
+          "our_len": 0,
+          "their_len": 105
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i063": {
+      "assigned_at": "2026-11-01T04:13:27+00:00",
+      "branch": "p3/wso-i063",
+      "closed_at": "2026-11-01T06:49:50+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x531360",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBolt::CProjectileBolt",
+          "our_len": 0,
+          "their_len": 284
+        },
+        {
+          "address": "0x57C510",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileChainLightning::IcewindCProjectileChainLightning",
+          "our_len": 0,
+          "their_len": 209
+        },
+        {
+          "address": "0x533DE0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFollowUp::CallBack",
+          "our_len": 0,
+          "their_len": 15
+        },
+        {
+          "address": "0x580770",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::~CProjectileLightningBolt",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x5297B0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSparkleExplosion::CProjectileSparkleExplosion",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x57F8D0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::AIUpdate",
+          "our_len": 0,
+          "their_len": 3507
+        },
+        {
+          "address": "0x52D430",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::AreaEffect",
+          "our_len": 0,
+          "their_len": 2192
+        },
+        {
+          "address": "0x52D9F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::Fire",
+          "our_len": 0,
+          "their_len": 1752
+        }
+      ],
+      "status": "closed",
       "verdicts": {}
     }
   }

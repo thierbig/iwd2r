@@ -465,6 +465,42 @@ def _mismatch_finding(repo, base, address):
     return ' '.join(f.group(1).split()) if f else None
 
 
+def _recall_cut(text, limit=200):
+    return text if len(text) <= limit else text[:limit] + '...'
+
+
+def _row_recall(repo, base, state, address):
+    """What the tree already records about one import row, as short strings
+    the brief quotes back (Task 64): its evidence front matter at `base`,
+    why an earlier batch parked it and unparked it, and a parked entry
+    still standing at `base`.  Empty: the tree holds nothing on the row."""
+    if not address:
+        return []
+    out = []
+    text = _git_show(repo, base, _evidence_rel(address))
+    if text:
+        fields = _check_evidence().front_matter(text)
+        item = f'evidence at {base[:7]}: kind {fields.get("kind") or "none"}'
+        for key in ('exemption', 'parity_waiver'):
+            if fields.get(key):
+                item += f'; {key}: {_recall_cut(fields[key])}'
+        out.append(item)
+    for batch_id, batch in sorted(state.get('batches', {}).items()):
+        for entry in batch.get('unparked', []):
+            if _addr_key(entry.get('address')) == _addr_key(address):
+                out.append(f'parked by {batch_id}: {entry.get("needs") or "?"}; '
+                           f'unparked: {entry.get("reason") or "?"}')
+    parked = _git_show(repo, base, parked_rel(address))
+    if parked:
+        try:
+            entry = json.loads(parked)
+        except ValueError:
+            entry = None
+        needs = entry.get('needs') if isinstance(entry, dict) else None
+        out.append(f'parked at {base[:7]}: {needs or "?"}')
+    return out
+
+
 def unmeasured_wso(text):
     """True when an evidence text carries the unmeasured WSO import marking
     (rule 1 of the 2026-10-26 ruling): an `exemption:` whose value starts
@@ -1322,6 +1358,9 @@ def render_brief(template_path=TEMPLATE_PATH, state_path=STATE_PATH,
                 # the oracle case found ours wrong; a kept row cannot stand
                 line += (f'\n   - oracle mismatch at {base} (ours is wrong there; import '
                          f'the fork body or park this row): {finding}')
+            for item in _row_recall(repo, base, state, r.get('address')):
+                # what the tree already knows about the row (Task 64)
+                line += f'\n   - recall: {item}'
         return line
     fork_base = str(batch.get('fork_base') or state.get('fork_base')
                     or DEFAULT_FORK_BASE)

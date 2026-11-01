@@ -1,0 +1,1 @@
+{"address": "0x57B080", "name": "IcewindCProjectileScorcher::~IcewindCProjectileScorcher", "file": "src/CProjectile.cpp", "batch": "i058", "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised"}
