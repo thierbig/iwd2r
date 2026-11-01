@@ -166,17 +166,11 @@ public:
 // NOTE: The exe vtable's slot 0x88 is AddVisualToArea (0x533AE0), overriding
 // the slot CProjectileBAM fills with 0x529AB0; the vtable continues past it
 // (0x8C -> 0x533DF0, 0x90 -> 0x45B680, 0x94 -> 0x4C7BE0, 0x98 -> 0x534140)
-// and those virtuals are still undeclared.
+// and those virtuals are not part of batch i058, so ours declares none of
+// them.
 class CProjectileSprayCell : public CProjectileBAM {
 public:
-    /* 000C */ void AIUpdate() override;
     /* 0088 */ virtual void AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height);
-
-    // NOTE: The BAM ctor leaves +0x2A0 to the subclasses (it only writes
-    // +0x29D/+0x29E there), so — like CProjectile84E030's m_nCount and
-    // CProjectileSPBRNHND's m_animationLifetime — the derived class names
-    // the bytes.
-    /* 02A0 */ WORD m_animationLifetime;
 };
 
 // The projectile that fires child projectiles of type m_childType + 1 on an

@@ -940,27 +940,6 @@ CProjectileAcidBlob::CProjectileAcidBlob()
     field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
-// 0x533A50
-void CProjectileSprayCell::AIUpdate()
-{
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    if (pGame->m_nTimeStop != 0 && pGame->m_nTimeStopCaster != m_id) {
-        return;
-    }
-
-    m_animationLifetime = static_cast<WORD>(m_animationLifetime - 1);
-    m_animation->FrameAdvance();
-    if (static_cast<SHORT>(m_animationLifetime) <= 0) {
-        RemoveFromArea();
-        if (pGame->GetObjectArray()->Delete(m_id,
-                CGameObjectArray::THREAD_ASYNCH,
-                NULL,
-                INFINITE) == CGameObjectArray::SUCCESS) {
-            delete this;
-        }
-    }
-}
-
 // 0x534600
 CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     : CProjectileFollowUp(0x16, CResRef("MAGMISS"), count, 300, TRUE, CAIObjectType::ANYONE)
