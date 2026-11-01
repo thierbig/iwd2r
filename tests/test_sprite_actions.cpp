@@ -775,6 +775,96 @@ TEST_CASE("sprite: UseDoor next to AR1000_Door5 opens it and does nothing from a
     ClearMessages();
 }
 
+TEST_CASE("sprite: BashDoor rolls against a locked door and opens it", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door5");
+    REQUIRE(pDoor != NULL);
+
+    // Stand on the door's own point, so BashDoor does not walk first (the
+    // walk would draw from rand too).
+    pCharacter->m_pos = pDoor->GetPos();
+    if (!pCharacter->m_bSelected) {
+        pGame->SelectCharacter(pCharacter->GetId(), FALSE);
+    }
+    REQUIRE(pCharacter->m_bSelected);
+
+    CAIObjectType doorId(0, 0, 0, 0, 0, 0, 0, 0, pDoor->GetId(), 0, 0);
+
+    // Locked, difficulty 0 (9): pick a seed whose d20 roll plus the STR
+    // modifier beats it.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x1) | 0x2;
+    pDoor->m_lockDifficulty = 0;
+    const INT nModifier = pGame->GetRuleTables().GetAbilityScoreModifier(pCharacter->m_derivedStats.m_nSTR);
+    INT nRoll = 0;
+    UINT nSeed = 0;
+    for (nSeed = 1; nSeed < 1000; nSeed++) {
+        iwd2r_srand(nSeed);
+        nRoll = iwd2r_rand() % 20 + 1;
+        if (nRoll + nModifier > 9) {
+            break;
+        }
+    }
+    REQUIRE(nRoll + nModifier > 9);
+    INFO("roll " << nRoll << " modifier " << nModifier << " seed " << nSeed);
+
+    INFO("character " << pCharacter->m_pos.x << "," << pCharacter->m_pos.y
+                      << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    // The lock bit is cleared, the 0x10 bit and the door's open bit are set.
+    CHECK((pDoor->m_dwFlags & 0x2) == 0);
+    CHECK((pDoor->m_dwFlags & 0x10) != 0);
+    CHECK((pDoor->m_dwFlags & 0x1) != 0);
+    ClearMessages();
+
+    // A 100 lock is unpickable: the best roll leaves it locked and shut.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x3) | 0x2;
+    pDoor->m_lockDifficulty = 100;
+    INFO("character " << pCharacter->m_pos.x << "," << pCharacter->m_pos.y
+                      << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    CHECK((pDoor->m_dwFlags & 0x1) == 0);
+    ClearMessages();
+
+    // More than three squares away it walks first (whatever the walk answers)
+    // and leaves the lock alone.
+    pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x3) | 0x2;
+    pDoor->m_lockDifficulty = 0;
+    pCharacter->m_pos = CPoint(pDoor->GetPos().x + CPathSearch::GRID_SQUARE_SIZEX * 5,
+        pDoor->GetPos().y + CPathSearch::GRID_SQUARE_SIZEY * 5);
+    pCharacter->SetCurrAction(CAIAction(148, doorId, 0, 0, 0));
+    pCharacter->m_actionCount = 0;
+    iwd2r_srand(nSeed);
+    CHECK(pCharacter->ExecuteAction() != CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    ClearMessages();
+}
+
 TEST_CASE("sprite: UseDoor on a locked door leaves it closed and says it is locked", "[ai][data]")
 {
     if (DataDir() == nullptr) {

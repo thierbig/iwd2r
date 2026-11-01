@@ -14209,10 +14209,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 148:
-        // BashDoor
-        // TODO: 0x72A50E-0x72A536 not ported (0x75CBD0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // BashDoor (0x72A50E-0x72A536)
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = TryBash(pTarget);
+        goto release;
     case 149:
         // EquipMostDamagingMelee (0x72A536-0x72A546)
         returnValue = EquipMostDamagingMelee();
@@ -25878,6 +25879,120 @@ SHORT CGameSprite::UseDoor()
     }
 
     delete pGroupList;
+
+    return ACTION_DONE;
+}
+
+// 0x75CBD0
+SHORT CGameSprite::TryBash(CGameObject* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (pTarget->GetObjectType() != CGameObject::TYPE_DOOR
+        && pTarget->GetObjectType() != CGameObject::TYPE_CONTAINER) {
+        return ACTION_ERROR;
+    }
+
+    CMessage* message = new CMessageSetForceActionPick(TRUE, m_id, pTarget->GetId());
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+    // Walk to the door or container first when it is more than three squares
+    // away.
+    const CPoint& ptTarget = pTarget->GetPos();
+    LONG dy = ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY - m_pos.y / CPathSearch::GRID_SQUARE_SIZEY;
+    LONG dx = ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX - m_pos.x / CPathSearch::GRID_SQUARE_SIZEX;
+    SHORT returnValue = ACTION_DONE;
+    if (dx * dx + dy * dy > 9) {
+        m_curAction.m_dest = ptTarget;
+        returnValue = MoveToPoint(ptTarget, 0);
+    }
+
+    if (returnValue != ACTION_DONE) {
+        return returnValue;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    INT nModifier = pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nSTR);
+
+    // A d20 roll against the lock's difficulty, on top of the STR modifier.
+    INT nRoll = rand() % 20 + 1;
+
+    CAITrigger trigger(CAITrigger::NO_TRIGGER, 0);
+
+    if (pTarget->GetObjectType() == CGameObject::TYPE_DOOR) {
+        CGameDoor* pDoor = static_cast<CGameDoor*>(pTarget);
+        SHORT nDifficulty = static_cast<SHORT>(pDoor->m_lockDifficulty / 6 + 9);
+
+        if ((pDoor->m_dwFlags & 0x2) == 0) {
+            FeedBack(FEEDBACK_BASHDOORSUCCEEDED, 0, 0, 0, -1, 0, 0);
+        } else {
+            if (nDifficulty < nRoll + nModifier && pDoor->m_lockDifficulty != 100) {
+                trigger = CAITrigger(CAITrigger::UNLOCKED, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                pDoor->m_dwFlags = (pDoor->m_dwFlags & ~0x2) | 0x10;
+                FeedBack(FEEDBACK_BASHDOORSUCCEEDED, 0, 0, 0, -1, 0, 0);
+
+                message = new CMessageUnlock(pDoor->m_dwFlags, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                if ((pDoor->m_dwFlags & 0x1) == 0) {
+                    if (g_pChitin->cNetwork.m_nServiceProvider == 0
+                        || g_pChitin->cNetwork.m_idLocalPlayer == pTarget->m_remotePlayerID) {
+                        pDoor->ToggleDoor(m_typeAI, FALSE);
+                    } else {
+                        // TODO: 0x75CF8A-0x75CFD7 not ported: a multiplayer
+                        // client asks the door's owner to toggle it (message
+                        // vtable 0x848C58, the open state's inverse); a
+                        // single-player game never gets here.
+                    }
+                }
+            } else {
+                FeedBack(FEEDBACK_BASHDOORFAILED, 0, 0, 0, -1, 0, 0);
+            }
+
+            if (pDoor->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_ROLL, nRoll, nModifier, nDifficulty, 0x4FEC, 0, 0);
+            }
+        }
+    }
+
+    if (pTarget->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+        CGameContainer* pContainer = static_cast<CGameContainer*>(pTarget);
+        SHORT nDifficulty = static_cast<SHORT>(pContainer->m_lockDifficulty / 6 + 9);
+
+        if ((pContainer->m_dwFlags & 0x1) == 0) {
+            FeedBack(FEEDBACK_BASHCHESTSUCCEEDED, 0, 0, 0, -1, 0, 0);
+        } else {
+            if (nDifficulty < nRoll + nModifier && pContainer->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_BASHCHESTSUCCEEDED, 0, 0, 0, -1, 0, 0);
+
+                trigger = CAITrigger(CAITrigger::UNLOCKED, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                message = new CMessageUnlock(pContainer->m_dwFlags & ~0x1, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            } else {
+                // 0x60 is PickLockFailed (TRIGGER.IDS), no named constant yet.
+                trigger = CAITrigger(0x60, m_typeAI, 0);
+
+                message = new CMessageSetTrigger(trigger, m_id, pTarget->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                FeedBack(FEEDBACK_BASHCHESTFAILED, 0, 0, 0, -1, 0, 0);
+            }
+
+            if (pContainer->m_lockDifficulty != 100) {
+                FeedBack(FEEDBACK_ROLL, nRoll, nModifier, nDifficulty, 0x4FEC, 0, 0);
+            }
+        }
+    }
 
     return ACTION_DONE;
 }
