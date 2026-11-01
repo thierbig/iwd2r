@@ -8689,6 +8689,92 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i066": {
+      "assigned_at": "2026-11-01T12:43:16+00:00",
+      "branch": "p3/wso-i066",
+      "closed_at": "2026-11-01T14:06:40+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x52CCE0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::CProjectileExploding",
+          "our_len": 0,
+          "their_len": 415
+        },
+        {
+          "address": "0x57F640",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::CProjectileWhirlwind",
+          "our_len": 0,
+          "their_len": 403
+        },
+        {
+          "address": "0x577590",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBigBoulder::CProjectileBigBoulder",
+          "our_len": 0,
+          "their_len": 401
+        },
+        {
+          "address": "0x574140",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileProduceFire::CProjectileProduceFire",
+          "our_len": 0,
+          "their_len": 397
+        },
+        {
+          "address": "0x571170",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAcidStorm::CProjectileAcidStorm",
+          "our_len": 0,
+          "their_len": 332
+        },
+        {
+          "address": "0x573460",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileIceStorm::CProjectileIceStorm",
+          "our_len": 0,
+          "their_len": 332
+        },
+        {
+          "address": "0x57FF80",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::Fire",
+          "our_len": 0,
+          "their_len": 309
+        },
+        {
+          "address": "0x531790",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDart::CProjectileDart",
+          "our_len": 0,
+          "their_len": 286
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
