@@ -1,0 +1,1 @@
+{"address": "0x5017E0", "name": "CMessageInsertResponse::MarshalMessage", "file": "src/CMessage.cpp", "batch": "i059", "needs": "fork body contradicts the exe: his body is a TODO stub; the exe marshals a 30-byte header plus per-action records (three CAIObjectType slots, specific-id LONGs, length-prefixed strings, a destination point) walked off CAIResponse's action list"}

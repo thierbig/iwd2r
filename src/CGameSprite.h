@@ -453,6 +453,8 @@ public:
     void ComputeWaypoint(CPoint& result, LONG** ppPath, SHORT* pnPath, SHORT delay, BYTE* pReachedEnd);
     BOOL ClearBumpPath(const CPoint& start, const CPoint& goal);
     BOOL IsVisibleToCaller(BOOL bSeeInvisible);
+    BOOL CheckSpellTarget(CGameSprite* pTarget, DWORD flags);
+    BOOL CheckSpellUseful(CGameSprite* pTarget, INT nSpellId, DWORD flags);
     BOOL sub_6FB440();
     void AIUpdateFly();
     void ChangeDirection();
@@ -626,6 +628,8 @@ public:
     SHORT MoveToPoint(const CPoint& dest, LONG range);
     SHORT Dialog(CGameSprite* pTarget);
     SHORT PlayerDialog(CGameSprite* pTarget);
+    SHORT Interact(CGameSprite* pTarget);
+    SHORT StartDialog(CGameSprite* pTarget);
     SHORT UseDoor();
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
@@ -667,6 +671,7 @@ public:
     SHORT sub_75F3D0(int a1);
     SHORT LeaveArea();
     SHORT LeaveAreaName();
+    SHORT Help();
     SHORT Rest();
     SHORT JoinParty();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);

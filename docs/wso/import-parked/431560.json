@@ -1,0 +1,1 @@
+{"address": "0x431560", "name": "CBaldurMessage::SwapItemRequest", "file": "src/CMessage.cpp", "batch": "i059", "needs": "fork body contradicts the exe: his body is a TODO stub returning FALSE; the exe runs the SendSpecificMessage/FetchSpecificMessage item-swap exchange, with the reply parsed by an in-file helper at 0x431F10 that his tree does not carry"}
