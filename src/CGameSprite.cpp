@@ -13997,9 +13997,8 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 85:
     case 130:
-        // RandomWalk, RandomTurn
-        // TODO: 0x7290BB-0x7290CB not ported (0x747F80).
-        returnValue = ACTION_ERROR;
+        // RandomWalk, RandomTurn (0x7290BB-0x7290CB)
+        returnValue = RandomWalk();
         goto done;
     case 86:
         // SetInterrupt (0x729CF3-0x729D26)
@@ -23063,6 +23062,159 @@ SHORT CGameSprite::FaceObject(CGameAIBase* pObject)
         }
     }
 
+    return ACTION_DONE;
+}
+
+// 0x747F80
+// RandomWalk (85) and RandomTurn (130): the action queues a copy of itself and
+// then either a random MoveToPoint inside the view (RandomWalk) or a Face to a
+// random direction plus a short Wait (RandomTurn). Out of the view, or when the
+// frame rate makes the choice pointless, it queues a longer Wait instead.
+// NOTE: The WORD at 0x85BBA8 is 2 (walk/turn) and the one at 0x85BBAE is 10.
+SHORT CGameSprite::RandomWalk()
+{
+    // NOTE: The original also builds an unused CAIObjectType(CAIObjectType::ANYONE)
+    // after this local (0x74806F-0x74808A). ANYONE is the default type and the
+    // local is never read again, so the port omits it.
+    // The direction is drawn before the interrupt check, as the original does.
+    CAIAction face(CAIAction::FACE, CPoint(-1, -1), rand() % 16, -1);
+
+    // The copy of the action itself, queued first (last after AddHead).
+    CAIAction action;
+    action.m_actionID = m_curAction.m_actionID;
+    action.m_specificID = 0;
+    action.m_specificID2 = -1;
+    action.m_specificID3 = 0;
+    action.m_dest = CPoint(-1, -1);
+    action.m_internalFlags = 0;
+
+    if (m_interrupt != 0) {
+        return ACTION_INTERRUPTABLE;
+    }
+
+    AddAction(action);
+
+    if (g_pChitin->m_nRenderPerSec > 14) {
+        if (g_pChitin->m_nAIPerSec < 15) {
+            CRect rView(m_pArea->m_cInfinity.rViewPort);
+            INT nViewX;
+            INT nViewY;
+            m_pArea->m_cInfinity.GetViewPosition(nViewX, nViewY);
+            rView.OffsetRect(nViewX, nViewY);
+            if (!rView.PtInRect(m_pos)) {
+                goto noTarget;
+            }
+        }
+
+        int nWalk = rand() % 2;
+
+        CRect rBounds(m_pArea->m_cInfinity.rViewPort);
+        int nWidth = rBounds.Width();
+        int nHeight = rBounds.Height();
+        if (m_huntingRange != 0 && static_cast<int>(m_huntingRange) * 2 < nWidth) {
+            nWidth = m_huntingRange;
+        }
+        if (m_huntingRange != 0 && static_cast<int>(m_huntingRange) * 2 < nHeight) {
+            nHeight = m_huntingRange;
+        }
+
+        // RandomTurn (130) always turns.
+        if (m_curAction.m_actionID == 0x82) {
+            nWalk = 1;
+        }
+
+        if (nWalk == 0) {
+            int nHalfWidth = nWidth >> 1;
+            int nHalfHeight = nHeight >> 1;
+            int nDx = 0;
+            int nDy = 0;
+            int nDistanceSq = 0;
+            BYTE nTries = 0;
+
+            for (;;) {
+                BYTE nCostTries = 0;
+                BYTE nCost;
+                do {
+                    nDx = (nWidth != 0 ? rand() % nWidth : 0) - nHalfWidth;
+                    nDy = (nHeight != 0 ? rand() % nHeight : 0) - nHalfHeight;
+                    nDistanceSq = nDy * nDy + nDx * nDx;
+
+                    int nBaseX;
+                    int nBaseY;
+                    if (m_huntingRange != 0) {
+                        int nFromStartX = m_pos.x - m_posStart.x;
+                        int nFromStartY = m_pos.y - m_posStart.y;
+                        if (nFromStartX * nFromStartX + nFromStartY * nFromStartY < m_huntingRange) {
+                            nBaseX = m_pos.x;
+                            nBaseY = m_pos.y;
+                        } else {
+                            nBaseX = m_posStart.x;
+                            nBaseY = m_posStart.y;
+                        }
+                    } else {
+                        nBaseX = m_pos.x;
+                        nBaseY = m_pos.y;
+                    }
+
+                    nDx += nBaseX;
+                    nDy += nBaseY;
+                    if (nDx < 0) {
+                        nDx = 0;
+                    }
+                    if (nDy < 0) {
+                        nDy = 0;
+                    }
+                    if (nDx >= m_pArea->m_cInfinity.nAreaX) {
+                        nDx = m_pArea->m_cInfinity.nAreaX - 1;
+                    }
+                    if (nDy >= m_pArea->m_cInfinity.nAreaY) {
+                        nDy = m_pArea->m_cInfinity.nAreaY - 1;
+                    }
+
+                    CPoint pt(nDx / CPathSearch::GRID_SQUARE_SIZEX,
+                        nDy / CPathSearch::GRID_SQUARE_SIZEY);
+                    SHORT nTableIndex;
+                    nCost = m_pArea->m_search.GetCost(pt,
+                        m_terrainTable,
+                        m_animation.GetPersonalSpace(),
+                        nTableIndex,
+                        TRUE);
+                    nCostTries++;
+                } while (nCost == CPathSearch::COST_IMPASSABLE && nCostTries < 100);
+
+                if (m_posStart.x == -1 && m_posStart.y == -1) {
+                    nDistanceSq = -1;
+                }
+                nTries++;
+
+                if (m_huntingRange == 0
+                    || nDistanceSq <= static_cast<int>(m_huntingRange) * m_huntingRange) {
+                    if (nTries < 20) {
+                        CAIAction move(CAIAction::MOVETOPOINT, CPoint(nDx, nDy), -2, -1);
+                        AddAction(move);
+                        return ACTION_DONE;
+                    }
+                } else if (nTries < 20) {
+                    continue;
+                }
+                break;
+            }
+
+            CAIAction wait(CAIAction::WAIT, CPoint(-1, -1), 0xFF, -1);
+            AddAction(wait);
+            return ACTION_ERROR;
+        }
+
+        AddAction(face);
+        CAIAction wait(CAIAction::WAIT, CPoint(-1, -1), rand() % 10 + 1, -1);
+        AddAction(wait);
+        return ACTION_DONE;
+    }
+
+noTarget: {
+    CAIAction wait(CAIAction::WAIT, CPoint(-1, -1), rand() % 40 + 1, -1);
+    AddAction(wait);
+}
     return ACTION_DONE;
 }
 
