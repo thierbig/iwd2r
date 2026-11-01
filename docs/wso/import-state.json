@@ -8436,6 +8436,87 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i063": {
+      "assigned_at": "2026-11-01T04:13:27+00:00",
+      "branch": "p3/wso-i063",
+      "closed_at": "2026-11-01T06:49:50+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x531360",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBolt::CProjectileBolt",
+          "our_len": 0,
+          "their_len": 284
+        },
+        {
+          "address": "0x57C510",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileChainLightning::IcewindCProjectileChainLightning",
+          "our_len": 0,
+          "their_len": 209
+        },
+        {
+          "address": "0x533DE0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFollowUp::CallBack",
+          "our_len": 0,
+          "their_len": 15
+        },
+        {
+          "address": "0x580770",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::~CProjectileLightningBolt",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x5297B0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSparkleExplosion::CProjectileSparkleExplosion",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x57F8D0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::AIUpdate",
+          "our_len": 0,
+          "their_len": 3507
+        },
+        {
+          "address": "0x52D430",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::AreaEffect",
+          "our_len": 0,
+          "their_len": 2192
+        },
+        {
+          "address": "0x52D9F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::Fire",
+          "our_len": 0,
+          "their_len": 1752
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
