@@ -8139,11 +8139,15 @@
     "i058": {
       "assigned_at": "2026-10-31T13:34:33+00:00",
       "branch": "p3/wso-i058",
-      "closed_at": null,
+      "closed_at": "2026-11-01T00:14:36+00:00",
       "files": [
         "src/CNetwork.cpp",
         "src/CProjectile.cpp"
       ],
+      "gate": "full",
+      "measured_deps": {
+        "531120": "750c0ce0f8bc1e106d89a5a3748587c305ec8b8706e4a7e593c52d7456b26db0"
+      },
       "pool": "glm",
       "rows": [
         {
@@ -8211,7 +8215,7 @@
           "their_len": 401
         }
       ],
-      "status": "assigned",
+      "status": "closed",
       "verdicts": {}
     },
     "i059": {
