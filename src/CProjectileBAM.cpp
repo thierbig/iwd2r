@@ -732,6 +732,49 @@ void CProjectileBAM::UpdateBasedOnTargetPoint(LONG x, LONG y)
     }
 }
 
+// 0x52E160
+void CProjectileSparkleExplosion::Explode()
+{
+    WORD nChildType;
+    switch (m_nSparkleColour) {
+    case 1:
+    case 9:
+    case 10:
+        nChildType = 0xC4;
+        break;
+    case 2:
+        nChildType = 0xC5;
+        break;
+    case 3:
+    case 11:
+        nChildType = 0xC8;
+        break;
+    case 4:
+        nChildType = 0xC6;
+        break;
+    case 5:
+        nChildType = 0xC7;
+        break;
+    case 6:
+        nChildType = 0xC9;
+        break;
+    case 7:
+    case 8:
+        nChildType = 0xCA;
+        break;
+    case 12:
+        nChildType = 0xCB;
+        break;
+    default:
+        return;
+    }
+
+    CProjectile* pChild = DecodeProjectile(nChildType, NULL, 0);
+    if (pChild != NULL) {
+        pChild->Fire(m_pArea, m_sourceId, m_targetId, m_targetPos, 30, m_nSparkleColour);
+    }
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x5300E0
@@ -929,6 +972,89 @@ CProjectile84E0C4::CProjectile84E0C4(WORD nCount, WORD nPaletteType)
     field_1D2 = 0x80;
     field_1D8 = 1;
     m_fireSoundRef = "";
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x532000
+CProjectileDagger::CProjectileDagger()
+    : CProjectileBAM(CResRef("DAGGER"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(5, 27, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(4, 30, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x532CA0
+CProjectileSPBRNHND::CProjectileSPBRNHND()
+    : CProjectileBAM(CResRef("SPBRNHND"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 71, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_E6 |= 0x8;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_animationLifetime = 55;
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    field_174 = 23;
+    field_178 = 50;
+}
+
+// 0x533AE0
+void CProjectileSprayCell::AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height)
+{
+    m_pArea = pArea;
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Add(&m_id, this, INFINITE) != CGameObjectArray::SUCCESS) {
+        delete this;
+        return;
+    }
+    CGameObject::AddToArea(pArea, point, height, CGameObject::LIST_FRONT);
+    m_sound.Stop();
+    if (m_fireSoundRef != "") {
+        m_sound.SetResRef(m_fireSoundRef, TRUE, TRUE);
+        if (m_loopFireSound) m_sound.SetLoopingFlag(TRUE);
+        m_sound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+        m_sound.Play(m_pos.x, m_pos.y, 0, FALSE);
+    }
+}
+
+// 0x533CB0
+CProjectileFollowUp::CProjectileFollowUp(USHORT childType, CResRef resRef, SHORT remaining, SHORT interval, BOOL keepSource, CAIObjectType type)
+    : CProjectileBAM(resRef)
+{
+    m_launchHeight = 0;
+    m_launchKind = 0;
+    m_checkLOS = FALSE;
+    m_delay = 0;
+    m_animation->SequenceSet(0);
+    m_childType = childType;
+    m_remainingShots = remaining;
+    m_interval = interval;
+    m_keepSource = keepSource;
+    m_ready = FALSE;
+    m_targetType.Set(type);
+    m_nextProjectile = CProjectile::DecodeProjectile(static_cast<WORD>(m_childType + 1), NULL, 0);
     m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
     m_sVisualEffect = "";
     field_182 = CGameObjectArray::INVALID_INDEX;

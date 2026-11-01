@@ -1,0 +1,1 @@
+{"address": "0x4FD930", "name": "CMessageContinueDialog::MarshalMessage", "file": "src/CMessage.cpp", "batch": "i059", "needs": "fork body contradicts the exe: his body is a TODO stub; the exe implements the full marshal. Also src/CMessage.h has no CMessageContinueDialog class, which the declaration-only header edit the batch is allowed cannot add"}
