@@ -22837,6 +22837,9 @@ SHORT CGameSprite::FaceObject(CGameAIBase* pObject)
 // NOTE: The WORD at 0x85BBA8 is 2 (walk/turn) and the one at 0x85BBAE is 10.
 SHORT CGameSprite::RandomWalk()
 {
+    // NOTE: The original also builds an unused CAIObjectType(CAIObjectType::ANYONE)
+    // after this local (0x74806F-0x74808A). ANYONE is the default type and the
+    // local is never read again, so the port omits it.
     // The direction is drawn before the interrupt check, as the original does.
     CAIAction face(CAIAction::FACE, CPoint(-1, -1), rand() % 16, -1);
 
