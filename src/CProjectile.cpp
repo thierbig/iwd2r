@@ -1123,6 +1123,34 @@ CProjectileInsectPlague::CProjectileInsectPlague()
     m_nRadius = 250;
 }
 
+// 0x576BA0
+void CProjectileDBFireball::AIUpdate()
+{
+    if (m_bExploded == 0) {
+        CProjectileArea::AIUpdate();
+        return;
+    }
+    if (m_bBlasted == 1) {
+        CProjectileArea::AIUpdate();
+        return;
+    }
+
+    if (++m_scanTimer == 5) {
+        m_scanTimer = 0;
+
+        CTypedPtrList<CPtrList, LONG*> targets;
+        m_pArea->GetAllInRange(m_posVertList, m_pos, CAIObjectType::ANYONE, 100, m_terrainTable, targets, TRUE, FALSE);
+        m_pArea->GetAllInRangeBack(m_pos, CAIObjectType::ANYONE, 100, m_terrainTable, targets, TRUE, FALSE, FALSE);
+
+        if (targets.GetCount() != 0) {
+            CProjectileArea::OnArrival();
+            m_bBlasted = TRUE;
+        }
+    }
+
+    m_animation->FrameAdvance();
+}
+
 // The exe keeps these in the zero-initialized virtual tail of .data — the
 // raw range ends at 0x8C6000, and the elements sit at 0x8E52D4/0x8E52D8/
 // 0x8E52DC with the flag at 0x8E52E8 — so the loaded image starts them all

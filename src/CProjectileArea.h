@@ -300,4 +300,19 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// Delayed Blast Fireball (SPWI714, projectile type 360, vtable 0x85099C): a
+// Fireball-shaped carrier whose landing does not detonate — its OnArrival
+// (0x576CE0, not yet recovered) only latches the exploded flag, and this
+// AIUpdate override waits until something comes within 100 of the resting
+// bead before firing the base detonation. The ctor (0x576990) is parked from
+// i064 and OnArrival is not declared either, so only the AIUpdate override is
+// declared (never declare a slot without its body).
+class CProjectileDBFireball : public CProjectileArea {
+public:
+    /* 000C */ void AIUpdate() override;
+
+    /* 065E */ BYTE m_bBlasted;
+    /* 0660 */ LONG m_scanTimer;
+};
+
 #endif /* CPROJECTILEAREA_H_ */
