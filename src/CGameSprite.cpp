@@ -28310,7 +28310,6 @@ INT CGameSprite::GetSkillCost(UINT iSkillNumber, BYTE nClass)
     return 0;
 }
 
-// 0x764520
 // The paladin and ranger fall check: a character below reputation 70 whose
 // class mask has the paladin (or ranger) bit loses the fallen class's innate
 // spells and levels (they move to fighter) and its state gains 0x200 (0x400).
@@ -28433,6 +28432,7 @@ void CGameSprite::CheckReputation()
     }
 }
 
+// 0x764520
 INT CGameSprite::GetEffectiveCharacterLevel()
 {
     INT nLevel = m_derivedStats.m_nLevel;
