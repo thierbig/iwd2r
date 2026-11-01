@@ -2032,12 +2032,6 @@ TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][d
     CHECK(bHeard);
 }
 
-// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
-// own dialog with the target without Dialog's distance/LOS checks. Action
-// 137 takes the dialog resource from the action (the actor's m_dialog),
-// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
-// talk, the world screen opens the dialog, and the handler is done. A
-// charmed actor, or one of the two unable to speak, is an error.
 TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
 {
     if (DataDir() == nullptr) {
@@ -2126,4 +2120,153 @@ TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the t
     CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
     pHedron->m_derivedStats.m_generalState &= ~STATE_CHARMED;
     ClearMessages();
+}
+
+TEST_CASE("sprite: JoinParty puts the creature in the party and moves its gold", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    std::vector<BYTE> cre = candidates[0];
+    std::vector<BYTE> creJoiner = candidates[1];
+
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+    const BYTE nAreaCharacters = pArea->m_nCharacters;
+
+    // The creature from the second CHR, standing in the party's area and not
+    // in the party yet.
+    CGameSprite* pJoiner = new CGameSprite(creJoiner.data(),
+        static_cast<LONG>(creJoiner.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pJoiner->m_pArea = pArea;
+    pJoiner->m_baseStats.m_gold = 500;
+    pJoiner->m_derivedStats.m_nGold = 500;
+    pJoiner->m_baseStats.m_fatigue = 7;
+    const LONG nJoinerId = pJoiner->GetId();
+    REQUIRE(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+
+    // Action 19 (JoinParty) through the sprite's dispatcher.
+    CAIAction joinParty;
+    joinParty.m_actionID = 19;
+    pJoiner->SetCurrAction(joinParty);
+    CHECK(pJoiner->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // In the party: a portrait slot and a character slot, and the area counts
+    // it.
+    CHECK(pGame->GetCharacterPortraitNum(nJoinerId) != -1);
+    CHECK(pGame->m_nCharacters == 2);
+    CHECK(pArea->m_nCharacters == static_cast<BYTE>(nAreaCharacters + 1));
+
+    // A party member: the three AI types are PC, the gold moved out (the
+    // message carries it), the reputation and fatigue are reset.
+    CHECK(pJoiner->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_liveTypeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_startTypeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_baseStats.m_gold == 0);
+    CHECK(pJoiner->m_derivedStats.m_nGold == 0);
+    CHECK(pJoiner->m_baseStats.m_reputation == 100);
+    CHECK(pJoiner->m_baseStats.m_fatigue == 0);
+
+    // The join dialog came from the table (or is the "multig" fallback), and
+    // the six scripts are set.
+    CHECK(pJoiner->m_dialog.IsValid());
+    CHECK(pJoiner->m_special1Script != NULL);
+    CHECK(pJoiner->m_teamScript != NULL);
+    CHECK(pJoiner->m_special2Script != NULL);
+    CHECK(pJoiner->m_combatScript != NULL);
+    CHECK(pJoiner->m_special3Script != NULL);
+    CHECK(pJoiner->m_movementScript != NULL);
+
+    // Joining twice is an error: the portrait slot already exists.
+    CHECK(pJoiner->JoinParty() == CGameAIBase::ACTION_ERROR);
+}
+
+TEST_CASE("sprite: JoinParty overflows a full party without moving the gold", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    const auto newSprite = [&](const std::vector<BYTE>& bytes) {
+        CGameSprite* pSprite = new CGameSprite(const_cast<BYTE*>(bytes.data()),
+            static_cast<LONG>(bytes.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        pSprite->m_pArea = pArea;
+        return pSprite;
+    };
+
+    // Fill the party to its six-character limit.
+    for (size_t n = 1; n < candidates.size() && pGame->m_nCharacters < CINFGAME_MAXCHARACTERS; n++) {
+        CGameSprite* pMember = newSprite(candidates[n]);
+        pMember->m_sName = "Member";
+        REQUIRE(pGame->AddCharacterToParty(pMember->GetId(), -1) == TRUE);
+    }
+    if (pGame->m_nCharacters < CINFGAME_MAXCHARACTERS) {
+        SKIP("[iwd2r-skip] fewer than six CHR V2.2 files for a full party");
+    }
+
+    CGameSprite* pJoiner = newSprite(candidates[1]);
+    pJoiner->m_baseStats.m_gold = 500;
+    pJoiner->m_derivedStats.m_nGold = 500;
+    const LONG nJoinerId = pJoiner->GetId();
+    REQUIRE(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+
+    // Action 19 (JoinParty) through the sprite's dispatcher.
+    CAIAction joinParty;
+    joinParty.m_actionID = 19;
+    pJoiner->SetCurrAction(joinParty);
+    CHECK(pJoiner->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // The party stays at six; the creature waits in the overflow and its gold
+    // stays with it (the overflow path has no party-gold message).
+    CHECK(pGame->m_nCharacters == CINFGAME_MAXCHARACTERS);
+    CHECK(pGame->GetCharacterPortraitNum(nJoinerId) == -1);
+    REQUIRE(pGame->m_nCharacterOverflowCount == 1);
+    CHECK(static_cast<int>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow[0])) == nJoinerId);
+    CHECK(pJoiner->m_baseStats.m_gold == 500);
+    CHECK(pJoiner->m_derivedStats.m_nGold == 500);
+    CHECK(pJoiner->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pJoiner->m_baseStats.m_fatigue == 0);
+    CHECK(pJoiner->m_dialog.IsValid());
+    CHECK(pJoiner->m_special1Script != NULL);
+    CHECK(pJoiner->m_movementScript != NULL);
 }
