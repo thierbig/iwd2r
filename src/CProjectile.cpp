@@ -1075,6 +1075,54 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     m_checkLOS = TRUE;
 }
 
+// 0x573600
+CProjectileFieryCloud::CProjectileFieryCloud()
+    : CProjectileArea(0x100)
+{
+    field_65E = 0;
+    m_explosion1.m_animation = "ICloudX";
+    m_explosion1.m_sound = "EFF_M40";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_animation = "ICloudR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 13;
+    m_explosion3.m_animation = "ICloudA";
+    m_explosion3.m_sound = "ARE_M05";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 1500;
+    m_explosion3.field_44 = TRUE;
+    m_nDuration = 1050;
+    field_1D8 = 1;
+    m_nRadius = 100;
+}
+
+// 0x573AF0
+CProjectileInsectPlague::CProjectileInsectPlague()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "IPlaguX";
+    m_explosion1.m_sound = "RNG_P01";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_animation = "IPlaguR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 13;
+    m_explosion3.m_animation = "IPlaguA";
+    m_explosion3.m_sound = "ARE_P02";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10;
+    m_nHitModulus = 10;
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_nTriggerCountdown = 0;
+    m_nDuration = 1500;
+    field_1D8 = 1;
+    m_nRadius = 250;
+}
+
 // The exe keeps these in the zero-initialized virtual tail of .data — the
 // raw range ends at 0x8C6000, and the elements sit at 0x8E52D4/0x8E52D8/
 // 0x8E52DC with the flag at 0x8E52E8 — so the loaded image starts them all

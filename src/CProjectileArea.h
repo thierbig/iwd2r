@@ -182,6 +182,27 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// Fiery Cloud (SPWI802, projectile type 214, vtable 0x84FB98): ICloudX burst,
+// ICloudR ring and the persistent ICloudA fire cloud (EFF_M40 / ARE_M05), all
+// copy-from-back; 100 around for 1050 ticks. Unique among the recovered cloud
+// leaves in setting the +0x584 cloud flip (the ICloudA/ICloudB particle path),
+// and in zeroing a DWORD at +0x65E right after the base ctor.
+class CProjectileFieryCloud : public CProjectileArea {
+public:
+    CProjectileFieryCloud();
+
+    /* 065E */ DWORD field_65E;
+};
+
+// Insect Plague (SPPR510, projectile type 216, vtable 0x84FC34): IPlaguX
+// burst, IPlaguR ring and the persistent IPlaguA swarm (RNG_P01 / ARE_P02),
+// all copy-from-back; strikes every 10 for 1500 ticks, 250 around. It adds no
+// members of its own — the ctor writes only inherited fields.
+class CProjectileInsectPlague : public CProjectileArea {
+public:
+    CProjectileInsectPlague();
+};
+
 // Sleep (projectile type 42, vtable 0x84FEA4): EnchanX, 150 around; it puts
 // to sleep creatures below level 5, up to 2 to 8 levels.
 class CProjectileArea84FEA4 : public CProjectileArea {
