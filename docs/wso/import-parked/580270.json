@@ -1,0 +1,7 @@
+{
+  "address": "0x580270",
+  "name": "CProjectileWhirlwind::OnArrival",
+  "file": "src/CProjectile.cpp",
+  "batch": "i068",
+  "needs": "dependency outside the batch's files: CProjectileWhirlwind::PickWanderPoint (0x5800E0) -- the body's only callee (exe call at 0x58027D): the fork body itself matches the exe line for line (copy the picked point into m_targetPos at +0xC8/+0xCC, then m_nLegBudget = rand() % 50 + 50 into +0x2B2), but the pick parks this batch because its fork body contradicts the exe (the 16-entry step table is mirrored: the fork's case n carries the exe jump table 0x58022C's index (12-n) mod 16, read by GetDirection's 0=south/4=west/8=north/12=east rose; docs/wso/import-parked/5800E0.json), leaving no in-tree pick for OnArrival to call"
+}
