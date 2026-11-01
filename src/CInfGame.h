@@ -471,6 +471,7 @@ public:
     /* 4A8E */ BOOLEAN m_bPartyAI;
     /* 4A8F */ BOOLEAN m_bShowAreaNotes;
     /* 4A90 */ BYTE m_nTravelScreenImageToUse;
+    /* 4A91 */ CResRef m_cTravelScreenArea;
     /* 4A9A */ DWORD m_dwLastProgressRenderTickCount;
     /* 4A9E */ DWORD m_dwLastProgressMsgTickCount;
     /* 4AA2 */ ULONG m_nLastSaveTime;

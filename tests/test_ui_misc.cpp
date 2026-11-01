@@ -1667,7 +1667,14 @@ SHORT RunTravelAction(CGameSprite* pSprite, const CAIAction& action)
     CGameObject* pObject;
     REQUIRE(pObjects->GetDeny(pSprite->GetId(), CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE) == CGameObjectArray::SUCCESS);
     pSprite->m_curAction = action;
-    SHORT result = action.m_actionID == CAIAction::LEAVEAREA ? pSprite->LeaveArea() : pSprite->LeaveAreaName();
+    SHORT result;
+    if (action.m_actionID == CAIAction::LEAVEAREA) {
+        result = pSprite->LeaveArea();
+    } else if (action.m_actionID == CAIAction::LEAVEAREALUA) {
+        result = pSprite->LeaveAreaLUA();
+    } else {
+        result = pSprite->LeaveAreaName();
+    }
     pObjects->ReleaseDeny(pSprite->GetId(), CGameObjectArray::THREAD_ASYNCH, INFINITE);
     return result;
 }
@@ -2087,6 +2094,79 @@ TEST_CASE("travel: LeaveAreaName on the region takes the member to the entry poi
     CHECK(pArea->field_436 == 1);
 
     // Back to AR1000 for the other cases (one process may run them all).
+    pSprite->RemoveFromArea();
+    pSprite->m_pos = ptStart;
+    pSprite->AddToArea(pArea, ptStart, 0, CGameObject::LIST_FRONT);
+    pGame->UnselectAll();
+    pGame->SelectCharacter(pSprite->GetId(), FALSE);
+    CHECK(pGame->GetVisibleArea() == pArea);
+    g_pChitin->pActiveEngine = pEngine;
+    g_pChitin->cSoundMixer.CleanUp();
+}
+
+// LeaveAreaLUA (0x74B340): the action's first string names the area to load
+// and the member is put at its own point there (in search squares, the
+// nearest open square), in the new area and selected; the area left behind
+// is marshalled and the action is done. The second string is the resref the
+// travel screen is picked for: when it is set the image is 5, else random.
+TEST_CASE("travel: LeaveAreaLUA takes the member to the named area at its own point", "[uimisc][travel][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    // No session: a single-player game has no connection, so the client's
+    // permission request (0x4373E0, not ported) is never entered.
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pSprite->GetArea();
+    REQUIRE(pArea != NULL);
+    const CPoint ptStart = pSprite->GetPos();
+    SelectAlone(pSprite);
+    // The house's entrance point (FR1000, 165,224): the member keeps its
+    // own point in the new area.
+    const CPoint ptDest(165, 224);
+    PutAt(pSprite, ptDest);
+    g_pChitin->cSoundMixer.Initialize(&g_pChitin->cWnd, 16, g_pChitin->GetNumberSoundChannels());
+    CWarp* pEngine = g_pChitin->pActiveEngine;
+
+    CAIAction leave(CAIAction::LEAVEAREALUA, CString("AR1005"), CPoint(0, 0), 0);
+    leave.m_specificID2 = 0;
+    leave.m_string2 = "AR1005";
+    CHECK(RunTravelAction(pSprite, leave) == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    CGameArea* pHouse = pGame->GetArea(CString("AR1005"));
+    REQUIRE(pHouse != NULL);
+    CHECK(pSprite->GetArea() == pHouse);
+    const CPoint pos = pSprite->GetPos();
+    INFO("pos " << pos.x << "," << pos.y);
+    CHECK(std::abs(pos.x - ptDest.x) <= 4 * CPathSearch::GRID_SQUARE_SIZEX);
+    CHECK(std::abs(pos.y - ptDest.y) <= 4 * CPathSearch::GRID_SQUARE_SIZEY);
+    CHECK(pArea->field_436 == 1);
+    // The travel screen named by the second string (the image number itself
+    // is rolled again at the end of LoadArea).
+    CHECK(pGame->m_cTravelScreenArea == CResRef("AR1005"));
+
+    // Back without the resref: the travel screen is picked randomly.
+    CAIAction back(CAIAction::LEAVEAREALUA, CString("AR1000"), CPoint(0, 0), 0);
+    back.m_specificID2 = 0;
+    CHECK(RunTravelAction(pSprite, back) == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(pSprite->GetArea() == pArea);
+    // Without the second string the resref is left alone (only the image
+    // number is picked, and LoadArea rolls that again).
+    CHECK(pGame->m_cTravelScreenArea == CResRef("AR1005"));
+
+    // Back to the start point for the other cases (one process may run them
+    // all).
     pSprite->RemoveFromArea();
     pSprite->m_pos = ptStart;
     pSprite->AddToArea(pArea, ptStart, 0, CGameObject::LIST_FRONT);
