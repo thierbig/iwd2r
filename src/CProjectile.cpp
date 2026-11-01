@@ -1003,6 +1003,49 @@ CProjectileAcidBlob::CProjectileAcidBlob()
     field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
+// 0x5324A0
+CProjectileArrow::CProjectileArrow()
+    : CProjectileBAM(CResRef("ARARROW"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(5, 0x1B, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(4, 0x17, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(2, 0x2E, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x532720
+CProjectileSPFLMARR::CProjectileSPFLMARR()
+    : CProjectileBAM(CResRef("SPFLMARR"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(1, 0x2E, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_trailTick = 0;
+    memset(m_trailColorRanges, 0x41, sizeof(m_trailColorRanges));
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
 // 0x533DE0
 void CProjectileFollowUp::CallBack()
 {

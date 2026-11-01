@@ -177,6 +177,32 @@ public:
     CProjectileAcidBlob();
 };
 
+// The arrow projectile (vtable 0x84E58C): a CProjectileBAM on the ARARROW
+// animation with the palette ranges SetRange(5, 27), SetRange(4, 23) and
+// SetRange(2, 46) off the master bitmap, tinted, 16 directions and its speed
+// quintupled. It adds no members of its own — the ctor writes only inherited
+// fields.
+class CProjectileArrow : public CProjectileBAM {
+public:
+    CProjectileArrow();
+};
+
+// The SPFLMARR projectile (vtable 0x84E614): a CProjectileBAM on the SPFLMARR
+// flame-arrow animation with the palette ranges SetRange(0, 67) and
+// SetRange(1, 46) off the master bitmap, 16 directions and its speed
+// quintupled. It names the seven trail colour-range bytes at +0x2A0 (all
+// stamped 'A') and the trail tick at +0x2A7 — the BAM ctor leaves +0x2A0 to
+// the subclasses (it only writes +0x29D/+0x29E there), so — like
+// CProjectileSPBRNHND's m_animationLifetime — the derived class names the
+// bytes. Its AIUpdate (0x5329A0, parked from i052) animates the trail.
+class CProjectileSPFLMARR : public CProjectileBAM {
+public:
+    CProjectileSPFLMARR();
+
+    /* 02A0 */ BYTE m_trailColorRanges[7];
+    /* 02A7 */ BYTE m_trailTick;
+};
+
 // The SPBRNHND projectile (vtable 0x84E69C): a CProjectileBAM on the
 // SPBRNHND animation with the full palette range SetRange(0, 71) off the
 // master bitmap, the field_E6 brightest bit set, and a WORD lifetime of
