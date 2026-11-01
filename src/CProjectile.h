@@ -13,6 +13,7 @@ class CProjectile : public CGameObject {
 public:
     CProjectile();
     /* 0000 */ ~CProjectile() override;
+    /* 002C */ BOOLEAN CompressTime(DWORD deltaTime) override;
     /* 0068 */ BOOLEAN IsProjectile() override;
     /* 006C */ virtual void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType);
     /* 0070 */ virtual void OnArrival();

@@ -97,6 +97,39 @@ public:
     CProjectile84E0C4(WORD nCount, WORD nPaletteType);
 };
 
+// The boulder projectile (vtable 0x84E1D4): a CProjectileBAM on the BOULDER
+// animation with 16 directions and its speed times 3/2. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileBoulder : public CProjectileBAM {
+public:
+    CProjectileBoulder();
+};
+
+// The sling-stone projectile (vtable 0x84E2E4): a CProjectileBAM on the
+// MAGICSTN animation with the full palette range SetRange(0, 27) off the
+// master bitmap, one direction, and its speed times 5. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileSlingStone : public CProjectileBAM {
+public:
+    CProjectileSlingStone();
+};
+
+// The axe projectile (vtable 0x84E36C): a CProjectileBAM on the AXE
+// animation with 16 directions and its speed doubled. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileAxe : public CProjectileBAM {
+public:
+    CProjectileAxe();
+};
+
+// The spear projectile (vtable 0x84E3F4): a CProjectileBAM on the SPEAR
+// animation with 16 directions and its speed doubled. It adds no members
+// of its own — the ctor writes only inherited fields.
+class CProjectileSpear : public CProjectileBAM {
+public:
+    CProjectileSpear();
+};
+
 // The thrown-dagger projectile (vtable 0x84E47C): a CProjectileBAM on the
 // DAGGER animation with the palette ranges SetRange(5, 27) and SetRange(4, 30)
 // off the master bitmap and its speed doubled. It adds no members of its own —
@@ -104,6 +137,15 @@ public:
 class CProjectileDagger : public CProjectileBAM {
 public:
     CProjectileDagger();
+};
+
+// The acid-blob projectile (vtable 0x84E504): a CProjectileBAM on the
+// ACIDBLOB animation with the full palette range SetRange(0, 73) off the
+// master bitmap and 16 directions. It adds no members of its own — the ctor
+// writes only inherited fields.
+class CProjectileAcidBlob : public CProjectileBAM {
+public:
+    CProjectileAcidBlob();
 };
 
 // The SPBRNHND projectile (vtable 0x84E69C): a CProjectileBAM on the
@@ -124,11 +166,17 @@ public:
 // NOTE: The exe vtable's slot 0x88 is AddVisualToArea (0x533AE0), overriding
 // the slot CProjectileBAM fills with 0x529AB0; the vtable continues past it
 // (0x8C -> 0x533DF0, 0x90 -> 0x45B680, 0x94 -> 0x4C7BE0, 0x98 -> 0x534140)
-// and those virtuals are not part of batch i058, so ours declares none of
-// them.
+// and those virtuals are still undeclared.
 class CProjectileSprayCell : public CProjectileBAM {
 public:
+    /* 000C */ void AIUpdate() override;
     /* 0088 */ virtual void AddVisualToArea(CGameArea* pArea, const CPoint& point, LONG height);
+
+    // NOTE: The BAM ctor leaves +0x2A0 to the subclasses (it only writes
+    // +0x29D/+0x29E there), so — like CProjectile84E030's m_nCount and
+    // CProjectileSPBRNHND's m_animationLifetime — the derived class names
+    // the bytes.
+    /* 02A0 */ WORD m_animationLifetime;
 };
 
 // The projectile that fires child projectiles of type m_childType + 1 on an
@@ -152,6 +200,17 @@ public:
     /* 02F2 */ WORD m_launchKind;
     /* 02F4 */ DWORD m_checkLOS;
     /* 02F8 */ WORD m_delay;
+};
+
+// The Magic Missile barrage (vtable 0x84E838): a CProjectileFollowUp on the
+// MAGMISS animation that keeps its source alive and launches one child of
+// type 23 every 300 ticks until count runs out. The ctor mirrors the
+// missile (field_1C6, mirror fields +0x1CA/+0x1CE = 10/7, one direction,
+// leaf render param 0x80) and points m_targetType at the hostile side with
+// LOS checks on.
+class CProjectileMAGMISS : public CProjectileFollowUp {
+public:
+    CProjectileMAGMISS(SHORT count, USHORT /*unused*/);
 };
 
 // One magic missile, type 218 (vtable 0x8510A4).

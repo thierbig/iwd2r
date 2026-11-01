@@ -12,6 +12,7 @@
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
 #include "CProjectileSingleTarget.h"
+#include "CTimerWorld.h"
 #include "CUtil.h"
 #include "IcewindCVisualEffect.h"
 #include "IcewindMisc.h"
@@ -656,6 +657,28 @@ SHORT CProjectile::GetDirection(CPoint target)
     return CGameSprite::GetDirection(ptStart, ptTarget);
 }
 
+// 0x536F40
+// CompressTime (vtable slot 0x2C): the game is fast-forwarding time past
+// this projectile and nothing here survives a skip, so it removes itself
+// from the object array and deletes itself. It first asserts the skip is
+// more than one minute (the exe multiplies the two timer bytes 15 and 60).
+// NOTE: The exe masks the low byte off its return in every path, so the
+// BOOLEAN answer is always FALSE.
+BOOLEAN CProjectile::CompressTime(DWORD deltaTime)
+{
+    UTIL_ASSERT(deltaTime > CTimerWorld::TIMESCALE_MSEC_PER_SEC * CTimerWorld::TIMESCALE_SEC_PER_MIN);
+
+    BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Delete(m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        NULL,
+        INFINITE);
+    if (rc == CGameObjectArray::SUCCESS) {
+        delete this;
+    }
+
+    return FALSE;
+}
+
 // 0x536FC0
 // TRUE when the target is immune to this projectile: the projectile type is
 // on the target's projectile-immunity list, or m_nSpellLevel (when it is 8
@@ -827,6 +850,138 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     // NOTE: OnArrival's Delete fails (the projectile was never added to the
     // object array), so the projectile deletes itself here.
     delete this;
+}
+
+// 0x531570
+CProjectileBoulder::CProjectileBoulder()
+    : CProjectileBAM(CResRef("BOULDER"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 3 / 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x5319A0
+CProjectileSlingStone::CProjectileSlingStone()
+    : CProjectileBAM(CResRef("MAGICSTN"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 27, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 1;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x531BE0
+CProjectileAxe::CProjectileAxe()
+    : CProjectileBAM(CResRef("AXE"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x531DF0
+CProjectileSpear::CProjectileSpear()
+    : CProjectileBAM(CResRef("SPEAR"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x532260
+CProjectileAcidBlob::CProjectileAcidBlob()
+    : CProjectileBAM(CResRef("ACIDBLOB"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 73, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x533A50
+void CProjectileSprayCell::AIUpdate()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    if (pGame->m_nTimeStop != 0 && pGame->m_nTimeStopCaster != m_id) {
+        return;
+    }
+
+    m_animationLifetime = static_cast<WORD>(m_animationLifetime - 1);
+    m_animation->FrameAdvance();
+    if (static_cast<SHORT>(m_animationLifetime) <= 0) {
+        RemoveFromArea();
+        if (pGame->GetObjectArray()->Delete(m_id,
+                CGameObjectArray::THREAD_ASYNCH,
+                NULL,
+                INFINITE) == CGameObjectArray::SUCCESS) {
+            delete this;
+        }
+    }
+}
+
+// 0x534600
+CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
+    : CProjectileFollowUp(0x16, CResRef("MAGMISS"), count, 300, TRUE, CAIObjectType::ANYONE)
+{
+    field_1CA = 10;
+    field_1CE = 7;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = TRUE;
+    field_1D2 = 0x80;
+    field_1D4 = FALSE;
+    field_1D8 = 1;
+    m_fireSoundRef = "";
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+
+    CAIObjectType type;
+    type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
+    m_targetType.Set(type);
+    m_checkLOS = TRUE;
 }
 
 // The exe keeps these in the zero-initialized virtual tail of .data — the
