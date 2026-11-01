@@ -858,6 +858,46 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     delete this;
 }
 
+// 0x52CA10
+CProjectileSparkle::CProjectileSparkle(SHORT nPaletteType)
+    : CProjectileBAM(CResRef("SPMAGMIS"))
+{
+    m_shadow = NULL;
+    field_1D8 = 0;
+    field_1DA = 0;
+    m_nDirection = 0;
+    field_1DE = FALSE;
+    field_29C = 0;
+    m_bLimitedLifetime = FALSE;
+    m_nLifetime = 0;
+
+    m_animation->SequenceSet(0);
+
+    m_speed = static_cast<SHORT>(m_speed << 1);
+    field_1CA = 0xF;
+    field_1CE = 0xB;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = TRUE;
+    field_1D2 = 0x80;
+    field_1D4 = FALSE;
+    m_fireSoundRef = "";
+    field_E6 |= 8;
+
+    if (nPaletteType != 0) {
+        if (nPaletteType == CVidPalette::TYPE_RANGE) {
+            m_palette.SetRange(0, 0x21, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+            m_animation->SetPalette(m_palette);
+        } else {
+            UTIL_ASSERT(FALSE);
+        }
+    }
+
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
 // 0x531360
 CProjectileBolt::CProjectileBolt()
     : CProjectileBAM(CResRef("BOLT"))
@@ -1243,4 +1283,23 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE);
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x580B30
+// Push the picked target point out to m_beamRange past it along the caster->
+// target heading, so the bolt overshoots its mark and rakes the whole line,
+// then launch through the base.
+void CProjectileLightningBolt::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    CGameObject* pSource;
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(
+            source, CGameObjectArray::THREAD_ASYNCH, &pSource, INFINITE)
+        == CGameObjectArray::SUCCESS) {
+        const CPoint& casterPos = pSource->GetPos();
+        CPoint endPoint = IcewindMisc::sub_5847B0(targetPos,
+            targetPos.x - casterPos.x, targetPos.y - casterPos.y, m_beamRange);
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(
+            source, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        CProjectileSingleTarget::Fire(pArea, source, target, endPoint, nHeight, nType);
+    }
 }

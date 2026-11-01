@@ -185,4 +185,28 @@ public:
     /* 02AE */ std::set<LONG> m_struckTargets;
 };
 
+// The lightning-bolt carrier (vtable 0x8513BC): pushes the picked target
+// point out past the target so the bolt rakes the whole line. WillScarlettOhara
+// models the family as CProjectileLightningBolt
+// < IcewindCProjectileTravellingVFX < CProjectileTravelling; the exe Fire
+// 0x580B30 closes with CProjectileSingleTarget::Fire (0x5791D0), which is
+// the anchor used here (the same substitution as the two classes above).
+class CProjectileLightningBolt : public CProjectileSingleTarget {
+public:
+    // 0x580B30. Reads the caster's position, pushes the target point out to
+    // m_beamRange past the target along the caster->target heading, then
+    // launches through the base Fire.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+    // The ctor 0x5806C0 and the dtor (vtable slot 0, exe entry 0x580750)
+    // are not part of the batch, and slot 0x000C (AIUpdate 0x5808A0) is
+    // parked (docs/wso/import-parked/5808A0.json — the strike tracker it
+    // walks is the fork-only IcewindCProjectileTargetMap at +0x2BE), so the
+    // class inherits the base virtuals for those slots; a declared-but-
+    // undefined dtor would become the key function and leave the vtable
+    // unemitted, breaking the link.
+    // Distance the shot is pushed past the picked target: the radius handed
+    // to IcewindMisc::sub_5847B0 in Fire (a DWORD read at +0x2AE in the exe).
+    /* 02AE */ LONG m_beamRange;
+};
+
 #endif /* CPROJECTILESINGLETARGET_H_ */

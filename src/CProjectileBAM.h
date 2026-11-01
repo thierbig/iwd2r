@@ -75,6 +75,19 @@ public:
     /* 0088 */ virtual void Explode();
 };
 
+// The single travelling spell missile (vtable 0x84DB54, between
+// CProjectileSparkleExplosion's 0x84D938 and the exploding intermediate's
+// 0x84DBDC): the magic-missile bolt. DecodeProjectile's sparkle cases hand
+// the ctor an optional palette recolour; the sparkle-stream factory cases
+// swap the cell to "TRAVEL" afterwards. Doubled velocity, mirror bounds
+// 15/11 and leaf render param 0x80 — the same tuning as the mirrored
+// missiles — with the shadow, direction and lifetime fields cleared.
+class CProjectileSparkle : public CProjectileBAM {
+public:
+    // 0x52CA10
+    CProjectileSparkle(SHORT nPaletteType);
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {
