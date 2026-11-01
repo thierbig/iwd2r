@@ -8,6 +8,7 @@
 #include "CBaldurChitin.h"
 #include "CGameAnimationTypeCharacter.h"
 #include "CGameArea.h"
+#include "CGameContainer.h"
 #include "CGameDialog.h"
 #include "CGameDoor.h"
 #include "CGameSprite.h"
@@ -1228,6 +1229,183 @@ std::vector<CGameObject*> ObjectsOfType(CGameArea* pArea, BYTE type)
     return objects;
 }
 
+}
+
+TEST_CASE("sprite: PickLock unlocks a picked door, and reports a failed or unpickable one", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door1");
+    REQUIRE(pDoor != NULL);
+    REQUIRE((pDoor->m_dwFlags & 0x2) != 0);
+
+    CAIAction pickLock;
+    pickLock.m_actionID = 145;
+    pickLock.m_acteeID.Set(pDoor->m_typeAI);
+
+    // From the party's start the door is more than four squares away: the
+    // handler only starts the walk and remembers where it is headed.
+    const CPoint ptStart = pCharacter->GetPos();
+    const int startDx = pDoor->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX
+        - ptStart.x / CPathSearch::GRID_SQUARE_SIZEX;
+    const int startDy = pDoor->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY
+        - ptStart.y / CPathSearch::GRID_SQUARE_SIZEY;
+    INFO("start " << ptStart.x << "," << ptStart.y << " door " << pDoor->GetPos().x << "," << pDoor->GetPos().y);
+    REQUIRE(startDx * startDx + startDy * startDy > 0x10);
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() != CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curAction.m_dest == pDoor->GetPos());
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+
+    // Next to it, a difficulty of zero is a pick: the door's locked bit is
+    // cleared at once, the unlocked trigger and an unlock message go out, and
+    // the door is told to force the action pick.
+    pCharacter->m_pos = pDoor->GetPos();
+    pDoor->m_lockDifficulty = 0;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) == 0);
+
+    int nUnlocked = 0;
+    int nPickFailed = 0;
+    int nForcePick = 0;
+    bool bUnlock = false;
+    DWORD dwUnlockFlags = 0;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            CHECK(pTrigger->m_targetId == pDoor->GetId());
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            } else if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (auto* pUnlock = dynamic_cast<CMessageUnlock*>(pMessage)) {
+            bUnlock = true;
+            dwUnlockFlags = pUnlock->m_dwFlags;
+            CHECK(pUnlock->m_targetId == pDoor->GetId());
+            CHECK(pUnlock->m_sourceId == pCharacter->GetId());
+        } else if (auto* pForcePick = dynamic_cast<CMessageSetForceActionPick*>(pMessage)) {
+            CHECK(pForcePick->m_targetId == pDoor->GetId());
+            nForcePick += pForcePick->m_forceActionPick ? 1 : 0;
+        }
+    }
+    CHECK(nForcePick == 1);
+    CHECK(nUnlocked == 1);
+    CHECK(nPickFailed == 0);
+    REQUIRE(bUnlock);
+    CHECK((dwUnlockFlags & 0x2) == 0);
+
+    // A difficulty above the skill: the picklock-failed trigger, no unlock
+    // message, the door still locked.
+    pDoor->m_dwFlags |= 0x2;
+    pDoor->m_lockDifficulty = 1000;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    nPickFailed = 0;
+    nUnlocked = 0;
+    bUnlock = false;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            } else if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (dynamic_cast<CMessageUnlock*>(pMessage) != nullptr) {
+            bUnlock = true;
+        }
+    }
+    CHECK(nPickFailed == 1);
+    CHECK(nUnlocked == 0);
+    CHECK(!bUnlock);
+
+    // A difficulty of 100 is unpickable: the same failed trigger and no
+    // unlock even though the skill would beat a real difficulty.
+    pDoor->m_lockDifficulty = 100;
+    ClearMessages();
+    pCharacter->SetCurrAction(pickLock);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+    nPickFailed = 0;
+    bUnlock = false;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_PICKLOCKFAILED) {
+                nPickFailed++;
+            }
+        } else if (dynamic_cast<CMessageUnlock*>(pMessage) != nullptr) {
+            bUnlock = true;
+        }
+    }
+    CHECK(nPickFailed == 1);
+    CHECK(!bUnlock);
+
+    // A locked barrel: the same pick, but the container's own flags are left
+    // to the unlock message (the door clears its bit itself).
+    std::vector<CGameObject*> containers = ObjectsOfType(pArea, CGameObject::TYPE_CONTAINER);
+    CGameContainer* pBarrel = NULL;
+    for (CGameObject* pObject : containers) {
+        auto* pContainer = static_cast<CGameContainer*>(pObject);
+        if (pContainer->m_containerType == 11) {
+            pBarrel = pContainer;
+            break;
+        }
+    }
+    REQUIRE(pBarrel != NULL);
+    pBarrel->m_dwFlags |= 0x1;
+    pBarrel->m_lockDifficulty = 0;
+    pCharacter->m_pos = pBarrel->GetPos();
+    CAIAction pickBarrel = pickLock;
+    pickBarrel.m_acteeID.Set(pBarrel->m_typeAI);
+    ClearMessages();
+    pCharacter->SetCurrAction(pickBarrel);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK((pBarrel->m_dwFlags & 0x1) != 0);
+    nUnlocked = 0;
+    bUnlock = false;
+    dwUnlockFlags = 0;
+    pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        if (auto* pTrigger = dynamic_cast<CMessageSetTrigger*>(pMessage)) {
+            if (pTrigger->m_trigger.m_triggerID == CAITRIGGER_UNLOCKED) {
+                nUnlocked++;
+            }
+        } else if (auto* pUnlock = dynamic_cast<CMessageUnlock*>(pMessage)) {
+            bUnlock = true;
+            dwUnlockFlags = pUnlock->m_dwFlags;
+            CHECK(pUnlock->m_targetId == pBarrel->GetId());
+        }
+    }
+    CHECK(nUnlocked == 1);
+    REQUIRE(bUnlock);
+    CHECK(dwUnlockFlags == (pBarrel->m_dwFlags & ~0x1));
+
+    ClearMessages();
 }
 
 TEST_CASE("sprite: DoAIUpdate runs while the world is paused and cycles the AI inhibitor", "[ai][data]")
@@ -2572,6 +2750,125 @@ TEST_CASE("sprite: RandomFly queues the fly arc, rounds the facing and jumps aft
     ClearMessages();
 }
 
+TEST_CASE("sprite: RemoveSpell erases the action's spell from its list", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // A character that owns the spell lists (the Rest test's search); the
+    // entries the test removes are added to its lists below, so the shipped
+    // data only supplies the character and the game's spell table.
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        BOOL bHasSpells = !pProbe->m_innateSpells.m_List.empty();
+        for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES && !bHasSpells; nClass++) {
+            const CGameSpriteGroupedSpellList& spells = pProbe->m_spells.m_spellsByClass[nClass];
+            for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel && !bHasSpells; nLevel++)
+                bHasSpells = !spells.m_lists[nLevel].m_List.empty();
+        }
+        for (UINT nLevel = 0; nLevel < pProbe->m_domainSpells.m_nHighestLevel && !bHasSpells; nLevel++)
+            bHasSpells = !pProbe->m_domainSpells.m_lists[nLevel].m_List.empty();
+        delete pProbe;
+        if (bHasSpells) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with spells, domains or innates");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // A normal spell of the game's table (GetSpellType 1): a memorized spell
+    // is added to the bard list (index 0) and the same id to the domain list,
+    // so both case-1 removals are deterministic.
+    UINT nSpellId = 0;
+    CResRef resRef;
+    for (UINT nIndex = 0; nIndex < pGame->m_spells.m_nCount; nIndex++) {
+        UINT nCandidate = nIndex;
+        const CResRef& candidate = pGame->m_spells.Get(nCandidate);
+        if (candidate.IsValid() && pGame->GetSpellType(candidate) == 1) {
+            nSpellId = nIndex;
+            resRef = candidate;
+            break;
+        }
+    }
+    if (!resRef.IsValid()) {
+        SKIP("[iwd2r-skip] the spell table has no normal spell");
+    }
+
+    // The memorized path: a class entry with one available memorization;
+    // sub_727720 only finds entries whose field_8 is above zero.
+    CGameSpriteGroupedSpellList& classList = pCharacter->m_spells.m_spellsByClass[0];
+    REQUIRE(classList.Add(nSpellId, 0, 0, 1, 0) == TRUE);
+    const size_t nClassBefore = classList.m_lists[0].m_List.size();
+
+    pCharacter->m_curAction = CAIAction::NULL_ACTION;
+    pCharacter->m_curAction.SetString1(resRef.GetResRefStr());
+    CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+    CHECK(classList.m_lists[0].m_List.size() == nClassBefore - 1);
+    for (const CGameSpriteSpellListEntry& entry : classList.m_lists[0].m_List) {
+        CHECK(entry.m_nID != nSpellId);
+    }
+
+    // The domain path: the same id only in the domain list, with a specialist
+    // mask (sub_727720 reports the domain entry's specialization; the handler
+    // then removes it from the domain list as well). RemoveDomainSpell only
+    // acts for a cleric, and the built-in data's caster here is not one.
+    if (pCharacter->m_derivedStats.HasClass(CAIOBJECTTYPE_C_CLERIC)) {
+        CGameSpriteGroupedSpellList& domainList = pCharacter->m_domainSpells;
+        REQUIRE(domainList.Add(nSpellId, 0, 0, 1, 0) == TRUE);
+        // The domain scan reports the cleric class; the memorized removal for
+        // it asserts unless that list covers level 0 (the original expects a
+        // cleric to have one).
+        pCharacter->m_spells.m_spellsByClass[1].m_nHighestLevel = 1;
+        pCharacter->m_baseStats.m_specialization = 1;
+        const size_t nDomainBefore = domainList.m_lists[0].m_List.size();
+
+        pCharacter->m_curAction = CAIAction::NULL_ACTION;
+        pCharacter->m_curAction.SetString1(resRef.GetResRefStr());
+        CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+        CHECK(domainList.m_lists[0].m_List.size() == nDomainBefore - 1);
+    }
+
+    // The innate path, when the character has an innate entry.
+    if (!pCharacter->m_innateSpells.m_List.empty()) {
+        UINT nInnateId = pCharacter->m_innateSpells.m_List.front().m_nID;
+        pCharacter->m_innateSpells.m_List.front().field_8 = 1;
+        const CResRef& innateResRef = pGame->GetInnateSpells()->Get(nInnateId);
+        REQUIRE(innateResRef.IsValid());
+        const size_t nInnateBefore = pCharacter->m_innateSpells.m_List.size();
+
+        pCharacter->m_curAction = CAIAction::NULL_ACTION;
+        pCharacter->m_curAction.SetString1(innateResRef.GetResRefStr());
+        CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_innateSpells.m_List.size() == nInnateBefore - 1);
+    }
+
+    // The id path with nothing to decode answers ACTION_ERROR.
+    pCharacter->m_curAction = CAIAction::NULL_ACTION;
+    pCharacter->field_588 = 0;
+    pCharacter->m_curAction.m_specificID = 0;
+    CHECK(pCharacter->RemoveSpell() == CGameAIBase::ACTION_ERROR);
+}
+
 // CGameSprite::Help (0x74FF10, action 17): every object within GetHelpRange
 // (twice the visual range, CAIObjectType::ANYONE) gets a Help trigger
 // (TRIGGER.IDS 3) from the caller, its AI type as the cause and no
@@ -2632,6 +2929,12 @@ TEST_CASE("sprite: Help sends the Help trigger to the sprites in range", "[ai][d
     CHECK(bHeard);
 }
 
+// CGameSprite::StartDialog (0x7543B0, actions 137/198): the actor starts its
+// own dialog with the target without Dialog's distance/LOS checks. Action
+// 137 takes the dialog resource from the action (the actor's m_dialog),
+// 198 (StartDialogNoSet) keeps the actor's current one; both remember the
+// talk, the world screen opens the dialog, and the handler is done. A
+// charmed actor, or one of the two unable to speak, is an error.
 TEST_CASE("sprite: StartDialog opens the actor's dialog without walking to the target", "[ai][data]")
 {
     if (DataDir() == nullptr) {
