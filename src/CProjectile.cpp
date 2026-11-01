@@ -657,13 +657,13 @@ SHORT CProjectile::GetDirection(CPoint target)
     return CGameSprite::GetDirection(ptStart, ptTarget);
 }
 
-// 0x536F40
 // CompressTime (vtable slot 0x2C): the game is fast-forwarding time past
 // this projectile and nothing here survives a skip, so it removes itself
 // from the object array and deletes itself. It first asserts the skip is
 // more than one minute (the exe multiplies the two timer bytes 15 and 60).
 // NOTE: The exe masks the low byte off its return in every path, so the
 // BOOLEAN answer is always FALSE.
+// 0x536F40
 BOOLEAN CProjectile::CompressTime(DWORD deltaTime)
 {
     UTIL_ASSERT(deltaTime > CTimerWorld::TIMESCALE_MSEC_PER_SEC * CTimerWorld::TIMESCALE_SEC_PER_MIN);
