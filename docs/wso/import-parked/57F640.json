@@ -1,0 +1,7 @@
+{
+  "address": "0x57F640",
+  "name": "CProjectileWhirlwind::CProjectileWhirlwind",
+  "file": "src/CProjectile.cpp",
+  "batch": "i066",
+  "needs": "dependency outside the batch's files: IcewindCProjectileTargetMap (fork src/IcewindCProjectileTargetMap.{h,cpp}, ctor 0x55ACC0) constructs the strike tracker at +0x2BA"
+}
