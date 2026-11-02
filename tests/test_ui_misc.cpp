@@ -46,6 +46,7 @@
 #include "CWeather.h"
 #include "Icewind586B70.h"
 #include "ScreenLayout.h"
+#include "compat/marshal_ptr.h"
 #include "compat/msvc_rand.h"
 #include "data_view.h"
 #include "platform/data_dir.h"
@@ -3229,4 +3230,90 @@ TEST_CASE("player character: OnUpdateCharacterSlotReply's session guard and its 
     // character it still only answers TRUE.
     reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 6;
     CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+}
+
+TEST_CASE("player character: the slot reply retargets both type AIs to the slot's id", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pOld = PartyMember();
+    HostSession session;
+    REQUIRE(session.Open());
+
+    if (pOld == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character in the Characters folder");
+    }
+    const LONG nOldCharacter = pOld->GetId();
+    const WORD nAnimation = pOld->m_baseStats.m_animationType;
+
+    // The reply the client sends: the party creature marshalled whole.
+    CSavedGamePartyCreature partyCreature;
+    pOld->Marshal(partyCreature, TRUE);
+    BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
+    REQUIRE(pCreature != NULL);
+    REQUIRE(partyCreature.m_creatureSize > 0);
+
+    BYTE* pStats = NULL;
+    LONG nStats = 0;
+    pOld->m_derivedStats.Marshal(&pStats, &nStats);
+    REQUIRE(nStats >= 0x188);
+    // The reply carries the 0x188-byte template the handler reads.
+    const LONG nStatsInReply = 0x188;
+
+    // {header; SHORT slot; BYTE has; stats; WORD animation; WORD icons;
+    //  CSavedGamePartyCreature; creature; DWORD biographyLength}. The struct's
+    // offset is relative to the payload, so the handler's +header restores it.
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const DWORD nCreatureAt = cnt + sizeof(SHORT) + sizeof(BYTE) + nStatsInReply
+        + sizeof(WORD) + sizeof(WORD) + sizeof(CSavedGamePartyCreature);
+    std::vector<BYTE> reply(nCreatureAt + partyCreature.m_creatureSize + sizeof(DWORD), 0);
+
+    *reinterpret_cast<SHORT*>(&reply[cnt]) = 0;
+    cnt += sizeof(SHORT);
+    reply[cnt] = 1;
+    cnt += sizeof(BYTE);
+    memcpy(&reply[cnt], pStats, nStatsInReply);
+    cnt += nStatsInReply;
+    *reinterpret_cast<WORD*>(&reply[cnt]) = nAnimation;
+    cnt += sizeof(WORD);
+    *reinterpret_cast<WORD*>(&reply[cnt]) = 0; // no portrait icons
+    cnt += sizeof(WORD);
+
+    partyCreature.m_creatureOffset = nCreatureAt - CNetwork::SPEC_MSG_HEADER_LENGTH;
+    memcpy(&reply[cnt], &partyCreature, sizeof(CSavedGamePartyCreature));
+    cnt += sizeof(CSavedGamePartyCreature);
+    memcpy(&reply[cnt], pCreature, partyCreature.m_creatureSize);
+    cnt += partyCreature.m_creatureSize;
+    *reinterpret_cast<DWORD*>(&reply[cnt]) = 0; // no biography override
+    cnt += sizeof(DWORD);
+    REQUIRE(cnt == reply.size());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    network.m_bConnectionEstablished = TRUE;
+
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply.data(), static_cast<DWORD>(reply.size())) == TRUE);
+
+    // The sprite that replaced the slot's own remembers nOldCharacter in BOTH
+    // type AIs (0x42EDEE and 0x42EE05), not the temporary sprite's id.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pNew = NULL;
+    REQUIRE(pGame->GetObjectArray()->GetShare(nOldCharacter,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pNew),
+                INFINITE)
+        == CGameObjectArray::SUCCESS);
+    CHECK(pNew->m_liveTypeAI.m_nInstance == nOldCharacter);
+    CHECK(pNew->m_startTypeAI.m_nInstance == nOldCharacter);
+    pGame->GetObjectArray()->ReleaseShare(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    delete[] pStats;
+    delete[] pCreature;
 }

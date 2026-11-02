@@ -2221,6 +2221,9 @@ BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DW
     WORD nIcons = *reinterpret_cast<WORD*>(pData + cnt);
     cnt += sizeof(WORD);
 
+    // __LINE__: 4263 (0x10A7) at 0x42E8AC.
+    UTIL_ASSERT(nIcons < 128);
+
     DWORD nIconsOffset = cnt;
     cnt += sizeof(DWORD) * nIcons;
 
@@ -2238,7 +2241,7 @@ BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DW
         0,
         0x7FFFFFFF,
         CPoint(-1, -1),
-        -1);
+        0); // the facing push at 0x42E942 is 0, not -1
 
     if (pSprite == NULL) {
         m_bInOnObjectAdd = FALSE;
@@ -2334,9 +2337,12 @@ BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DW
         pSprite->JumpToPoint(pSprite->GetPos(), TRUE);
     }
 
-    // The type AIs remember this sprite's new instance.
+    // Both type AIs remember this sprite's new instance: the exe copies
+    // m_liveTypeAI twice (0x42ED6E and 0x42ED9A) and Sets both copies
+    // (0x42EDEE live, 0x42EE05 start).
     CAIObjectType liveType(pSprite->m_liveTypeAI);
     liveType.m_nInstance = nOldCharacter;
+    pSprite->m_liveTypeAI.Set(liveType);
     pSprite->m_startTypeAI.Set(liveType);
 
     pSprite->m_canBeSeen = nOldCanBeSeen;
