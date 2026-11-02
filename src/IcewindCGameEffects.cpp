@@ -865,7 +865,7 @@ BOOL IcewindCGameEffectColorGlowDissipate::ApplyEffect(CGameSprite* pSprite)
 IcewindCGameEffectSummon::IcewindCGameEffectSummon(ITEM_EFFECT* effect, const CPoint& source, LONG sourceID, CPoint target)
     : CGameEffect(effect, source, sourceID, target, FALSE)
 {
-    field_18C = 0;
+    m_pSprite = NULL;
     field_190 = 0;
 }
 
@@ -883,6 +883,31 @@ CGameEffect* IcewindCGameEffectSummon::Copy()
 void IcewindCGameEffectSummon::sub_49DB60(int a1)
 {
     field_190 = a1;
+}
+
+// 0x560140
+void IcewindCGameEffectSummon::ResolveSourceSprite()
+{
+    BYTE rc;
+
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceID,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&m_pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::BAD_INDEX) {
+        return;
+    }
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        UTIL_ASSERT(FALSE); // __LINE__: 2076
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceID,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
 }
 
 // 0x55FA10

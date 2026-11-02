@@ -214,9 +214,11 @@ public:
 
     void sub_49DB60(int a1);
 
+    virtual void ResolveSourceSprite();
+
     void AddSummonVisualHit(CGameSprite* pSpawned, int mode);
 
-    /* 018C */ int field_18C;
+    /* 018C */ CGameSprite* m_pSprite;
     /* 0190 */ int field_190;
 };
 
