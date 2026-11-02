@@ -712,6 +712,24 @@ public:
     /* 000C */ BOOLEAN m_cutSceneMode;
 };
 
+class CMessageContinueDialog : public CMessage {
+public:
+    CMessageContinueDialog(LONG entryIndex, LONG marker, COLORREF nameColor,
+        const CString& name, LONG sourceSpriteId, const CString& nextDialog, LONG talkerIndex,
+        LONG characterIndex, LONG nextEntryIndex, BYTE flag, LONG id);
+
+    /* 000C */ CString m_name;
+    /* 0010 */ LONG m_entryIndex;
+    /* 0014 */ LONG m_marker;
+    /* 0018 */ COLORREF m_nameColor;
+    /* 001C */ LONG m_sourceSpriteId;
+    /* 0020 */ CString m_nextDialog;
+    /* 0024 */ LONG m_talkerIndex;
+    /* 0028 */ LONG m_characterIndex;
+    /* 002C */ LONG m_nextEntryIndex;
+    /* 0030 */ BYTE m_flag;
+};
+
 class CMessageDisplayText : public CMessage {
 public:
     CMessageDisplayText(const CString& name, const CString& text, COLORREF nameColor, COLORREF textColor, LONG marker, LONG caller, LONG target);

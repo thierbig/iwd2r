@@ -10556,6 +10556,30 @@ void CMessageDoorStatus::Run()
 
 // -----------------------------------------------------------------------------
 
+// 0x4F5400
+//
+// NOTE: ret 0x2c -- eleven stack args; the exe also inlines this ctor in
+// CGameDialogSprite::AsynchronousUpdate (0x4841A2-0x484248). The single id
+// argument lands in both base slots ([esi+4] and [esi+8]).
+CMessageContinueDialog::CMessageContinueDialog(LONG entryIndex, LONG marker, COLORREF nameColor,
+    const CString& name, LONG sourceSpriteId, const CString& nextDialog, LONG talkerIndex,
+    LONG characterIndex, LONG nextEntryIndex, BYTE flag, LONG id)
+    : CMessage(id, id)
+    , m_name(name)
+    , m_entryIndex(entryIndex)
+    , m_marker(marker)
+    , m_nameColor(nameColor)
+    , m_sourceSpriteId(sourceSpriteId)
+    , m_nextDialog(nextDialog)
+    , m_talkerIndex(talkerIndex)
+    , m_characterIndex(characterIndex)
+    , m_nextEntryIndex(nextEntryIndex)
+    , m_flag(flag)
+{
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x4F54C0
 CMessageEnterDialog::CMessageEnterDialog(DWORD entryNum, BOOLEAN a2, LONG caller, LONG target)
     : CMessage(caller, target)
