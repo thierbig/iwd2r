@@ -30448,7 +30448,30 @@ SHORT CGameSprite::JumpToArea(CString areaName, const CPoint& dest, SHORT facing
 // 0x766380
 void CGameSprite::MoveOntoArea(CGameArea* pArea, const CPoint& dest, SHORT facingDirection)
 {
-    // TODO: Incomplete.
+    // Search the grid squares around the requested point for the nearest one
+    // this sprite can stand on.
+    CPoint grid = pArea->m_search.GetNearestOpenSquare(
+        CPoint(dest.x / CPathSearch::GRID_SQUARE_SIZEX, dest.y / CPathSearch::GRID_SQUARE_SIZEY),
+        GetTerrainTable(), GetAnimation()->GetPersonalSpace(), facingDirection);
+
+    CPoint pos(CPathSearch::GRID_SQUARE_SIZEX * grid.x + CPathSearch::GRID_SQUARE_SIZEX / 2,
+        CPathSearch::GRID_SQUARE_SIZEY * grid.y + CPathSearch::GRID_SQUARE_SIZEY / 2);
+    AddToArea(pArea, pos, 0, CGameObject::LIST_FRONT);
+    SetFacing(facingDirection);
+
+    if (GetPos().x != -1 || GetPos().y != -1 || m_pArea != NULL) {
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(new CMessageSpriteUpdate(this, m_id, m_id), FALSE);
+        }
+    }
+
+    CVariable var;
+    var.SetName(CString(GetScriptName()));
+    var.m_intValue = m_id;
+    pArea->m_namedCreatures.AddKey(var);
+
+    m_posStart = m_pos;
 }
 
 // 0x42FDC0
