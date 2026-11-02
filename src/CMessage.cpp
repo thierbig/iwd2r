@@ -2261,7 +2261,7 @@ BOOLEAN CBaldurMessage::DemandCharacterSlotUpdate(SHORT nCharacterSlot, SHORT nP
     }
 
     g_pChitin->cNetwork.GetPlayerName(nPlayerSlot, sPlayerName);
-    if (sPlayerName == "") {
+    if (strcmp(sPlayerName, "") == 0) {
         return FALSE;
     }
 
@@ -2296,9 +2296,9 @@ BOOLEAN CBaldurMessage::OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage
 // 0x42E630
 BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete. The 2,766-byte handler unmarshals the character
-    // update and owns the fetched message in the original; it is out of
-    // scope for this task, so the message is freed here.
+    // Not ported: the 2,766-byte handler unmarshals the character update and
+    // owns the fetched message in the original; it is out of scope for this
+    // task, so the message is freed here.
 
     delete pMessage;
 
