@@ -18863,6 +18863,33 @@ void CMessage97::MarshalMessage(BYTE** pData, DWORD* dwSize)
     UTIL_ASSERT(*dwSize == 20);
 }
 
+// 0x514040
+BOOL CMessage97::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29811
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt + 4);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+        remoteObjectID,
+        localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+    m_nScript = *reinterpret_cast<INT*>(pData + cnt + 8);
+    memcpy(&m_resScript, pData + cnt + 12, RESREF_SIZE);
+
+    // Native code ignores dwSize and keeps the caller's source ID.
+    return TRUE;
+}
+
 // 0x5140D0
 void CMessage97::Run()
 {
