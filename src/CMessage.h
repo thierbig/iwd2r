@@ -1477,6 +1477,34 @@ public:
     /* 000C */ CResRef m_screen;
 };
 
+// Remote half of Icewind586B70::Unsummon: other machines replay the poof.
+class CMessageUnsummon : public CMessage {
+public:
+    CMessageUnsummon(LONG summonedId, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ LONG m_summonedId;
+};
+
+// Remote half of the summon-registry unlink (Icewind586B70::Remove).
+class CMessageRemoveSummonLink : public CMessage {
+public:
+    CMessageRemoveSummonLink(LONG summonedId, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ LONG m_summonedId;
+};
+
 // The SaveGame action's message (vtable 0x84888C): saves the game under a
 // name made of the strref's text.
 class CMessageSaveGame : public CMessage {
@@ -1520,6 +1548,23 @@ public:
 
     /* 000C */ LONG m_spriteId;
 };
+
+#pragma pack(push, 2)
+// Native subtype 97: replace an AI script on a sprite.
+class CMessage97 : public CMessage {
+public:
+    CMessage97(LONG caller, LONG target, INT nScript, const CResRef& resScript);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ INT m_nScript;
+    /* 0010 */ CResRef m_resScript;
+};
+#pragma pack(pop)
 
 class CMessage90 : public CMessage {
 public:
