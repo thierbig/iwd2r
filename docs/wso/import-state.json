@@ -9015,7 +9015,320 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i070": {
+      "assigned_at": "2026-11-02T15:50:57+00:00",
+      "branch": "p3/wso-i070",
+      "closed_at": "2026-11-02T17:38:38+00:00",
+      "files": [
+        "src/CInfGame.cpp",
+        "src/CGameSprite.cpp",
+        "src/CProjectile.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5C3790",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CInfGame.cpp",
+          "name": "CInfGame::ChangeBiography",
+          "our_len": 2,
+          "their_len": 1623
+        },
+        {
+          "address": "0x766140",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::JumpToArea",
+          "our_len": 21,
+          "their_len": 1075
+        },
+        {
+          "address": "0x766380",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::MoveOntoArea",
+          "our_len": 2,
+          "their_len": 893
+        },
+        {
+          "address": "0x74F6D0",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::MoveGlobal",
+          "our_len": 2,
+          "their_len": 575
+        },
+        {
+          "address": "0x530790",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectile84D8B8::CProjectile84D8B8",
+          "our_len": 2,
+          "their_len": 335
+        },
+        {
+          "address": "0x5BDBA0",
+          "category": "theirs_real_ours_stub",
+          "file": "src/CInfGame.cpp",
+          "name": "CInfGame::sub_5BDBA0",
+          "our_len": 2,
+          "their_len": 123
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   },
-  "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"
+  "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+  "kept_default": {
+    "54aa40": {
+      "address": "0x54AA40",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CSpell.cpp",
+      "name": "CSpell::CheckUsableBy"
+    },
+    "55f180": {
+      "address": "0x55F180",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/IcewindCGameEffects.cpp",
+      "name": "IcewindCGameEffectSlowPoison::ApplyEffect"
+    },
+    "5e0880": {
+      "address": "0x5E0880",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CScreenCharacter::ResetPopupPanel"
+    },
+    "5f6930": {
+      "address": "0x5F6930",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlScrollBarCharacterFeats::OnScrollUp"
+    },
+    "5f69d0": {
+      "address": "0x5F69D0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlScrollBarCharacterFeats::OnScrollDown"
+    },
+    "5f6a80": {
+      "address": "0x5F6A80",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlScrollBarCharacterFeats::OnPageUp"
+    },
+    "5f7fb0": {
+      "address": "0x5F7FB0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlScrollBarCharacterSkills::OnScrollUp"
+    },
+    "5f80e0": {
+      "address": "0x5F80E0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlScrollBarCharacterSkills::OnPageUp"
+    },
+    "5f8610": {
+      "address": "0x5F8610",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCharacter.cpp",
+      "name": "CUIControlButtonCharacterSkillsPlusMinus::AdjustValue"
+    },
+    "60a5c0": {
+      "address": "0x60A5C0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::ResetArcaneSpellsPanel"
+    },
+    "60be30": {
+      "address": "0x60BE30",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::ResetAbility"
+    },
+    "60c700": {
+      "address": "0x60C700",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::ResetSkillsPanel"
+    },
+    "60eb60": {
+      "address": "0x60EB60",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::UpdateSkillsPanel"
+    },
+    "60ef70": {
+      "address": "0x60EF70",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::UpdateArcaneSpellsPanel"
+    },
+    "60f430": {
+      "address": "0x60F430",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::UpdateMemorizeArcaneSpellsPanel"
+    },
+    "610850": {
+      "address": "0x610850",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CScreenCreateChar::RecallMemoryAbilities"
+    },
+    "619220": {
+      "address": "0x619220",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenAbilitiesPlusMinus::OnLButtonDown"
+    },
+    "619b60": {
+      "address": "0x619B60",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenAbilitiesRecall::OnLButtonClick"
+    },
+    "61a2a0": {
+      "address": "0x61A2A0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGen61A130::OnLButtonClick"
+    },
+    "61a300": {
+      "address": "0x61A300",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenSkills::OnScrollUp"
+    },
+    "61a430": {
+      "address": "0x61A430",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenSkills::OnPageUp"
+    },
+    "61a830": {
+      "address": "0x61A830",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenSkillsPlusMinus::OnLButtonDown"
+    },
+    "61a980": {
+      "address": "0x61A980",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenSkillsPlusMinus::AdjustValue"
+    },
+    "61b290": {
+      "address": "0x61B290",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::SetSpell"
+    },
+    "61b460": {
+      "address": "0x61B460",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::OnLButtonClick"
+    },
+    "61b750": {
+      "address": "0x61B750",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::Render"
+    },
+    "61f430": {
+      "address": "0x61F430",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenSkillsHotArea::OnHotAreaClick"
+    },
+    "620560": {
+      "address": "0x620560",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenMemorizedArcaneSpellSelection::OnLButtonClick"
+    },
+    "620970": {
+      "address": "0x620970",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenMemorizedArcaneSpellSelection::Render"
+    },
+    "620e10": {
+      "address": "0x620E10",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenMemorizedDivineSpellSelection::OnLButtonClick"
+    },
+    "6212d0": {
+      "address": "0x6212D0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenMemorizedDivineSpellSelection::Render"
+    },
+    "622ac0": {
+      "address": "0x622AC0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenFeatsHotArea::OnHotAreaClick"
+    },
+    "622be0": {
+      "address": "0x622BE0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenFeats::OnScrollUp"
+    },
+    "622c80": {
+      "address": "0x622C80",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenFeats::OnScrollDown"
+    },
+    "622d30": {
+      "address": "0x622D30",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenFeats::OnPageUp"
+    },
+    "622e80": {
+      "address": "0x622E80",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlScrollBarCharGenFeats::OnScroll"
+    },
+    "623150": {
+      "address": "0x623150",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CScreenCreateChar.cpp",
+      "name": "CUIControlButtonCharGenFeatsPlusMinus::OnLButtonDown"
+    },
+    "725330": {
+      "address": "0x725330",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CGameSprite.cpp",
+      "name": "CGameSprite::sub_725330"
+    },
+    "7642d0": {
+      "address": "0x7642D0",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CGameSprite.cpp",
+      "name": "CGameSprite::GetSkillValue"
+    },
+    "764310": {
+      "address": "0x764310",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CGameSprite.cpp",
+      "name": "CGameSprite::GetSkillCost"
+    },
+    "790b70": {
+      "address": "0x790B70",
+      "at": "2026-11-02T15:50:57+00:00",
+      "file": "src/CChitin.cpp",
+      "name": "CChitin::SynchronousUpdate"
+    }
+  }
 }
