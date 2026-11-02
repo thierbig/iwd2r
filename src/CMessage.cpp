@@ -18736,6 +18736,89 @@ CMessageAddSummonLink::CMessageAddSummonLink(LONG summonedId, LONG caller, LONG 
 
 // -----------------------------------------------------------------------------
 
+// 0x513F00
+void CMessage97::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29748
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
+    LONG remoteObjectID = pObject->m_remoteObjectID;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = 20;
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29772
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    *reinterpret_cast<PLAYER_ID*>(*pData) = remotePlayerID;
+    *reinterpret_cast<LONG*>(*pData + 4) = remoteObjectID;
+    *reinterpret_cast<INT*>(*pData + 8) = m_nScript;
+    memcpy(*pData + 12, m_resScript.GetResRef(), RESREF_SIZE);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29797
+    UTIL_ASSERT(*dwSize == 20);
+}
+
+// 0x5140D0
+void CMessage97::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CAIScript* pScript = new CAIScript;
+
+            // The exe builds its two by-value CResRef arguments through the
+            // CResRef(BYTE*) converting constructor (0x78A9D0: memcpy + MakeUpper)
+            // from an inlined GetResRef(), so both the script's resref and the
+            // one handed to Read are uppercased copies of m_resScript. The first
+            // is installed via CAIScript::SetResRef (0x514220), which our tree
+            // has not imported; m_cResRef is public, so assign it directly.
+            CResRef resScript(m_resScript);
+            resScript.MakeUpper();
+            pScript->m_cResRef = resScript;
+            pScript->Read(resScript, TRUE);
+            static_cast<CGameSprite*>(pObject)->SetScript(static_cast<SHORT>(m_nScript), pScript);
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x4F6C10
 CMessageSetProtagonist::CMessageSetProtagonist(LONG nId, LONG caller, LONG target)
     : CMessage(caller, target)
@@ -18993,89 +19076,6 @@ void CMessageStartCombatMusic::Run()
 
     if (rc == CGameObjectArray::SUCCESS) {
         pObject->GetArea()->PlaySong(m_slot, 0x10000 | 0x100 | 0x80 | 0x40 | 0x20 | 0x10 | 0x04);
-
-        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
-            CGameObjectArray::THREAD_ASYNCH,
-            INFINITE);
-    }
-}
-
-// -----------------------------------------------------------------------------
-
-// 0x513F00
-void CMessage97::MarshalMessage(BYTE** pData, DWORD* dwSize)
-{
-    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
-    // __LINE__: 29748
-    UTIL_ASSERT(pData != NULL && dwSize != NULL);
-
-    CGameObject* pObject;
-
-    BYTE rc;
-    do {
-        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
-            CGameObjectArray::THREAD_ASYNCH,
-            &pObject,
-            INFINITE);
-    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
-
-    if (rc != CGameObjectArray::SUCCESS) {
-        *dwSize = 0;
-        return;
-    }
-
-    PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
-    LONG remoteObjectID = pObject->m_remoteObjectID;
-
-    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
-        CGameObjectArray::THREAD_ASYNCH,
-        INFINITE);
-
-    *dwSize = 20;
-
-    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
-    // __LINE__: 29772
-    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
-
-    *reinterpret_cast<PLAYER_ID*>(*pData) = remotePlayerID;
-    *reinterpret_cast<LONG*>(*pData + 4) = remoteObjectID;
-    *reinterpret_cast<INT*>(*pData + 8) = m_nScript;
-    memcpy(*pData + 12, m_resScript.GetResRef(), RESREF_SIZE);
-
-    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
-    // __LINE__: 29797
-    UTIL_ASSERT(*dwSize == 20);
-}
-
-// 0x5140D0
-void CMessage97::Run()
-{
-    CGameObject* pObject;
-
-    BYTE rc;
-    do {
-        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
-            CGameObjectArray::THREAD_ASYNCH,
-            &pObject,
-            INFINITE);
-    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
-
-    if (rc == CGameObjectArray::SUCCESS) {
-        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
-            CAIScript* pScript = new CAIScript;
-
-            // The exe builds its two by-value CResRef arguments through the
-            // CResRef(BYTE*) converting constructor (0x78A9D0: memcpy + MakeUpper)
-            // from an inlined GetResRef(), so both the script's resref and the
-            // one handed to Read are uppercased copies of m_resScript. The first
-            // is installed via CAIScript::SetResRef (0x514220), which our tree
-            // has not imported; m_cResRef is public, so assign it directly.
-            CResRef resScript(m_resScript);
-            resScript.MakeUpper();
-            pScript->m_cResRef = resScript;
-            pScript->Read(resScript, TRUE);
-            static_cast<CGameSprite*>(pObject)->SetScript(static_cast<SHORT>(m_nScript), pScript);
-        }
 
         g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
             CGameObjectArray::THREAD_ASYNCH,
