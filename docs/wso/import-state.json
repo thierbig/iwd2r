@@ -8947,6 +8947,74 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i069": {
+      "assigned_at": "2026-11-02T14:29:30+00:00",
+      "branch": "p3/wso-i069",
+      "closed_at": "2026-11-02T15:23:23+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x56E260",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitParticle::~IcewindCSpellHitParticle",
+          "our_len": 0,
+          "their_len": 70
+        },
+        {
+          "address": "0x575B90",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTremor::CProjectileTremor",
+          "our_len": 0,
+          "their_len": 58
+        },
+        {
+          "address": "0x5756C0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectilePortalAnimFlip::CProjectilePortalAnimFlip",
+          "our_len": 0,
+          "their_len": 46
+        },
+        {
+          "address": "0x576CE0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDBFireball::OnArrival",
+          "our_len": 0,
+          "their_len": 17
+        },
+        {
+          "address": "0x5768A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAcidFog::~CProjectileAcidFog",
+          "our_len": 0,
+          "their_len": 2
+        },
+        {
+          "address": "0x57F760",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::~CProjectileWhirlwind",
+          "our_len": 0,
+          "their_len": 2
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }
