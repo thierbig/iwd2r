@@ -7320,14 +7320,6 @@
           "their_len": 2351
         },
         {
-          "address": "0x55FAD0",
-          "category": "only_theirs",
-          "file": "src/IcewindCGameEffects.cpp",
-          "name": "IcewindCGameEffectSummon::SpawnFromResRef",
-          "our_len": 0,
-          "their_len": 2234
-        },
-        {
           "address": "0x52E4D0",
           "category": "only_theirs",
           "file": "src/CProjectile.cpp",
@@ -7337,6 +7329,19 @@
         }
       ],
       "status": "closed",
+      "unparked": [
+        {
+          "address": "0x55FAD0",
+          "at": "2026-11-02T20:27:17+00:00",
+          "category": "only_theirs",
+          "file": "src/IcewindCGameEffects.cpp",
+          "name": "IcewindCGameEffectSummon::SpawnFromResRef",
+          "needs": "its callees are unmeasured and are parked with this batch: IcewindCGameEffectSummon::sub_55FF40 (0x55FF40) and the CMessage88 functions (0x453510 GetCommType, 0x4F6B50 GetMsgSubType, 0x5125A0 Run) were not exercised by the differential scenarios (0x4F6B50 additionally could not be hooked by Frida on ours), so the row cannot meet the measurement rule yet",
+          "our_len": 0,
+          "reason": "imported by i071",
+          "their_len": 2234
+        }
+      ],
       "verdicts": {}
     },
     "i048": {
@@ -7808,17 +7813,22 @@
           "name": "IcewindCGameEffectSummon::AddSummonVisualHit",
           "our_len": 0,
           "their_len": 558
-        },
-        {
-          "address": "0x55F930",
-          "category": "only_theirs",
-          "file": "src/IcewindCGameEffects.cpp",
-          "name": "IcewindCGameEffectSummon::PlayGroupVFX",
-          "our_len": 0,
-          "their_len": 482
         }
       ],
       "status": "closed",
+      "unparked": [
+        {
+          "address": "0x55F930",
+          "at": "2026-11-02T20:27:17+00:00",
+          "category": "only_theirs",
+          "file": "src/IcewindCGameEffects.cpp",
+          "name": "IcewindCGameEffectSummon::PlayGroupVFX",
+          "needs": "dependency outside the batch's files: CProjectileSummonVFX and the DecodeProjectile summon projectile cases (src/CProjectile.h, src/CProjectile.cpp)",
+          "our_len": 0,
+          "reason": "imported by i071",
+          "their_len": 482
+        }
+      ],
       "verdicts": {}
     },
     "i054": {
@@ -9076,6 +9086,88 @@
           "name": "CInfGame::sub_5BDBA0",
           "our_len": 2,
           "their_len": 123
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i071": {
+      "assigned_at": "2026-11-02T17:39:49+00:00",
+      "branch": "p3/wso-i071",
+      "closed_at": "2026-11-02T21:28:43+00:00",
+      "files": [
+        "src/CGameSprite.cpp",
+        "src/CProjectile.cpp",
+        "src/IcewindCGameEffects.cpp",
+        "src/CMessage.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7473E0",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::UseItemPoint",
+          "our_len": 0,
+          "their_len": 6762
+        },
+        {
+          "address": "0x4C4A90",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::IcewindCProjectileSpellHit",
+          "our_len": 0,
+          "their_len": 1558
+        },
+        {
+          "address": "0x55F710",
+          "category": "only_theirs",
+          "file": "src/IcewindCGameEffects.cpp",
+          "name": "IcewindCGameEffectSummon::ApplyEffect",
+          "our_len": 0,
+          "their_len": 1120
+        },
+        {
+          "address": "0x71F480",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::GetLightLevel",
+          "our_len": 0,
+          "their_len": 1069
+        },
+        {
+          "address": "0x512FE0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageRemoveSummonLink::MarshalMessage",
+          "our_len": 0,
+          "their_len": 797
+        },
+        {
+          "address": "0x512830",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageUnsummon::MarshalMessage",
+          "our_len": 0,
+          "their_len": 797
+        },
+        {
+          "address": "0x513F00",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage97::MarshalMessage",
+          "our_len": 0,
+          "their_len": 773
+        },
+        {
+          "address": "0x5140D0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage97::Run",
+          "our_len": 0,
+          "their_len": 613
         }
       ],
       "status": "closed",
