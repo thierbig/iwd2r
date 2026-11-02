@@ -778,7 +778,7 @@ BOOLEAN CBaldurMessage::ResourceSuggestLoad(const CString& sResName, UINT nType,
         sCopyResName.GetBuffer(sCopyResName.GetLength()),
         sCopyResName.GetLength());
 
-    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
         CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
         MSG_TYPE_RESOURCE,
         MSG_SUBTYPE_RESOURCE_SUGGEST,
