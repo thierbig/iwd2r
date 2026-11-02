@@ -603,6 +603,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_PERMIT_REQUEST = 82;
 // 0x84CFAC
 const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_ANNOUNCE = 65;
 
+// 0x84CFAD
+const BYTE CBaldurMessage::MSG_TYPE_REFORMPARTY = 113;
+
+// 0x84CFAF
+const BYTE CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS = 115;
+
 // 0x84CFB0
 const BYTE CBaldurMessage::MSG_TYPE_RESOURCE = 82;
 
@@ -3663,9 +3669,32 @@ BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
 // 0x436DF0
 BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
 {
-    // TODO: Incomplete.
+    DWORD dwSize;
+    BYTE* pMessage;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(BOOLEAN);
+    pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BOOLEAN*>(pMessage) = TRUE;
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_REFORMPARTY,
+        MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x436F50
