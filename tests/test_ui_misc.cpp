@@ -3539,3 +3539,64 @@ TEST_CASE("msg: the demand-slot reply answers a closed session and clears an emp
     network.m_bConnectionEstablished = bConnection;
     network.m_bIsHost = bIsHost;
 }
+
+TEST_CASE("nightmare: the host's setting, its demand and the reply", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    CGameOptions* pOptions = g_pBaldurChitin->GetObjectGame()->GetOptions();
+    const INT nServiceProvider = network.m_nServiceProvider;
+    const INT nHostPlayer = network.m_nHostPlayer;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    pOptions->m_nNightmareMode = 1;
+
+    // The host broadcasts its setting: {0xFF, 77, 78, DWORD nightmare}.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.SendSettingsNightmareMode(CString("")) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MPSETTINGS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE);
+    {
+        DWORD nNightmare = 0;
+        memcpy(&nNightmare, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nNightmare == 1);
+    }
+
+    // The host does not demand its own setting.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.DemandSettingsNightmareMode(FALSE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // A client asks: {0xFF, 77, 110} with no payload.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = 0;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.DemandSettingsNightmareMode(FALSE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MPSETTINGS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE);
+
+    // The client takes the host's reply only from the host's location.
+    const INT nHostLocation = network.FindPlayerLocationByID(network.GetHostPlayerID(), FALSE);
+    BYTE reply[8] = { 0 };
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 0;
+    pOptions->m_nNightmareMode = 1;
+    CHECK(message.OnSettingsNightmareMode(nHostLocation + 1, reply, sizeof(reply)) == FALSE);
+    CHECK(pOptions->m_nNightmareMode == 1);
+    CHECK(message.OnSettingsNightmareMode(nHostLocation, reply, sizeof(reply)) == TRUE);
+    CHECK(pOptions->m_nNightmareMode == 0);
+
+    network.m_nHostPlayer = nHostPlayer;
+    network.m_bIsHost = TRUE;
+    network.m_nServiceProvider = nServiceProvider;
+}

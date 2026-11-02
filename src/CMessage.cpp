@@ -6247,7 +6247,7 @@ BOOLEAN CBaldurMessage::OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage
         return FALSE;
     }
 
-    if (nMsgFrom != g_pChitin->cNetwork.GetHostPlayerID()) {
+    if (nMsgFrom != g_pChitin->cNetwork.FindPlayerLocationByID(g_pChitin->cNetwork.GetHostPlayerID(), FALSE)) {
         return FALSE;
     }
 
@@ -6257,11 +6257,64 @@ BOOLEAN CBaldurMessage::OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage
 }
 
 // 0x43D590
+// The client's request for the host's nightmare setting; when `wait` it also
+// takes the reply and stores it in the options (the unlisted host reply).
 BOOLEAN CBaldurMessage::DemandSettingsNightmareMode(BOOLEAN wait)
 {
-    // TODO: Incomplete.
+    CString sHostName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MPSETTINGS,
+        MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE,
+        NULL,
+        0);
+
+    if (wait != TRUE) {
+        return TRUE;
+    }
+
+    while (!g_pChitin->cNetwork.PeekSpecificMessage(sHostName,
+               MSG_TYPE_MPSETTINGS,
+               MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE)
+        && g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        HandleBlockingMessages();
+
+        g_pChitin->m_bDisplayStale = TRUE;
+        SleepEx(60, FALSE);
+    }
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    DWORD dwSize;
+    BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sHostName,
+        MSG_TYPE_MPSETTINGS,
+        MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE,
+        dwSize);
+
+    // NOTE: The exe re-checks the session and compares the host's player
+    // location with itself before storing the reply (0x43D754-0x43D791).
+    if (g_pChitin->cNetwork.GetSessionOpen()
+        && g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nNightmareMode = pMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    }
+
+    delete pMessage;
+
+    return TRUE;
 }
 
 // 0x43D810
