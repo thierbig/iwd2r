@@ -623,6 +623,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND = 68;
 // 0x84CFB2
 const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
 
+// 0x84CFB3
+const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST = 83;
+
 // 0x84CFB8
 const BYTE CBaldurMessage::MSG_TYPE_SIGNAL = 83;
 
@@ -925,9 +928,60 @@ BOOLEAN CBaldurMessage::OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWO
 // 0x42AA10
 BOOLEAN CBaldurMessage::ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags)
 {
-    // TODO: Incomplete.
+    CString sCopyResName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
 
-    return FALSE;
+    // A real provider is required, not just a session (0x42AA35): the null
+    // provider answers FALSE before anything is built.
+    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+        return FALSE;
+    }
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // NOTE: The original also requires the multiplayer screen's startup flag
+    // to be clear (CBaldurChitin + 0x1C90, + 0x488). ADR 0002 removed that
+    // screen and the flag is never set in single player, so the session tests
+    // are kept alone (the same omission as CBaldurChitin 0x5AC430).
+
+    sCopyResName = sResName;
+
+    dwSize = sizeof(UINT)
+        + sizeof(DWORD)
+        + sCopyResName.GetLength();
+
+    // The original reserves 0x1E bytes whatever the resref length
+    // (0x42AA77); the resref is at most 8, so at most 16 are used.
+    pByteMessage = CreateBuffer(0x1E);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<UINT*>(pByteMessage + cnt) = nType;
+    cnt += sizeof(UINT);
+
+    *reinterpret_cast<DWORD*>(pByteMessage + cnt) = dwFlags;
+    cnt += sizeof(DWORD);
+
+    memcpy(pByteMessage + cnt,
+        sCopyResName.GetBuffer(sCopyResName.GetLength()),
+        sCopyResName.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_RESOURCE,
+        MSG_SUBTYPE_RESOURCE_SUGGEST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x42B1F0
