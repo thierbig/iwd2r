@@ -7817,7 +7817,7 @@ DWORD CInfGame::GetScrollSpeed()
 }
 
 // 0x5BDBA0
-void CInfGame::sub_5BDBA0(int a1, BOOL a2)
+void CInfGame::sub_5BDBA0(int a1, BOOL a2) // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
     // Sets the reputation from whole points (1..20); stored x10. The clamps
     // run only when told to, matching the three separate stores in the exe.

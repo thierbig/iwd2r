@@ -24782,7 +24782,7 @@ void CGameSprite::MoveGlobal(const CString& sArea, const CPoint& ptStart)
 
     // The destination area is not loaded: wait it out off-area, without the
     // summons this sprite brought along.
-    Icewind586B70::Instance()->sub_5872C0(this);
+    Icewind586B70::Instance()->sub_5872C0(this); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_currentArea = CResRef(sArea);
     m_pos = ptStart;
 }
