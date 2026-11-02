@@ -4962,7 +4962,7 @@ BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID id
     *reinterpret_cast<LONG*>(pByteMessage + cnt) = nLeavingEdge;
     cnt += sizeof(LONG);
 
-    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
         CNetwork::SEND_GUARANTEED | CNetwork::SEND_ALL_PLAYERS,
         MSG_TYPE_MAPWORLD,
         MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS,
