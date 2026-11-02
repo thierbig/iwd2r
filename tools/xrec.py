@@ -15,11 +15,14 @@ integration waves work from.
 
 A function is matched between the trees by its // 0xADDR comment first (a
 renamed function is still the function) and by name second; the address is
-read from the nearest line above that is a standalone `// 0xADDR` line —
-the whole line, labels.ADDRESS, the rule labels.definitions applies (comment
-and blank lines between the marker and the signature are skipped; a comment
-line that merely mentions a hex number never supplies it), the convention of
-both trees. An address two functions of one tree carry (shared thunks and
+read from the nearest line above that is a marker line — a comment that
+starts with the address, 5 to 8 hex digits, followed by either nothing or
+one parenthesised annotation that ends the line: `// 0x5A1234` and Will's
+annotated `// 0x5A1234 (virtual)` both count (comment and blank lines
+between the marker and the signature are skipped; a comment line that
+merely mentions a hex number never supplies it). That rule is this tool's
+alone, per the task 68b ruling; labels.definitions and our own tree keep
+the strict whole-line `// 0xADDR` form. An address two functions of one tree carry (shared thunks and
 unknown addresses get stamped alike) is no key; those functions match by
 name. Bodies are compared brace-matched, whitespace and comments
 stripped: rough but symmetric, so the noise lands on both sides alike.
@@ -39,14 +42,21 @@ import re
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                'ghidra'))
-import labels  # noqa: E402
-
 CATEGORIES = ['same', 'same_stub', 'only_theirs', 'only_ours',
               'theirs_real_ours_stub', 'ours_real_theirs_stub',
               'theirs_changed_ours_base', 'ours_changed_theirs_base',
               'both_changed_differ', 'both_stub_diff']
+
+# Task 68b ruling: in xrec only, a marker line is a comment that starts with
+# the address — 5 to 8 hex digits — then either nothing or one parenthesised
+# annotation that ends the line. Accepts `// 0x5A1234` and the annotated
+# style Will's tree writes: `// 0x5A1234 (virtual)`, `// 0x5A1234 (vtable
+# slot 3)`, `// 0x40A0D0 (folded by /OPT:ICF with 0x40A0E0)`. Rejects
+# `// 0x44-0x48). text`, `// 0x44DC10 case 0xA1 - ...`, `// see 0x5A0000`,
+# `// 0xADDR` (not hex) and `// 0x44` (too short). tools/ghidra/labels.py
+# (labels.ADDRESS, labels.definitions) and our own tree keep the strict
+# whole-line rule; this loosening never leaves xrec.
+MARKER = re.compile(r'^\s*//\s*0x([0-9A-Fa-f]{5,8})\s*(\(.*\))?\s*$')
 
 
 def files(ref):
@@ -71,8 +81,9 @@ def blank_comments(text):
 
 def signature_addr(text, masked, m):
     """The // 0xADDR comment of one signature match: the nearest line above
-    that is a standalone `// 0xADDR` line — the whole line, labels.ADDRESS,
-    the rule labels.definitions applies. Comment and blank lines between the
+    that is a marker line — MARKER, the task 68b ruling (a comment starting
+    with the address, bare or with one parenthesised annotation; xrec only,
+    labels.definitions stays strict). Comment and blank lines between the
     marker and the signature are skipped, and skipping a comment line never
     takes its hex (`// 0x44-0x48). text` and `// see 0x5A0000` are comments,
     not markers). Read from the unmasked text."""
@@ -81,7 +92,7 @@ def signature_addr(text, masked, m):
         start = masked.rfind('\n', 0, line - 1) + 1
         if masked[start:line - 1].strip():
             break  # a non-comment line sits between the signature and any marker
-        hit = labels.ADDRESS.match(text[start:line - 1])
+        hit = MARKER.match(text[start:line - 1])
         if hit:
             return '0x' + hit.group(1)
         line = start

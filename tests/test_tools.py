@@ -7565,8 +7565,8 @@ class XrecTest(unittest.TestCase):
                          (None, '{return2;}'))
 
     def test_xrec_plain_marker_line_only(self):
-        # A standalone `// 0xADDR` line is still the marker (the whole line,
-        # as labels.ADDRESS has it).
+        # A standalone `// 0xADDR` line is still the marker (nothing after
+        # the address).
         f = xrec.funcs(
             '// 0x5A1234\n'
             'int CThing::Beta(void)\n'
@@ -7574,6 +7574,43 @@ class XrecTest(unittest.TestCase):
             '    return 2;\n'
             '}\n')
         self.assertEqual(f['CThing::Beta'], ('0x5A1234', '{return2;}'))
+
+    def test_xrec_annotated_marker_is_a_marker(self):
+        # Task 68b ruling: xrec alone also reads Will's annotated marker
+        # style — a comment that starts with the address, then one
+        # parenthesised annotation ending the line. labels.definitions and
+        # our own tree stay strict; the import queue needs these addresses.
+        f = xrec.funcs(
+            '// 0x5A1234 (virtual)\n'
+            'int CThing::Beta(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CThing::Beta'], ('0x5A1234', '{return2;}'))
+        f = xrec.funcs(
+            '// 0x40A0D0 (folded by /OPT:ICF with 0x40A0E0)\n'
+            'int CMessage::GetCommType(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CMessage::GetCommType'], ('0x40A0D0', '{return2;}'))
+
+    def test_xrec_case_note_is_no_marker(self):
+        # Task 68b ruling bounds: `// 0xADDR case ...` (src/CGameAIBase.cpp's
+        # switch-case notes) is prose, not a marker, and `// 0x44` is too
+        # short, `// 0xADDR` is not hex, 9 digits are too many. None of it is
+        # an address even with no real marker anywhere above.
+        f = xrec.funcs(
+            '// 0x44DC10 case 0xA1 - IncrementChapter(pSection, id)\n'
+            '// 0x44\n'
+            '// 0xADDR\n'
+            '// 0x123456789\n'
+            'int CGameAIBase::IncrementChapter(int id)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CGameAIBase::IncrementChapter'],
+                         (None, '{return2;}'))
 
     def test_xrec_matches_renamed_function_by_address(self):
         real = '{ints=m_x;s+=x;s+=m_y;s-=x;return s==0&&x!=0;}'
