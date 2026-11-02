@@ -9172,6 +9172,88 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i072": {
+      "assigned_at": "2026-11-02T21:29:45+00:00",
+      "branch": "p3/wso-i072",
+      "closed_at": "2026-11-02T22:49:53+00:00",
+      "files": [
+        "src/CMessage.cpp",
+        "src/CGameAIBase.cpp",
+        "src/CProjectile.cpp",
+        "src/CGameSprite.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x513100",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageRemoveSummonLink::UnmarshalMessage",
+          "our_len": 0,
+          "their_len": 456
+        },
+        {
+          "address": "0x512950",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageUnsummon::UnmarshalMessage",
+          "our_len": 0,
+          "their_len": 456
+        },
+        {
+          "address": "0x4525CC",
+          "category": "only_theirs",
+          "file": "src/CGameAIBase.cpp",
+          "name": "CGameAIBase::WaitAnimation",
+          "our_len": 0,
+          "their_len": 445
+        },
+        {
+          "address": "0x514040",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage97::UnmarshalMessage",
+          "our_len": 0,
+          "their_len": 413
+        },
+        {
+          "address": "0x4F5400",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageContinueDialog::CMessageContinueDialog",
+          "our_len": 0,
+          "their_len": 234
+        },
+        {
+          "address": "0x537220",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::ResName::Set",
+          "our_len": 0,
+          "their_len": 228
+        },
+        {
+          "address": "0x44",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSPMAGMIS::CProjectileSPMAGMIS",
+          "our_len": 0,
+          "their_len": 226
+        },
+        {
+          "address": "0x6FC260",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::CompressTime",
+          "our_len": 0,
+          "their_len": 45
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
