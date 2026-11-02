@@ -3197,3 +3197,62 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(engine->field_102 == bar);
     CHECK(barBase->m_bActive == TRUE);
 }
+
+TEST_CASE("time: the synch and change messages write their TIME wire bytes", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    const INT nServiceProvider = network.m_nServiceProvider;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    // A closed session writes nothing: neither sender leaves a packet.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    network.m_bConnectionEstablished = FALSE;
+    message.TimeSynchBroadcast(0x12345678, TRUE);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The synch is the host's: {0xFF, 84, 116, DWORD gameTime, BYTE compress}.
+    network.m_bConnectionEstablished = TRUE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeSynchBroadcast(0x12345678, TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_TIME);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    {
+        DWORD nGameTime = 0;
+        memcpy(&nGameTime, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nGameTime == 0x12345678);
+    }
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)] == 1);
+
+    // The change is the client's: {0xFF, 84, 99, DWORD deltaTime}.
+    network.m_bIsHost = FALSE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_TIME);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    {
+        DWORD nDeltaTime = 0;
+        memcpy(&nDeltaTime, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nDeltaTime == 0x12345678);
+    }
+
+    // A host does not send the change (and does not disturb the buffer).
+    network.m_bIsHost = TRUE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    network.m_nServiceProvider = nServiceProvider;
+}
