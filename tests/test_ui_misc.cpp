@@ -3197,3 +3197,36 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(engine->field_102 == bar);
     CHECK(barBase->m_bActive == TRUE);
 }
+
+TEST_CASE("player character: OnUpdateCharacterSlotReply's session guard and its no-character reply", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+
+    // A closed session answers FALSE before parsing anything.
+    network.m_bConnectionEstablished = FALSE;
+    BYTE reply[8] = { 0 };
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 0; // slot 0
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 1; // has a character
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == FALSE);
+
+    // An open session with no character in the slot only answers TRUE: the
+    // handler returns before it reads the marshalled part.
+    network.m_bConnectionEstablished = TRUE;
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 0;
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+
+    // A slot past the party never indexes the character array; with no
+    // character it still only answers TRUE.
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 6;
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+}

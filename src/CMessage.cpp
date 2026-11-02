@@ -2,6 +2,7 @@
 
 #include "CBaldurChitin.h"
 #include "CGameAIBase.h"
+#include "CGameAnimationType.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
@@ -2119,6 +2120,294 @@ BOOLEAN CBaldurMessage::OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage
     // TODO: Incomplete.
 
     return FALSE;
+}
+
+// 0x42E630
+// The client's answer to the host's PLAYERCHAR/85 demand, carrying the slot's
+// character: {SHORT slot; BYTE hasCharacter; 0x188-byte derived stats; WORD
+// animation; WORD icon count; DWORD icons[]; CSavedGamePartyCreature; the
+// creature block; DWORD biography length; char biography[]}. The sprite built
+// from it replaces the slot's old sprite in place.
+BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    SHORT nSlot = *reinterpret_cast<SHORT*>(pData + cnt);
+    BOOLEAN bHasCharacter = pData[cnt + sizeof(SHORT)];
+    cnt += sizeof(SHORT) + sizeof(BYTE);
+
+    if (bHasCharacter != TRUE) {
+        return TRUE;
+    }
+
+    LONG nOldCharacter = nSlot < 6
+        ? pGame->m_characters[nSlot]
+        : CGameObjectArray::INVALID_INDEX;
+
+    CGameSprite* pOldSprite = NULL;
+
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pOldSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    BOOLEAN bSaved = FALSE;
+    BOOLEAN bOldHidden = FALSE;
+    BOOLEAN bOldSelected = FALSE;
+    LONG nOldRemotePlayer = 0;
+    LONG nOldRemoteObject = 0;
+    CGameArea* pOldArea = NULL;
+    CPoint ptOldPos(0, 0);
+    LONG nOldPosZ = 0;
+    BYTE nOldVertListType = 0;
+    POSITION posOldVertList = NULL;
+    SHORT nOldSequence = 0;
+    SHORT nOldHitPoints = 0;
+    SHORT nOldDirection = 0;
+    BOOLEAN bOldInfravision = FALSE;
+    SHORT nOldCanBeSeen = 0;
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        bOldHidden = pOldSprite->field_70F2 != 0;
+        pOldSprite->sub_723BF0(FALSE, FALSE);
+        bOldSelected = pOldSprite->m_bSelected != FALSE;
+        if (bOldSelected) {
+            pOldSprite->Unselect();
+        }
+        nOldRemoteObject = pOldSprite->m_remoteObjectID;
+        nOldRemotePlayer = pOldSprite->m_remotePlayerID;
+        pOldArea = pOldSprite->m_pArea;
+        ptOldPos = pOldSprite->GetPos();
+        nOldPosZ = pOldSprite->m_posZ;
+        nOldVertListType = pOldSprite->GetVertListType();
+        posOldVertList = pOldSprite->GetVertListPos();
+        nOldSequence = pOldSprite->m_nSequence;
+        nOldHitPoints = pOldSprite->m_baseStats.m_hitPoints;
+        nOldDirection = pOldSprite->m_nDirection;
+        bOldInfravision = pOldSprite->m_bInfravisionOn != FALSE;
+        nOldCanBeSeen = pOldSprite->m_canBeSeen;
+
+        if (pOldArea != NULL) {
+            pOldSprite->RemoveReplacementFromArea();
+        }
+
+        pGame->GetObjectArray()->ReleaseDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        bSaved = TRUE;
+    }
+
+    // The object-array traffic below pumps messages; the original sets the
+    // OnObjectAdd guard around it (0x42E87F/0x42EA6D).
+    m_bInOnObjectAdd = TRUE;
+
+    DWORD nStatsOffset = cnt;
+    cnt += 0x188;
+
+    WORD nAnimation = *reinterpret_cast<WORD*>(pData + cnt);
+    cnt += sizeof(WORD);
+
+    WORD nIcons = *reinterpret_cast<WORD*>(pData + cnt);
+    cnt += sizeof(WORD);
+
+    DWORD nIconsOffset = cnt;
+    cnt += sizeof(DWORD) * nIcons;
+
+    CSavedGamePartyCreature* pCreature = reinterpret_cast<CSavedGamePartyCreature*>(pData + cnt);
+    pCreature->m_creatureOffset += CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BOOLEAN bPortrait = pGame->GetCharacterPortraitNum(nOldCharacter) != -1;
+
+    CGameSprite* pSprite = new CGameSprite(pData + pCreature->m_creatureOffset,
+        pCreature->m_creatureSize,
+        bPortrait,
+        0,
+        -1,
+        0,
+        0,
+        0x7FFFFFFF,
+        CPoint(-1, -1),
+        -1);
+
+    if (pSprite == NULL) {
+        m_bInOnObjectAdd = FALSE;
+        return FALSE;
+    }
+
+    // TODO: 0x42E9C5-0x42EA1D the world screen's portrait control check that
+    // decides whether EnablePortrait runs; the port always enables it.
+    pGame->EnablePortrait(static_cast<BYTE>(nSlot), TRUE);
+
+    pSprite->Unmarshal(pCreature, TRUE, FALSE);
+
+    pSprite->sub_723BF0(bOldHidden, FALSE);
+
+    CGameObject* pObject;
+    pGame->GetObjectArray()->Delete(pSprite->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+
+    m_bInOnObjectAdd = FALSE;
+
+    // Move the new sprite onto the old character's index.
+    pGame->GetObjectArray()->ChangeEntry(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        pSprite,
+        INFINITE);
+
+    rc = CGameObjectArray::SHARED;
+    while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED) {
+        rc = pGame->GetObjectArray()->GetDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    }
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return TRUE;
+    }
+
+    pSprite = static_cast<CGameSprite*>(pObject);
+
+    // The derived stats arrive as the marshalled template (0x188 bytes).
+    pSprite->m_derivedStats.Unmarshal(pData + nStatsOffset, 0x188);
+
+    pSprite->UnequipAll(TRUE);
+
+    // Take the new sprite out of the search bitmap while its animation is
+    // replaced; its old list type and personal space decide the square.
+    if (pSprite->m_pArea != NULL) {
+        BYTE nListType = pSprite->m_animation.GetListType();
+        // NOTE: The BYTE at 0x84C50E is 2 (the back list).
+        if (nListType != 2) {
+            CPoint ptGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+            BOOLEAN bOnSearchMap = pSprite->field_7430 != 0;
+            pSprite->m_pArea->m_search.RemoveObject(
+                ptGrid,
+                pSprite->GetAIType().m_nEnemyAlly,
+                pSprite->m_animation.GetPersonalSpace(),
+                pSprite->field_54A8,
+                bOnSearchMap);
+        }
+    }
+
+    // The slot's animation type replaces the marshalled one.
+    if (pSprite->m_animation.m_animation != NULL) {
+        delete pSprite->m_animation.m_animation;
+    }
+    pSprite->m_animation.m_animation = CGameAnimationType::SetAnimationType(
+        nAnimation,
+        pSprite->m_baseStats.m_colors,
+        pSprite->m_nDirection);
+
+    if (pSprite->m_pArea != NULL) {
+        BYTE nListType = pSprite->m_animation.GetListType();
+        if (nListType != 2) {
+            CPoint ptGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+            BOOLEAN bOnSearchMap = pSprite->field_7430 != 0;
+            pSprite->m_pArea->m_search.AddObject(
+                ptGrid,
+                pSprite->GetAIType().m_nEnemyAlly,
+                pSprite->m_animation.GetPersonalSpace(),
+                pSprite->field_54A8,
+                bOnSearchMap);
+        }
+    }
+
+    pSprite->EquipAll(TRUE);
+
+    if (pSprite->m_pArea != NULL) {
+        pSprite->JumpToPoint(pSprite->GetPos(), TRUE);
+    }
+
+    // The type AIs remember this sprite's new instance.
+    CAIObjectType liveType(pSprite->m_liveTypeAI);
+    liveType.m_nInstance = nOldCharacter;
+    pSprite->m_startTypeAI.Set(liveType);
+
+    pSprite->m_canBeSeen = nOldCanBeSeen;
+    pSprite->m_id = nOldCharacter;
+
+    if (bSaved) {
+        pSprite->m_remoteObjectID = nOldRemoteObject;
+        pSprite->m_remotePlayerID = nOldRemotePlayer;
+
+        // TODO: 0x6F3B80 not ported: the sprite's re-placement in the old
+        // area (area, position, z, list type, vert list position, infravision).
+        (void)pOldArea;
+        (void)ptOldPos;
+        (void)nOldPosZ;
+        (void)nOldVertListType;
+        (void)posOldVertList;
+        (void)bOldInfravision;
+
+        // NOTE: The BYTE at 0x85BBBD is 10.
+        if (nOldSequence != 10) {
+            BYTE nSequence = static_cast<BYTE>(nOldSequence);
+            pSprite->CheckSequence(nSequence);
+            pSprite->SetSequence(nSequence);
+            pSprite->SetDirection(nOldDirection);
+        }
+
+        CPoint ptOldGrid(ptOldPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptOldPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+        CPoint ptNewGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+            pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+        if ((ptOldGrid.x != ptNewGrid.x || ptOldGrid.y != ptNewGrid.y)
+            && nOldHitPoints > 0) {
+            pSprite->JumpToPoint(ptOldPos, FALSE);
+        }
+
+        if (bOldSelected) {
+            pSprite->Select();
+        }
+
+        pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+    }
+
+    // The portrait icons travel in the reply.
+    pSprite->m_portraitIcons.RemoveAll();
+    for (SHORT nIcon = 0; nIcon < static_cast<SHORT>(nIcons); nIcon++) {
+        DWORD nIconId = *reinterpret_cast<DWORD*>(pData + nIconsOffset + sizeof(DWORD) * nIcon);
+        pSprite->m_portraitIcons.AddTail(reinterpret_cast<int*>(nIconId));
+    }
+
+    // The biography override string follows the creature block.
+    DWORD nTextOffset = cnt + 0x340 + pCreature->m_creatureSize;
+    DWORD nTextLength = *reinterpret_cast<DWORD*>(pData + nTextOffset);
+    if (nTextLength != 0) {
+        STR_RES strText;
+        strText.szText = CString(reinterpret_cast<const char*>(pData + nTextOffset + sizeof(DWORD)), nTextLength);
+
+        STR_RES strOld;
+        if (g_pBaldurChitin->m_cTlkTable.m_override.Fetch(pSprite->m_baseStats.m_biography, strOld)) {
+            g_pBaldurChitin->m_cTlkTable.m_override.Remove(pSprite->m_baseStats.m_biography);
+        }
+        g_pBaldurChitin->m_cTlkTable.m_override.AddUserEntry(pSprite->m_baseStats.m_biography, strText);
+    }
+
+    pGame->GetObjectArray()->ReleaseDeny(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // TODO: 0x42F060-0x42F07D the active engine's portrait refresh
+    // (vtable +0x108, the old character id) when EnablePortrait ran.
+
+    return TRUE;
 }
 
 // 0x42F100
