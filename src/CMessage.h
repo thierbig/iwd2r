@@ -241,6 +241,7 @@ public:
 
     static const BYTE MSG_TYPE_LEAVEAREANAME;
     static const BYTE MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REQUEST;
+    static const BYTE MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY;
 
     CBaldurMessage();
     ~CBaldurMessage();

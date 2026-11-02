@@ -648,6 +648,9 @@ const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREANAME = 120;
 // 0x84CFDC
 const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REQUEST = 82;
 
+// 0x84CFDD
+const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY = 114;
+
 // 0x4294F0
 CBaldurMessage::CBaldurMessage()
 {
@@ -3601,9 +3604,126 @@ BYTE CBaldurMessage::sub_438710(LONG nCharacterId, LONG nTriggerId, CString sAre
 // 0x438BF0
 BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CString sAreaName;
+    LONG nCharacterId;
+    LONG nTriggerId;
+    BOOLEAN bPermit;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    BYTE* pMessage = pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The two objects, then the length-prefixed area name.
+    LONG nLocalObject;
+    if (pGame->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pMessage),
+            *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID)),
+            nLocalObject)
+        == TRUE) {
+        nCharacterId = nLocalObject;
+    } else {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    if (pGame->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pMessage + sizeof(PLAYER_ID) + sizeof(LONG)),
+            *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(PLAYER_ID)),
+            nLocalObject)
+        == TRUE) {
+        nTriggerId = nLocalObject;
+    } else {
+        nTriggerId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE* pArea = pMessage
+        + sizeof(PLAYER_ID) + sizeof(LONG)
+        + sizeof(PLAYER_ID) + sizeof(LONG);
+    sAreaName = CString(reinterpret_cast<const char*>(pArea + sizeof(BYTE)), pArea[0]);
+
+    bPermit = TRUE;
+
+    // A character still being created or imported blocks the transition; the
+    // character is told why through the two feedback strings.
+    STRREF nFeedback = 0;
+    if (pGame->GetMultiplayerSettings()->sub_518560() > 0) {
+        nFeedback = 26826;
+    } else if (pGame->GetMultiplayerSettings()->sub_5186A0() > 0) {
+        nFeedback = 41398;
+    }
+
+    if (nFeedback != 0) {
+        if (nCharacterId != CGameObjectArray::INVALID_INDEX) {
+            CGameSprite* pSprite;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pSprite->FeedBack(nFeedback, 0, 0, 0, -1, 0, 0);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+
+        bPermit = FALSE;
+    }
+
+    // A blocking demand, a paused game, a dialog mode or a player without the
+    // area-transition permission refuses too.
+    if (m_bInHandleBlockingMessages == TRUE) {
+        bPermit = FALSE;
+    }
+
+    if (g_pBaldurChitin->m_pEngineWorld->m_bPaused == TRUE) {
+        bPermit = FALSE;
+    }
+
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bPermit = FALSE;
+    }
+
+    if (!pGame->GetMultiplayerSettings()->GetPermission(nMsgFrom, CGamePermission::AREA_TRANSITION)) {
+        bPermit = FALSE;
+    }
+
+    if (pGame->GetMultiplayerSettings()->m_bHostPermittedDialog == TRUE || bPermit != TRUE) {
+        bPermit = FALSE;
+    } else {
+        pGame->sub_5C4AD0(nCharacterId, nTriggerId, CString(sAreaName));
+    }
+
+    BYTE* pReply = CreateBuffer(sizeof(BOOLEAN));
+    if (pReply == NULL) {
+        return FALSE;
+    }
+
+    *pReply = bPermit;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_LEAVEAREANAME,
+        MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY,
+        pReply,
+        sizeof(BOOLEAN));
+
+    DestroyBuffer(pReply);
+
+    return TRUE;
 }
 
 // 0x4381A0
