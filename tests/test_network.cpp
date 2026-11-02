@@ -925,3 +925,77 @@ TEST_CASE("CBaldurMessage::UpdateDemandCharacters walks the slots and drives the
     network.m_bIsHost = FALSE;
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
+
+// CBaldurMessage::SendMapWorldAnnounceStatus (0x4354E0): the host broadcasts
+// MAPWORLD/115 with the world map's active flag, controlling player and the
+// edge the party is leaving through. SendSpecificMessage writes the packet
+// into CNetwork::STATIC_MESSAGE_BUFFER whenever a non-null provider is
+// selected; SendMessage_ then reports the send failed (DirectPlay is gone),
+// but the wire bytes are the ones the original sends.
+TEST_CASE("msg: MapWorld announce status writes MAPWORLD/115 for the host only", "[network][msg]")
+{
+    ChitinScope scope;
+    REQUIRE(g_pChitin != nullptr);
+
+    CNetwork& network = g_pChitin->cNetwork;
+    const INT nProvider = network.m_nServiceProvider;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+
+    CBaldurMessage message;
+
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    // A closed session, or a client, answers FALSE and leaves the buffer
+    // untouched.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendMapWorldAnnounceStatus(TRUE, 7, -3) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == 0);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == 0);
+
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(message.SendMapWorldAnnounceStatus(TRUE, 7, -3) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == 0);
+
+    // The host sends it to all players, guaranteed: the flag byte, the
+    // MAPWORLD type, the announce-status subtype and
+    // {BOOLEAN active; DWORD controller; LONG leaving edge}, 9 bytes.
+    network.m_bIsHost = TRUE;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendMapWorldAnnounceStatus(TRUE, 7, -3) == TRUE);
+
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+    CHECK(pBuffer[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MAPWORLD);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH] == 1);
+
+    DWORD nController = 0;
+    std::memcpy(&nController, pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + 1, sizeof(nController));
+    CHECK(nController == 7);
+
+    LONG nLeavingEdge = 0;
+    std::memcpy(&nLeavingEdge,
+        pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + 1 + sizeof(nController),
+        sizeof(nLeavingEdge));
+    CHECK(nLeavingEdge == -3);
+
+    // The values travel as they are, zero included.
+    std::memset(pBuffer, 0, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendMapWorldAnnounceStatus(FALSE, 0, 0) == TRUE);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH] == 0);
+    nController = 1;
+    std::memcpy(&nController, pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + 1, sizeof(nController));
+    CHECK(nController == 0);
+    nLeavingEdge = 1;
+    std::memcpy(&nLeavingEdge,
+        pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + 1 + sizeof(nController),
+        sizeof(nLeavingEdge));
+    CHECK(nLeavingEdge == 0);
+
+    network.m_nServiceProvider = nProvider;
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}

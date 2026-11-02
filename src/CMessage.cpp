@@ -563,6 +563,9 @@ const BYTE CBaldurMessage::MSG_TYPE_MAPWORLD = 109;
 // 0x84CF8D
 const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST = 99;
 
+// 0x84CF8E
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS = 115;
+
 // 0x84CF91
 const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA = 82;
 
@@ -4930,9 +4933,45 @@ BOOLEAN CBaldurMessage::SendMapWorldCancelRequestToServer()
 // 0x4354E0
 BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID idController, LONG nLeavingEdge)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(BOOLEAN)
+        + sizeof(PLAYER_ID)
+        + sizeof(LONG);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BOOLEAN*>(pByteMessage + cnt) = bActive;
+    cnt += sizeof(BOOLEAN);
+
+    *reinterpret_cast<PLAYER_ID*>(pByteMessage + cnt) = idController;
+    cnt += sizeof(PLAYER_ID);
+
+    *reinterpret_cast<LONG*>(pByteMessage + cnt) = nLeavingEdge;
+    cnt += sizeof(LONG);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_GUARANTEED | CNetwork::SEND_ALL_PLAYERS,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `sAreaResRef` should be reference.
