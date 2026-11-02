@@ -2460,8 +2460,9 @@ BOOLEAN CBaldurMessage::SendChatMessage(CString& sChatMessage)
         }
     }
 
-    sChatMessage = sMessage;
-
+    // NOTE: The original does not write the decorated text back to the
+    // caller's CString: the tail is `sMessage = sMessage + ""` (an identity
+    // append whose temporary reuses the argument's dead stack slot).
     m_cChatBuffer.AddMessage(sMessage);
 
     if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {

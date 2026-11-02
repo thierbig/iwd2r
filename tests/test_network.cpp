@@ -114,7 +114,7 @@ TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconn
     // A plain message is announced with the local player's name.
     CString sText("hello");
     CHECK(message.SendChatMessage(sText) == TRUE);
-    CHECK(sText == "[sender]:  hello");
+    CHECK(sText == "hello"); // the caller's CString is not rewritten
     REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
     CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender]:  hello");
 
@@ -122,7 +122,7 @@ TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconn
     message.m_cChatBuffer.ClearMessages();
     sText = "target: whisper";
     CHECK(message.SendChatMessage(sText) == TRUE);
-    CHECK(sText == "[sender->target]:   whisper");
+    CHECK(sText == "target: whisper"); // the caller's CString is not rewritten
     REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
     CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender->target]:   whisper");
 
@@ -130,7 +130,7 @@ TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconn
     message.m_cChatBuffer.ClearMessages();
     sText = "nobody: hello";
     CHECK(message.SendChatMessage(sText) == TRUE);
-    CHECK(sText == "[sender]:  nobody: hello");
+    CHECK(sText == "nobody: hello"); // the caller's CString is not rewritten
     REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
     CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender]:  nobody: hello");
 
@@ -139,7 +139,7 @@ TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconn
     message.m_cChatBuffer.ClearMessages();
     sText = "hello";
     CHECK(message.SendChatMessage(sText) == TRUE);
-    CHECK(sText == "You talking to me?");
+    CHECK(sText == "hello"); // the caller's CString is not rewritten
     REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
     CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "You talking to me?");
 
