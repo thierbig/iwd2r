@@ -1,12 +1,11 @@
 #include "CGameSprite.h"
 
-#include "CCreatureFile.h"
-
 #include "CAIScript.h"
 #include "CAIUtil.h"
 #include "CBaldurChitin.h"
 #include "CBaldurEngine.h"
 #include "CBlood.h"
+#include "CCreatureFile.h"
 #include "CGameAnimationType.h"
 #include "CGameAnimationTypeMonsterIcewind.h"
 #include "CGameAnimationTypeMonsterIcewindNew.h"

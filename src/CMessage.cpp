@@ -3553,7 +3553,7 @@ BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
     *reinterpret_cast<BYTE*>(pByteMessage) = static_cast<BYTE>(sAreaResRef.GetLength());
 
     memcpy(pByteMessage + sizeof(BYTE),
-        sAreaResRef.GetBuffer(sAreaResRef.GetLength()),
+        sAreaResRef.GetBuffer(nLength),
         nLength);
 
     g_pChitin->cNetwork.SendSpecificMessage(CString(""),
