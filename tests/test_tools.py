@@ -9749,7 +9749,8 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertEqual(
             out, 'recompare: 2 new rows at bbbbbbb '
-                 '(2 already queued, 1 decided)\n')
+                 '(2 already queued, 1 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
         with open(self.disagreements) as f:
             rows = json.load(f)
         # The untouched rows stay, the older undecided row is replaced by
@@ -9762,6 +9763,11 @@ class WaveTest(unittest.TestCase):
             st = json.load(f)
         self.assertEqual(st['fork_base'], 'b' * 40)
         self.assertEqual(set(st['batches']), {'b001', 'b002'})
+        # Task 66: the import twin beside the state is created and its
+        # fork_base moves with the state's.
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            self.assertEqual(json.load(f),
+                             {'batches': {}, 'fork_base': 'b' * 40})
         # Idempotent: a second look finds nothing new.
         rc, out = self._recompare(tip_rows)
         self.assertIn('recompare: 0 new rows', out)
@@ -9794,6 +9800,7 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(
             out, 'recompare: 1 new rows at bbbbbbb '
                  '(0 already queued, 0 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n'
                  'reclassified 0x600100 F0x600100: ours already carries the '
                  'body; theirs is a stub -> ours_real_theirs_stub\n'
                  'reclassified 0x600200 F0x600200: ours already carries the '
@@ -9809,7 +9816,8 @@ class WaveTest(unittest.TestCase):
 
     def test_recompare_leaves_a_present_row_theirs_only_when_unreadable(self):
         # no fork body to read: no reclassification, the row stays as xrec
-        # saw it (and, being only_theirs, out of the wave-1 file)
+        # saw it — only_theirs, so wave 1 skips it and the import queue
+        # files it (Task 66)
         R = self._row
         self.write_disagreements([])
         with open(self.state, 'w') as f:
@@ -9825,10 +9833,115 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertEqual(
             out, 'recompare: 0 new rows at bbbbbbb '
-                 '(0 already queued, 0 decided)\n')
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 1 new rows (0 already queued, 0 decided)\n')
         self.assertNotIn('reclassified', out)
         with open(self.disagreements) as f:
-            self.assertEqual(json.load(f), [])
+            rows = json.load(f)
+        self.assertEqual([r['address'] for r in rows], ['0x600100'])
+        self.assertEqual(rows[0]['category'], 'only_theirs')
+
+    def _import_state(self, batches, fork_base=None):
+        state = {'batches': batches}
+        if fork_base:
+            state['fork_base'] = fork_base
+        path = os.path.join(self.tmp, 'import-state.json')
+        with open(path, 'w') as f:
+            json.dump(state, f)
+        return path
+
+    def test_recompare_holds_a_row_an_import_batch_closed(self):
+        # Task 66: a row an import batch closed is decided for wave 1 too —
+        # the fork's body for it has not moved since that batch's pin.
+        R = self._row
+        self.write_disagreements([])
+        self._import_state({'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                                     'files': ['src/A.cpp'], 'rows': [R('0x5000')],
+                                     'verdicts': {'0x5000': {'side': 'ours'}}}},
+                           fork_base='a' * 40)
+        bodies = {('a' * 40, '0x5000'): '{a;}', ('b' * 40, '0x5000'): '{a;}'}
+        with mock.patch.object(self.wave, '_func_body',
+                               side_effect=lambda repo, ref, path, addr:
+                                   bodies.get((ref, addr))):
+            rc, out = self._recompare([R('0x5000', n=7), R('0x6000')])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 1 new rows at bbbbbbb '
+                 '(0 already queued, 1 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
+        with open(self.disagreements) as f:
+            self.assertEqual([r['address'] for r in json.load(f)], ['0x6000'])
+        # the import twin moved with the wave state
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            self.assertEqual(json.load(f)['fork_base'], 'b' * 40)
+
+    def test_recompare_refiles_a_closed_import_row_whose_fork_body_moved(self):
+        # ... but when the fork's body changed under the verdict since the
+        # pin, the verdict is stale and the row is new again.
+        R = self._row
+        self.write_disagreements([])
+        self._import_state({'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                                     'files': ['src/A.cpp'], 'rows': [R('0x5000')],
+                                     'verdicts': {'0x5000': {'side': 'ours'}}}},
+                           fork_base='a' * 40)
+        bodies = {('a' * 40, '0x5000'): '{a;}', ('b' * 40, '0x5000'): '{a;b;}'}
+        with mock.patch.object(self.wave, '_func_body',
+                               side_effect=lambda repo, ref, path, addr:
+                                   bodies.get((ref, addr))):
+            rc, out = self._recompare([R('0x5000', n=7)])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 1 new rows at bbbbbbb '
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
+        with open(self.disagreements) as f:
+            self.assertEqual([r['address'] for r in json.load(f)], ['0x5000'])
+
+    def test_recompare_files_import_rows_and_moves_the_import_state(self):
+        # Task 66: the append/replace pass runs for the import categories
+        # too: a tip row replaces the older row for its address in place, a
+        # fresh one is appended, a decided one is skipped.  A row whose tip
+        # category left the import categories is counted and left alone, and
+        # the import state's fork_base becomes the tip (in-flight batches
+        # keep their pin).
+        R = self._row
+        self.write_disagreements([R('0x4100', cat='theirs_real_ours_stub'),
+                                  R('0x4200', cat='only_theirs')])
+        self._import_state({
+            'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                     'files': ['src/A.cpp'], 'rows': [R('0x4300', cat='only_theirs')],
+                     'verdicts': {'0x4300': {'side': 'ours'}}},
+            'i002': {'status': 'assigned', 'branch': 'p3/wso-i002',
+                     'files': ['src/A.cpp'], 'rows': [R('0x4500', cat='only_theirs')],
+                     'verdicts': {}}}, fork_base='a' * 40)
+        tip = [R('0x4100', cat='theirs_real_ours_stub', n=9),
+               R('0x4200', cat='same'),
+               R('0x4300', cat='only_theirs'),
+               R('0x4400', cat='only_theirs'),
+               R('0x4500', cat='only_theirs')]
+        rc, out = self._recompare(tip)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 0 new rows at bbbbbbb '
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 1 new rows (2 already queued, 1 decided)\n'
+                 'recompare import: 1 row(s) in the file left the import '
+                 'categories at bbbbbbb (left alone)\n')
+        with open(self.disagreements) as f:
+            rows = json.load(f)
+        # 0x4100 replaced in place, 0x4200 (now `same` at the tip) left
+        # alone, 0x4400 appended; 0x4300 (decided) and 0x4500 (queued in
+        # i002) change nothing in the file.
+        self.assertEqual([(r['address'], r['category'], r['their_len'])
+                          for r in rows],
+                         [('0x4100', 'theirs_real_ours_stub', 9),
+                          ('0x4200', 'only_theirs', 100),
+                          ('0x4400', 'only_theirs', 100)])
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            st = json.load(f)
+        self.assertEqual(st['fork_base'], 'b' * 40)           # moved to the tip
+        self.assertNotIn('fork_base', st['batches']['i001'])  # closed: no pin
+        self.assertEqual(st['batches']['i002']['fork_base'], 'a' * 40)
 
     def test_recompare_regenerates_triage_and_demotes_open_rows(self):
         # Task 23: after a fork_base move disables fork-stub, the closed row
@@ -10045,7 +10158,9 @@ class WaveTest(unittest.TestCase):
         tip = [R('0x1000', n=7), dict(R('0x2000', n=5), name='Other')]
         rc, out = self._recompare(tip)
         self.assertEqual(out, 'recompare: 1 new rows at bbbbbbb '
-                              '(1 already queued, 0 decided)\n')
+                              '(1 already queued, 0 decided)\n'
+                              'recompare import: 0 new rows '
+                              '(0 already queued, 0 decided)\n')
         with open(self.disagreements) as f:
             rows = json.load(f)
         self.assertEqual([(r['address'], r['name'], r['category'], r['their_len'])

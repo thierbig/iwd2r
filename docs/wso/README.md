@@ -179,6 +179,19 @@ already queued, K decided)` and exits 0, or 2 when the tip does not resolve
 ls-tree`. `--state`, `--disagreements` and `--repo` point it at copies, to look
 without touching the live files.
 
+`decided` is built from the batches of both queue states — the one given and
+its import twin beside it (`import-state.json`) — so a recompare never re-files
+a row an import batch closed: a closed row holds unless the fork's body for its
+address changed between that batch's pin and the tip (unreadable bodies hold).
+The same append/replace pass then runs for the import categories
+(`theirs_real_ours_stub`, `theirs_changed_ours_base`, `only_theirs`), so the
+rows `next --queue import` cuts are refreshed too, and the import state's
+`fork_base` moves to the tip with the wave state's (its in-flight batches keep
+their pin). The message adds `recompare import: N new rows (M already queued,
+K decided)` for that pass, and — only when it is not empty — one line counting
+the file rows whose tip category left the import categories (e.g. now `same`)
+but that no batch holds: they are reported and left alone.
+
 Each batch carries the `fork_base` its rows were compared at, recorded at cut
 (old batches fall back to the state's). `brief`, the triage evidence line and
 `close`'s check read the batch's pin: a batch cut before a recompare is briefed
