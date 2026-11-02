@@ -890,6 +890,73 @@ void IcewindCGameEffectSummon::sub_49DB60(int a1)
     field_190 = a1;
 }
 
+// 0x55F710
+// The caster is resolved once and remembered; m_numDice d m_diceSize + 1 each
+// is added to m_effectAmount for the summon count. Each summon that passes the
+// registry limit check spawns from m_res, optionally carrying a timed Unsummon
+// bounded by m_duration; the visual mode and the closing vfx both key off
+// m_dwFlags.
+BOOL IcewindCGameEffectSummon::ApplyEffect(CGameSprite* pSprite)
+{
+    ResolveSourceSprite();
+
+    if (m_pSprite == NULL) {
+        m_pSprite = pSprite;
+    }
+
+    int total = m_effectAmount;
+    for (DWORD i = 0; i < m_numDice; ++i) {
+        total += (m_diceSize == 0 ? 0 : rand() % static_cast<int>(m_diceSize)) + 1;
+    }
+
+    CGameSprite* pCaster = m_pSprite;
+    for (int i = 0; i < total; ++i) {
+        if (!Icewind586B70::Instance()->sub_586CA0(pCaster)) {
+            pCaster->FeedBack(CGameSprite::FEEDBACK_TOOMANYSUMMONED, 0, 0, 0, -1, 0, 0);
+            break;
+        }
+
+        CString resRef = m_res.GetResRefStr();
+        CGameSprite* pSpawned = SpawnFromResRef(resRef, &m_target);
+
+        // The exe gates the rider with three compares against the duration
+        // type constants (0, 3, 0x1000) and then repeats a != 1 test the
+        // in-set check already excludes.
+        if (pSpawned != NULL
+            && (m_durationType == 0 || m_durationType == 3 || m_durationType == 0x1000)) {
+            DWORD now = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+            CGameEffect* pUnsummon = IcewindMisc::CreateEffectSkillUnsummon(pSpawned,
+                (m_duration - now) / 15,
+                0);
+            pUnsummon->m_casterLevel = m_casterLevel;
+            pSpawned->AddEffect(pUnsummon, CGameAIBase::EFFECT_LIST_TIMED, TRUE, TRUE);
+        }
+
+        AddSummonVisualHit(pSpawned, (m_dwFlags != 0) ? 0x15 : 0);
+    }
+
+    int vfxId;
+    switch (m_dwFlags) {
+    case 1: vfxId = 0x120; break;
+    case 2: vfxId = 0x121; break;
+    case 3: vfxId = 0x122; break;
+    case 4: vfxId = 0x123; break;
+    case 5: vfxId = 0x124; break;
+    case 6: vfxId = 0x168; break;
+    case 0:
+    case 7: vfxId = 0; break;
+    default:
+        UTIL_ASSERT(FALSE);
+        vfxId = 0;
+        break;
+    }
+    PlayGroupVFX(vfxId);
+
+    m_done = TRUE;
+
+    return TRUE;
+}
+
 // 0x560140
 void IcewindCGameEffectSummon::ResolveSourceSprite()
 {

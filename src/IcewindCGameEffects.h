@@ -211,6 +211,7 @@ class IcewindCGameEffectSummon : public CGameEffect {
 public:
     IcewindCGameEffectSummon(ITEM_EFFECT* effect, const CPoint& source, LONG sourceID, CPoint target);
     CGameEffect* Copy() override;
+    BOOL ApplyEffect(CGameSprite* pSprite) override;
 
     void sub_49DB60(int a1);
 
