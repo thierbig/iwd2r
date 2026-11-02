@@ -3149,9 +3149,61 @@ BOOLEAN CBaldurMessage::OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dw
 // 0x432C50
 BOOLEAN CBaldurMessage::SendChatMessage(CString& sChatMessage)
 {
-    // TODO: Incomplete.
+    CString sMessage;
+    CString sTarget;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        // Not connected: the chat answers the joke instead of the text.
+        sTarget = "";
+        sMessage = "You talking to me?";
+    } else {
+        CString sLocalName = g_pChitin->cNetwork.m_sLocalPlayerName;
+        CString sName;
+        INT nColon = sChatMessage.Find(":");
+        BOOLEAN bTarget = FALSE;
+
+        if (nColon != -1) {
+            // A "name: text" whose name is a player in the session is a
+            // whisper to that player.
+            sName = sChatMessage.Left(nColon);
+            bTarget = g_pChitin->cNetwork.FindPlayerIDByName(sName, FALSE) != 0;
+        }
+
+        if (bTarget) {
+            sTarget = sName;
+            sMessage = CString("[") + sLocalName + "->" + sName + "]:  " + sChatMessage.Mid(nColon + 1);
+        } else {
+            sTarget = "";
+            sMessage = CString("[") + sLocalName + "]:  " + sChatMessage;
+        }
+    }
+
+    // NOTE: The original does not write the decorated text back to the
+    // caller's CString: the tail is `sMessage = sMessage + ""` (an identity
+    // append whose temporary reuses the argument's dead stack slot).
+    m_cChatBuffer.AddMessage(sMessage);
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        DWORD dwSize = sMessage.GetLength() + 1;
+        BYTE* pMessage = CreateBuffer(dwSize);
+        if (pMessage == NULL) {
+            return FALSE;
+        }
+
+        *pMessage = static_cast<BYTE>(sMessage.GetLength());
+        memcpy(pMessage + 1, static_cast<const char*>(sMessage), sMessage.GetLength());
+
+        DWORD dwFlags = CNetwork::SEND_GUARANTEED;
+        if (sTarget == "") {
+            dwFlags |= CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_JOINING_PLAYERS;
+        }
+
+        g_pChitin->cNetwork.SendMessage_(sTarget, dwFlags, pMessage, dwSize);
+
+        DestroyBuffer(pMessage);
+    }
+
+    return TRUE;
 }
 
 // 0x433080
