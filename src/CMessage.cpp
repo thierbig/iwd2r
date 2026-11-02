@@ -18737,6 +18737,13 @@ BOOL CMessageUnsummon::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
 // -----------------------------------------------------------------------------
 
+// 0x4F6BC0
+CMessageRemoveSummonLink::CMessageRemoveSummonLink(LONG summonedId, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_summonedId = summonedId;
+}
+
 // 0x512FE0
 void CMessageRemoveSummonLink::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {

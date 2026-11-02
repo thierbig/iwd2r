@@ -1518,15 +1518,17 @@ public:
 };
 
 // Remote half of the summon-registry unlink (Icewind586B70::Remove).
+// The network face of the exe class with vtable 0x84C38C (0x10 bytes):
+// the ctor 0x4F6BC0 and the marshal pair 0x512FE0/0x513100. The dispatch
+// face (GetCommType 0x453510, GetMsgType 0x40A0E0, GetMsgSubType 0x4AD390,
+// Run 0x513180) is ported under CMessage96, the other face of the same exe
+// class; the overrides stay undeclared here so the ctor can define the
+// vtable without undefined entries.
 class CMessageRemoveSummonLink : public CMessage {
 public:
     CMessageRemoveSummonLink(LONG summonedId, LONG caller, LONG target);
-    SHORT GetCommType() override;
-    BYTE GetMsgType() override;
-    BYTE GetMsgSubType() override;
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
-    void Run() override;
 
     /* 000C */ LONG m_summonedId;
 };
