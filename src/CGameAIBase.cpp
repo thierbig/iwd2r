@@ -1164,8 +1164,10 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 323:
         // WaitAnimation
-        // TODO: 0x4525EA-0x45262C not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = WaitAnimation(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 324:
         returnValue = SetMusic();
         goto done;
@@ -1195,6 +1197,24 @@ release:
 done:
     SetLastActionReturn(returnValue);
     return returnValue;
+}
+
+// 0x4525CC
+//
+// ACTION 323 WaitAnimation; the exe body is the ExecuteAction (0x44DC10)
+// case at 0x4525EA-0x45262C. An unresolved target returns ACTION_ERROR;
+// otherwise the target sprite's current animation sequence (0x453180) is
+// compared against the action's specifics (0x41E180) -- still matching
+// keeps the action interruptable, a finished sequence reports ACTION_DONE.
+SHORT CGameAIBase::WaitAnimation(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    return pTarget->GetSequence() == m_curAction.GetSpecifics()
+        ? ACTION_INTERRUPTABLE
+        : ACTION_DONE;
 }
 
 // 0x45C300
