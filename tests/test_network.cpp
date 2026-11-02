@@ -15,8 +15,13 @@
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CMessage.h"
+#include "CInfGame.h"
+#include "CMessage.h"
 #include "CNetwork.h"
 #include "CScreenWorld.h"
+
+#include <cstring>
+#include <memory>
 
 #include <cstring>
 #include <memory>
@@ -690,5 +695,114 @@ TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconn
 
     // Leave the embedded CNetwork closed before the ChitinScope restores
     // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::OnSwapItemRequest (0x4319C0): the SWAPITEM 73/82 host
+// handler. The item/unmarshal paths need a real CGameSprite/CItem, so the
+// unit test pins the guards that need no game state: a zeroed game's remote
+// object array misses the request's remote id, and the handler still answers
+// TRUE with the 5-byte reply {BYTE result, DWORD errorCode} sent as
+// SWAPITEM 73/114 to the requester. The packet is in the static buffer:
+// 0xFF, 73, 114, {0, -1}. The m_bInHandleBlockingMessages gate also refuses
+// the swap and replies the same miss.
+TEST_CASE("CBaldurMessage::OnSwapItemRequest replies a miss for an unknown remote object", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    // A zeroed CBaldurChitin/CInfGame: GetRemoteObjectArray()->Find always
+    // misses (the array size is 0) and no swap is attempted.
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // {BYTE source 'G'; DWORD remotePlayerID 1; DWORD remoteObjectID 0;
+    //  SHORT slot 0; SHORT count 0; BYTE hasItem 0}
+    BYTE packet[3 + 1 + 4 + 4 + 2 + 2 + 1];
+    memset(packet, 0, sizeof(packet));
+    packet[3] = 0x47;
+    DWORD nRemotePlayer = 1;
+    memcpy(packet + 4, &nRemotePlayer, sizeof(nRemotePlayer));
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pPlayerID[0] = 1;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    memset(pBuffer, 0xCD, 3 + 5 + 1);
+    CHECK(message.OnSwapItemRequest(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 73);
+    CHECK(pBuffer[2] == 114);
+    CHECK(pBuffer[3] == 0); // result: the Find missed
+    // errorCode = -1
+    CHECK(pBuffer[4] == 0xFF);
+    CHECK(pBuffer[5] == 0xFF);
+    CHECK(pBuffer[6] == 0xFF);
+    CHECK(pBuffer[7] == 0xFF);
+    CHECK(pBuffer[8] == 0xCD);
+
+    // The blocking-message loop refuses the swap too; the miss packet is
+    // the same.
+    message.m_bInHandleBlockingMessages = TRUE;
+    memset(pBuffer, 0xCD, 3 + 5 + 1);
+    CHECK(message.OnSwapItemRequest(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[3] == 0);
+    message.m_bInHandleBlockingMessages = FALSE;
+
+    g_pBaldurChitin = pSavedBaldur;
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::SwapItemReply (0x431CA0): a successful swap with no item to
+// return is the 6-byte {result, hasItem = 0, errorCode} packet — the second
+// byte is "has an item" (a local BOOLEAN in the dead nMsgFrom slot,
+// 0x431D52-0x431D59), not the result again, and there is no item block to
+// dereference.
+TEST_CASE("CBaldurMessage::SwapItemReply answers a successful swap with no item", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    memset(pBuffer, 0xCD, 3 + 6 + 1);
+    CHECK(message.SwapItemReply(0, TRUE, NULL, -1) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 73);
+    CHECK(pBuffer[2] == 114);
+    CHECK(pBuffer[3] == 1); // result
+    CHECK(pBuffer[4] == 0); // no item to return
+    CHECK(pBuffer[5] == 0xFF); // errorCode = -1
+    CHECK(pBuffer[6] == 0xFF);
+    CHECK(pBuffer[7] == 0xFF);
+    CHECK(pBuffer[8] == 0xFF);
+    CHECK(pBuffer[9] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
