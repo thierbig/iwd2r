@@ -3653,9 +3653,9 @@ BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByte
     // A character still being created or imported blocks the transition; the
     // character is told why through the two feedback strings.
     STRREF nFeedback = 0;
-    if (pGame->GetMultiplayerSettings()->sub_518560() > 0) {
+    if (pGame->GetMultiplayerSettings()->sub_518560() > 0) { // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         nFeedback = 26826;
-    } else if (pGame->GetMultiplayerSettings()->sub_5186A0() > 0) {
+    } else if (pGame->GetMultiplayerSettings()->sub_5186A0() > 0) { // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         nFeedback = 41398;
     }
 
@@ -3704,7 +3704,7 @@ BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByte
     if (pGame->GetMultiplayerSettings()->m_bHostPermittedDialog == TRUE || bPermit != TRUE) {
         bPermit = FALSE;
     } else {
-        pGame->sub_5C4AD0(nCharacterId, nTriggerId, CString(sAreaName));
+        pGame->sub_5C4AD0(nCharacterId, nTriggerId, CString(sAreaName)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     }
 
     BYTE* pReply = CreateBuffer(sizeof(BOOLEAN));
