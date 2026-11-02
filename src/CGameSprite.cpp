@@ -24748,7 +24748,43 @@ SHORT CGameSprite::LeaveArea()
 // 0x74F6D0
 void CGameSprite::MoveGlobal(const CString& sArea, const CPoint& ptStart)
 {
-    // TODO: Incomplete.
+    if (m_bGlobal == FALSE) {
+        return;
+    }
+
+    if (m_pArea != NULL) {
+        if (m_pArea->m_resRef == sArea) {
+            JumpToPoint(ptStart, TRUE);
+            return;
+        }
+
+        if (m_bSelected != FALSE) {
+            Unselect();
+            g_pBaldurChitin->GetObjectGame()->SelectToolbar();
+        }
+
+        RemoveFromArea();
+    }
+
+    CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sArea);
+    if (pArea != NULL) {
+        // A dead sprite whose animation can lie down joins the area's back
+        // list so living actors draw over it; everything else goes to the
+        // front list. The z position starts at ground level.
+        if ((m_baseStats.m_generalState & STATE_DEAD) != 0
+            && GetAnimation()->CanLieDown() != FALSE) {
+            AddToArea(pArea, ptStart, 0, CGameObject::LIST_BACK);
+        } else {
+            AddToArea(pArea, ptStart, 0, CGameObject::LIST_FRONT);
+        }
+        return;
+    }
+
+    // The destination area is not loaded: wait it out off-area, without the
+    // summons this sprite brought along.
+    Icewind586B70::Instance()->sub_5872C0(this);
+    m_currentArea = CResRef(sArea);
+    m_pos = ptStart;
 }
 
 // 0x74FC50
