@@ -11681,6 +11681,48 @@ void CGameSprite::DisplayTextRef(STRREF nameRef, STRREF textRef, COLORREF nameCo
     }
 }
 
+// 0x71F480
+//
+// Ambient light level at the sprite (0..50), used as the light penalty in the
+// stealth detection check.  Samples the area tint at the sprite's height-
+// projected position, takes its NTSC luminance relative to the night-colour
+// baseline, then halves it.  When the area applies a day/night global tint (and
+// is not flagged to skip it) the sampled colour is first modulated by the video
+// mode's global tint -- this is the branch the inlined infravision copy in the
+// asynchronous update leaves as a no-op.
+char CGameSprite::GetLightLevel()
+{
+    CPoint pt;
+    pt.x = m_pos.x;
+    pt.y = m_pos.y + m_posZ + m_pArea->GetHeightOffset(m_pos, m_listType);
+    COLORREF rgbTintColor = m_pArea->GetTintColor(pt, m_listType);
+
+    BYTE nBaseline = static_cast<BYTE>((299 * GetRValue(CInfinity::RGB_NIGHT_COLOR)
+        + 587 * GetGValue(CInfinity::RGB_NIGHT_COLOR)
+        + 114 * GetBValue(CInfinity::RGB_NIGHT_COLOR)) / 2550);
+
+    BYTE nLevel;
+    if ((m_pArea->GetInfinity()->m_areaType & 0x2) == 0
+        || ((m_pArea->GetInfinity()->m_areaType & 0x40) != 0
+            && (m_pArea->GetInfinity()->m_renderDayNightCode & 0x2) != 0)) {
+        nLevel = static_cast<BYTE>((299 * GetRValue(rgbTintColor)
+            + 587 * GetGValue(rgbTintColor)
+            + 114 * GetBValue(rgbTintColor)) / 2550);
+    } else {
+        COLORREF rgbGlobal = g_pBaldurChitin->GetCurrentVideoMode()->GetGlobalTintColor();
+        COLORREF rgbModulated = RGB(
+            GetRValue(rgbGlobal) * GetRValue(rgbTintColor) / 255,
+            GetGValue(rgbGlobal) * GetGValue(rgbTintColor) / 255,
+            GetBValue(rgbGlobal) * GetBValue(rgbTintColor) / 255);
+        nLevel = static_cast<BYTE>((299 * GetRValue(rgbModulated)
+            + 587 * GetGValue(rgbModulated)
+            + 114 * GetBValue(rgbModulated)) / 2550);
+    }
+
+    int nLight = (nLevel - nBaseline) * 100 / (100 - nBaseline);
+    return static_cast<char>(static_cast<char>(nLight) >> 1);
+}
+
 // 0x71FBA0
 void CGameSprite::GetNumInventoryPersonalSlots(INT& nUsedSlots, INT& nTotalSlots)
 {

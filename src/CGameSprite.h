@@ -554,6 +554,7 @@ public:
     void PlayDialogSound(CGameSprite* pNPC);
     void AddKnownDivineSpells(const BYTE& nClass);
     void DisplayTextRef(STRREF nameRef, STRREF textRef, COLORREF nameColor, COLORREF textColor);
+    char GetLightLevel();
     void GetNumInventoryPersonalSlots(INT& nUsedSlots, INT& nTotalSlots);
     void SetModalState(BYTE modalState, BOOL bUpdateToolbar);
     BOOL sub_7202E0();
