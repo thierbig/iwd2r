@@ -1,0 +1,7 @@
+{
+ "address": "0x533A50",
+ "name": "CProjectileSprayLifetime::AIUpdate",
+ "file": "src/CProjectile.cpp",
+ "batch": "i061",
+ "needs": "no Frida hook: no entry for CProjectileSprayLifetime::AIUpdate in our map"
+}

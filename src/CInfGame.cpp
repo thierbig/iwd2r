@@ -26,6 +26,7 @@
 #include "CResText.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
+#include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
 #include "CScreenJournal.h"
 #include "CScreenLoad.h"
@@ -7816,9 +7817,19 @@ DWORD CInfGame::GetScrollSpeed()
 }
 
 // 0x5BDBA0
-void CInfGame::sub_5BDBA0(int a1, BOOL a2)
+void CInfGame::sub_5BDBA0(int a1, BOOL a2) // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
-    // TODO: Incomplete.
+    // Sets the reputation from whole points (1..20); stored x10. The clamps
+    // run only when told to, matching the three separate stores in the exe.
+    m_nReputation = static_cast<SHORT>(a1 * 10);
+    if (a2 != FALSE) {
+        if (m_nReputation > 200) {
+            m_nReputation = 200;
+        }
+        if (m_nReputation < 10) {
+            m_nReputation = 10;
+        }
+    }
 }
 
 // 0x5BDC00
@@ -9592,7 +9603,62 @@ STRREF CInfGame::sub_5C3770(CString a1)
 // 0x5C3790
 void CInfGame::ChangeBiography(BYTE nFixedPartyId, CString szBiography)
 {
-    // TODO: Incomplete.
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        if (g_pChitin->cNetwork.GetSessionHosting() == FALSE) {
+            if (pMessage->m_bInOnAnnounceBiography == FALSE) {
+                pMessage->SendBiographyToServer(nFixedPartyId, szBiography);
+                return;
+            }
+        } else {
+            pMessage->AnnounceBiography(nFixedPartyId, szBiography);
+        }
+    }
+
+    // The strings are fetched and never used; the original does the same.
+    CScreenCharacter* pScreen = g_pBaldurChitin->m_pEngineCharacter;
+    CString sTitle = CBaldurEngine::FetchString(0x3E0A);
+    CString sDone = CBaldurEngine::FetchString(0x2E57);
+
+    LONG nId = nFixedPartyId < 6 ? m_characters[nFixedPartyId]
+                                 : CGameObjectArray::INVALID_INDEX;
+    if (nId == CGameObjectArray::INVALID_INDEX) {
+        // No party slot; while creating a character, edit that sprite instead.
+        if (g_pBaldurChitin->GetActiveEngine() != g_pBaldurChitin->m_pEngineCreateChar) {
+            return;
+        }
+        nId = g_pBaldurChitin->m_pEngineCreateChar->m_nGameSprite;
+    }
+
+    CGameSprite* pSprite;
+    BYTE rc;
+    do {
+        rc = m_cObjectArray.GetShare(nId, CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite), INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        STR_RES strRes;
+        CTlkFileOverride& overrideFile = g_pBaldurChitin->GetTlkTable().m_override;
+        if (overrideFile.Fetch(pSprite->m_baseStats.m_biography, strRes)) {
+            overrideFile.Remove(pSprite->m_baseStats.m_biography);
+        }
+
+        pSprite->m_baseStats.m_biography = 0xF240 + nFixedPartyId;
+        strRes.szText = szBiography;
+        overrideFile.AddUserEntry(pSprite->m_baseStats.m_biography, strRes);
+
+        m_cObjectArray.ReleaseShare(nId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    }
+
+    // Refresh the biography edit popup when it is on top (panel id 12).
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE
+        && g_pBaldurChitin->GetActiveEngine() == pScreen) {
+        CUIPanel* pPanel = pScreen->GetTopPopup();
+        if (pPanel != NULL && pPanel->m_nID == 12) {
+            pScreen->GetManager()->GetPanel(12)->GetControl(0);
+        }
+    }
 }
 
 // The traveller moved into the destination area by the host's party

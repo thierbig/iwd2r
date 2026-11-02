@@ -900,3 +900,68 @@ TEST_CASE("infinity: ScrollingCancelRequestRect's clamps, count floor and a1", "
         }
     }
 }
+
+namespace {
+
+struct FailedAssert {
+    int nLine;
+};
+
+// A failed UTIL_ASSERT throws instead of aborting (the pattern
+// tests/test_vid.cpp and test_warp.cpp use).
+class TestChitin : public CChitin {
+public:
+    void MessageThreadMain(void*) override { }
+    void RSThreadMain(void*) override { }
+    void MainAIThread(void*) override { }
+    void MusicThreadMain(void*) override { }
+
+    void ShutDown(int nLineNumber, const char* szFileName, const char* text) override
+    {
+        if (nLineNumber != -1) {
+            throw FailedAssert { nLineNumber };
+        }
+        CChitin::ShutDown(nLineNumber, szFileName, text);
+    }
+};
+
+class ChitinScope {
+public:
+    ChitinScope()
+        : m_previous(g_pChitin)
+    {
+        g_pChitin = &m_chitin;
+    }
+    ~ChitinScope() { g_pChitin = m_previous; }
+
+    ChitinScope(const ChitinScope&) = delete;
+    ChitinScope& operator=(const ChitinScope&) = delete;
+
+private:
+    CChitin* m_previous;
+    TestChitin m_chitin;
+};
+
+} // namespace
+
+// CInfTileSet::RenderToPrimary (0x5CB260) rejects an unknown dual-tile code:
+// its switch's default is UTIL_ASSERT(FALSE) (the exe's 0x5CB415, Infinity.cpp
+// line 571); if the assert returns the exe then calls the dual-tile fallback
+// (SetRes, SetAddColor and 0x7B1F70), which the survey left unported (#54,
+// report-T96.md). The assert fires before any tile is read, so a zeroed tile
+// set is enough.
+TEST_CASE("infinity: RenderToPrimary asserts on an unknown dual-tile code", "[infinity]")
+{
+    RawBlock<CInfTileSet> tileSet;
+    TILE_CODE code = {};
+    ChitinScope scope;
+
+    // 0, 1, 2 and 4 are the handled codes; anything else asserts. The surface
+    // is a dummy non-null pointer: the assert fires before it is used, and
+    // without that default the shared Render pair returns early on the empty
+    // tile set instead of throwing (which is what makes this bite).
+    auto* pSurface = reinterpret_cast<LPDIRECTDRAWSURFACE>(static_cast<uintptr_t>(1));
+    CHECK_THROWS_AS(tileSet.get()->RenderToPrimary(pSurface, 0, -1, code, 3, 0, 0), FailedAssert);
+    CHECK_THROWS_AS(tileSet.get()->RenderToPrimary(pSurface, 0, -1, code, 5, 0, 0), FailedAssert);
+    CHECK_THROWS_AS(tileSet.get()->RenderToPrimary(pSurface, 0, -1, code, 0xFF, 0, 0), FailedAssert);
+}

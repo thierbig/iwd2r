@@ -1,0 +1,7 @@
+{
+  "address": "0x4F69B0",
+  "name": "CMessageProjectileTrailingVFX::CMessageProjectileTrailingVFX",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "Not measurable on its own: the constructor only materializes the class vtable and its members, and no scenario that the batch's measurements ran ever builds a CMessageProjectileTrailingVFX. Parked with its dependencies, imported with the batch and parked back to the merge base's text alongside it: rows 0x40A0E0 CMessageProjectileTrailingVFX::GetMsgType, 0x4F6A70 CMessageProjectileTrailingVFX::GetMsgSubType, 0x799CA0 CMessageProjectileTrailingVFX::Run. The header keeps the merge-base constructor declaration; the class's kept rows (0x4088A0 GetCommType, 0x511D00 MarshalMessage, 0x511F40 UnmarshalMessage) remain imported."
+}

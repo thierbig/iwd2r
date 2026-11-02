@@ -1906,6 +1906,49 @@ class LabelsTest(unittest.TestCase):
                          [(0x401010, 'Helper'), (0x401020, 'CFoo::~CFoo'),
                           (0x401030, 'CResRef::operator!=')])
 
+    def test_ours_skips_comment_block_between_marker_and_definition(self):
+        # ApplyTriggers-style: a full paragraph of explanation between the
+        # marker and the signature. The lookahead used to cap this at 3 lines.
+        self.write('src/a.cpp',
+                   '// 0x401000\n'
+                   '// The trigger loop: one line.\n'
+                   '// A second line.\n'
+                   '// A third line.\n'
+                   '// A fourth line.\n'
+                   '// A fifth line.\n'
+                   '// A sixth line.\n'
+                   'void CFoo::ApplyTriggers()\n{\n}\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x401000, 'CFoo::ApplyTriggers')])
+
+    def test_ours_reads_wrapped_signature(self):
+        # A first signature line ending in `,` is a signature that wraps, not
+        # data, when its `(` is unclosed; the name comes from that line.
+        self.write('src/b.cpp',
+                   '// 0x402000\n'
+                   'void CFoo::Fire(CGameArea* pArea, LONG nSource, LONG nTarget,\n'
+                   '    LONG nLevel)\n{\n}\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x402000, 'CFoo::Fire')])
+        # A `,`-ending line whose parens balance is no wrapped signature.
+        self.write('src/b2.cpp',
+                   '// 0x402100\n'
+                   'CFoo::Bar(1), CFoo::Baz(2),\n'
+                   '    CFoo::Qux(3);\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')),
+                         [(0x402000, 'CFoo::Fire')])
+
+    def test_ours_still_rejects_data_after_comments(self):
+        # Comment lines between marker and definition do not turn a data line
+        # into a definition.
+        self.write('src/c.cpp',
+                   '// 0x403000\n'
+                   '// a note\n'
+                   '// another\n'
+                   '// a third\n'
+                   'static const LONG CFoo::K = 5;\n')
+        self.assertEqual(labels.ours(os.path.join(self.dir, 'src')), [])
+
     def test_ieex_skips_placeholders(self):
         path = self.write('function_names.db',
                           '0x401000 FUN_00401000\r\n'
@@ -7477,6 +7520,20 @@ class XrecTest(unittest.TestCase):
         self.assertEqual(f['CThing::Alpha'], (None, '{returnx+1;}'))
         self.assertEqual(f['CThing::Beta'], ('0x401000', '{return2;}'))
 
+    def test_xrec_address_above_comment_block(self):
+        # The marker may sit above a comment block: the address is read from
+        # the nearest line above with text on it, as labels.definitions does.
+        f = xrec.funcs(
+            '// 0x402000\n'
+            '// The wrapper: a note,\n'
+            '// a second line,\n'
+            '// a third line.\n'
+            'int CThing::Beta(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CThing::Beta'], ('0x402000', '{return2;}'))
+
     def test_xrec_matches_renamed_function_by_address(self):
         real = '{ints=m_x;s+=x;s+=m_y;s-=x;return s==0&&x!=0;}'
         theirs = xrec.funcs('// 0x401000\nint CThing::HisName(int x)\n%s\n' % real)
@@ -9600,6 +9657,65 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, brief)
         self.assertNotIn('oracle mismatch', brief)
 
+    def test_wave_brief_carries_a_rows_recall(self):
+        # Task 64: an import row's brief quotes what the tree already records
+        # about it -- its evidence front matter at the base and why an earlier
+        # batch parked it -- so the worker does not rediscover it
+        self.write_disagreements(_WAVE_ROWS[:2])
+        self.next(size=2)
+        repo = os.path.join(self.tmp, 'repo')
+        os.makedirs(os.path.join(repo, 'docs', 'evidence'), exist_ok=True)
+        os.makedirs(os.path.join(repo, 'docs', 'wso', 'import-parked'),
+                    exist_ok=True)
+        _write(os.path.join(repo, 'docs', 'evidence', '643CC0.md'),
+               '---\naddress: 0x643CC0\nname: Render\nkind: trace\n'
+               'exemption: ' + 'x' * 250 + '\n'
+               'parity_waiver: reads a static the fork moved\n---\n')
+        _write(os.path.join(repo, 'docs', 'wso', 'import-parked', '643CD0.json'),
+               json.dumps({'address': '0x643CD0', 'name': 'Draw',
+                           'file': 'src/A.cpp', 'batch': 'i003',
+                           'needs': 'the draw path measured'}))
+        self.git('init', '-q', '-b', 'first', cwd=repo)
+        self.git('add', '-A', cwd=repo)
+        self.git('commit', '-qm', 'evidence and a parked row', cwd=repo)
+        # an earlier closed batch unparked Render
+        with open(self.state) as f:
+            state = json.load(f)
+        state['batches']['i009'] = {
+            'status': 'closed',
+            'rows': [],
+            'unparked': [dict(_WAVE_ROWS[0], at='2026-10-30T10:00:00+00:00',
+                              reason='rule 4: waiting on the fork note',
+                              needs='a frida trace')],
+        }
+        with open(self.state, 'w') as f:
+            json.dump(state, f)
+        template = os.path.join(ROOT, 'docs', 'wso', 'brief-template.md')
+        rc, brief = self.wave.render_brief(template, self.state, 'b001', repo=repo)
+        self.assertEqual(rc, 0, brief)
+        # the evidence line: kind, then exemption (cut at 200) and waiver
+        self.assertIn('   - recall: evidence at first: kind trace; exemption: '
+                      + 'x' * 200 + '...; parity_waiver: reads a static the fork '
+                      'moved', brief)
+        self.assertNotIn('x' * 201, brief)
+        # the park history: the unparked entry names its batch
+        self.assertIn('   - recall: parked by i009: a frida trace; unparked: '
+                      'rule 4: waiting on the fork note', brief)
+        # a row still parked at the base
+        self.assertIn('   - recall: parked at first: the draw path measured',
+                      brief)
+        # a row with nothing recorded gets no recall line
+        self.git('rm', '-q', os.path.join('docs', 'evidence', '643CC0.md'),
+                 os.path.join('docs', 'wso', 'import-parked', '643CD0.json'),
+                 cwd=repo)
+        self.git('commit', '-qm', 'nothing recorded', cwd=repo)
+        del state['batches']['i009']
+        with open(self.state, 'w') as f:
+            json.dump(state, f)
+        rc, brief = self.wave.render_brief(template, self.state, 'b001', repo=repo)
+        self.assertEqual(rc, 0, brief)
+        self.assertNotIn('- recall', brief)
+
     # -- recompare ---------------------------------------------------------
 
     @staticmethod
@@ -9633,7 +9749,8 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertEqual(
             out, 'recompare: 2 new rows at bbbbbbb '
-                 '(2 already queued, 1 decided)\n')
+                 '(2 already queued, 1 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
         with open(self.disagreements) as f:
             rows = json.load(f)
         # The untouched rows stay, the older undecided row is replaced by
@@ -9646,6 +9763,11 @@ class WaveTest(unittest.TestCase):
             st = json.load(f)
         self.assertEqual(st['fork_base'], 'b' * 40)
         self.assertEqual(set(st['batches']), {'b001', 'b002'})
+        # Task 66: the import twin beside the state is created and its
+        # fork_base moves with the state's.
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            self.assertEqual(json.load(f),
+                             {'batches': {}, 'fork_base': 'b' * 40})
         # Idempotent: a second look finds nothing new.
         rc, out = self._recompare(tip_rows)
         self.assertIn('recompare: 0 new rows', out)
@@ -9678,6 +9800,7 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(
             out, 'recompare: 1 new rows at bbbbbbb '
                  '(0 already queued, 0 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n'
                  'reclassified 0x600100 F0x600100: ours already carries the '
                  'body; theirs is a stub -> ours_real_theirs_stub\n'
                  'reclassified 0x600200 F0x600200: ours already carries the '
@@ -9693,7 +9816,8 @@ class WaveTest(unittest.TestCase):
 
     def test_recompare_leaves_a_present_row_theirs_only_when_unreadable(self):
         # no fork body to read: no reclassification, the row stays as xrec
-        # saw it (and, being only_theirs, out of the wave-1 file)
+        # saw it — only_theirs, so wave 1 skips it and the import queue
+        # files it (Task 66)
         R = self._row
         self.write_disagreements([])
         with open(self.state, 'w') as f:
@@ -9709,10 +9833,115 @@ class WaveTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertEqual(
             out, 'recompare: 0 new rows at bbbbbbb '
-                 '(0 already queued, 0 decided)\n')
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 1 new rows (0 already queued, 0 decided)\n')
         self.assertNotIn('reclassified', out)
         with open(self.disagreements) as f:
-            self.assertEqual(json.load(f), [])
+            rows = json.load(f)
+        self.assertEqual([r['address'] for r in rows], ['0x600100'])
+        self.assertEqual(rows[0]['category'], 'only_theirs')
+
+    def _import_state(self, batches, fork_base=None):
+        state = {'batches': batches}
+        if fork_base:
+            state['fork_base'] = fork_base
+        path = os.path.join(self.tmp, 'import-state.json')
+        with open(path, 'w') as f:
+            json.dump(state, f)
+        return path
+
+    def test_recompare_holds_a_row_an_import_batch_closed(self):
+        # Task 66: a row an import batch closed is decided for wave 1 too —
+        # the fork's body for it has not moved since that batch's pin.
+        R = self._row
+        self.write_disagreements([])
+        self._import_state({'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                                     'files': ['src/A.cpp'], 'rows': [R('0x5000')],
+                                     'verdicts': {'0x5000': {'side': 'ours'}}}},
+                           fork_base='a' * 40)
+        bodies = {('a' * 40, '0x5000'): '{a;}', ('b' * 40, '0x5000'): '{a;}'}
+        with mock.patch.object(self.wave, '_func_body',
+                               side_effect=lambda repo, ref, path, addr:
+                                   bodies.get((ref, addr))):
+            rc, out = self._recompare([R('0x5000', n=7), R('0x6000')])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 1 new rows at bbbbbbb '
+                 '(0 already queued, 1 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
+        with open(self.disagreements) as f:
+            self.assertEqual([r['address'] for r in json.load(f)], ['0x6000'])
+        # the import twin moved with the wave state
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            self.assertEqual(json.load(f)['fork_base'], 'b' * 40)
+
+    def test_recompare_refiles_a_closed_import_row_whose_fork_body_moved(self):
+        # ... but when the fork's body changed under the verdict since the
+        # pin, the verdict is stale and the row is new again.
+        R = self._row
+        self.write_disagreements([])
+        self._import_state({'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                                     'files': ['src/A.cpp'], 'rows': [R('0x5000')],
+                                     'verdicts': {'0x5000': {'side': 'ours'}}}},
+                           fork_base='a' * 40)
+        bodies = {('a' * 40, '0x5000'): '{a;}', ('b' * 40, '0x5000'): '{a;b;}'}
+        with mock.patch.object(self.wave, '_func_body',
+                               side_effect=lambda repo, ref, path, addr:
+                                   bodies.get((ref, addr))):
+            rc, out = self._recompare([R('0x5000', n=7)])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 1 new rows at bbbbbbb '
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 0 new rows (0 already queued, 0 decided)\n')
+        with open(self.disagreements) as f:
+            self.assertEqual([r['address'] for r in json.load(f)], ['0x5000'])
+
+    def test_recompare_files_import_rows_and_moves_the_import_state(self):
+        # Task 66: the append/replace pass runs for the import categories
+        # too: a tip row replaces the older row for its address in place, a
+        # fresh one is appended, a decided one is skipped.  A row whose tip
+        # category left the import categories is counted and left alone, and
+        # the import state's fork_base becomes the tip (in-flight batches
+        # keep their pin).
+        R = self._row
+        self.write_disagreements([R('0x4100', cat='theirs_real_ours_stub'),
+                                  R('0x4200', cat='only_theirs')])
+        self._import_state({
+            'i001': {'status': 'closed', 'branch': 'p3/wso-i001',
+                     'files': ['src/A.cpp'], 'rows': [R('0x4300', cat='only_theirs')],
+                     'verdicts': {'0x4300': {'side': 'ours'}}},
+            'i002': {'status': 'assigned', 'branch': 'p3/wso-i002',
+                     'files': ['src/A.cpp'], 'rows': [R('0x4500', cat='only_theirs')],
+                     'verdicts': {}}}, fork_base='a' * 40)
+        tip = [R('0x4100', cat='theirs_real_ours_stub', n=9),
+               R('0x4200', cat='same'),
+               R('0x4300', cat='only_theirs'),
+               R('0x4400', cat='only_theirs'),
+               R('0x4500', cat='only_theirs')]
+        rc, out = self._recompare(tip)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, 'recompare: 0 new rows at bbbbbbb '
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 1 new rows (2 already queued, 1 decided)\n'
+                 'recompare import: 1 row(s) in the file left the import '
+                 'categories at bbbbbbb (left alone)\n')
+        with open(self.disagreements) as f:
+            rows = json.load(f)
+        # 0x4100 replaced in place, 0x4200 (now `same` at the tip) left
+        # alone, 0x4400 appended; 0x4300 (decided) and 0x4500 (queued in
+        # i002) change nothing in the file.
+        self.assertEqual([(r['address'], r['category'], r['their_len'])
+                          for r in rows],
+                         [('0x4100', 'theirs_real_ours_stub', 9),
+                          ('0x4200', 'only_theirs', 100),
+                          ('0x4400', 'only_theirs', 100)])
+        with open(os.path.join(self.tmp, 'import-state.json')) as f:
+            st = json.load(f)
+        self.assertEqual(st['fork_base'], 'b' * 40)           # moved to the tip
+        self.assertNotIn('fork_base', st['batches']['i001'])  # closed: no pin
+        self.assertEqual(st['batches']['i002']['fork_base'], 'a' * 40)
 
     def test_recompare_regenerates_triage_and_demotes_open_rows(self):
         # Task 23: after a fork_base move disables fork-stub, the closed row
@@ -9929,7 +10158,9 @@ class WaveTest(unittest.TestCase):
         tip = [R('0x1000', n=7), dict(R('0x2000', n=5), name='Other')]
         rc, out = self._recompare(tip)
         self.assertEqual(out, 'recompare: 1 new rows at bbbbbbb '
-                              '(1 already queued, 0 decided)\n')
+                              '(1 already queued, 0 decided)\n'
+                              'recompare import: 0 new rows '
+                              '(0 already queued, 0 decided)\n')
         with open(self.disagreements) as f:
             rows = json.load(f)
         self.assertEqual([(r['address'], r['name'], r['category'], r['their_len'])
@@ -26007,6 +26238,10 @@ class ReStatusTest(unittest.TestCase):
         self.assertLess(text.index('table'), text.index('### Recovery status'))
         self.assertLess(text.index('### Recovery status'), text.index('### Roadmap'))
         self.assertIn('| `.text` code recovered | **85.7%** (300 / 350 bytes) |', text)
+        # the 2026-11-02 rule 1 wording, pinned so --check keeps it current
+        self.assertIn('a body whose only code is a constant return or nothing '
+                      'stays a stub when it carries a TODO, NotImplemented or '
+                      'assert(false)', text)
         self.assertIn('| Functions recovered | **66.7%** (2 / 3) |', text)
         self.assertIn('| Verified against the original | **33.3%** (1 / 3; 100 bytes) |', text)
         self.assertIn('| Scenarios matched | 1 | `a`:', text)
@@ -26071,6 +26306,30 @@ class ReStatusTest(unittest.TestCase):
         for a in ('0x100A', '0x100C', '0x100D'):
             self.assertTrue(got[a][1], a)
 
+    def test_marker_parser_comment_blocks_and_wrapped_signatures(self):
+        # The same two layouts labels.definitions reads: a comment block of
+        # any length between marker and signature, and a signature that wraps
+        # with its first line ending in `,` (unclosed paren). A data line
+        # behind comments is still no definition.
+        rs = load_tool('re_status')
+        body = 'int total = x * 2 + 1;\n    total += x;\n    return total + 12345;\n'
+        src = (
+            '// 0x1000\n'
+            '// one\n// two\n// three\n// four\n// five\n// six\n'
+            'void A::ApplyTriggers()\n{\n    ' + body + '}\n'
+            '// 0x1001\n'
+            'void A::Fire(CGameArea* pArea, LONG nSource, LONG nTarget,\n'
+            '    LONG nLevel)\n{\n    ' + body + '}\n'
+            '// 0x1002\n'
+            '// a note\n'
+            'static const LONG A::K = 5;\n')
+        got = {a: (n, s) for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, (n, s) in got.items() if not s},
+                         {'0x1000', '0x1001'})
+        self.assertEqual(got['0x1000'][0], 'A::ApplyTriggers')
+        self.assertEqual(got['0x1001'][0], 'A::Fire')
+        self.assertNotIn('0x1002', got)
+
     def test_operator_definitions_and_brace_initializers(self):
         rs = load_tool('re_status')
         body = 'int total = x * 2 + 1;\n    total += x;\n    return total + 12345;\n'
@@ -26086,14 +26345,62 @@ class ReStatusTest(unittest.TestCase):
         self.assertNotIn('0x2002', got)
         self.assertEqual(got['0x2000'][0], 'A::operator=')
 
-    def test_rule1_todo_notimplemented_and_assert_stay_stubs_at_any_length(self):
+    def test_rule1_notimplemented_and_assert_stay_stubs_at_any_length(self):
+        # The 2026-11-02 ruling keeps only NotImplemented and assert(false) as
+        # unconditional stubs; a TODO-named call is code, so rule 2 counts it.
         rs = load_tool('re_status')
         src = (
             '// 0x3000\nvoid A::F()\n{\n    assert(false);\n    DoIt();\n}\n'
             '// 0x3001\nvoid A::G()\n{\n    NotImplemented(); return;\n}\n'
             '// 0x3002\nvoid A::H()\n{\n    TODO_fill_in_the_body(p);\n}\n')
+        got = {a: s for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, s in got.items() if s},
+                         {'0x3000', '0x3001'})
+        self.assertFalse(got['0x3002'])
+
+    def test_rule1_todo_beside_only_a_constant_return_or_nothing_is_a_stub(self):
+        # The 2026-11-02 ruling: rule 1 reads the raw body, comments
+        # included, and demands only that the masked code be empty or a
+        # single return of a constant (a literal, TRUE/FALSE, NULL/nullptr,
+        # a negative number, or an enum/static constant).
+        rs = load_tool('re_status')
+        src = (
+            '// 0x3100\nBOOLEAN CBaldurMessage::SendMap()\n{\n'
+            '    // TODO: Incomplete.\n\n    return FALSE;\n}\n'
+            '// 0x3101\nint A::G()\n{\n    // TODO\n\n'
+            '    return CGameAib::ACTION_ERROR;\n}\n'
+            '// 0x3102\nint A::H()\n{\n    // TODO: unported\n    return -1;\n}\n'
+            '// 0x3103\nvoid* A::I()\n{\n    // TODO\n    return NULL;\n}\n'
+            '// 0x3104\nvoid* A::J()\n{\n    // TODO\n    return nullptr;\n}\n'
+            '// 0x3105\nint A::K()\n{\n    // TODO\n    return 0x401000;\n}\n'
+            '// 0x3106\nvoid A::L()\n{\n    // TODO: Incomplete.\n}\n')
         self.assertEqual({a for a, n, s in rs.markers(src) if s},
-                         {'0x3000', '0x3001', '0x3002'})
+                         {'0x3100', '0x3101', '0x3102', '0x3103', '0x3104',
+                          '0x3105', '0x3106'})
+
+    def test_rule1_todo_beats_the_size_and_ctor_rules(self):
+        # An empty body with a TODO comment stays a stub even when the exe's
+        # function is at most 16 bytes (rule 1 fires before rule 3).
+        rs = load_tool('re_status')
+        table = {'401000': ('CUIControlBase::~CUIControlBase', 14)}
+        src = ('// 0x401000\nCUIControlBase::~CUIControlBase()\n{\n'
+               '    // TODO: Incomplete.\n}\n')
+        self.assertTrue({a: s for a, n, s in rs.markers(src, table)}['0x401000'])
+
+    def test_rule1_todo_beside_real_code_stays_recovered(self):
+        rs = load_tool('re_status')
+        src = (
+            '// 0x3200\nvoid A::F()\n{\n    x = 1; // TODO\n}\n'
+            '// 0x3201\nvoid A::G()\n{\n    // TODO: one case unported\n'
+            '    switch (x) {\n    case 1: DoIt(); break;\n    }\n}\n'
+            '// 0x3202\nint A::H()\n{\n    // TODO\n    return m_nCount;\n}\n'
+            '// 0x3203\nint A::I()\n{\n    // TODO\n    return (BOOLEAN)0;\n}\n'
+            '// 0x3204\nBOOLEAN A::J()\n{\n    return FALSE;\n}\n'
+            '// 0x3205\nvoid A::K()\n{\n    NotImplemented();\n    DoIt();\n}\n')
+        got = {a: s for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, s in got.items() if not s},
+                         {'0x3200', '0x3201', '0x3202', '0x3203', '0x3204'})
+        self.assertTrue(got['0x3205'])  # NotImplemented beside real code
 
     def test_rule2_any_statement_is_real_and_comment_only_bodies_are_not(self):
         rs = load_tool('re_status')

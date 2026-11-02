@@ -1,0 +1,7 @@
+{
+  "address": "0x799CA0",
+  "name": "CMessageProjectileTrailingVFX::Run",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "not measured: Frida could not hook it on the original in world_entry (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in first_fight (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in walk_and_talk (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in action_bar (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in equip_shots (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in inventory (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in level_up (Error: unable to intercept function at 00799CA0; please file a bug); Frida could not hook it on the original in world_map (Error: unable to intercept function at 00799CA0; please file a bug). A dependency imported with the batch; parked with it: row 0x4F69B0 CMessageProjectileTrailingVFX"
+}

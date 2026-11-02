@@ -124,6 +124,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_101;
     static const BYTE MSG_SUBTYPE_CMESSAGE_103;
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
@@ -136,6 +137,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_EXPLORED;
     static const BYTE MSG_SUBTYPE_CMESSAGE_CHANGE_STAT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_120;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX;
     static const BYTE MSG_SUBTYPE_CMESSAGE_END_GAME;
 
     static const BYTE MSG_TYPE_DIALOG;
@@ -198,6 +200,14 @@ public:
     static const BYTE MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE;
     static const BYTE MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE;
 
+    static const BYTE MSG_TYPE_MAPWORLD;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
+
+    static const BYTE MSG_TYPE_MOVIE;
+    static const BYTE MSG_SUBTYPE_MOVIE_REQUEST;
+    static const BYTE MSG_SUBTYPE_MOVIE_ANNOUNCE;
+
     static const BYTE MSG_TYPE_OBJECT;
     static const BYTE MSG_SUBTYPE_OBJECT_ADD;
 
@@ -213,8 +223,13 @@ public:
     static const BYTE MSG_SUBTYPE_PAUSING_PERMIT_REQUEST;
     static const BYTE MSG_SUBTYPE_PAUSING_ANNOUNCE;
 
+    static const BYTE MSG_TYPE_REFORMPARTY;
+    static const BYTE MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS;
+
     static const BYTE MSG_TYPE_RESOURCE;
     static const BYTE MSG_SUBTYPE_RESOURCE_DEMAND;
+    static const BYTE MSG_SUBTYPE_RESOURCE_DEMAND_REPLY;
+    static const BYTE MSG_SUBTYPE_RESOURCE_SUGGEST;
 
     static const BYTE MSG_TYPE_SIGNAL;
     static const BYTE MSG_SUBTYPE_SIGNAL;
@@ -230,9 +245,16 @@ public:
     static const BYTE MSG_SUBTYPE_MPSYNCH_REQUEST;
     static const BYTE MSG_SUBTYPE_MPSYNCH_REPLY;
 
+    static const BYTE MSG_TYPE_TIME;
+    static const BYTE MSG_SUBTYPE_TIME_SYNCH_BROADCAST;
+    static const BYTE MSG_SUBTYPE_TIME_CHANGE_TO_SERVER;
+
     static const BYTE MSG_TYPE_VERSION;
     static const BYTE MSG_SUBTYPE_VERSION_SERVER;
     static const BYTE VERSION_NUM_FIELDS;
+
+    static const BYTE MSG_TYPE_WEATHER;
+    static const BYTE MSG_SUBTYPE_WEATHER_BROADCAST;
 
     static const BYTE MSG_TYPE_LEAVEAREALUA;
     static const BYTE MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST;
@@ -243,6 +265,7 @@ public:
     CBaldurMessage();
     ~CBaldurMessage();
     BOOLEAN DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp);
+    BOOLEAN sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);
@@ -282,6 +305,7 @@ public:
     void UpdateDemandCharacters(unsigned char a1, int a2, unsigned char a3);
     void BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
     BOOLEAN OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
+    BOOLEAN sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo);
     BOOLEAN DemandCharacterSlot(SHORT nCharacterSlot, BOOLEAN bDemandFromHost, SHORT nPlayerSlot);
     BOOLEAN OnDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN BroadcastDemandCharacterSlotReply(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
@@ -323,7 +347,7 @@ public:
     BOOLEAN SendMovieRequestToServer(CResRef cResMovie);
     BOOLEAN MovieAnnounceStatus(CResRef cResMovie);
     BOOLEAN SendReformPartyAnnounceStatus();
-    void WeatherBroadcast(WORD wWeatherFlags);
+    BOOLEAN WeatherBroadcast(WORD wWeatherFlags);
     void TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime);
     void TimeChangeToServer(ULONG deltaTime);
     BOOLEAN OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
@@ -1771,6 +1795,17 @@ public:
     /* 000C */ CImmunitiesWeapon m_weaponImmunities;
 };
 
+class CMessageSpellLevelImmumityUpdate : public CMessage {
+public:
+    ~CMessageSpellLevelImmumityUpdate() override;
+    SHORT GetCommType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CImmunitiesSpellLevel m_spellLevelImmunities;
+};
+
 class CMessage103 : public CMessage {
 public:
     CMessage103(BOOLEAN a1, PLAYER_ID idPlayer, INT nPortrait, LONG caller, LONG target);
@@ -1970,21 +2005,18 @@ public:
         const CPoint& launch, CPoint targetPoint, SHORT launchHeight,
         LONG caller, LONG target);
 
-    SHORT GetCommType() override;       // returns SEND (3)
-    BYTE GetMsgType() override;         // returns MSG_TYPE_CMESSAGE (0x43)
-    BYTE GetMsgSubType() override;      // returns MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX (0x56)
+    SHORT GetCommType() override; // returns BROADCAST_OTHERS (3)
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
-    void Run() override;                // no-op
 
     // The caller is the projectile's ID before Fire registers it.
-    /* 000C */ CResRef m_resRef;        // resource name from field_17E (8 bytes)
-    /* 0014 */ CString m_resRef2;       // area resource name
-    /* 0018 */ LONG m_launchX;          // launch position x
-    /* 001C */ LONG m_launchY;          // launch position y
-    /* 0020 */ LONG m_targetX;          // original Fire target point x
-    /* 0024 */ LONG m_targetY;          // original Fire target point y
-    /* 0028 */ SHORT m_launchHeight;    // launch height (from DetermineHeight, SHORT copy)
+    /* 000C */ CResRef m_resRef; // resource name from field_17E (8 bytes)
+    /* 0014 */ CString m_resRef2; // area resource name
+    /* 0018 */ LONG m_launchX; // launch position x
+    /* 001C */ LONG m_launchY; // launch position y
+    /* 0020 */ LONG m_targetX; // original Fire target point x
+    /* 0024 */ LONG m_targetY; // original Fire target point y
+    /* 0028 */ SHORT m_launchHeight; // launch height (from DetermineHeight, SHORT copy)
 };
 
 // A message replacing a sprite's projectile immunities before a projectile
@@ -2016,6 +2048,20 @@ public:
     void Run() override;
 
     /* 000C */ std::list<CMessage*> m_messages;
+};
+
+// A message removing an item from a player's inventory slot.
+class CMessageRemoveItem : public CMessage {
+public:
+    CMessageRemoveItem(SHORT slot, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ SHORT m_slot;
 };
 
 #endif /* CMESSAGE_H_ */

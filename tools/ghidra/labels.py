@@ -16,15 +16,20 @@ import sys
 ADDRESS = re.compile(r'^// 0x([0-9A-Fa-f]+)\s*$')
 OPERATOR = re.compile(r'((?:[\w~]+::)*operator\s*(?:\(\)|[^\s(]+))\s*\(')
 PLAIN = re.compile(r'((?:\w+::)*~?\w+)\s*$')
-LOOKAHEAD = 3
-
-
 def _definition_name(line):
-    """The function name defined on line, or None if it is not a definition."""
+    """The function name defined on line, or None if it is not a definition.
+
+    A first signature line may end in `,` (a signature that wraps) when the
+    line is top-level — checked by the caller, a top-level line has no
+    leading whitespace — and its `(` is unclosed; the name still comes from
+    that line. Everything else a data line (`;`, `=` before any `(`) stays
+    rejected."""
     if not line or line[0].isspace() or line.startswith(('//', '/*', '#', '{', '}')):
         return None
     text = line.rstrip()
-    if text.endswith((';', ',')) or '(' not in text:
+    if text.endswith(';') or '(' not in text:
+        return None
+    if text.endswith(',') and text.count('(') <= text.count(')'):
         return None
     m = OPERATOR.search(text)
     if m:
@@ -38,13 +43,16 @@ def _definition_name(line):
 
 def definitions(lines):
     """(address_line, definition_line, address, name) for each `// 0xADDR`
-    line directly above a function definition (0-based line indexes)."""
+    line directly above a function definition (0-based line indexes). Any
+    number of `//` comment (and blank) lines may sit between the marker and
+    the definition; the scan still stops at another marker, a `{`/`}` line
+    or any other non-comment line."""
     found = []
     for i, line in enumerate(lines):
         m = ADDRESS.match(line)
         if not m:
             continue
-        for j in range(i + 1, min(i + 1 + LOOKAHEAD, len(lines))):
+        for j in range(i + 1, len(lines)):
             follow = lines[j]
             if ADDRESS.match(follow) or follow.startswith(('{', '}')):
                 break

@@ -465,6 +465,42 @@ def _mismatch_finding(repo, base, address):
     return ' '.join(f.group(1).split()) if f else None
 
 
+def _recall_cut(text, limit=200):
+    return text if len(text) <= limit else text[:limit] + '...'
+
+
+def _row_recall(repo, base, state, address):
+    """What the tree already records about one import row, as short strings
+    the brief quotes back (Task 64): its evidence front matter at `base`,
+    why an earlier batch parked it and unparked it, and a parked entry
+    still standing at `base`.  Empty: the tree holds nothing on the row."""
+    if not address:
+        return []
+    out = []
+    text = _git_show(repo, base, _evidence_rel(address))
+    if text:
+        fields = _check_evidence().front_matter(text)
+        item = f'evidence at {base[:7]}: kind {fields.get("kind") or "none"}'
+        for key in ('exemption', 'parity_waiver'):
+            if fields.get(key):
+                item += f'; {key}: {_recall_cut(fields[key])}'
+        out.append(item)
+    for batch_id, batch in sorted(state.get('batches', {}).items()):
+        for entry in batch.get('unparked', []):
+            if _addr_key(entry.get('address')) == _addr_key(address):
+                out.append(f'parked by {batch_id}: {entry.get("needs") or "?"}; '
+                           f'unparked: {entry.get("reason") or "?"}')
+    parked = _git_show(repo, base, parked_rel(address))
+    if parked:
+        try:
+            entry = json.loads(parked)
+        except ValueError:
+            entry = None
+        needs = entry.get('needs') if isinstance(entry, dict) else None
+        out.append(f'parked at {base[:7]}: {needs or "?"}')
+    return out
+
+
 def unmeasured_wso(text):
     """True when an evidence text carries the unmeasured WSO import marking
     (rule 1 of the 2026-10-26 ruling): an `exemption:` whose value starts
@@ -1322,6 +1358,9 @@ def render_brief(template_path=TEMPLATE_PATH, state_path=STATE_PATH,
                 # the oracle case found ours wrong; a kept row cannot stand
                 line += (f'\n   - oracle mismatch at {base} (ours is wrong there; import '
                          f'the fork body or park this row): {finding}')
+            for item in _row_recall(repo, base, state, r.get('address')):
+                # what the tree already knows about the row (Task 64)
+                line += f'\n   - recall: {item}'
         return line
     fork_base = str(batch.get('fork_base') or state.get('fork_base')
                     or DEFAULT_FORK_BASE)
@@ -2267,7 +2306,17 @@ def recompare(state_path=STATE_PATH, disagreements_path=DISAGREEMENTS_PATH,
     candidate-category rows the coverage map (coverage_path, default
     coverage.json beside the file) has no opinion on are recorded in
     pending_path (default coverage.pending.json beside it), merged with
-    what is there; no map, nothing recorded."""
+    what is there; no map, nothing recorded.
+
+    Task 66: `decided` is built from the batches of both queue states —
+    this state and its import twin beside it; a closed row holds unless the
+    fork's body for its address changed between its batch's pin and the
+    tip.  The append/replace pass runs a second time for the import
+    categories (their rows feed `next --queue import`), the import state's
+    fork_base moves to the tip too (in-flight batches keep their pin), and
+    the message adds `recompare import:` lines — the second one counts the
+    file rows whose tip category left the import categories; they are
+    reported, never touched."""
     if fetch:
         r = subprocess.run(['git', '-C', repo, 'fetch', '--quiet', FORK_REMOTE],
                            capture_output=True, text=True)
@@ -2308,14 +2357,43 @@ def recompare(state_path=STATE_PATH, disagreements_path=DISAGREEMENTS_PATH,
                 rows = json.load(f)
         except (OSError, ValueError) as e:
             return 2, f'recompare: {disagreements_path}: {e}\n'
+        # Task 66: `decided` is built from the batches of BOTH queue states —
+        # this one and its import twin beside it — so a recompare does not
+        # re-file rows an import batch already closed.  A closed row stays
+        # decided unless the fork's body for its address changed between the
+        # batch's pin (the batch's fork_base, else the state's, else the
+        # default) and the tip: the verdict is stale, the row is new again.
+        import_path = os.path.join(
+            os.path.dirname(os.path.abspath(state_path)),
+            os.path.basename(IMPORT_STATE_PATH))
+        states = [state]
+        if os.path.abspath(import_path) != os.path.abspath(state_path):
+            try:
+                states.append(load_state(import_path))
+            except (OSError, ValueError) as e:
+                return 2, f'recompare: state file {import_path}: {e}\n'
+        tip_addrs = {_addr_key(r.get('address')) for r in theirs
+                     if r.get('address')}
         decided, in_batch = set(), set()
-        for b in state['batches'].values():
-            for r in b['rows']:
-                a = _addr_key(r.get('address'))
-                in_batch.add(a)
-                if b.get('status') == 'closed' or r['address'] in b.get(
-                        'verdicts', {}):
-                    decided.add(a)
+        for st in states:
+            for b in st['batches'].values():
+                closed = b.get('status') == 'closed'
+                pin = (b.get('fork_base') or st.get('fork_base')
+                       or DEFAULT_FORK_BASE) if closed else None
+                for r in b['rows']:
+                    a = _addr_key(r.get('address'))
+                    if (a and closed and pin != sha and a in tip_addrs
+                            and a not in decided):
+                        was = _func_body(repo, pin, r.get('file'),
+                                         r.get('address'))
+                        now = _func_body(repo, sha, r.get('file'),
+                                         r.get('address'))
+                        if (was is not None and now is not None
+                                and was != now):
+                            continue        # the fork moved under the verdict
+                    in_batch.add(a)
+                    if closed or r.get('address') in b.get('verdicts', {}):
+                        decided.add(a)
         # Rows that left wave 1 for the import or probe list are decided too.
         for rel in (IMPORT_LIST_REL, PROBE_LIST_REL):
             listed, err = _load_list(os.path.join(repo, rel), rel,
@@ -2323,8 +2401,8 @@ def recompare(state_path=STATE_PATH, disagreements_path=DISAGREEMENTS_PATH,
             if err:
                 return 2, err
             decided.update(_addr_key(e['address']) for e in listed)
-        def cuttable(r):
-            return r.get('category') == category and r.get('address')
+        def cuttable(r, cats):
+            return r.get('category') in cats and r.get('address')
 
         # The row `next` would cut for an address: the first in-category
         # one; matched by (address, name) first, else that one.
@@ -2333,41 +2411,63 @@ def recompare(state_path=STATE_PATH, disagreements_path=DISAGREEMENTS_PATH,
             if r.get('address'):
                 have.setdefault(_addr_key(r['address']), []).append(i)
 
-        def slot(a, name):
+        def slot(a, name, cats):
             idx = have.get(a, [])
             for i in idx:
                 if rows[i].get('name') == name:
                     return i
             for i in idx:
-                if cuttable(rows[i]):
+                if cuttable(rows[i], cats):
                     return i
             return idx[0] if idx else None
 
-        new, queued, done, seen = 0, 0, 0, set()
-        for r in theirs:
-            a = _addr_key(r.get('address'))
-            if r.get('category') != category or not a or a in seen:
-                continue
-            seen.add(a)
-            if a in decided:
-                done += 1
-                continue
-            if a in in_batch:
-                queued += 1
-                continue
-            i = slot(a, r.get('name'))
-            if i is None:
-                new += 1
-                have.setdefault(a, []).append(len(rows))
-                rows.append(r)
-            else:
-                # A row that was not cuttable before (another category)
-                # is new to the queue; the replacement is in place.
-                if cuttable(rows[i]):
+        # Task 66: the same append/replace pass runs for wave 1's category
+        # and for the import categories, which `next --queue import` cuts
+        # from this file; a pass only sees the tip rows of its categories.
+        # `seen` is shared, so an address the tip shows as wave 1 is never
+        # also filed as an import row.
+        counts, seen = [], set()
+        for cats in ((category,), IMPORT_CATEGORIES):
+            new = queued = done = 0
+            for r in theirs:
+                a = _addr_key(r.get('address'))
+                if r.get('category') not in cats or not a or a in seen:
+                    continue
+                seen.add(a)
+                if a in decided:
+                    done += 1
+                    continue
+                if a in in_batch:
                     queued += 1
-                else:
+                    continue
+                i = slot(a, r.get('name'), cats)
+                if i is None:
                     new += 1
-                rows[i] = r
+                    have.setdefault(a, []).append(len(rows))
+                    rows.append(r)
+                else:
+                    # A row that was not cuttable before (another category)
+                    # is new to the queue; the replacement is in place.
+                    if cuttable(rows[i], cats):
+                        queued += 1
+                    else:
+                        new += 1
+                    rows[i] = r
+            counts.append((new, queued, done))
+        (new, queued, done), (imp_new, imp_queued, imp_done) = counts
+        # Task 66: rows still filed under an import category whose tip
+        # category left them (e.g. now `same`) and that no batch holds —
+        # counted and reported, never touched here.
+        tip_cat = {}
+        for r in theirs:
+            if r.get('address'):
+                tip_cat.setdefault(_addr_key(r['address']), r.get('category'))
+        left = sum(
+            1 for r in rows if r.get('category') in IMPORT_CATEGORIES
+            and r.get('address')
+            and tip_cat.get(_addr_key(r['address'])) not in IMPORT_CATEGORIES
+            and _addr_key(r['address']) not in decided
+            and _addr_key(r['address']) not in in_batch)
         # A new row nothing could name stays in the file (next lists it);
         # it is not a "new row" for the count, it cannot be batched.
         have_nameless = {(r.get('name'), r.get('file')) for r in rows
@@ -2414,20 +2514,31 @@ def recompare(state_path=STATE_PATH, disagreements_path=DISAGREEMENTS_PATH,
                 return 2, f'recompare: triage regeneration failed: {e}\n'
             tri_lines = [tri.calibration_text(cal)] + tri_lines
         # Batches in flight keep the pin their rows were compared at.
-        for b in state['batches'].values():
-            if b.get('status') != 'closed':
-                b.setdefault('fork_base',
-                             state.get('fork_base') or DEFAULT_FORK_BASE)
+        for st in states:
+            for b in st['batches'].values():
+                if b.get('status') != 'closed':
+                    b.setdefault('fork_base',
+                                 st.get('fork_base') or DEFAULT_FORK_BASE)
         # xrec's own format, so an unchanged file stays byte-identical.
         _write_rows(disagreements_path, rows)
         if added:
             _write_rows(pend_path, have_pending + added)
         state['fork_base'] = sha
         save_state(state_path, state)
+        # Task 66: the import twin moves with this state — in-flight batches
+        # pinned above, fork_base at the tip the file now reflects.
+        if len(states) > 1:
+            states[1]['fork_base'] = sha
+            save_state(import_path, states[1])
         if tri_out is not None:
             tri._write_atomic(tri_path, tri_out)
     text = (f'recompare: {new} new rows at {sha[:7]} '
-            f'({queued} already queued, {done} decided)\n')
+            f'({queued} already queued, {done} decided)\n'
+            f'recompare import: {imp_new} new rows ({imp_queued} already '
+            f'queued, {imp_done} decided)\n')
+    if left:
+        text += (f'recompare import: {left} row(s) in the file left the '
+                 f'import categories at {sha[:7]} (left alone)\n')
     if filled:
         text += (f'address from our header comment: {len(filled)} row(s): '
                  + ', '.join(f'{r["name"]} {r["address"]}' for r in filled) + '\n')
@@ -2453,21 +2564,35 @@ def _git_show(repo, ref, path):
     return r.stdout if r.returncode == 0 else ''
 
 
+# _func_body's reads, kept for one run: the src/*.cpp listing of a ref and
+# the funcs() parse of one file of one ref.  A recompare that checks every
+# closed row of both queues against its batch's pin reads hundreds of
+# bodies; without the caches that is a git ls-tree and a git show per body.
+_LS_TREE_CACHE = {}
+_FUNCS_CACHE = {}
+
+
 def _func_body(repo, ref, path, address):
     """The stripped body xrec.funcs() reads for the function `address` labels
     in repo's `ref` (path first, else every other src/*.cpp), or None when no
     such function is there."""
-    ce = _check_evidence()
-    r = ce.git(repo, 'ls-tree', '-r', '--name-only', ref, '--', 'src/',
-               check=False)
-    if r.returncode != 0:
+    if (repo, ref) not in _LS_TREE_CACHE:
+        r = _check_evidence().git(repo, 'ls-tree', '-r', '--name-only', ref,
+                                  '--', 'src/', check=False)
+        _LS_TREE_CACHE[(repo, ref)] = (
+            [p for p in r.stdout.splitlines() if p.endswith('.cpp')]
+            if r.returncode == 0 else None)
+    paths = _LS_TREE_CACHE[(repo, ref)]
+    if paths is None:
         return None
-    paths = [p for p in r.stdout.splitlines() if p.endswith('.cpp')]
     if path:
         paths = [path] + [p for p in paths if p != path]
     want = _addr_key(address)
     for rel in paths:
-        for a, body in _xrec().funcs(_git_show(repo, ref, rel)).values():
+        if (repo, ref, rel) not in _FUNCS_CACHE:
+            _FUNCS_CACHE[(repo, ref, rel)] = _xrec().funcs(
+                _git_show(repo, ref, rel))
+        for a, body in _FUNCS_CACHE[(repo, ref, rel)].values():
             if a is not None and _addr_key(a) == want:
                 return body
     return None

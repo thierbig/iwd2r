@@ -4138,14 +4138,6 @@
     "reason": "the bodies differ beyond identifier names"
   },
   {
-    "address": "0x5DAF30",
-    "class": "ambiguous",
-    "file": "src/CScreenCharacter.cpp",
-    "name": "CScreenCharacter::UpdateInformationPanel",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
     "address": "0x5E4E80",
     "class": "ambiguous",
     "file": "src/CScreenCharacter.cpp",
@@ -4160,14 +4152,6 @@
     "name": "CUIControlButtonCharacter5EBC60::SetSpell",
     "ours_ref": "first",
     "reason": "bodies and signatures match after renaming identifiers"
-  },
-  {
-    "address": "0x5E56F0",
-    "class": "ambiguous",
-    "file": "src/CScreenCharacter.cpp",
-    "name": "CScreenCharacter::LevelUp",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
   },
   {
     "address": "0x5D9970",
@@ -4370,50 +4354,10 @@
     "reason": "the bodies differ beyond identifier names"
   },
   {
-    "address": "0x5007F0",
-    "class": "ambiguous",
-    "file": "src/CMessage.cpp",
-    "name": "CMessageFireProjectile::Run",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
     "address": "0x4F7620",
     "class": "ambiguous",
     "file": "src/CMessage.cpp",
     "name": "CMessageHandler::Broadcast",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x618D10",
-    "class": "ambiguous",
-    "file": "src/CScreenCreateChar.cpp",
-    "name": "CScreenCreateChar::sub_618D10",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x617D80",
-    "class": "ambiguous",
-    "file": "src/CScreenCreateChar.cpp",
-    "name": "CScreenCreateChar::sub_617D80",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x610DC0",
-    "class": "ambiguous",
-    "file": "src/CScreenCreateChar.cpp",
-    "name": "CScreenCreateChar::UpdateCharacterSummary",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x607BB0",
-    "class": "ambiguous",
-    "file": "src/CScreenCreateChar.cpp",
-    "name": "CScreenCreateChar::UpdateMainPanel",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
@@ -4454,22 +4398,6 @@
     "class": "ambiguous",
     "file": "src/CInfGame.cpp",
     "name": "CInfGame::CharacterExport",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x5C1350",
-    "class": "ambiguous",
-    "file": "src/CInfGame.cpp",
-    "name": "CInfGame::RestPartyPrivate",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": "0x5C1E30",
-    "class": "ambiguous",
-    "file": "src/CInfGame.cpp",
-    "name": "CInfGame::CanRestParty",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
@@ -4538,18 +4466,986 @@
     "reason": "the bodies differ beyond identifier names"
   },
   {
-    "address": "0x4781B0",
-    "class": "ambiguous",
-    "file": "src/CGameArea.cpp",
-    "name": "CGameArea::SetNight",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
     "address": "0x477EE0",
     "class": "ambiguous",
     "file": "src/CGameArea.cpp",
     "name": "CGameArea::SetDay",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x7C8990",
+    "class": "ambiguous",
+    "file": "src/CChitin3d.cpp",
+    "name": "CChitin::Init3d",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5BDC00",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::ReputationAdjustment",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5AF160",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::SwapCharacters",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5B9C60",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::CheckIfPlayerInPortraitSlotCanUseItem",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5C1350",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::RestPartyPrivate",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5C1E30",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::CanRestParty",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5C9300",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CGameObjectArray::HasNoRestBlockingSpellStates",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5C0BB0",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::AddExperienceParty",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x56BF30",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitVisual::IcewindCSpellHitVisual",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5791D0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56D0A0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitVisual::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x52B190",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTravelling::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x579EF0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x534DD0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCallLightning::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57ED30",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSunray::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x578AB0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56E650",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitParticle::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x52BD20",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTravelling::AimAtPoint",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x578ED0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::AimAtPoint",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5363F0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileImpactBAM::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x535A40",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectilePhaseBAM::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x530C90",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSPMAGMIS::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56D730",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitVisual::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56F410",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::OnArrival",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56F820",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x52B6B0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTravelling::GetCellBounds",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57C1D0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileScorcher::Strike",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x57A670",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::DeliverEffects",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x535100",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCallLightning::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57F050",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSunray::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56EA90",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitParticle::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56FAF0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x579860",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::UpdateDirectionSequence",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56CF00",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitVisual::~IcewindCSpellHitVisual",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5701E0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::StrikeTarget",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57EB30",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSunray::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57A530",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::OnArrival",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56E280",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitParticle::IcewindCSpellHitParticle",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x534C10",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCallLightning::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5357B0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectilePhaseBAM::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x578970",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::GetCellBounds",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57D230",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileBAM::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56FED0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::GatherTargets",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x579B40",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::CProjectileCone",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57A970",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::Pulse",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x571E80",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileFireball::CProjectileFireball",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x52C8C0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTravelling::UpdateDirectionSequence",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57E710",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSummonVFX::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57CAC0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileBAM::CProjectileBAM",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x574AA0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCallLightningStrike::Strike",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x535D20",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectilePhaseBAM::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57CEE0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileBAM::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x578110",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::IcewindCProjectileTravellingVFX",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x535F20",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileImpactBAM::CProjectileImpactBAM",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x571310",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCloudkill::CProjectileCloudkill",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x574B80",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileStinkingCloud::CProjectileStinkingCloud",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57E030",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileMMissiT::CProjectileMMissiT",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5366F0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileImpactBAM::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x572110",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileFireSeed::CProjectileFireSeed",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x572670",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileGrease::CProjectileGrease",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x574EB0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileWeb::CProjectileWeb",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x572290",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileFireStorm::CProjectileFireStorm",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x579E50",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCone::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x571CE0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileEntangle::CProjectileEntangle",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x535320",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectilePhaseBAM::CProjectilePhaseBAM",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57E860",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSunray::CProjectileSunray",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5348C0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileCallLightning::CProjectileCallLightning",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5300E0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileStrike::CProjectileStrike",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x536380",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileImpactBAM::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57E490",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSummonVFX::CProjectileSummonVFX",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56ECF0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitParticle::RemoveFromArea",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56D9B0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCSpellHitVisual::RemoveFromArea",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x572E60",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileEyeOfStone::CProjectileEyeOfStone",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x574300",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSleep::CProjectileSleep",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x577B20",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileDispelMagic::CProjectileDispelMagic",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x57B1D0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileScorcher::Fire",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x52B150",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTravelling::SetRange",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x576CF0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTurnUndead::CProjectileTurnUndead",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5701B0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::Strike",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56F3F0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::Render",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x529950",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectile84D8B8::Fire",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5309C0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileMagicMissileMulti::CProjectileMagicMissileMulti",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5703F0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::SetStrikeAllyFilter",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5704E0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::SetStrikeTargetFilter",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x2",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileArrow::CProjectileArrow",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x850558",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileTremor::CProjectileTremor",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x7A3B50",
+    "class": "ambiguous",
+    "file": "src/CNetwork.cpp",
+    "name": "CNetworkWindow::ReceiveCall",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x7A2590",
+    "class": "ambiguous",
+    "file": "src/CNetwork.cpp",
+    "name": "CNetworkWindow::FrameSend",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x55DBD0",
+    "class": "ambiguous",
+    "file": "src/CGameAnimationTypeEffect.cpp",
+    "name": "CGameAnimationTypeEffect::OverrideAnimation",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x6C2D70",
+    "class": "ambiguous",
+    "file": "src/CGameAnimationTypeMonsterLarge16.cpp",
+    "name": "CGameAnimationTypeMonsterLarge16::GetCurrentSequenceAndFrame",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x40A0E0",
+    "class": "signature-only",
+    "file": "src/CMessage.cpp",
+    "name": "CMessage105::GetMsgType",
+    "ours_ref": "first",
+    "reason": "bodies match under the signature parameters; signatures differ"
+  },
+  {
+    "address": "0x5007F0",
+    "class": "ambiguous",
+    "file": "src/CMessage.cpp",
+    "name": "CMessageFireProjectile::Run",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x4A3310",
+    "class": "ambiguous",
+    "file": "src/CGameEffect.cpp",
+    "name": "CGameEffect::sub_4A3310",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x4AF610",
+    "class": "ambiguous",
+    "file": "src/CGameEffect.cpp",
+    "name": "CGameEffectPoison::ApplyEffect",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x4A3FF0",
+    "class": "ambiguous",
+    "file": "src/CGameEffect.cpp",
+    "name": "CGameEffect::sub_4A3FF0",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x51E8B0",
+    "class": "ambiguous",
+    "file": "src/CGameEffect.cpp",
+    "name": "CPersistantEffectListRegenerated::AIUpdate",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x461190",
+    "class": "ambiguous",
+    "file": "src/CGameAIBase.cpp",
+    "name": "CGameAIBase::ForceSpell",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x45C030",
+    "class": "ambiguous",
+    "file": "src/CGameAIBase.cpp",
+    "name": "CGameAIBase::GetTargetShareAIType",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x44DAC0",
+    "class": "ambiguous",
+    "file": "src/CGameAIBase.cpp",
+    "name": "CGameAIBase::SeeTarget",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x71ABA0",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::CheckQuickLists",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x763E40",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::sub_763E40",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5B9D20",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::CanUseItem",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x722090",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::GetRaceString",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x7567F0",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::sub_7567F0",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x733200",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::HandlePersistantEffects",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x742840",
+    "class": "ambiguous",
+    "file": "src/CGameSprite.cpp",
+    "name": "CGameSprite::SpellPoint",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5950F0",
+    "class": "ambiguous",
+    "file": "src/CInfButtonArray.cpp",
+    "name": "CInfButtonArray::sub_5950F0",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5957C0",
+    "class": "ambiguous",
+    "file": "src/CInfButtonArray.cpp",
+    "name": "CInfButtonArray::sub_5957C0",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x7B4230",
+    "class": "ambiguous",
+    "file": "src/CVidBitmap.cpp",
+    "name": "CVidBitmap::GetTintValues",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x7B4600",
+    "class": "ambiguous",
+    "file": "src/CVidBitmap.cpp",
+    "name": "CVidBitmap::GetAddValues",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x7B4800",
+    "class": "ambiguous",
+    "file": "src/CVidBitmap.cpp",
+    "name": "CVidBitmap::GetLightValues",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5DAF30",
+    "class": "ambiguous",
+    "file": "src/CScreenCharacter.cpp",
+    "name": "CScreenCharacter::UpdateInformationPanel",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5E56F0",
+    "class": "ambiguous",
+    "file": "src/CScreenCharacter.cpp",
+    "name": "CScreenCharacter::LevelUp",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5F84E0",
+    "class": "ambiguous",
+    "file": "src/CScreenCharacter.cpp",
+    "name": "CUIControlButtonCharacterSkillsPlusMinus::OnLButtonDown",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5F88D0",
+    "class": "ambiguous",
+    "file": "src/CScreenCharacter.cpp",
+    "name": "CUIControlButtonCharacterSkillsHotArea::OnHotAreaClick",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5F6830",
+    "class": "ambiguous",
+    "file": "src/CScreenCharacter.cpp",
+    "name": "CUIControlButtonCharacterFeatsHotArea::OnHotAreaClick",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x618D10",
+    "class": "ambiguous",
+    "file": "src/CScreenCreateChar.cpp",
+    "name": "CScreenCreateChar::sub_618D10",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x617D80",
+    "class": "ambiguous",
+    "file": "src/CScreenCreateChar.cpp",
+    "name": "CScreenCreateChar::sub_617D80",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x610DC0",
+    "class": "ambiguous",
+    "file": "src/CScreenCreateChar.cpp",
+    "name": "CScreenCreateChar::UpdateCharacterSummary",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x615F50",
+    "class": "ambiguous",
+    "file": "src/CScreenCreateChar.cpp",
+    "name": "CScreenCreateChar::OnDoneButtonClick",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x607BB0",
+    "class": "ambiguous",
+    "file": "src/CScreenCreateChar.cpp",
+    "name": "CScreenCreateChar::UpdateMainPanel",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x547620",
+    "class": "ambiguous",
+    "file": "src/CRuleTables.cpp",
+    "name": "CRuleTables::sub_547620",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
@@ -4586,18 +5482,26 @@
     "reason": "the bodies differ beyond identifier names"
   },
   {
-    "address": "0x7C8990",
+    "address": "0x4781B0",
     "class": "ambiguous",
-    "file": "src/CChitin3d.cpp",
-    "name": "CChitin::Init3d",
+    "file": "src/CGameArea.cpp",
+    "name": "CGameArea::SetNight",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
   {
-    "address": null,
+    "address": "0x46FEA0",
     "class": "ambiguous",
-    "file": "src/CUIControlEditMultiLine.cpp",
-    "name": "CUIControlEditMultiLineScroller::OnScroll",
+    "file": "src/CGameArea.cpp",
+    "name": "CGameArea::CheckRestEncounter",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x46E130",
+    "class": "ambiguous",
+    "file": "src/CGameArea.cpp",
+    "name": "CGameArea::ApplyEffectToSprites",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
@@ -4622,30 +5526,6 @@
     "class": "ambiguous",
     "file": "src/CResCHR.cpp",
     "name": "CResCHR::Parse",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": null,
-    "class": "ambiguous",
-    "file": "src/CResStore.cpp",
-    "name": "CResStore::Parse",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": null,
-    "class": "ambiguous",
-    "file": "src/CResEffect.cpp",
-    "name": "CResEffect::Parse",
-    "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
-  },
-  {
-    "address": null,
-    "class": "ambiguous",
-    "file": "src/CResDLG.cpp",
-    "name": "CResDLG::Parse",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   }

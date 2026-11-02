@@ -21,6 +21,9 @@ public:
 
 class CProjectileAreaExplosion2 : public CProjectileAreaExplosion {
 public:
+    // 0x56FDC0
+    CProjectileAreaExplosion2();
+
     /* 002C */ BYTE field_2C;
     /* 002E */ LONG field_2E;
 };
@@ -49,6 +52,9 @@ public:
 
 class CProjectileAreaExplosion3 : public CProjectileAreaExplosion {
 public:
+    // 0x56FE30
+    CProjectileAreaExplosion3();
+
     LONG GetChanceRange();
 
     /* 002C */ CProjectileAreaPoints* m_pPoints;
@@ -69,6 +75,8 @@ public:
 class CProjectileArea : public CProjectileSingleTarget {
 public:
     CProjectileArea(WORD nRadius);
+    // 0x56F1F0
+    /* 0000 */ ~CProjectileArea() override;
     /* 000C */ void AIUpdate() override;
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, int a3) override;
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
@@ -112,6 +120,17 @@ public:
     /* 064E */ std::set<LONG> m_excludedTargets;
 };
 
+// Acid Storm (vtable 0x84F274): the AStormX burst (no sound of its own),
+// then the persistent AStormA cloud on ARE_M04, both copy-from-back. It is
+// the one leaf setting both the +0x575 and +0x576 flips on the third
+// explosion, striking every 10 ticks for 45 with the hit modulus pinned at
+// 10000, 200 around. It adds no members of its own — the ctor writes only
+// inherited fields.
+class CProjectileAcidStorm : public CProjectileArea {
+public:
+    CProjectileAcidStorm();
+};
+
 // Fireball (projectile type 38, vtable 0x84F580): it flies as FirebaT to
 // the target point and explodes there in FirebaX, throwing up to 20
 // FirebaR flames and leaving FirebaA embers that wander over the burned
@@ -135,7 +154,18 @@ public:
 class CProjectileArea84F3AC : public CProjectileArea {
 public:
     CProjectileArea84F3AC();
+    // 0x5768A0
+    /* 0000 */ ~CProjectileArea84F3AC() override;
     /* 0098 */ void CreateSecondary(LONG nTargetId) override;
+};
+
+// Circle of Death (vtable 0x84F448): the DSpellX burst on EFF_M42, both
+// copy-from-back; the trigger interval pinned at 10000 (one burst) with hit
+// modulus 10, for 45 ticks, 300 around. It adds no members of its own — the
+// ctor writes only inherited fields.
+class CProjectileCircleOfDeath : public CProjectileArea {
+public:
+    CProjectileCircleOfDeath();
 };
 
 // Entangle (projectile type 235, vtable 0x84F4E4): EntangX and lingering
@@ -174,12 +204,86 @@ public:
     CProjectileArea84F7F0();
 };
 
+// Hold Animal (vtable 0x84F88C): the EnchanX burst on ARE_M21, both
+// copy-from-back; the trigger interval pinned at 10000 (one burst) with hit
+// modulus 10, for 45 ticks, 200 around — the same EnchanX shape Hold Person
+// (0x84F9C4) shares. It adds no members of its own.
+class CProjectileHoldAnimal : public CProjectileArea {
+public:
+    CProjectileHoldAnimal();
+};
+
+// Hold Monster (vtable 0x84F928): the same EnchanX burst on ARE_M21, one
+// burst with hit modulus 10, for 45 ticks, 200 around. It adds no members
+// of its own.
+class CProjectileHoldMonster : public CProjectileArea {
+public:
+    CProjectileHoldMonster();
+};
+
 // Hold Person (projectile type 190, vtable 0x84F9C4): EnchanX, 150 around;
 // it holds every sprite found up to 1 to 4 humanoids.
 class CProjectileArea84F9C4 : public CProjectileArea {
 public:
     CProjectileArea84F9C4();
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
+// Halt Undead (vtable 0x84FA60): the EnchanX burst on ARE_M21, both
+// copy-from-back; one burst with hit modulus 10, for 45 ticks, 150 around.
+// It adds no members of its own.
+class CProjectileHaltUndead : public CProjectileArea {
+public:
+    CProjectileHaltUndead();
+};
+
+// Ice Storm (vtable 0x84FAFC): the IStormX burst (no sound of its own),
+// then the persistent IStormA cloud on ARE_M04, both copy-from-back, with
+// the +0x574 and +0x575 flips on the third explosion — the same shape as
+// Acid Storm but for 100 ticks instead of 45. It adds no members of its
+// own — the ctor writes only inherited fields.
+class CProjectileIceStorm : public CProjectileArea {
+public:
+    CProjectileIceStorm();
+};
+
+// Fiery Cloud (SPWI802, projectile type 214, vtable 0x84FB98): ICloudX burst,
+// ICloudR ring and the persistent ICloudA fire cloud (EFF_M40 / ARE_M05), all
+// copy-from-back; 100 around for 1050 ticks. Unique among the recovered cloud
+// leaves in setting the +0x584 cloud flip (the ICloudA/ICloudB particle path),
+// and in zeroing a DWORD at +0x65E right after the base ctor.
+class CProjectileFieryCloud : public CProjectileArea {
+public:
+    CProjectileFieryCloud();
+
+    /* 065E */ DWORD field_65E;
+};
+
+// Insect Plague (SPPR510, projectile type 216, vtable 0x84FC34): IPlaguX
+// burst, IPlaguR ring and the persistent IPlaguA swarm (RNG_P01 / ARE_P02),
+// all copy-from-back; strikes every 10 for 1500 ticks, 250 around. It adds no
+// members of its own — the ctor writes only inherited fields.
+class CProjectileInsectPlague : public CProjectileArea {
+public:
+    CProjectileInsectPlague();
+};
+
+// Power Word Kill (vtable 0x84FD6C): the PWKillX burst on EFF_M39, both
+// copy-from-back; one burst with hit modulus 10, for 45 ticks, 150 around.
+// It adds no members of its own.
+class CProjectilePowerWordKill : public CProjectileArea {
+public:
+    CProjectilePowerWordKill();
+};
+
+// Produce Fire (vtable 0x84FE08): the PFireX burst on EFF_P45, then the
+// persistent PFireA fire on ARE_P03, both copy-from-back, with the +0x574
+// and +0x575 flips and a 750 linger (+0x578) on the third explosion;
+// strikes every 10 ticks for 100, 60 around. It adds no members of its
+// own — the ctor writes only inherited fields.
+class CProjectileProduceFire : public CProjectileArea {
+public:
+    CProjectileProduceFire();
 };
 
 // Sleep (projectile type 42, vtable 0x84FEA4): EnchanX, 150 around; it puts
@@ -211,6 +315,26 @@ public:
     CProjectileArea8502E8();
 };
 
+// The portal animation flipping hack (projectile types 294 open and 297
+// close, vtable 0x850420): not a spell — the engine reuses an area
+// projectile as the door overlay. The ctor runs the base at 2000 around
+// and retargets to NOT_SPRITE only; no visuals, no members of its own.
+class CProjectilePortalAnimFlip : public CProjectileArea {
+public:
+    // 0x5756C0
+    CProjectilePortalAnimFlip();
+};
+
+// Tremor (SPPR719, projectile type 306, vtable 0x850558): the family's
+// most minimal spell leaf — beyond the base ctor at 0x100 around it only
+// loads the looping area sound ARE_P27 into the first explosion and
+// widens the radius to 0x15E. No members of its own.
+class CProjectileTremor : public CProjectileArea {
+public:
+    // 0x575B90
+    CProjectileTremor();
+};
+
 // A breath (projectile type 349, vtable 0x85072C): it arrives on its
 // seventh tick, DBreatH and lingering DBreatA, 200 around.
 class CProjectileArea85072C : public CProjectileArea {
@@ -228,6 +352,24 @@ class CProjectileArea850A38 : public CProjectileArea {
 public:
     CProjectileArea850A38();
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
+// Big Boulder (vtable 0x850AD4): it travels to the point on BIGBOLDR
+// (radius 100, speed 7) with the fire and arrival sounds AM6103e and
+// AM5101e, and bursts with the +0x574 flip set and +0x575 clear, striking
+// every 10th find (hit modulus 10). It adds no members of its own — the
+// ctor writes only inherited fields.
+class CProjectileBigBoulder : public CProjectileArea {
+public:
+    CProjectileBigBoulder();
+};
+
+// Symbol of Death (SPPR726, projectile type 365, vtable 0x850B70): the
+// SoPainX burst on the EFF_P49 sound, copy-from-back, 300 around. It adds
+// no members of its own — the ctor writes only inherited fields.
+class CProjectileSymbolOfDeath : public CProjectileArea {
+public:
+    CProjectileSymbolOfDeath();
 };
 
 // Dispel Magic (projectile type 246, vtable 0x850C0C): AbjuraX, 150 around;
@@ -277,6 +419,26 @@ class CProjectileArea850690 : public CProjectileArea {
 public:
     CProjectileArea850690(WORD nRadius);
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
+// Delayed Blast Fireball (SPWI714, projectile type 360, vtable 0x85099C): a
+// Fireball-shaped carrier whose landing does not detonate — its OnArrival
+// (0x576CE0, batch i069) only latches the exploded flag, and this AIUpdate
+// override waits until something comes within 100 of the resting bead before
+// firing the base detonation. The dtor is the family's folded empty one
+// (0x85099C slot 0 = 0x5768A0, anchored on the Acid Fog row; both members are
+// trivial, so the body is unmarked empty braces). The ctor (0x576990) is
+// parked from i064 and stays undeclared with it (never declare a slot without
+// its body).
+class CProjectileDBFireball : public CProjectileArea {
+public:
+    /* 0000 */ ~CProjectileDBFireball() override;
+    /* 000C */ void AIUpdate() override;
+    // 0x576CE0
+    /* 0070 */ void OnArrival() override;
+
+    /* 065E */ BYTE m_bBlasted;
+    /* 0660 */ LONG m_scanTimer;
 };
 
 #endif /* CPROJECTILEAREA_H_ */

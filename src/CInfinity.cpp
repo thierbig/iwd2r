@@ -296,6 +296,17 @@ BOOL CInfTileSet::RenderToPrimary(LPDIRECTDRAWSURFACE pSurface, INT nTile, INT n
         m_cVidTile.SetAddColor(m_rgbAddColor);
         dwNewFlags |= 0x10000;
         break;
+    default:
+        // An unknown dual-tile code is a data error: the exe asserts FALSE
+        // (0x5CB415, Infinity.cpp line 571) and then, if the assert returns,
+        // calls the dual-tile fallback (SetRes, SetAddColor and 0x7B1F70 at
+        // 0x5CB42B-0x5CB474) instead of the Render call below. The fallback is
+        // dead code the survey left unported (#54, report-T96.md); our
+        // UTIL_ASSERT aborts, so the flow after it is unreachable either way.
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\Infinity.cpp
+        // __LINE__: 571
+        UTIL_ASSERT(FALSE);
+        break;
     }
 
     if (nStencilTile != -1) {

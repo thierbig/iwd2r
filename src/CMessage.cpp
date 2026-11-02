@@ -16,6 +16,11 @@
 #include "CItem.h"
 #include "CPathSearch.h"
 #include "CProjectile.h"
+#include "CRes.h"
+#include "CResArea.h"
+#include "CResGame.h"
+#include "CResStore.h"
+#include "CResWorldMap.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
 #include "CScreenConnection.h"
@@ -318,6 +323,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STOP_ESCAPE_AREA = 82;
 // 0x84CF2C
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TIME_STOP = 85;
 
+// 0x84CF2D
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PROJECTILE_TRAILING_VFX = 86;
+
 // 0x84CF2E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_RELEASE = 87;
 
@@ -356,6 +364,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE = 102;
 
 // 0x84CF3E
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_103 = 103;
+
+// 0x84CF3F
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE = 104;
 
 // 0x84CF40
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_GROUP = 105;
@@ -543,6 +554,24 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE = 78;
 // 0x84CF8A
 const BYTE CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE = 110;
 
+// 0x84CF8B
+const BYTE CBaldurMessage::MSG_TYPE_MAPWORLD = 109;
+
+// 0x84CF8D
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST = 99;
+
+// 0x84CF91
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA = 82;
+
+// 0x84CF92
+const BYTE CBaldurMessage::MSG_TYPE_MOVIE = 78;
+
+// 0x84CF93
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST = 82;
+
+// 0x84CF94
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE = 65;
+
 // 0x84CF98
 const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;
 
@@ -579,11 +608,23 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_PERMIT_REQUEST = 82;
 // 0x84CFAC
 const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_ANNOUNCE = 65;
 
+// 0x84CFAD
+const BYTE CBaldurMessage::MSG_TYPE_REFORMPARTY = 113;
+
+// 0x84CFAF
+const BYTE CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS = 115;
+
 // 0x84CFB0
 const BYTE CBaldurMessage::MSG_TYPE_RESOURCE = 82;
 
 // 0x84CFB1
 const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND = 68;
+
+// 0x84CFB2
+const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
+
+// 0x84CFB3
+const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST = 83;
 
 // 0x84CFB8
 const BYTE CBaldurMessage::MSG_TYPE_SIGNAL = 83;
@@ -621,6 +662,15 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MPSYNCH_REQUEST = 82;
 // 0x84CFCA
 const BYTE CBaldurMessage::MSG_SUBTYPE_MPSYNCH_REPLY = 80;
 
+// 0x84CFCB
+const BYTE CBaldurMessage::MSG_TYPE_TIME = 84;
+
+// 0x84CFCC
+const BYTE CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST = 116;
+
+// 0x84CFCD
+const BYTE CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER = 99;
+
 // 0x84CFCE
 const BYTE CBaldurMessage::MSG_TYPE_VERSION = 86;
 
@@ -629,6 +679,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_VERSION_SERVER = 115;
 
 // 0x84CFD0
 const BYTE CBaldurMessage::VERSION_NUM_FIELDS = 3;
+
+// 0x84CFD1
+const BYTE CBaldurMessage::MSG_TYPE_WEATHER = 87;
+
+// 0x84CFD2
+const BYTE CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST = 119;
 
 // 0x84CFD3
 const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREALUA = 88;
@@ -707,11 +763,158 @@ CBaldurMessage::~CBaldurMessage()
 }
 
 // 0x4297C0
+// The client's resource demand: asks the host for the named resource (its type
+// and resref), then, when asked, waits for the reply and hands the payload to
+// the reply processor (0x42A3F0).
 BOOLEAN CBaldurMessage::DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp)
 {
-    // TODO: Incomplete.
+    CString sHostName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    if (bSendMessage) {
+        // {DWORD nType; char resref[]}: the resref's length is the packet's
+        // remainder. The buffer is a fixed 0x1E bytes in the original; only the
+        // type and the resref are sent.
+        CString sResNameCopy(sResName);
+        DWORD nLength = sResNameCopy.GetLength();
+
+        dwSize = sizeof(UINT) + nLength;
+
+        pByteMessage = CreateBuffer(0x1E);
+        if (pByteMessage == NULL) {
+            return FALSE;
+        }
+
+        *reinterpret_cast<UINT*>(pByteMessage) = nType;
+
+        memcpy(pByteMessage + sizeof(UINT),
+            sResNameCopy.GetBuffer(nLength),
+            nLength);
+
+        g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+            CNetwork::SEND_GUARANTEED,
+            MSG_TYPE_RESOURCE,
+            MSG_SUBTYPE_RESOURCE_DEMAND,
+            pByteMessage,
+            dwSize);
+
+        DestroyBuffer(pByteMessage);
+    }
+
+    if (bWaitForMessage) {
+        while (!g_pChitin->cNetwork.PeekSpecificMessage(sHostName,
+                   MSG_TYPE_RESOURCE,
+                   MSG_SUBTYPE_RESOURCE_DEMAND_REPLY)
+            && g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+            HandleBlockingMessages();
+
+            g_pChitin->m_bDisplayStale = TRUE;
+            SleepEx(60, FALSE);
+        }
+
+        if (!g_pChitin->cNetwork.GetSessionOpen()) {
+            return FALSE;
+        }
+
+        pByteMessage = g_pChitin->cNetwork.FetchSpecificMessage(sHostName,
+            MSG_TYPE_RESOURCE,
+            MSG_SUBTYPE_RESOURCE_DEMAND_REPLY,
+            dwSize);
+        sub_42A3F0(pByteMessage, dwSize, bSaveToTemp);
+        delete pByteMessage;
+    }
+
+    return TRUE;
+}
+
+// 0x42A3F0
+// The demand's reply processor: the payload is {BYTE length; char
+// resref[length]; DWORD nType; DWORD size; BYTE data[size]}; the data is
+// written through the matching CRes type into the temp directory (bSaveToTemp)
+// or the multiplayer save directory.
+BOOLEAN CBaldurMessage::sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp)
+{
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nLength = pData[cnt];
+    cnt += sizeof(BYTE);
+
+    CString sResRef(reinterpret_cast<const char*>(pData + cnt), nLength);
+    cnt += nLength;
+
+    DWORD nType = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    DWORD nSize = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    BYTE* pBuffer = CreateBuffer(nSize);
+    if (pBuffer == NULL) {
+        return FALSE;
+    }
+
+    memcpy(pBuffer, pData + cnt, nSize);
+
+    CString sFilePath;
+    if (bSaveToTemp == TRUE) {
+        sFilePath = g_pBaldurChitin->GetObjectGame()->m_sTempDir;
+    } else {
+        sFilePath = g_pBaldurChitin->GetObjectGame()->sub_5C0B30();
+    }
+
+    switch (nType) {
+    case 1010: {
+        CResHelper<CResArea, 1010> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1013: {
+        CResHelper<CResGame, 1013> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1014: {
+        CResHelper<CResStore, 1014> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1015: {
+        CResHelper<CResWorldMap, 1015> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    }
+
+    DestroyBuffer(pBuffer);
+
+    return TRUE;
 }
 
 // 0x429A90
@@ -725,9 +928,60 @@ BOOLEAN CBaldurMessage::OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWO
 // 0x42AA10
 BOOLEAN CBaldurMessage::ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags)
 {
-    // TODO: Incomplete.
+    CString sCopyResName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
 
-    return FALSE;
+    // A real provider is required, not just a session (0x42AA35): the null
+    // provider answers FALSE before anything is built.
+    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+        return FALSE;
+    }
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // NOTE: The original also requires the multiplayer screen's startup flag
+    // to be clear (CBaldurChitin + 0x1C90, + 0x488). ADR 0002 removed that
+    // screen and the flag is never set in single player, so the session tests
+    // are kept alone (the same omission as CBaldurChitin 0x5AC430).
+
+    sCopyResName = sResName;
+
+    dwSize = sizeof(UINT)
+        + sizeof(DWORD)
+        + sCopyResName.GetLength();
+
+    // The original reserves 0x1E bytes whatever the resref length
+    // (0x42AA77); the resref is at most 8, so at most 16 are used.
+    pByteMessage = CreateBuffer(0x1E);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<UINT*>(pByteMessage + cnt) = nType;
+    cnt += sizeof(UINT);
+
+    *reinterpret_cast<DWORD*>(pByteMessage + cnt) = dwFlags;
+    cnt += sizeof(DWORD);
+
+    memcpy(pByteMessage + cnt,
+        sCopyResName.GetBuffer(sCopyResName.GetLength()),
+        sCopyResName.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_RESOURCE,
+        MSG_SUBTYPE_RESOURCE_SUGGEST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x42B1F0
@@ -2110,9 +2364,169 @@ void CBaldurMessage::BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, 
 // 0x42E0C0
 BOOLEAN CBaldurMessage::OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    SHORT nCharacterSlot;
+    BOOLEAN bSendCharInfo;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    nCharacterSlot = *reinterpret_cast<SHORT*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    bSendCharInfo = g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nCharacterSlot) != CGameObjectArray::INVALID_INDEX;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // NOTE: The original also constructs and destroys an unused CSound local
+    // here (the same dead local DemandCharacterSlotReply has); omitted.
+    sub_42E1B0(sPlayerName, nCharacterSlot, bSendCharInfo);
+
+    return TRUE;
+}
+
+// 0x42E1B0
+BOOLEAN CBaldurMessage::sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo)
+{
+    DWORD dwSize;
+    BYTE* pMessage;
+    DWORD nCustomBio = 0;
+    STR_RES strRes;
+    CSavedGamePartyCreature partyCreature;
+    BYTE* pStats = NULL;
+    LONG nStats = 0;
+    WORD nAnimationId = 0;
+    WORD nPortraitIcons = 0;
+    DWORD portraitIcons[128];
+    DWORD dwCreatureDataLoc = 0;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(SHORT) + sizeof(BOOLEAN);
+
+    if (bSendCharInfo == TRUE) {
+        LONG nCharacterId = g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nCharacterSlot);
+
+        CGameSprite* pSprite;
+
+        BYTE rc;
+        do {
+            rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            pSprite->m_derivedStats.Marshal(&pStats, &nStats);
+            dwSize += nStats;
+
+            nAnimationId = pSprite->m_animation.GetAnimationId();
+            dwSize += sizeof(WORD);
+
+            nPortraitIcons = static_cast<WORD>(pSprite->m_portraitIcons.GetCount());
+            dwSize += sizeof(WORD);
+
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+            // __LINE__: 3968
+            UTIL_ASSERT_MSG(nPortraitIcons < 128, "nPortraitIcons < 128");
+
+            POSITION pos = pSprite->m_portraitIcons.GetHeadPosition();
+            for (WORD nIcon = 0; nIcon < nPortraitIcons; nIcon++) {
+                portraitIcons[nIcon] = static_cast<DWORD>(reinterpret_cast<INT_PTR>(pSprite->m_portraitIcons.GetNext(pos)));
+                dwSize += sizeof(DWORD);
+            }
+
+            pSprite->Marshal(partyCreature, TRUE);
+            dwSize += sizeof(CSavedGamePartyCreature);
+
+            dwCreatureDataLoc = dwSize;
+            dwSize += partyCreature.m_creatureSize + sizeof(DWORD);
+
+            if (g_pBaldurChitin->GetTlkTable().m_override.Fetch(pSprite->GetBaseStats()->m_biography, strRes)) {
+                nCustomBio = strRes.szText.GetLength();
+                dwSize += nCustomBio;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        } else {
+            bSendCharInfo = FALSE;
+        }
+    }
+
+    pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<SHORT*>(pMessage + cnt) = nCharacterSlot;
+    cnt += sizeof(SHORT);
+
+    *reinterpret_cast<BOOLEAN*>(pMessage + cnt) = bSendCharInfo;
+    cnt += sizeof(BOOLEAN);
+
+    if (bSendCharInfo == TRUE) {
+        memcpy(pMessage + cnt, pStats, nStats);
+        cnt += nStats;
+        delete pStats;
+
+        *reinterpret_cast<WORD*>(pMessage + cnt) = nAnimationId;
+        cnt += sizeof(WORD);
+
+        *reinterpret_cast<WORD*>(pMessage + cnt) = nPortraitIcons;
+        cnt += sizeof(WORD);
+
+        memcpy(pMessage + cnt, portraitIcons, nPortraitIcons * sizeof(DWORD));
+        cnt += nPortraitIcons * sizeof(DWORD);
+
+        // NOTE: CGameSprite::Marshal stores a 32-bit handle
+        // (compat/marshal_ptr.h) where the original stores the pointer; the
+        // block's offset field becomes the payload offset.
+        BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
+        partyCreature.m_creatureOffset = dwCreatureDataLoc;
+
+        memcpy(pMessage + cnt, &partyCreature, sizeof(CSavedGamePartyCreature));
+        cnt += sizeof(CSavedGamePartyCreature);
+
+        if (pCreature != NULL) {
+            memcpy(pMessage + cnt, pCreature, partyCreature.m_creatureSize);
+        } else {
+            memset(pMessage + cnt, 0, partyCreature.m_creatureSize);
+        }
+        cnt += partyCreature.m_creatureSize;
+
+        delete pCreature;
+
+        *reinterpret_cast<DWORD*>(pMessage + cnt) = nCustomBio;
+        cnt += sizeof(DWORD);
+
+        if (nCustomBio != 0) {
+            memcpy(pMessage + cnt, (LPCSTR)strRes.szText, nCustomBio);
+        }
+    }
+
+    DWORD dwFlags = CNetwork::SEND_GUARANTEED;
+    if (sSendTo == "") {
+        dwFlags |= CNetwork::SEND_ALL_PLAYERS;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sSendTo,
+        dwFlags,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    // NOTE: The original pre-sizes the caller's name buffer to 0x80 here.
+    sSendTo.GetBuffer(0x80);
+
+    return TRUE;
 }
 
 // 0x42F100
@@ -2311,9 +2725,103 @@ BOOLEAN CBaldurMessage::DemandCharacterSlotReply(CString& sSendTo, SHORT nCharac
 // 0x42FA60
 BOOLEAN CBaldurMessage::OnDemandCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    STR_RES strRes;
+    SHORT nCharacterSlot;
+    BOOLEAN bSendCharInfo;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    nCharacterSlot = *reinterpret_cast<SHORT*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    bSendCharInfo = *reinterpret_cast<BOOLEAN*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (bSendCharInfo == TRUE) {
+        CSavedGamePartyCreature* pCreature = reinterpret_cast<CSavedGamePartyCreature*>(
+            pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT) + sizeof(BOOLEAN));
+
+        m_bInOnObjectAdd = TRUE;
+
+        DWORD dwBioOffset = CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT) + sizeof(BOOLEAN)
+            + sizeof(CSavedGamePartyCreature) + pCreature->m_creatureSize;
+
+        // The marshalled offset is payload-relative; the block starts after
+        // the 3-byte network header.
+        pCreature->m_creatureOffset += CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+        CGameSprite* pSprite = new CGameSprite(pMessage + pCreature->m_creatureOffset,
+            static_cast<LONG>(pCreature->m_creatureSize),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+
+        // NOTE: The exe's SetResRef takes the CString; ours takes a CResRef,
+        // whose CString constructor is the same copy.
+        CString sResRef;
+        sResRef = pCreature->m_creatureResRef;
+        pSprite->SetResRef(CResRef(sResRef));
+
+        if (pSprite == NULL) {
+            return FALSE;
+        }
+
+        pGame->EnablePortrait(static_cast<BYTE>(nCharacterSlot), TRUE);
+
+        pSprite->Unmarshal(pCreature, TRUE, FALSE);
+
+        m_bInOnObjectAdd = FALSE;
+
+        pGame->SetCharacterSlot(nCharacterSlot, pSprite->m_id);
+
+        if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+            pGame->GetMultiplayerSettings()->SignalCharacterStatus(nCharacterSlot,
+                CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED,
+                TRUE,
+                TRUE);
+        }
+
+        // The custom biography, when the reply carried one: the base stats'
+        // STRREF gets a TLK user entry.
+        DWORD nCustomBio = *reinterpret_cast<DWORD*>(pMessage + dwBioOffset);
+        if (nCustomBio != 0) {
+            CString sBio(reinterpret_cast<const char*>(pMessage + dwBioOffset + sizeof(DWORD)),
+                static_cast<int>(nCustomBio));
+
+            if (g_pBaldurChitin->GetTlkTable().m_override.Fetch(pSprite->GetBaseStats()->m_biography, strRes)) {
+                g_pBaldurChitin->GetTlkTable().m_override.Remove(pSprite->GetBaseStats()->m_biography);
+            }
+
+            strRes.szText = sBio;
+            g_pBaldurChitin->GetTlkTable().m_override.AddUserEntry(pSprite->GetBaseStats()->m_biography, strRes);
+        }
+    } else {
+        // No character for the slot: it is cleared, and a client asks the
+        // controlling player for the character it should hold.
+        pGame->ClearCharacterSlot(nCharacterSlot);
+
+        if (g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+            if (pGame->GetMultiplayerSettings()->GetCharacterStatus(nCharacterSlot) == CMultiplayerSettings::CHARSTATUS_CHARACTER) {
+                BYTE nHostPlayer = static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer);
+                DemandCharacterSlot(nCharacterSlot, FALSE, nHostPlayer);
+            }
+        }
+
+        if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+            pGame->GetMultiplayerSettings()->SignalCharacterStatus(nCharacterSlot,
+                CMultiplayerSettings::CHARSTATUS_SIGNAL_DELETED,
+                TRUE,
+                TRUE);
+        }
+    }
+
+    return TRUE;
 }
 
 // 0x42FE20
@@ -3467,9 +3975,27 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
 // 0x435360
 BOOLEAN CBaldurMessage::SendMapWorldCancelRequestToServer()
 {
-    // TODO: Incomplete.
+    CString sHostName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST,
+        NULL,
+        0);
+
+    return TRUE;
 }
 
 // 0x4354E0
@@ -3485,9 +4011,39 @@ BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID id
 // 0x436050
 BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD nLength;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The resref is length-prefixed by the low byte of its length.
+    nLength = sAreaResRef.GetLength() & 0xFF;
+    dwSize = sizeof(BYTE) + nLength;
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BYTE*>(pByteMessage) = static_cast<BYTE>(sAreaResRef.GetLength());
+
+    memcpy(pByteMessage + sizeof(BYTE),
+        sAreaResRef.GetBuffer(nLength),
+        nLength);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_REVEAL_AREA,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `cResMovie` should be reference.
@@ -3495,9 +4051,52 @@ BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 // 0x436690
 BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    CString sHostName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // NOTE: Uninline.
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_REQUEST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `cResMovie` should be reference.
@@ -3505,35 +4104,181 @@ BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 // 0x4369E0
 BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_ANNOUNCE,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x436DF0
 BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
 {
-    // TODO: Incomplete.
+    DWORD dwSize;
+    BYTE* pMessage;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(BOOLEAN);
+    pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BOOLEAN*>(pMessage) = TRUE;
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_REFORMPARTY,
+        MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x436F50
-void CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
+BOOLEAN CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(WORD);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<WORD*>(pByteMessage + cnt) = wWeatherFlags;
+    cnt += sizeof(WORD);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_WEATHER,
+        MSG_SUBTYPE_WEATHER_BROADCAST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x4370B0
 void CBaldurMessage::TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return;
+    }
+
+    dwSize = sizeof(ULONG) + sizeof(BOOLEAN);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<ULONG*>(pByteMessage + cnt) = nGameTime;
+    cnt += sizeof(ULONG);
+
+    *reinterpret_cast<BOOLEAN*>(pByteMessage + cnt) = bCompressTime;
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_TIME,
+        MSG_SUBTYPE_TIME_SYNCH_BROADCAST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
 }
 
 // 0x437240
 void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
 {
-    // TODO: Incomplete.
+    CString sHostName;
+    BYTE* pByteMessage;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return;
+    }
+
+    pByteMessage = CreateBuffer(sizeof(DWORD));
+    if (pByteMessage == NULL) {
+        return;
+    }
+
+    *reinterpret_cast<DWORD*>(pByteMessage) = deltaTime;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_TIME,
+        MSG_SUBTYPE_TIME_CHANGE_TO_SERVER,
+        pByteMessage,
+        sizeof(DWORD));
+
+    DestroyBuffer(pByteMessage);
 }
 
 // 0x437950
@@ -6425,7 +7170,7 @@ BOOL CMessageAddEffect::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
     if (rc == CGameObjectArray::SUCCESS) {
         if ((object->GetObjectType() & CGameObject::TYPE_AIBASE) != 0
-                && object->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            && object->GetObjectType() == CGameObject::TYPE_SPRITE) {
             auto* sprite = static_cast<CGameSprite*>(object);
             m_effect->m_casterLevel = static_cast<LONG>(sprite->GetCasterLevel(&spell, 0, 0));
             m_effect->m_spellPenetrationBonus = static_cast<DWORD>(sprite->GetFeatValue(0x40)) << 1;
@@ -7378,16 +8123,22 @@ void CMessageAddItem::MarshalMessage(BYTE** pData, DWORD* dwSize)
     *dwSize = 21 + length;
     UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
     DWORD cnt = 0;
-    memcpy(*pData + cnt, &player, sizeof(player)); cnt += sizeof(player);
-    memcpy(*pData + cnt, &id, sizeof(id)); cnt += sizeof(id);
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &id, sizeof(id));
+    cnt += sizeof(id);
     (*pData)[cnt++] = length;
-    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), name.GetLength()); cnt += name.GetLength();
+    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), name.GetLength());
+    cnt += name.GetLength();
     for (INT ability = 0; ability < 3; ability++) {
         WORD uses = m_item.GetUsageCount(ability);
-        memcpy(*pData + cnt, &uses, sizeof(uses)); cnt += sizeof(uses);
+        memcpy(*pData + cnt, &uses, sizeof(uses));
+        cnt += sizeof(uses);
     }
-    memcpy(*pData + cnt, &m_item.m_wear, sizeof(m_item.m_wear)); cnt += sizeof(m_item.m_wear);
-    memcpy(*pData + cnt, &m_item.m_flags, sizeof(m_item.m_flags)); cnt += sizeof(m_item.m_flags);
+    memcpy(*pData + cnt, &m_item.m_wear, sizeof(m_item.m_wear));
+    cnt += sizeof(m_item.m_wear);
+    memcpy(*pData + cnt, &m_item.m_flags, sizeof(m_item.m_flags));
+    cnt += sizeof(m_item.m_flags);
     UTIL_ASSERT(cnt == *dwSize);
 }
 
@@ -7398,18 +8149,25 @@ BOOL CMessageAddItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
     PLAYER_ID player;
     LONG id, local;
-    memcpy(&player, pData + cnt, sizeof(player)); cnt += sizeof(player);
-    memcpy(&id, pData + cnt, sizeof(id)); cnt += sizeof(id);
-    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, id, local) != TRUE) return FALSE;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&id, pData + cnt, sizeof(id));
+    cnt += sizeof(id);
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, id, local) != TRUE)
+        return FALSE;
     m_targetId = local;
     BYTE length = pData[cnt++];
-    char name[9] = {0};
-    memcpy(name, pData + cnt, length); cnt += length;
+    char name[9] = { 0 };
+    memcpy(name, pData + cnt, length);
+    cnt += length;
     WORD uses[3], wear;
     DWORD flags;
-    memcpy(uses, pData + cnt, sizeof(uses)); cnt += sizeof(uses);
-    memcpy(&wear, pData + cnt, sizeof(wear)); cnt += sizeof(wear);
-    memcpy(&flags, pData + cnt, sizeof(flags)); cnt += sizeof(flags);
+    memcpy(uses, pData + cnt, sizeof(uses));
+    cnt += sizeof(uses);
+    memcpy(&wear, pData + cnt, sizeof(wear));
+    cnt += sizeof(wear);
+    memcpy(&flags, pData + cnt, sizeof(flags));
+    cnt += sizeof(flags);
     {
         CItem item(CResRef(reinterpret_cast<BYTE*>(name)), uses[0], uses[1], uses[2], wear, flags);
         m_item.SetResRef(item.cResRef, TRUE);
@@ -16203,19 +16961,26 @@ void CMessageFireProjectile::MarshalMessage(BYTE** pData, DWORD* dwSize)
     UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
     DWORD cnt = 0;
     auto write = [&](const void* value, DWORD size) { memcpy(*pData + cnt, value, size); cnt += size; };
-    write(&player, sizeof(player)); write(&remote, sizeof(remote)); write(&m_projectileType, sizeof(WORD));
+    write(&player, sizeof(player));
+    write(&remote, sizeof(remote));
+    write(&m_projectileType, sizeof(WORD));
     do {
         rc = objects->GetShare(m_projectileTargetId, CGameObjectArray::THREAD_ASYNCH, &object, INFINITE);
     } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
     if (rc == CGameObjectArray::SUCCESS) {
-        player = object->m_remotePlayerID; remote = object->m_remoteObjectID;
+        player = object->m_remotePlayerID;
+        remote = object->m_remoteObjectID;
         objects->ReleaseShare(m_projectileTargetId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
     } else {
-        player = 0; remote = CGameObjectArray::INVALID_INDEX;
+        player = 0;
+        remote = CGameObjectArray::INVALID_INDEX;
     }
-    write(&player, sizeof(player)); write(&remote, sizeof(remote));
-    write(&m_projectileTarget, sizeof(CPoint)); write(&m_height, sizeof(LONG));
-    write(&field_20, sizeof(field_20)); write(&field_1E, sizeof(field_1E));
+    write(&player, sizeof(player));
+    write(&remote, sizeof(remote));
+    write(&m_projectileTarget, sizeof(CPoint));
+    write(&m_height, sizeof(LONG));
+    write(&field_20, sizeof(field_20));
+    write(&field_1E, sizeof(field_1E));
     UTIL_ASSERT(cnt == *dwSize);
 }
 
@@ -16225,18 +16990,25 @@ BOOL CMessageFireProjectile::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     UTIL_ASSERT(pData != NULL);
     DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
     auto read = [&](void* value, DWORD size) { memcpy(value, pData + cnt, size); cnt += size; };
-    PLAYER_ID player; LONG remote, local;
-    read(&player, sizeof(player)); read(&remote, sizeof(remote));
+    PLAYER_ID player;
+    LONG remote, local;
+    read(&player, sizeof(player));
+    read(&remote, sizeof(remote));
     auto* remotes = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
     m_targetId = remotes->Find(player, remote, local) == TRUE ? local : CGameObjectArray::INVALID_INDEX;
-    read(&m_projectileType, sizeof(WORD)); read(&player, sizeof(player)); read(&remote, sizeof(remote));
+    read(&m_projectileType, sizeof(WORD));
+    read(&player, sizeof(player));
+    read(&remote, sizeof(remote));
     if (remotes->Find(player, remote, local) != TRUE) {
-        if (player != 0 || remote != CGameObjectArray::INVALID_INDEX) return FALSE;
+        if (player != 0 || remote != CGameObjectArray::INVALID_INDEX)
+            return FALSE;
         local = CGameObjectArray::INVALID_INDEX;
     }
     m_projectileTargetId = local;
-    read(&m_projectileTarget, sizeof(CPoint)); read(&m_height, sizeof(LONG));
-    read(&field_20, sizeof(field_20)); read(&field_1E, sizeof(field_1E));
+    read(&m_projectileTarget, sizeof(CPoint));
+    read(&m_height, sizeof(LONG));
+    read(&field_20, sizeof(field_20));
+    read(&field_1E, sizeof(field_1E));
     UTIL_ASSERT(cnt == dwSize);
     return TRUE;
 }
@@ -17258,6 +18030,131 @@ void CMessageWeaponImmumityUpdate::Run()
         }
 
         g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// NOTE: The original folds this destructor into 0x4B2340, a body it shares
+// with the other message classes whose destructors do nothing of their own
+// (the original calls it 121-411 times per scenario, ours never calls this
+// copy), so the address is not this copy's to claim.
+CMessageSpellLevelImmumityUpdate::~CMessageSpellLevelImmumityUpdate()
+{
+}
+
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageSpellLevelImmumityUpdate::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
+// 0x516D50
+void CMessageSpellLevelImmumityUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 32328
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
+        LONG remoteObjectID = pObject->m_remoteObjectID;
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+
+        *dwSize = sizeof(PLAYER_ID)
+            + sizeof(LONG)
+            + sizeof(m_spellLevelImmunities.m_levels);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 32349
+        UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+        DWORD cnt = 0;
+
+        *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+        cnt += sizeof(LONG);
+
+        memcpy(*pData + cnt, m_spellLevelImmunities.m_levels, sizeof(m_spellLevelImmunities.m_levels));
+        cnt += sizeof(m_spellLevelImmunities.m_levels);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 32363
+        UTIL_ASSERT(cnt == *dwSize);
+    } else {
+        *dwSize = 0;
+    }
+}
+
+// 0x516E90
+BOOL CMessageSpellLevelImmumityUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 32378
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    memcpy(m_spellLevelImmunities.m_levels, pData + cnt, sizeof(m_spellLevelImmunities.m_levels));
+    cnt += sizeof(m_spellLevelImmunities.m_levels);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    // NOTE: Missing trailing guard.
+
+    return TRUE;
+}
+
+// 0x516F10
+void CMessageSpellLevelImmumityUpdate::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+            pSprite->GetDerivedStats()->m_cImmunitiesSpellLevel = m_spellLevelImmunities;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
@@ -18944,6 +19841,14 @@ void CMessage96::Run()
 
 // ---------------------------------------------------------------------------
 
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageProjectileTrailingVFX::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
 // 0x511D00
 void CMessageProjectileTrailingVFX::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19032,7 +19937,8 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 
     LONG localObjectID;
     if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
-            remoteObjectID, localObjectID) == TRUE) {
+            remoteObjectID, localObjectID)
+        == TRUE) {
         m_targetId = localObjectID;
     } else {
         m_targetId = CGameObjectArray::INVALID_INDEX;
@@ -19062,6 +19968,35 @@ BOOL CMessageProjectileTrailingVFX::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     cnt += sizeof(LONG);
     m_launchHeight = *reinterpret_cast<SHORT*>(pData + cnt);
     return TRUE;
+}
+
+// NOTE: The original folds this body into 0x4088A0 (identical-code folding:
+// every GetCommType returning BROADCAST_OTHERS is one function there), whose
+// address marker stays on the copies the tree already labels.
+SHORT CMessageProjectileImmumityUpdate::GetCommType()
+{
+    return BROADCAST_OTHERS;
+}
+
+// 0x514FF0
+CMessageProjectileImmumityUpdate::~CMessageProjectileImmumityUpdate()
+{
+}
+
+// NOTE: The original's slot holds 0x40A0E0, the one GetMsgType body every
+// CMessage subclass shares (identical-code folding), so the address stays on
+// the copies the tree already labels.
+BYTE CMessageProjectileImmumityUpdate::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// NOTE: The original's slot holds 0x516D40, one body for both immunity
+// messages (vtables 0x84D548 and 0x84D580): it returns the spell-level
+// immunities subtype (the byte at 0x84CF3F) for this message too.
+BYTE CMessageProjectileImmumityUpdate::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_LEVEL_IMMUNITIES_UPDATE;
 }
 
 // 0x515010
@@ -19150,7 +20085,8 @@ BOOL CMessageProjectileImmumityUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSiz
 
     LONG localObjectID;
     if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
-            remoteObjectID, localObjectID) != TRUE) {
+            remoteObjectID, localObjectID)
+        != TRUE) {
         return FALSE;
     }
 
@@ -19182,4 +20118,38 @@ void CMessageProjectileImmumityUpdate::Run()
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x5041A0
+BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15367
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    m_slot = *reinterpret_cast<SHORT*>(pData + cnt);
+    cnt += sizeof(m_slot);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15393
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
 }

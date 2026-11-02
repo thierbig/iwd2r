@@ -1,0 +1,7 @@
+{
+  "address": "0x4F6EF0",
+  "name": "CMessage117::CMessage117",
+  "file": "src/CMessage.cpp",
+  "batch": "i057",
+  "needs": "dependency outside the batch's files: COnHitSpell / CDerivedStats::m_onHitSpells. The ctor body itself is verified against IWD2.exe (base CMessage(caller, target) at src/CMessage.cpp:5593 shape; CResRef::CResRef 0x78A960 default constructions at this+0xC/this+0x14; CResRef::operator= 0x78AC30 twice; m_level DWORD at this+0x1C; m_target CPoint read through a pointer at this+0x20/0x24; exe packs the class to 40 bytes, all offsets 4-aligned) and imports cleanly, but defining any ctor of the class materializes the class vtable (vtable 0x84D45C, confirmed in the exe: dtor 0x4B2340 / GetCommType 0x4536E0 / GetMsgType 0x40A0E0 / GetMsgSubType 0x4F6FA0 / Marshal 0x516910 / Unmarshal 0x516A80 / Run 0x516B70), and every slot must resolve. Run (0x516B70) is the class's last undefined virtual and its body applies the on-hit-spell list of the struck sprite (call list captured: 0x599C70 share-area call, indirect [eax+4], 0x4C5B20, 0x44AD80, 0x7FC95B, 0x44BA70, 0x59A010, 0x4E7030) through COnHitSpell / CDerivedStats::m_onHitSpells — grep over src/ finds neither; CDerivedStats.h is outside this batch's files. Importing the ctor with the inherited base CMessage::Run in that slot would silently diverge from the exe; the sibling getters/Marshal/Unmarshal stubs are importable but are parked with the row since they only exist to materialize this vtable."
+}

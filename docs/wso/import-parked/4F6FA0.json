@@ -1,0 +1,1 @@
+{"address": "0x4F6FA0", "name": "CMessage117::GetMsgSubType", "file": "src/CMessage.cpp", "batch": "i059", "needs": "dependency outside the batch's files: src/CMessage.h has no CMessage117 class; his getter returns that message's subtype through it, and the declaration-only header edit the batch is allowed cannot add it"}

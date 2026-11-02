@@ -13,6 +13,7 @@ class CProjectile : public CGameObject {
 public:
     CProjectile();
     /* 0000 */ ~CProjectile() override;
+    /* 002C */ BOOLEAN CompressTime(DWORD deltaTime) override;
     /* 0068 */ BOOLEAN IsProjectile() override;
     /* 006C */ virtual void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType);
     /* 0070 */ virtual void OnArrival();
@@ -69,6 +70,8 @@ public:
     /* 016C */ SHORT m_nStartHeight;
     /* 016E */ SHORT m_nCurrentHeight;
     /* 0170 */ LONG m_nStartDistance;
+    /* 0174 */ LONG field_174;
+    /* 0178 */ LONG field_178;
     /* 017C */ BYTE field_17C;
     /* 017E */ CString m_sVisualEffect;
     /* 0182 */ LONG field_182;
