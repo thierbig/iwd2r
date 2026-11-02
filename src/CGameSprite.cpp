@@ -23383,10 +23383,243 @@ movementCheck:
     return ACTION_INTERRUPTABLE;
 }
 
+// 0x751BD0
+void CGameSprite::sub_751BD0()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageChangeDirection(1, m_id, m_id), FALSE);
+
+    m_pArea->m_nCharacters = m_pArea->m_nCharacters == 0xFF
+        ? 1
+        : static_cast<BYTE>(m_pArea->m_nCharacters + 1);
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+    }
+
+    m_cGameStats.RecordJoinParty();
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+            if (pGame->GetCharacterSlot(nSlot) == m_id) {
+                pGame->m_multiplayerSettings.SetCharacterControlledByPlayer(nSlot, 0, FALSE, FALSE);
+                pGame->m_multiplayerSettings.SignalCharacterStatus(nSlot,
+                    CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED,
+                    TRUE,
+                    FALSE);
+                pGame->m_multiplayerSettings.SetCharacterReady(nSlot, TRUE, FALSE);
+            }
+        }
+    }
+}
+
 // 0x751CD0
 SHORT CGameSprite::LeaveParty()
 {
-    // TODO: Incomplete.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The host assigns the new party member to the slot this creature leaves
+    // (the scan only runs on the host).
+    SHORT nPortraitNumber = -1;
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+            if (pGame->GetCharacterSlot(nSlot) == m_id) {
+                nPortraitNumber = static_cast<SHORT>(nSlot);
+            }
+        }
+    }
+
+    // A party member that died on its feet (no hit points, no death pose yet)
+    // drops its inventory where the protagonist stands, lies down on the
+    // nearest open square and turns.
+    if (m_baseStats.m_hitPoints < 1
+        && (m_derivedStats.m_generalState & (STATE_FROZEN_DEATH | STATE_STONE_DEATH)) == 0) {
+        LONG nProtagonist = pGame->GetProtagonist();
+
+        CGameObject* pProtagonist;
+        BYTE rc = pGame->GetObjectArray()->GetShare(nProtagonist,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pProtagonist,
+            INFINITE);
+        if (rc == CGameObjectArray::SUCCESS) {
+            CGameArea* pArea = pProtagonist->m_pArea;
+            if (pArea == NULL) {
+                DropInventory(FALSE, CString(""));
+            } else {
+                const CPoint& pos = pProtagonist->GetPos();
+
+                // __FILE__: .\Include\ObjAnimation.h
+                // __LINE__: 2093
+                UTIL_ASSERT(m_animation.m_animation != NULL);
+
+                CPoint pt = pArea->m_search.GetNearestOpenSquare(
+                    CPoint(pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                        pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                    GetTerrainTable(),
+                    m_animation.m_animation->GetPersonalSpace(),
+                    -1);
+
+                pt.x = pt.x * CPathSearch::GRID_SQUARE_SIZEX + CPathSearch::GRID_SQUARE_SIZEX / 2;
+                pt.y = pt.y * CPathSearch::GRID_SQUARE_SIZEY + CPathSearch::GRID_SQUARE_SIZEY / 2;
+
+                DropInventory(FALSE, CString(""));
+
+                // __FILE__: .\Include\ObjAnimation.h
+                // __LINE__: 2081
+                UTIL_ASSERT(m_animation.m_animation != NULL);
+
+                AddToArea(pArea,
+                    pt,
+                    0,
+                    m_animation.m_animation->CanLieDown() ? CGAMEOBJECT_LIST_BACK : CGAMEOBJECT_LIST_FRONT);
+                SetSequence(9);
+                SetFacing(GetDirection());
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(nProtagonist,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    BOOL bOverflow;
+    if (pGame->RemoveCharacterFromParty(m_id, bOverflow)) {
+        // The party list and the global creature list both lose the id.
+        POSITION pos = pGame->m_lstGlobalCreatures.GetHeadPosition();
+        while (pos != NULL) {
+            POSITION posOld = pos;
+            if (static_cast<LONG>(reinterpret_cast<INT_PTR>(pGame->m_lstGlobalCreatures.GetNext(pos))) == m_id) {
+                pGame->m_lstGlobalCreatures.RemoveAt(posOld);
+                break;
+            }
+        }
+
+        if (!bOverflow && m_pArea != NULL) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageChangeDirection(0, m_id, m_id), FALSE);
+
+            if (m_pArea->m_nCharacters != 0xFF) {
+                m_pArea->m_nCharacters--;
+            }
+        }
+
+        m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+        m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+        m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+
+        SetScript(1, new CAIScript(CResRef("")));
+        SetScript(2, new CAIScript(CResRef("WTASIGHT")));
+        SetScript(3, new CAIScript(CResRef("")));
+        SetScript(4, new CAIScript(CResRef("")));
+        SetScript(5, new CAIScript(CResRef("")));
+
+        // Tell every remaining party member the creature left.
+        CAITrigger trigger(CAITRIGGER_LEAVES, m_typeAI, 0);
+        for (INT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageSetTrigger(trigger, m_id, pGame->m_characterPortraits[nIndex]),
+                FALSE);
+        }
+
+        if ((m_baseStats.m_flags & 0x800) != 0
+            && (m_derivedStats.m_generalState & STATE_DEAD) != 0) {
+            m_expirationTime = pGame->GetWorldTimer()->m_gameTime;
+        }
+
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+        }
+
+        if (g_pChitin->cNetwork.m_bIsHost == TRUE && nPortraitNumber != -1) {
+            CMultiplayerSettings& settings = pGame->m_multiplayerSettings;
+            settings.SetCharacterControlledByPlayer(nPortraitNumber, 0, FALSE, FALSE);
+            settings.SignalCharacterStatus(nPortraitNumber,
+                CMultiplayerSettings::CHARSTATUS_SIGNAL_DELETED,
+                TRUE,
+                FALSE);
+            settings.SetCharacterReady(nPortraitNumber, FALSE, TRUE);
+        }
+
+        // Characters waiting in the overflow take the freed slot, in order.
+        while (pGame->m_characterOverflow.GetCount() > 0) {
+            LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow.GetAt(0)));
+            pGame->m_characterOverflow.RemoveAt(0, 1);
+
+            if (nId != CGameObjectArray::INVALID_INDEX) {
+                if (pGame->AddCharacterToParty(nId, -1) == 0) {
+                    pGame->m_characterOverflow.SetAtGrow(pGame->m_characterOverflow.GetCount(),
+                        reinterpret_cast<int*>(nId));
+                    break;
+                }
+
+                CGameObject* pObject;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetDeny(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pObject,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) {
+                    static_cast<CGameSprite*>(pObject)->sub_751BD0();
+
+                    pGame->GetObjectArray()->ReleaseDeny(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+            }
+        }
+
+        // Everything carried (except the fist) goes to the protagonist, and
+        // the slot is emptied.
+        for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+                continue;
+            }
+
+            CItem* pItem = m_equipment.m_items[nSlot];
+            if (pItem == NULL) {
+                continue;
+            }
+
+            if ((pItem->GetFlagsFile() & 1) == 0) {
+                continue;
+            }
+
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageAddItem(*pItem, m_id, pGame->GetProtagonist()), FALSE);
+
+            pGame->AddDisposableItem(pItem);
+            Unequip(static_cast<SHORT>(nSlot));
+            m_equipment.m_items[nSlot] = NULL;
+        }
+    } else {
+        // Not in the party: an ally or a familiar can still leave.
+        if (pGame->RemoveCharacterFromAllies(m_id) || pGame->RemoveCharacterFromFamiliars(m_id)) {
+            m_typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+            m_liveTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+            m_startTypeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+        }
+    }
+
+    // An area without characters goes back to the protagonist.
+    if (m_pArea != NULL && m_pArea->m_nCharacters == 0) {
+        pGame->SelectCharacter(pGame->GetProtagonist(), FALSE);
+        pGame->SelectToolbar();
+    }
+
+    // The world screen's selected portrait follows the party.
+    if (g_pBaldurChitin->pActiveEngine != g_pBaldurChitin->m_pEngineWorld) {
+        return ACTION_DONE;
+    }
+
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    if (pWorld->GetSelectedCharacter() == pGame->GetCharacterPortraitNum(m_id)) {
+        pWorld->OnPortraitLClick(pGame->GetCharacterPortraitNum(pGame->GetProtagonist()));
+    }
 
     return ACTION_DONE;
 }
