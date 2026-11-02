@@ -217,6 +217,7 @@ public:
 
     static const BYTE MSG_TYPE_RESOURCE;
     static const BYTE MSG_SUBTYPE_RESOURCE_DEMAND;
+    static const BYTE MSG_SUBTYPE_RESOURCE_DEMAND_REPLY;
 
     static const BYTE MSG_TYPE_SIGNAL;
     static const BYTE MSG_SUBTYPE_SIGNAL;
@@ -245,6 +246,7 @@ public:
     CBaldurMessage();
     ~CBaldurMessage();
     BOOLEAN DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp);
+    BOOLEAN sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);

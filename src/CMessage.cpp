@@ -16,6 +16,11 @@
 #include "CItem.h"
 #include "CPathSearch.h"
 #include "CProjectile.h"
+#include "CRes.h"
+#include "CResArea.h"
+#include "CResGame.h"
+#include "CResStore.h"
+#include "CResWorldMap.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
 #include "CScreenConnection.h"
@@ -591,6 +596,9 @@ const BYTE CBaldurMessage::MSG_TYPE_RESOURCE = 82;
 // 0x84CFB1
 const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND = 68;
 
+// 0x84CFB2
+const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
+
 // 0x84CFB8
 const BYTE CBaldurMessage::MSG_TYPE_SIGNAL = 83;
 
@@ -713,11 +721,158 @@ CBaldurMessage::~CBaldurMessage()
 }
 
 // 0x4297C0
+// The client's resource demand: asks the host for the named resource (its type
+// and resref), then, when asked, waits for the reply and hands the payload to
+// the reply processor (0x42A3F0).
 BOOLEAN CBaldurMessage::DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp)
 {
-    // TODO: Incomplete.
+    CString sHostName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    if (bSendMessage) {
+        // {DWORD nType; char resref[]}: the resref's length is the packet's
+        // remainder. The buffer is a fixed 0x1E bytes in the original; only the
+        // type and the resref are sent.
+        CString sResNameCopy(sResName);
+        DWORD nLength = sResNameCopy.GetLength();
+
+        dwSize = sizeof(UINT) + nLength;
+
+        pByteMessage = CreateBuffer(0x1E);
+        if (pByteMessage == NULL) {
+            return FALSE;
+        }
+
+        *reinterpret_cast<UINT*>(pByteMessage) = nType;
+
+        memcpy(pByteMessage + sizeof(UINT),
+            sResNameCopy.GetBuffer(nLength),
+            nLength);
+
+        g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+            CNetwork::SEND_GUARANTEED,
+            MSG_TYPE_RESOURCE,
+            MSG_SUBTYPE_RESOURCE_DEMAND,
+            pByteMessage,
+            dwSize);
+
+        DestroyBuffer(pByteMessage);
+    }
+
+    if (bWaitForMessage) {
+        while (!g_pChitin->cNetwork.PeekSpecificMessage(sHostName,
+                   MSG_TYPE_RESOURCE,
+                   MSG_SUBTYPE_RESOURCE_DEMAND_REPLY)
+            && g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+            HandleBlockingMessages();
+
+            g_pChitin->m_bDisplayStale = TRUE;
+            SleepEx(60, FALSE);
+        }
+
+        if (!g_pChitin->cNetwork.GetSessionOpen()) {
+            return FALSE;
+        }
+
+        pByteMessage = g_pChitin->cNetwork.FetchSpecificMessage(sHostName,
+            MSG_TYPE_RESOURCE,
+            MSG_SUBTYPE_RESOURCE_DEMAND_REPLY,
+            dwSize);
+        sub_42A3F0(pByteMessage, dwSize, bSaveToTemp);
+        delete pByteMessage;
+    }
+
+    return TRUE;
+}
+
+// 0x42A3F0
+// The demand's reply processor: the payload is {BYTE length; char
+// resref[length]; DWORD nType; DWORD size; BYTE data[size]}; the data is
+// written through the matching CRes type into the temp directory (bSaveToTemp)
+// or the multiplayer save directory.
+BOOLEAN CBaldurMessage::sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp)
+{
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nLength = pData[cnt];
+    cnt += sizeof(BYTE);
+
+    CString sResRef(reinterpret_cast<const char*>(pData + cnt), nLength);
+    cnt += nLength;
+
+    DWORD nType = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    DWORD nSize = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    BYTE* pBuffer = CreateBuffer(nSize);
+    if (pBuffer == NULL) {
+        return FALSE;
+    }
+
+    memcpy(pBuffer, pData + cnt, nSize);
+
+    CString sFilePath;
+    if (bSaveToTemp == TRUE) {
+        sFilePath = g_pBaldurChitin->GetObjectGame()->m_sTempDir;
+    } else {
+        sFilePath = g_pBaldurChitin->GetObjectGame()->sub_5C0B30();
+    }
+
+    switch (nType) {
+    case 1010: {
+        CResHelper<CResArea, 1010> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1013: {
+        CResHelper<CResGame, 1013> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1014: {
+        CResHelper<CResStore, 1014> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    case 1015: {
+        CResHelper<CResWorldMap, 1015> res;
+        CResRef cResRef(sResRef);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(sFilePath, pBuffer, nSize);
+        break;
+    }
+    }
+
+    DestroyBuffer(pBuffer);
+
+    return TRUE;
 }
 
 // 0x429A90
