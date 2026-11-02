@@ -33457,12 +33457,25 @@ SHORT CGameSprite::GiveEquipmentToParty()
                 continue;
             }
 
-            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_AMULET] == NULL) {
-                bFound = TRUE;
-                pGame->AddDisposableItem(pItem);
+            // NOTE: This loop shares the outer slot counter, as the exe does
+            // (edi at [esp+0x18]): it starts where the outer loop left off,
+            // steps nSlot itself, and the outer loop steps again after it.
+            // Two visible consequences, kept from the original: after a
+            // handout the next slot is skipped (its item stays equipped);
+            // and with the amulet slot occupied the loop runs nSlot up to
+            // NUM_SLOT, so only the first droppable item is unequipped and
+            // its slot cleared before the walk ends (the item is lost).
+            // Almost certainly an original bug.
+            for (; nSlot < CGameSpriteEquipment::NUM_SLOT && !bFound; nSlot++) {
+                // 0x757866's `test al,al` on the SLOT_FIST byte (0x85BD83).
+                if (m_equipment.m_items[CGameSpriteEquipment::SLOT_AMULET] == NULL
+                    && CGameSpriteEquipment::SLOT_FIST != 0) {
+                    bFound = TRUE;
+                    pGame->AddDisposableItem(pItem);
 
-                CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, nId);
-                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+                    CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, nId);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+                }
             }
 
             pGame->GetObjectArray()->ReleaseShare(nId,
