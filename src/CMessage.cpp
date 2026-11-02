@@ -636,6 +636,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_VERSION_SERVER = 115;
 // 0x84CFD0
 const BYTE CBaldurMessage::VERSION_NUM_FIELDS = 3;
 
+// 0x84CFD1
+const BYTE CBaldurMessage::MSG_TYPE_WEATHER = 87;
+
+// 0x84CFD2
+const BYTE CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST = 119;
+
 // 0x84CFD3
 const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREALUA = 88;
 
@@ -3525,9 +3531,39 @@ BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
 }
 
 // 0x436F50
-void CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
+BOOLEAN CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(WORD);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<WORD*>(pByteMessage + cnt) = wWeatherFlags;
+    cnt += sizeof(WORD);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_WEATHER,
+        MSG_SUBTYPE_WEATHER_BROADCAST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x4370B0
