@@ -18651,6 +18651,13 @@ void CMessageStoreRelease::Run()
 
 // -----------------------------------------------------------------------------
 
+// 0x4F6B60
+CMessageUnsummon::CMessageUnsummon(LONG summonedId, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_summonedId = summonedId;
+}
+
 // 0x512830
 void CMessageUnsummon::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
