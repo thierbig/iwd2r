@@ -30440,9 +30440,54 @@ void CGameSprite::DisplaySkills(CUIControlTextDisplay* pText)
 // 0x766140
 SHORT CGameSprite::JumpToArea(CString areaName, const CPoint& dest, SHORT facingDirection, SHORT delay)
 {
-    // TODO: Incomplete.
+    areaName.MakeUpper();
 
-    return ACTION_ERROR;
+    if (m_bGlobal) {
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageMoveGlobal(areaName, dest, m_id, m_id), FALSE);
+    }
+
+    if (m_pArea == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    if (delay > 0) {
+        // The area may still be loading; the limbo list holds the jump until
+        // the delay elapses.
+        CMoveListEntry* pEntry = new CMoveListEntry();
+        pEntry->m_nDelay = delay;
+        pEntry->m_nFacing = static_cast<BYTE>(facingDirection);
+        pEntry->m_nSpriteId = m_id;
+        pEntry->m_ptDestination = dest;
+        pEntry->m_areaResRef = areaName;
+        pGame->m_cLimboList.AddTail(pEntry);
+    } else {
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(CString(areaName));
+        if (pArea != NULL) {
+            m_clearAIOnRemoveFromArea = FALSE;
+            m_bDeleteOnRemove = FALSE;
+            RemoveFromArea();
+            m_bDeleteOnRemove = TRUE;
+            MoveOntoArea(pArea, dest, facingDirection);
+            return ACTION_DONE;
+        }
+
+        // The area is not loaded yet; the move list carries the sprite over.
+        CMoveListEntry* pEntry = new CMoveListEntry();
+        pEntry->m_nFacing = static_cast<BYTE>(facingDirection);
+        pEntry->m_nDelay = 0;
+        pEntry->m_nSpriteId = m_id;
+        pEntry->m_ptDestination = dest;
+        pEntry->m_areaResRef = areaName;
+        g_pBaldurChitin->GetObjectGame()->m_cMoveList.AddTail(pEntry);
+    }
+
+    m_bDeleteOnRemove = FALSE;
+    RemoveFromArea();
+    m_bDeleteOnRemove = TRUE;
+
+    return ACTION_DONE;
 }
 
 // 0x766380
