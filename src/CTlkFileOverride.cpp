@@ -3,6 +3,16 @@
 #include "CTlkTable.h"
 #include "CUtil.h"
 
+// The original has no lock here (0x7B5C30 closes the two CFiles with only the
+// m_bOpen checks, and CChitin::OnAltTab calls the engine's EngineActivated
+// directly, outside CChitin::SelectEngine's field_3AC critical section). The
+// main thread's WM_ACTIVATEAPP (OnAltTab) and the AI thread's movie switch can
+// therefore run CTlkFileOverride::CloseFiles/Open at the same time, and the
+// unchecked check-then-fclose pair in CFile::Close frees the same FILE twice.
+// One lock for the file lifecycle keeps the port safe on the platforms where
+// that interleaving actually happens.
+static CCriticalSection s_tlkFileLock;
+
 // 0x85DD72
 const WORD CTlkFileOverride::ENTRY_HAVE_TEXT = 0x1;
 
@@ -474,6 +484,9 @@ void CTlkFileOverride::Remove(DWORD strId)
 // 0x7B5A50
 void CTlkFileOverride::Open(const CString& sHeaderFileName, const CString& sTextFileName)
 {
+    CSingleLock lock(&s_tlkFileLock, FALSE);
+    lock.Lock(INFINITE);
+
     m_header.m_bOpen = m_header.Open(sHeaderFileName, CFile::OpenFlags::modeReadWrite | CFile::OpenFlags::modeCreate | CFile::OpenFlags::modeNoTruncate, NULL);
     if (m_header.m_bOpen) {
         m_header.Unmarshal();
@@ -532,6 +545,9 @@ DWORD CTlkFileOverride::Add(const CString& sText)
 // 0x7B5C30
 void CTlkFileOverride::CloseFiles()
 {
+    CSingleLock lock(&s_tlkFileLock, FALSE);
+    lock.Lock(INFINITE);
+
     if (m_header.m_bOpen) {
         m_header.Close();
         m_header.m_bOpen = FALSE;
