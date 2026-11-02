@@ -15,8 +15,11 @@ compute   reads the Ghidra function table (<exports>/functions.tsv, tab
 Denominator: the table minus `Unwind@`, `Catch@`, `Finally@` funclets and
 `thunk_` thunks. Recovered: a standalone // 0xADDR marker in src/*.cpp or *.h
 precedes a definition whose body is real by four rules, in order (classify):
-TODO, NotImplemented or assert(false) anywhere is a stub; any statement after
-masking comments is real; an empty body is real when the exe's function
+a body whose only code is a constant return or nothing stays a stub when it
+carries a TODO, NotImplemented or assert(false) (its raw text, comments
+included), and NotImplemented or assert(false) in the code itself is a stub
+beside real statements too; any statement after masking comments is real;
+an empty body is real when the exe's function
 (functions.tsv) is at most 16 bytes; an empty constructor or destructor body
 is real when every callee (callgraph.tsv) is a constructor, destructor,
 `operator new`/`operator delete`, a `_Construct`/`_Destruct`-style helper or
@@ -97,6 +100,15 @@ INIT = re.compile(r'(?<!:)[:,]\s*[\w:<>]+\s*$')
 ASSIGN = re.compile(r'[^=!<>]=[^=]')
 CTOR = re.compile(r'(\w+)::(~?)\1$')
 CLASSDECL = re.compile(r'^class\s+(\w+)\s*:\s*(.+)$')
+# One `return <constant>;`, whitespace squeezed out: a literal (number, char
+# or string), TRUE/FALSE, NULL/nullptr, or an enum/static constant such as
+# CGameAIBase::ACTION_ERROR (qualified, or an ALL_CAPS name).
+RETURN_CONST = re.compile(
+    r'return(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
+    r'|[-+]?(?:0[xX][0-9A-Fa-f]+|\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)[uUlLfF]{0,3}'
+    r'|NULL|nullptr'
+    r'|\w+(?:::\w+)+'
+    r'|[A-Z][A-Z0-9_]*);')
 
 
 def _mask(text):
@@ -187,20 +199,33 @@ def _base_callees(cls, bases, dtors, graph, seen=frozenset()):
 
 
 def classify(body, name='', address=None, table=None, graph=None, ours=None,
-             bases=None, dtors=None):
+             bases=None, dtors=None, raw=None):
     """(stub, why) for one masked, whitespace-free body, by the four rules of
     the 2026-10-30 census, in order; a body that matches none stays a stub.
-    `name` is our name for the definition, `address` the marker's; `table`
-    maps a normalised address to (name, size) in functions.tsv and `graph` a
-    caller to its callee addresses in callgraph.tsv. Rules 3 and 4 need the
-    exports, so with no table an empty body stays a stub. A destructor may
-    additionally call what the exe destructor of one of its base classes
-    calls (`bases` maps a class to its base classes, `dtors` a class to the
-    address of our destructor marker for it): the inlined base destructor."""
-    if ('TODO' in body or 'NotImplemented' in body
-            or 'assert(false' in body.replace(' ', '')):
-        return True, 'todo'
+    `raw` is the same span of the body unmasked (comments kept), whitespace
+    squeezed out like `body`; without it the TODO half of rule 1 sees only
+    the masked code, i.e. no comments. Rule 1 (2026-11-02 ruling): a body
+    whose masked code is a constant return or nothing stays a stub when its
+    raw text carries TODO, NotImplemented or assert(false), and NotImplemented
+    or assert(false) in the masked code itself is a stub whatever else the
+    body holds. `name` is our name for the definition, `address` the marker's;
+    `table` maps a normalised address to (name, size) in functions.tsv and
+    `graph` a caller to its callee addresses in callgraph.tsv. Rules 3 and 4
+    need the exports, so with no table an empty body stays a stub. A
+    destructor may additionally call what the exe destructor of one of its
+    base classes calls (`bases` maps a class to its base classes, `dtors` a
+    class to the address of our destructor marker for it): the inlined base
+    destructor."""
     inner = body[1:-1] if body[:1] == '{' and body[-1:] == '}' else body
+    if raw is None:
+        raw = body
+    if ('NotImplemented' in inner
+            or 'assert(false' in inner.replace(' ', '')):
+        return True, 'todo'  # in the code itself, whatever else it holds
+    if ('TODO' in raw or 'NotImplemented' in raw
+            or 'assert(false' in raw.replace(' ', '')):
+        if not inner or RETURN_CONST.fullmatch(inner):
+            return True, 'todo'  # only a constant return or nothing
     if inner:  # rule 2: any statement at all, comments masked out
         return False, 'statement'
     if table is None or address is None:
@@ -245,10 +270,12 @@ def _name(head):
 
 
 def _bodies(text):
-    """[(address, our name, body)] for every standalone // 0xADDR marker that
-    precedes a function definition. A marker followed by another marker, or by
-    a declaration or data definition (`;` or `=` before any body), is none.
-    The body is the masked, whitespace-free text between the braces."""
+    """[(address, our name, body, raw)] for every standalone // 0xADDR marker
+    that precedes a function definition. A marker followed by another marker,
+    or by a declaration or data definition (`;` or `=` before any body), is
+    none. `body` is the masked, whitespace-free text between the braces and
+    `raw` the same span unmasked, comments kept (whitespace squeezed out of
+    both): rule 1's TODO check reads `raw`."""
     lines = text.split('\n')
     masked = _mask(text)
     starts = []
@@ -302,7 +329,8 @@ def _bodies(text):
                     break
             e += 1
         body = re.sub(r'\s+', '', masked[k:e + 1])
-        out.append((m.group(1), _name(masked[starts[j]:k]), body))
+        out.append((m.group(1), _name(masked[starts[j]:k]), body,
+                    re.sub(r'\s+', '', text[k:e + 1])))
     return out
 
 
@@ -310,8 +338,8 @@ def markers(text, table=None, graph=None, ours=None, bases=None, dtors=None):
     """[(address, our name, stub?)] for every marker _bodies finds, judged by
     classify."""
     return [(a, name, classify(body, name, _norm(a), table, graph, ours,
-                               bases, dtors)[0])
-            for a, name, body in _bodies(text)]
+                               bases, dtors, raw)[0])
+            for a, name, body, raw in _bodies(text)]
 
 
 def scan(repo, table=None, graph=None):
@@ -335,23 +363,24 @@ def scan(repo, table=None, graph=None):
                 bases.update(_bases(text))
             bodies.extend(_bodies(text))
     ours = {}
-    for a, name, _ in bodies:
+    for a, name, _, _ in bodies:
         ours.setdefault(_norm(a), name)
     dtors = {}
     for a, name in ours.items():
         cls = _dtor_class(name)
         if cls and cls not in dtors:  # first marker wins, like ours above
             dtors[cls] = a
-    old_real = {_norm(a) for a, _, body in bodies if not _was_stub(body)}
+    old_real = {_norm(a) for a, _, body, _ in bodies if not _was_stub(body)}
     real = {}
     added = {'statement': 0, 'size': 0, 'ctor-callees': 0}
     demoted, kept, seen = 0, [], set()
-    for a, name, body in bodies:
+    for a, name, body, raw in bodies:
         a = _norm(a)
         if a in seen:  # two markers for one address: the first one wins
             continue
         seen.add(a)
-        stub, why = classify(body, name, a, table, graph, ours, bases, dtors)
+        stub, why = classify(body, name, a, table, graph, ours, bases, dtors,
+                             raw)
         if not stub:
             real.setdefault(a, name)
             if a not in old_real:
@@ -468,7 +497,7 @@ def render(s):
         f"SEH funclets and {ex['thunks']:,} thunks. |",
         f"| Functions recovered | **{_pct(r['functions'], g['functions'])}** "
         f"({r['functions']:,} / {g['functions']:,}) | By count, same "
-        "denominator; a function counts once its body is more than a stub: TODO, NotImplemented or assert(false) bodies stay stubs, any statement counts, and an empty body counts when the exe's function is at most 16 bytes or is a constructor/destructor calling only base/member constructors, destructors and the compiler's member construction/destruction helpers (`operator new`/`operator delete`, `construct_array`, `array_destruct`, the `eh vector` iterators); a destructor may also call what the exe destructor of its base classes calls (the inlined base destructor). |",
+        "denominator; a function counts once its body is more than a stub: a body whose only code is a constant return or nothing stays a stub when it carries a TODO, NotImplemented or assert(false) (as does any body with NotImplemented or assert(false) in its code), any statement counts, and an empty body counts when the exe's function is at most 16 bytes or is a constructor/destructor calling only base/member constructors, destructors and the compiler's member construction/destruction helpers (`operator new`/`operator delete`, `construct_array`, `array_destruct`, the `eh vector` iterators); a destructor may also call what the exe destructor of its base classes calls (the inlined base destructor). |",
         f"| Verified against the original | "
         f"**{_pct(v['functions'], g['functions'])}** ({v['functions']:,} / "
         f"{g['functions']:,}; {v['bytes']:,} bytes) | Recovered functions whose "

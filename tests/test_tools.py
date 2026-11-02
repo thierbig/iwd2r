@@ -26123,6 +26123,10 @@ class ReStatusTest(unittest.TestCase):
         self.assertLess(text.index('table'), text.index('### Recovery status'))
         self.assertLess(text.index('### Recovery status'), text.index('### Roadmap'))
         self.assertIn('| `.text` code recovered | **85.7%** (300 / 350 bytes) |', text)
+        # the 2026-11-02 rule 1 wording, pinned so --check keeps it current
+        self.assertIn('a body whose only code is a constant return or nothing '
+                      'stays a stub when it carries a TODO, NotImplemented or '
+                      'assert(false)', text)
         self.assertIn('| Functions recovered | **66.7%** (2 / 3) |', text)
         self.assertIn('| Verified against the original | **33.3%** (1 / 3; 100 bytes) |', text)
         self.assertIn('| Scenarios matched | 1 | `a`:', text)
@@ -26226,14 +26230,62 @@ class ReStatusTest(unittest.TestCase):
         self.assertNotIn('0x2002', got)
         self.assertEqual(got['0x2000'][0], 'A::operator=')
 
-    def test_rule1_todo_notimplemented_and_assert_stay_stubs_at_any_length(self):
+    def test_rule1_notimplemented_and_assert_stay_stubs_at_any_length(self):
+        # The 2026-11-02 ruling keeps only NotImplemented and assert(false) as
+        # unconditional stubs; a TODO-named call is code, so rule 2 counts it.
         rs = load_tool('re_status')
         src = (
             '// 0x3000\nvoid A::F()\n{\n    assert(false);\n    DoIt();\n}\n'
             '// 0x3001\nvoid A::G()\n{\n    NotImplemented(); return;\n}\n'
             '// 0x3002\nvoid A::H()\n{\n    TODO_fill_in_the_body(p);\n}\n')
+        got = {a: s for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, s in got.items() if s},
+                         {'0x3000', '0x3001'})
+        self.assertFalse(got['0x3002'])
+
+    def test_rule1_todo_beside_only_a_constant_return_or_nothing_is_a_stub(self):
+        # The 2026-11-02 ruling: rule 1 reads the raw body, comments
+        # included, and demands only that the masked code be empty or a
+        # single return of a constant (a literal, TRUE/FALSE, NULL/nullptr,
+        # a negative number, or an enum/static constant).
+        rs = load_tool('re_status')
+        src = (
+            '// 0x3100\nBOOLEAN CBaldurMessage::SendMap()\n{\n'
+            '    // TODO: Incomplete.\n\n    return FALSE;\n}\n'
+            '// 0x3101\nint A::G()\n{\n    // TODO\n\n'
+            '    return CGameAib::ACTION_ERROR;\n}\n'
+            '// 0x3102\nint A::H()\n{\n    // TODO: unported\n    return -1;\n}\n'
+            '// 0x3103\nvoid* A::I()\n{\n    // TODO\n    return NULL;\n}\n'
+            '// 0x3104\nvoid* A::J()\n{\n    // TODO\n    return nullptr;\n}\n'
+            '// 0x3105\nint A::K()\n{\n    // TODO\n    return 0x401000;\n}\n'
+            '// 0x3106\nvoid A::L()\n{\n    // TODO: Incomplete.\n}\n')
         self.assertEqual({a for a, n, s in rs.markers(src) if s},
-                         {'0x3000', '0x3001', '0x3002'})
+                         {'0x3100', '0x3101', '0x3102', '0x3103', '0x3104',
+                          '0x3105', '0x3106'})
+
+    def test_rule1_todo_beats_the_size_and_ctor_rules(self):
+        # An empty body with a TODO comment stays a stub even when the exe's
+        # function is at most 16 bytes (rule 1 fires before rule 3).
+        rs = load_tool('re_status')
+        table = {'401000': ('CUIControlBase::~CUIControlBase', 14)}
+        src = ('// 0x401000\nCUIControlBase::~CUIControlBase()\n{\n'
+               '    // TODO: Incomplete.\n}\n')
+        self.assertTrue({a: s for a, n, s in rs.markers(src, table)}['0x401000'])
+
+    def test_rule1_todo_beside_real_code_stays_recovered(self):
+        rs = load_tool('re_status')
+        src = (
+            '// 0x3200\nvoid A::F()\n{\n    x = 1; // TODO\n}\n'
+            '// 0x3201\nvoid A::G()\n{\n    // TODO: one case unported\n'
+            '    switch (x) {\n    case 1: DoIt(); break;\n    }\n}\n'
+            '// 0x3202\nint A::H()\n{\n    // TODO\n    return m_nCount;\n}\n'
+            '// 0x3203\nint A::I()\n{\n    // TODO\n    return (BOOLEAN)0;\n}\n'
+            '// 0x3204\nBOOLEAN A::J()\n{\n    return FALSE;\n}\n'
+            '// 0x3205\nvoid A::K()\n{\n    NotImplemented();\n    DoIt();\n}\n')
+        got = {a: s for a, n, s in rs.markers(src)}
+        self.assertEqual({a for a, s in got.items() if not s},
+                         {'0x3200', '0x3201', '0x3202', '0x3203', '0x3204'})
+        self.assertTrue(got['0x3205'])  # NotImplemented beside real code
 
     def test_rule2_any_statement_is_real_and_comment_only_bodies_are_not(self):
         rs = load_tool('re_status')
