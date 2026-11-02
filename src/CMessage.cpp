@@ -2310,9 +2310,169 @@ void CBaldurMessage::BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, 
 // 0x42E0C0
 BOOLEAN CBaldurMessage::OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    SHORT nCharacterSlot;
+    BOOLEAN bSendCharInfo;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    nCharacterSlot = *reinterpret_cast<SHORT*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    bSendCharInfo = g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nCharacterSlot) != CGameObjectArray::INVALID_INDEX;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // NOTE: The original also constructs and destroys an unused CSound local
+    // here (the same dead local DemandCharacterSlotReply has); omitted.
+    sub_42E1B0(sPlayerName, nCharacterSlot, bSendCharInfo);
+
+    return TRUE;
+}
+
+// 0x42E1B0
+BOOLEAN CBaldurMessage::sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo)
+{
+    DWORD dwSize;
+    BYTE* pMessage;
+    DWORD nCustomBio = 0;
+    STR_RES strRes;
+    CSavedGamePartyCreature partyCreature;
+    BYTE* pStats = NULL;
+    LONG nStats = 0;
+    WORD nAnimationId = 0;
+    WORD nPortraitIcons = 0;
+    DWORD portraitIcons[128];
+    DWORD dwCreatureDataLoc = 0;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(SHORT) + sizeof(BOOLEAN);
+
+    if (bSendCharInfo == TRUE) {
+        LONG nCharacterId = g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nCharacterSlot);
+
+        CGameSprite* pSprite;
+
+        BYTE rc;
+        do {
+            rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            pSprite->m_derivedStats.Marshal(&pStats, &nStats);
+            dwSize += nStats;
+
+            nAnimationId = pSprite->m_animation.GetAnimationId();
+            dwSize += sizeof(WORD);
+
+            nPortraitIcons = static_cast<WORD>(pSprite->m_portraitIcons.GetCount());
+            dwSize += sizeof(WORD);
+
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+            // __LINE__: 3968
+            UTIL_ASSERT_MSG(nPortraitIcons < 128, "nPortraitIcons < 128");
+
+            POSITION pos = pSprite->m_portraitIcons.GetHeadPosition();
+            for (WORD nIcon = 0; nIcon < nPortraitIcons; nIcon++) {
+                portraitIcons[nIcon] = static_cast<DWORD>(reinterpret_cast<INT_PTR>(pSprite->m_portraitIcons.GetNext(pos)));
+                dwSize += sizeof(DWORD);
+            }
+
+            pSprite->Marshal(partyCreature, TRUE);
+            dwSize += sizeof(CSavedGamePartyCreature);
+
+            dwCreatureDataLoc = dwSize;
+            dwSize += partyCreature.m_creatureSize + sizeof(DWORD);
+
+            if (g_pBaldurChitin->GetTlkTable().m_override.Fetch(pSprite->GetBaseStats()->m_biography, strRes)) {
+                nCustomBio = strRes.szText.GetLength();
+                dwSize += nCustomBio;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        } else {
+            bSendCharInfo = FALSE;
+        }
+    }
+
+    pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<SHORT*>(pMessage + cnt) = nCharacterSlot;
+    cnt += sizeof(SHORT);
+
+    *reinterpret_cast<BOOLEAN*>(pMessage + cnt) = bSendCharInfo;
+    cnt += sizeof(BOOLEAN);
+
+    if (bSendCharInfo == TRUE) {
+        memcpy(pMessage + cnt, pStats, nStats);
+        cnt += nStats;
+        delete pStats;
+
+        *reinterpret_cast<WORD*>(pMessage + cnt) = nAnimationId;
+        cnt += sizeof(WORD);
+
+        *reinterpret_cast<WORD*>(pMessage + cnt) = nPortraitIcons;
+        cnt += sizeof(WORD);
+
+        memcpy(pMessage + cnt, portraitIcons, nPortraitIcons * sizeof(DWORD));
+        cnt += nPortraitIcons * sizeof(DWORD);
+
+        // NOTE: CGameSprite::Marshal stores a 32-bit handle
+        // (compat/marshal_ptr.h) where the original stores the pointer; the
+        // block's offset field becomes the payload offset.
+        BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
+        partyCreature.m_creatureOffset = dwCreatureDataLoc;
+
+        memcpy(pMessage + cnt, &partyCreature, sizeof(CSavedGamePartyCreature));
+        cnt += sizeof(CSavedGamePartyCreature);
+
+        if (pCreature != NULL) {
+            memcpy(pMessage + cnt, pCreature, partyCreature.m_creatureSize);
+        } else {
+            memset(pMessage + cnt, 0, partyCreature.m_creatureSize);
+        }
+        cnt += partyCreature.m_creatureSize;
+
+        delete pCreature;
+
+        *reinterpret_cast<DWORD*>(pMessage + cnt) = nCustomBio;
+        cnt += sizeof(DWORD);
+
+        if (nCustomBio != 0) {
+            memcpy(pMessage + cnt, (LPCSTR)strRes.szText, nCustomBio);
+        }
+    }
+
+    DWORD dwFlags = CNetwork::SEND_GUARANTEED;
+    if (sSendTo == "") {
+        dwFlags |= CNetwork::SEND_ALL_PLAYERS;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sSendTo,
+        dwFlags,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    // NOTE: The original pre-sizes the caller's name buffer to 0x80 here.
+    sSendTo.GetBuffer(0x80);
+
+    return TRUE;
 }
 
 // 0x42F100
