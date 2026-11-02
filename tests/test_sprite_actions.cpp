@@ -2510,6 +2510,116 @@ TEST_CASE("object: FloatText floats only in the area on view and clears its text
     CHECK(pCharacter->field_1C == 0);
 }
 
+// The engine-internal action 224 (0x757720, ExecuteAction's case 224):
+// every equipped item whose ITM file flags carry 0x4, the fist's excluded, is
+// unequipped and given to the first party member the object array shares,
+// with GiveItem's CMessageAddItem tail; the original hands them out only
+// while the amulet slot is empty (0x757853).
+TEST_CASE("sprite: action 224 gives the droppable equipped items to the party", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // The first pregenerated character with a droppable (file flag 0x4)
+    // equipped item somewhere but the fist's slot.
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        BOOL bHas = FALSE;
+        for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT && !bHas; nSlot++) {
+            if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+                continue;
+            }
+            CItem* pItem = pProbe->GetEquipment()->m_items[nSlot];
+            if (pItem != NULL) {
+                bHas = (pItem->GetFlagsFile() & 0x4) != 0;
+            }
+        }
+        delete pProbe;
+        if (bHas) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with a droppable equipped item");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+
+    // The droppable slots and their resrefs.
+    std::vector<SHORT> slots;
+    std::vector<CString> resrefs;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        CItem* pItem = pEquipment->m_items[nSlot];
+        if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) != 0) {
+            slots.push_back(nSlot);
+            resrefs.push_back(pItem->GetResRef().GetResRefStr());
+        }
+    }
+    REQUIRE(!slots.empty());
+
+    // The amulet guard: an amulet the character draws nothing through
+    // (0x757853 tests the slot, and a droppable one would be unequipped
+    // first). Only when the character wears one and it is not droppable.
+    CItem* pAmulet = pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET];
+    if (pAmulet != NULL && (pAmulet->GetFlagsFile() & 0x4) == 0) {
+        ClearMessages();
+        CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        for (SHORT nSlot : slots) {
+            CHECK(pEquipment->m_items[nSlot] != NULL);
+        }
+        pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] = NULL;
+    } else if (pAmulet != NULL) {
+        pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] = NULL;
+    }
+
+    // The handout: every droppable slot empties and its item lands in the
+    // party member's inventory (the character is the only member), through
+    // the CMessageAddItem the action queues.
+    ClearMessages();
+    CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    for (SHORT nSlot : slots) {
+        INFO("slot " << nSlot);
+        CHECK(pEquipment->m_items[nSlot] == NULL);
+    }
+    for (const CString& sResRef : resrefs) {
+        BOOL bFound = FALSE;
+        for (INT n = 18; n < 42 && !bFound; n++) {
+            CItem* pItem = pEquipment->m_items[n];
+            if (pItem != NULL) {
+                bFound = pItem->GetResRef() == CResRef(sResRef);
+            }
+        }
+        INFO("resref " << static_cast<const char*>(sResRef));
+        CHECK(bFound);
+    }
+
+    // The fist's slot is never touched (a weapon there stays).
+    ClearMessages();
+}
+
 // CGameSprite::ChangeAnimation (0x75EC50, actions 194 and 219): the action's
 // string1 names a CRE ("10GOB") whose data builds a replacement sprite; it
 // joins this sprite's area at its position and list type, takes its hit points
@@ -3773,4 +3883,217 @@ TEST_CASE("sprite: LeaveParty ignores the 0x800 flag in the corpse timer test", 
     CHECK(pDead->ExecuteAction() == CGameAIBase::ACTION_DONE);
 
     CHECK(pDead->m_expirationTime == 0);
+}
+
+// 0x757720's loops share one slot counter (edi at [esp+0x18]): the handout
+// loop starts where the outer loop left off, steps the slot itself, and the
+// outer loop steps again after it. With droppable items in two consecutive
+// slots the second is therefore skipped and stays equipped.
+TEST_CASE("sprite: action 224 skips the slot after a handout", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // A character with at least two droppable (file flag 0x4) items.
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        int nDroppable = 0;
+        for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            CItem* pItem = pProbe->GetEquipment()->m_items[nSlot];
+            if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) != 0) {
+                nDroppable++;
+            }
+        }
+        delete pProbe;
+        if (nDroppable >= 2) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with two droppable items");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+
+    std::vector<SHORT> droppableSlots;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = pEquipment->m_items[nSlot];
+        if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) != 0) {
+            droppableSlots.push_back(nSlot);
+        }
+    }
+    REQUIRE(droppableSlots.size() >= 2);
+
+    CItem* pFirst = pEquipment->m_items[droppableSlots[0]];
+    CItem* pSecond = pEquipment->m_items[droppableSlots[1]];
+    const CString sFirst = pFirst->GetResRef().GetResRefStr();
+
+    // Everything droppable goes; the pair is placed in two adjacent
+    // equipment slots, so the first is the lowest droppable slot.
+    for (SHORT nSlot : droppableSlots) {
+        pEquipment->m_items[nSlot] = NULL;
+    }
+    SHORT nPair = -1;
+    for (SHORT nSlot = 1; nSlot + 1 < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST
+            || nSlot + 1 == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        if (pEquipment->m_items[nSlot] == NULL && pEquipment->m_items[nSlot + 1] == NULL) {
+            nPair = nSlot;
+            break;
+        }
+    }
+    REQUIRE(nPair > 0);
+    pEquipment->m_items[nPair] = pFirst;
+    pEquipment->m_items[nPair + 1] = pSecond;
+
+    ClearMessages();
+    CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    // The first went out; the loop's own +1 plus the outer loop's skips the
+    // second, which stays equipped.
+    CHECK(pEquipment->m_items[nPair] == NULL);
+    CHECK(pEquipment->m_items[nPair + 1] == pSecond);
+
+    BOOL bInInventory = FALSE;
+    for (INT n = 18; n < 42 && !bInInventory; n++) {
+        CItem* pItem = pEquipment->m_items[n];
+        if (pItem != NULL) {
+            bInInventory = pItem->GetResRef() == CResRef(sFirst);
+        }
+    }
+    INFO("first resref " << static_cast<const char*>(sFirst));
+    CHECK(bInInventory);
+    ClearMessages();
+}
+
+// The same shared counter's other quirk: with the amulet slot occupied the
+// handout loop runs the slot index to NUM_SLOT, so only the first droppable
+// item is unequipped and cleared, nothing is handed out, and that item is
+// lost. Almost certainly an original bug, kept.
+TEST_CASE("sprite: action 224 loses the first item when the amulet slot is occupied", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    std::vector<BYTE> cre;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        int nDroppable = 0;
+        for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            CItem* pItem = pProbe->GetEquipment()->m_items[nSlot];
+            if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) != 0) {
+                nDroppable++;
+            }
+        }
+        delete pProbe;
+        if (nDroppable >= 2) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character with two droppable items");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+
+    // A non-droppable item at SLOT_AMULET, so the inner loop sees it
+    // occupied while the outer loop walks past it.
+    CItem* pAmulet = pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET];
+    if (pAmulet == NULL || (pAmulet->GetFlagsFile() & 0x4) != 0) {
+        SHORT nSource = -1;
+        for (SHORT nSlot = 1; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            CItem* pItem = pEquipment->m_items[nSlot];
+            if (pItem != NULL && (pItem->GetFlagsFile() & 0x4) == 0) {
+                nSource = nSlot;
+                break;
+            }
+        }
+        if (nSource < 0) {
+            SKIP("[iwd2r-skip] no non-droppable item to occupy the amulet slot");
+        }
+        pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] = pEquipment->m_items[nSource];
+        pEquipment->m_items[nSource] = pAmulet;
+    }
+
+    std::vector<SHORT> droppableSlots;
+    for (SHORT nSlot = 1; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = pEquipment->m_items[nSlot];
+        if (nSlot != CGameSpriteEquipment::SLOT_FIST
+            && pItem != NULL
+            && (pItem->GetFlagsFile() & 0x4) != 0) {
+            droppableSlots.push_back(nSlot);
+        }
+    }
+    REQUIRE(droppableSlots.size() >= 2);
+    const SHORT nFirst = droppableSlots[0];
+    const SHORT nSecond = droppableSlots[1];
+    CItem* pLost = pEquipment->m_items[nFirst];
+    CItem* pKept = pEquipment->m_items[nSecond];
+    const CString sLost = pLost->GetResRef().GetResRefStr();
+
+    int nBagBefore = 0;
+    for (INT n = 18; n < 42; n++) {
+        if (pEquipment->m_items[n] != NULL) {
+            nBagBefore++;
+        }
+    }
+
+    ClearMessages();
+    CHECK(pCharacter->GiveEquipmentToParty() == CGameAIBase::ACTION_DONE);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+
+    // Nothing is handed out: the item was unequipped, its slot cleared, and
+    // the walk ended with the slot at NUM_SLOT.
+    CHECK(pEquipment->m_items[CGameSpriteEquipment::SLOT_AMULET] != NULL);
+    CHECK(pEquipment->m_items[nFirst] == NULL);
+    // The second droppable item is never reached: the walk ended with the
+    // slot index at NUM_SLOT.
+    CHECK(pEquipment->m_items[nSecond] == pKept);
+    int nBagAfter = 0;
+    for (INT n = 18; n < 42; n++) {
+        if (pEquipment->m_items[n] != NULL) {
+            nBagAfter++;
+        }
+    }
+    CHECK(nBagAfter == nBagBefore);
+    INFO("lost resref " << static_cast<const char*>(sLost));
+    ClearMessages();
 }
