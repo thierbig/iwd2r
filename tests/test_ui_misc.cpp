@@ -3234,3 +3234,97 @@ TEST_CASE("map world: SendMapWorldRevealArea sends the length-prefixed area to e
 
     network.m_nServiceProvider = nServiceProvider;
 }
+
+TEST_CASE("resource: the demand sends type and resref, and the reply processor writes the file", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    const INT nServiceProvider = network.m_nServiceProvider;
+    const INT nHostPlayer = network.m_nHostPlayer;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    // The demand is the client's: a host sends nothing.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // A client whose host name is unknown sends nothing either.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = -1;
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The client's demand: {0xFF, 82, 68, DWORD type, resref}.
+    network.m_nHostPlayer = 0;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_RESOURCE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND);
+    {
+        DWORD nType = 0;
+        memcpy(&nType, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nType == 1013);
+    }
+    CHECK(memcmp(CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD), "ICEWIND2", 8) == 0);
+
+    // Without the send the client only answers TRUE.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, FALSE, FALSE, TRUE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The reply processor takes {BYTE len; char resref[]; DWORD type; DWORD
+    // size; BYTE data[]} after the 3-byte header and writes it at the path.
+    BYTE payload[3 + 1 + 8 + 4 + 4 + 6];
+    memset(payload, 0, sizeof(payload));
+    payload[CNetwork::SPEC_MSG_FLAG] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    payload[CNetwork::SPEC_MSG_TYPE] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    payload[CNetwork::SPEC_MSG_SUBTYPE] = CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY;
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    payload[cnt] = 8;
+    cnt += sizeof(BYTE);
+    memcpy(payload + cnt, "WORLDMAP", 8);
+    cnt += 8;
+    {
+        const DWORD nType = 1015;
+        memcpy(payload + cnt, &nType, sizeof(DWORD));
+        cnt += sizeof(DWORD);
+        const DWORD nSize = 6;
+        memcpy(payload + cnt, &nSize, sizeof(DWORD));
+        cnt += sizeof(DWORD);
+    }
+    memcpy(payload + cnt, "REPLY!", 6);
+
+    const fs::path written = g_view / "temp" / "WORLDMAP.WMP";
+    std::error_code ec;
+    fs::remove(written, ec);
+
+    // A host processes no reply and a closed session neither.
+    network.m_bIsHost = TRUE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == FALSE);
+    network.m_bIsHost = FALSE;
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == TRUE);
+    {
+        std::ifstream in(written, std::ios::binary);
+        std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        CHECK(bytes == std::vector<char>({ 'R', 'E', 'P', 'L', 'Y', '!' }));
+    }
+    fs::remove(written, ec);
+
+    network.m_nHostPlayer = nHostPlayer;
+    network.m_bIsHost = TRUE;
+    network.m_nServiceProvider = nServiceProvider;
+}
