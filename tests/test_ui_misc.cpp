@@ -3197,3 +3197,40 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(engine->field_102 == bar);
     CHECK(barBase->m_bActive == TRUE);
 }
+
+TEST_CASE("map world: SendMapWorldRevealArea sends the length-prefixed area to every player", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+
+    // A closed session answers FALSE and leaves the message buffer alone.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(message.SendMapWorldRevealArea(CString("AR1000")) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // With the session up and a provider the packet is written before the
+    // dead DirectPlay path returns: {0xFF, 109, 82, BYTE len, resref}.
+    network.m_bConnectionEstablished = TRUE;
+    const INT nServiceProvider = network.m_nServiceProvider;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.SendMapWorldRevealArea(CString("AR1000")) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MAPWORLD);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_HEADER_LENGTH] == 6);
+    CHECK(memcmp(CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH + 1, "AR1000", 6) == 0);
+
+    network.m_nServiceProvider = nServiceProvider;
+}

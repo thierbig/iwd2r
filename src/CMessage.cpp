@@ -549,6 +549,24 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE = 78;
 // 0x84CF8A
 const BYTE CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE = 110;
 
+// 0x84CF8B
+const BYTE CBaldurMessage::MSG_TYPE_MAPWORLD = 109;
+
+// 0x84CF8D
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST = 99;
+
+// 0x84CF91
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA = 82;
+
+// 0x84CF92
+const BYTE CBaldurMessage::MSG_TYPE_MOVIE = 78;
+
+// 0x84CF93
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST = 82;
+
+// 0x84CF94
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE = 65;
+
 // 0x84CF98
 const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;
 
@@ -584,6 +602,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_PERMIT_REQUEST = 82;
 
 // 0x84CFAC
 const BYTE CBaldurMessage::MSG_SUBTYPE_PAUSING_ANNOUNCE = 65;
+
+// 0x84CFAD
+const BYTE CBaldurMessage::MSG_TYPE_REFORMPARTY = 113;
+
+// 0x84CFAF
+const BYTE CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS = 115;
 
 // 0x84CFB0
 const BYTE CBaldurMessage::MSG_TYPE_RESOURCE = 82;
@@ -3473,9 +3497,27 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
 // 0x435360
 BOOLEAN CBaldurMessage::SendMapWorldCancelRequestToServer()
 {
-    // TODO: Incomplete.
+    CString sHostName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST,
+        NULL,
+        0);
+
+    return TRUE;
 }
 
 // 0x4354E0
@@ -3491,9 +3533,39 @@ BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID id
 // 0x436050
 BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD nLength;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The resref is length-prefixed by the low byte of its length.
+    nLength = sAreaResRef.GetLength() & 0xFF;
+    dwSize = sizeof(BYTE) + nLength;
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BYTE*>(pByteMessage) = static_cast<BYTE>(sAreaResRef.GetLength());
+
+    memcpy(pByteMessage + sizeof(BYTE),
+        sAreaResRef.GetBuffer(nLength),
+        nLength);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_REVEAL_AREA,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `cResMovie` should be reference.
@@ -3501,9 +3573,52 @@ BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 // 0x436690
 BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    CString sHostName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // NOTE: Uninline.
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_REQUEST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `cResMovie` should be reference.
@@ -3511,17 +3626,75 @@ BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 // 0x4369E0
 BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_ANNOUNCE,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x436DF0
 BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
 {
-    // TODO: Incomplete.
+    DWORD dwSize;
+    BYTE* pMessage;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    dwSize = sizeof(BOOLEAN);
+    pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BOOLEAN*>(pMessage) = TRUE;
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_REFORMPARTY,
+        MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x436F50
