@@ -10,11 +10,15 @@
 #define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
+#include "CBaldurChitin.h"
 #include "CChitin.h"
+#include "CInfGame.h"
 #include "CMessage.h"
 #include "CNetwork.h"
+#include "CScreenWorld.h"
 
 #include <cstring>
+#include <memory>
 
 extern CChitin* g_pChitin;
 
@@ -408,4 +412,516 @@ TEST_CASE("msg: the resource suggest carries the type, flags and resref on RESOU
 
     network.m_nServiceProvider = nProvider;
     network.m_bConnectionEstablished = bConnection;
+}
+
+// CBaldurMessage::OnResourceDemanded (0x429A90): the host-only RESOURCE 82/68
+// handler. The resource loading needs the game files, so the unit test pins
+// the guards and the one branch that never loads a resource: an unknown type
+// falls through to the default (nSize = nType) and answers with the echoed
+// packet {BYTE nameLen, name, DWORD type, DWORD size, data}. The reply goes
+// through SendSpecificMessage, so with a non-null provider its wire bytes are
+// in the static buffer: [0]=0xFF flag, [1]=82 type, [2]=82 reply subtype.
+TEST_CASE("CBaldurMessage::OnResourceDemanded answers only the host and echoes an unknown type", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    BYTE packet[3 + 4 + 4];
+    memset(packet, 0, sizeof(packet));
+    DWORD nType = 1;
+    memcpy(packet + 3, &nType, sizeof(nType));
+    memcpy(packet + 7, "TEST", 4);
+
+    // No session: the first guard answers FALSE and the buffer is untouched.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    memset(pBuffer, 0xCD, 4);
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client does not answer the demand.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // The host: an unknown type (1) takes the default case, nSize = nType = 1,
+    // so the reply payload is 4 + 1 + 9 = 14 bytes. A non-null provider makes
+    // SendSpecificMessage marshal it; the send itself fails (DirectPlay is
+    // gone) and is ignored.
+    network.m_bIsHost = TRUE;
+    network.m_psPlayerName[0] = "sender";
+    network.m_pPlayerID[0] = 1;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    memset(pBuffer, 0xCD, 3 + 14 + 1);
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 82);
+    CHECK(pBuffer[2] == 82);
+    const BYTE* pPayload = pBuffer + 3;
+    CHECK(pPayload[0] == 4);
+    CHECK(memcmp(pPayload + 1, "TEST", 4) == 0);
+    DWORD nEchoType;
+    memcpy(&nEchoType, pPayload + 5, sizeof(nEchoType));
+    DWORD nEchoSize;
+    memcpy(&nEchoSize, pPayload + 9, sizeof(nEchoSize));
+    CHECK(nEchoType == 1);
+    CHECK(nEchoSize == 1);
+    CHECK(pPayload[13] == 0); // the one zeroed data byte
+    CHECK(pPayload[14] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::OnLeaveAreaLuaRequestToServer (0x437950): the host-side
+// LEAVEAREALUA 88/82 permit handler. The two entry guards need no game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a session or a host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 2 + 1 + 1] = { 0 };
+
+    // A closed session is refused before anything is parsed.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, sizeof(packet)) == FALSE);
+
+    // Only the host handles the server-bound request.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// The handler's response computation and the 1-byte LEAVEAREALUA 88/114 reply
+// on a zeroed game: the remote object always misses (so no feedback sprite
+// and no transition), the area is never loaded and the settings are the only
+// variable. Codes seen in the original: 1 allow, 0 deny, 3 busy/blocking,
+// 4 paused.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit request", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    std::unique_ptr<unsigned char[]> world(new unsigned char[sizeof(CScreenWorld)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+    g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(world.get());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
+    for (INT i = 0; i < 6; i++) {
+        pSettings->field_AC[i] = 0xFF;
+        pSettings->field_B2[i] = FALSE;
+    }
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // {header 0xFF, LEAVEAREALUA 88, permit request 82;
+    //  DWORD remotePlayerID 1; DWORD remoteObjectID 0;
+    //  LONG x 10; LONG y 20; SHORT direction 3;
+    //  BYTE 3 "abc"; BYTE 6 "AR1000"}
+    BYTE packet[64];
+    DWORD nSize = 0;
+    packet[nSize++] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[nSize++] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[nSize++] = CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST;
+    DWORD nRemotePlayerID = 1;
+    DWORD nRemoteObjectID = 0;
+    LONG nX = 10;
+    LONG nY = 20;
+    SHORT nDirection = 3;
+    memcpy(packet + nSize, &nRemotePlayerID, sizeof(nRemotePlayerID));
+    nSize += sizeof(nRemotePlayerID);
+    memcpy(packet + nSize, &nRemoteObjectID, sizeof(nRemoteObjectID));
+    nSize += sizeof(nRemoteObjectID);
+    memcpy(packet + nSize, &nX, sizeof(nX));
+    nSize += sizeof(nX);
+    memcpy(packet + nSize, &nY, sizeof(nY));
+    nSize += sizeof(nY);
+    memcpy(packet + nSize, &nDirection, sizeof(nDirection));
+    nSize += sizeof(nDirection);
+    packet[nSize++] = 3;
+    memcpy(packet + nSize, "abc", 3);
+    nSize += 3;
+    packet[nSize++] = 6;
+    memcpy(packet + nSize, "AR1000", 6);
+    nSize += 6;
+
+    // Allow: no player is in a character screen, the game is not paused, not
+    // in a save/load mode, no dialog is pending and the area is not loaded.
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_LEAVEAREALUA);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY);
+    CHECK(pBuffer[3] == 1);
+    CHECK(pBuffer[4] == 0xCD);
+
+    // A remote player in the inventory (field_AC) or the level-up screen
+    // (field_B2) denies with 0.
+    pSettings->field_AC[0] = 0;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 0);
+
+    pSettings->field_AC[0] = 0xFF;
+    pSettings->field_B2[0] = TRUE;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 0);
+    pSettings->field_B2[0] = FALSE;
+
+    // A paused world overrides the answer with 4.
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 4);
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = FALSE;
+
+    // A save/load mode denies with 0.
+    pGame->GetGameSave()->m_mode = 0x182;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 0);
+    pGame->GetGameSave()->m_mode = 0;
+
+    // A host-permitted dialog denies; inside the blocking-message loop the
+    // answer is the busy code 3 instead.
+    pSettings->m_bHostPermittedDialog = TRUE;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 0);
+
+    message.m_bInHandleBlockingMessages = TRUE;
+    memset(pBuffer, 0xCD, 4 + 1);
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pBuffer[3] == 3);
+    message.m_bInHandleBlockingMessages = FALSE;
+    pSettings->m_bHostPermittedDialog = FALSE;
+
+    g_pBaldurChitin = pSavedBaldur;
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::SendChatMessage (0x432C50): the chat formatting and the
+// chat-buffer path. A plain message becomes "[<local player>]:  <text>"; a
+// "name: text" whose name is a player in the session becomes
+// "[<local>->name]:  <text>" (a whisper, sent to that player); an unknown
+// name stays in the text; with no session the message is the joke answer
+// "You talking to me?". The caller's string and the local chat buffer both
+// receive the formatted text. The network send itself needs a live
+// DirectPlay session, so the test only observes the formatting and the
+// buffer (the unit-test route from report-T122.md row 8).
+TEST_CASE("CBaldurMessage::SendChatMessage formats the local, target and disconnected chat", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    network.m_sLocalPlayerName = "sender";
+    network.m_psPlayerName[0] = "target";
+    network.m_pPlayerID[0] = 1;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    // A plain message is announced with the local player's name.
+    CString sText("hello");
+    CHECK(message.SendChatMessage(sText) == TRUE);
+    CHECK(sText == "hello"); // the caller's CString is not rewritten
+    REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
+    CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender]:  hello");
+
+    // "target: text" to a player in the session is a whisper.
+    message.m_cChatBuffer.ClearMessages();
+    sText = "target: whisper";
+    CHECK(message.SendChatMessage(sText) == TRUE);
+    CHECK(sText == "target: whisper"); // the caller's CString is not rewritten
+    REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
+    CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender->target]:   whisper");
+
+    // A name that is not a player stays part of the text.
+    message.m_cChatBuffer.ClearMessages();
+    sText = "nobody: hello";
+    CHECK(message.SendChatMessage(sText) == TRUE);
+    CHECK(sText == "nobody: hello"); // the caller's CString is not rewritten
+    REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
+    CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "[sender]:  nobody: hello");
+
+    // No session: the joke answer, still added to the local buffer.
+    network.m_bConnectionEstablished = FALSE;
+    message.m_cChatBuffer.ClearMessages();
+    sText = "hello";
+    CHECK(message.SendChatMessage(sText) == TRUE);
+    CHECK(sText == "hello"); // the caller's CString is not rewritten
+    REQUIRE(message.m_cChatBuffer.m_lMessages.GetCount() == 1);
+    CHECK(*message.m_cChatBuffer.m_lMessages.GetTail() == "You talking to me?");
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::OnSwapItemRequest (0x4319C0): the SWAPITEM 73/82 host
+// handler. The item/unmarshal paths need a real CGameSprite/CItem, so the
+// unit test pins the guards that need no game state: a zeroed game's remote
+// object array misses the request's remote id, and the handler still answers
+// TRUE with the 5-byte reply {BYTE result, DWORD errorCode} sent as
+// SWAPITEM 73/114 to the requester. The packet is in the static buffer:
+// 0xFF, 73, 114, {0, -1}. The m_bInHandleBlockingMessages gate also refuses
+// the swap and replies the same miss.
+TEST_CASE("CBaldurMessage::OnSwapItemRequest replies a miss for an unknown remote object", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    // A zeroed CBaldurChitin/CInfGame: GetRemoteObjectArray()->Find always
+    // misses (the array size is 0) and no swap is attempted.
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // {BYTE source 'G'; DWORD remotePlayerID 1; DWORD remoteObjectID 0;
+    //  SHORT slot 0; SHORT count 0; BYTE hasItem 0}
+    BYTE packet[3 + 1 + 4 + 4 + 2 + 2 + 1];
+    memset(packet, 0, sizeof(packet));
+    packet[3] = 0x47;
+    DWORD nRemotePlayer = 1;
+    memcpy(packet + 4, &nRemotePlayer, sizeof(nRemotePlayer));
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pPlayerID[0] = 1;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    memset(pBuffer, 0xCD, 3 + 5 + 1);
+    CHECK(message.OnSwapItemRequest(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 73);
+    CHECK(pBuffer[2] == 114);
+    CHECK(pBuffer[3] == 0); // result: the Find missed
+    // errorCode = -1
+    CHECK(pBuffer[4] == 0xFF);
+    CHECK(pBuffer[5] == 0xFF);
+    CHECK(pBuffer[6] == 0xFF);
+    CHECK(pBuffer[7] == 0xFF);
+    CHECK(pBuffer[8] == 0xCD);
+
+    // The blocking-message loop refuses the swap too; the miss packet is
+    // the same.
+    message.m_bInHandleBlockingMessages = TRUE;
+    memset(pBuffer, 0xCD, 3 + 5 + 1);
+    CHECK(message.OnSwapItemRequest(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[3] == 0);
+    message.m_bInHandleBlockingMessages = FALSE;
+
+    g_pBaldurChitin = pSavedBaldur;
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::SwapItemReply (0x431CA0): a successful swap with no item to
+// return is the 6-byte {result, hasItem = 0, errorCode} packet — the second
+// byte is "has an item" (a local BOOLEAN in the dead nMsgFrom slot,
+// 0x431D52-0x431D59), not the result again, and there is no item block to
+// dereference.
+TEST_CASE("CBaldurMessage::SwapItemReply answers a successful swap with no item", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    memset(pBuffer, 0xCD, 3 + 6 + 1);
+    CHECK(message.SwapItemReply(0, TRUE, NULL, -1) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 73);
+    CHECK(pBuffer[2] == 114);
+    CHECK(pBuffer[3] == 1); // result
+    CHECK(pBuffer[4] == 0); // no item to return
+    CHECK(pBuffer[5] == 0xFF); // errorCode = -1
+    CHECK(pBuffer[6] == 0xFF);
+    CHECK(pBuffer[7] == 0xFF);
+    CHECK(pBuffer[8] == 0xFF);
+    CHECK(pBuffer[9] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::DemandCharacterSlotUpdate (0x42DF50): the PLAYERCHAR 80/85
+// {SHORT characterSlot} demand sent to one player. No game state is needed,
+// so the unit test pins the session and empty-name guards and the wire bytes
+// in CNetwork::STATIC_MESSAGE_BUFFER.
+TEST_CASE("CBaldurMessage::DemandCharacterSlotUpdate sends the update demand to a player", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    network.m_psPlayerName[1] = "remote";
+    network.m_pbPlayerVisible[1] = TRUE;
+    network.m_pPlayerID[1] = 2;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    memset(pBuffer, 0xCD, 3 + sizeof(SHORT) + 1);
+    CHECK(message.DemandCharacterSlotUpdate(4, 1) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_PLAYERCHAR);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND);
+    CHECK(pBuffer[3] == 4); // the character slot, little-endian SHORT
+    CHECK(pBuffer[4] == 0);
+    CHECK(pBuffer[5] == 0xCD);
+
+    // An empty player name refuses to send.
+    network.m_pbPlayerVisible[1] = FALSE;
+    memset(pBuffer, 0xCD, 3 + sizeof(SHORT) + 1);
+    CHECK(message.DemandCharacterSlotUpdate(4, 1) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+
+    // A closed session refuses to send.
+    network.m_pbPlayerVisible[1] = TRUE;
+    network.m_bConnectionEstablished = FALSE;
+    memset(pBuffer, 0xCD, 3 + sizeof(SHORT) + 1);
+    CHECK(message.DemandCharacterSlotUpdate(4, 1) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// CBaldurMessage::UpdateDemandCharacters (0x42D860): the slot walk and the
+// progress bar. A zeroed CBaldurChitin/CInfGame with every m_characters slot
+// at INVALID_INDEX makes GetDeny answer BAD_INDEX before it locks the array,
+// so each slot is skipped the way an absent character is and the test can
+// pin the connection guard, the 0..5 vs single-slot range, the 500000 step
+// and the bar's show/clear pair without a game.
+TEST_CASE("CBaldurMessage::UpdateDemandCharacters walks the slots and drives the progress bar", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    for (INT i = 0; i < 6; i++) {
+        pGame->m_characters[i] = CGameObjectArray::INVALID_INDEX;
+    }
+
+    CBaldurMessage message;
+
+    // No connection: nothing is touched.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    message.UpdateDemandCharacters(TRUE, 0, TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == 0);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    network.m_bIsHost = TRUE;
+
+    // Update all: slots 0..5 are all absent, so each is skipped and still
+    // advances the bar by 500000. The bar flag starts FALSE and no slot was
+    // handled, so the cleanup must not clear a waiting bar (the old
+    // initialiser copied bUpdateAllCharacters and always cleaned up).
+    g_pChitin->cProgressBar.m_nActionProgress = 0;
+    g_pChitin->cProgressBar.m_bWaiting = TRUE;
+    message.UpdateDemandCharacters(TRUE, 0, TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == 6 * 500000);
+    CHECK(g_pChitin->cProgressBar.m_nWaitingReason == 0);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == TRUE);
+    g_pChitin->cProgressBar.m_bWaiting = FALSE;
+
+    // A single slot is one iteration; every character is absent, so the
+    // GetDeny-success branch (which shows the bar with reason 19714 and
+    // demands the character from its controller) is not reached here.
+    g_pChitin->cProgressBar.m_nActionProgress = 0;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    message.UpdateDemandCharacters(FALSE, 3, TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == 500000);
+    CHECK(g_pChitin->cProgressBar.m_nWaitingReason == 0);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == FALSE);
+
+    // A slot outside 0..5 uses INVALID_INDEX and still takes one step.
+    g_pChitin->cProgressBar.m_nActionProgress = 0;
+    message.UpdateDemandCharacters(FALSE, 7, TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == 500000);
+
+    // bProgressBarInPlace == FALSE: the same walk, no step and no show.
+    g_pChitin->cProgressBar.m_nActionProgress = 0;
+    g_pChitin->cProgressBar.m_nWaitingReason = 0;
+    message.UpdateDemandCharacters(FALSE, 3, FALSE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == 0);
+    CHECK(g_pChitin->cProgressBar.m_nWaitingReason == 0);
+
+    g_pBaldurChitin = pSavedBaldur;
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }

@@ -46,6 +46,7 @@
 #include "CWeather.h"
 #include "Icewind586B70.h"
 #include "ScreenLayout.h"
+#include "compat/marshal_ptr.h"
 #include "compat/msvc_rand.h"
 #include "data_view.h"
 #include "platform/data_dir.h"
@@ -3198,6 +3199,66 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(barBase->m_bActive == TRUE);
 }
 
+// CBaldurMessage::ObjectControl (0x430C50): the host's pump. With the session
+// open and owned and a control change queued it marshals the list (OBJECT/67
+// to all players, guaranteed) and the marshal consumes the queue. The queue is
+// the observable here - the engine's null provider stops SendSpecificMessage
+// before the static buffer, and the original answers FALSE from its only
+// epilogue whether or not it broadcast.
+TEST_CASE("msg: ObjectControl broadcasts the queued control changes once", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    CGameRemoteObjectArray* pArray = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
+    REQUIRE(pArray->m_nControlsChanged == 0);
+    REQUIRE(pArray->m_pControlsChanged == NULL);
+
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+
+    // The queue as ChangeControl leaves one entry.
+    CGameRemoteObjectControlChange* pChange = new CGameRemoteObjectControlChange();
+    pChange->oldPlayerID = 5;
+    pChange->oldObjectID = 0x00010002;
+    pChange->newPlayerID = 1;
+    pChange->newObjectID = 0x00010003;
+    pChange->localControl = TRUE;
+    pChange->pNext = NULL;
+    pArray->m_nControlsChanged = 1;
+    pArray->m_pControlsChanged = pChange;
+    pArray->m_pControlsChangedTail = pChange;
+
+    // A closed session, or a client, answers FALSE and leaves the queue alone.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 1);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 1);
+
+    // The host marshals and consumes it; the answer is FALSE either way, as
+    // the original's single epilogue zeroes EAX.
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 0);
+    CHECK(pArray->m_pControlsChanged == NULL);
+    CHECK(pArray->m_pControlsChangedTail == NULL);
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}
+
 TEST_CASE("map world: SendMapWorldRevealArea sends the length-prefixed area to every player", "[uimisc][message][data]")
 {
     if (DataDir() == nullptr) {
@@ -3478,4 +3539,290 @@ TEST_CASE("msg: the demand-slot reply answers a closed session and clears an emp
 
     network.m_bConnectionEstablished = bConnection;
     network.m_bIsHost = bIsHost;
+}
+
+TEST_CASE("nightmare: the host's setting, its demand and the reply", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    CGameOptions* pOptions = g_pBaldurChitin->GetObjectGame()->GetOptions();
+    const INT nServiceProvider = network.m_nServiceProvider;
+    const INT nHostPlayer = network.m_nHostPlayer;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    pOptions->m_nNightmareMode = 1;
+
+    // The host broadcasts its setting: {0xFF, 77, 78, DWORD nightmare}.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.SendSettingsNightmareMode(CString("")) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MPSETTINGS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE);
+    {
+        DWORD nNightmare = 0;
+        memcpy(&nNightmare, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nNightmare == 1);
+    }
+
+    // The host does not demand its own setting.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.DemandSettingsNightmareMode(FALSE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // A client asks: {0xFF, 77, 110} with no payload.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = 0;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    CHECK(message.DemandSettingsNightmareMode(FALSE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_MPSETTINGS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE);
+
+    // The client takes the host's reply only from the host's location.
+    const INT nHostLocation = network.FindPlayerLocationByID(network.GetHostPlayerID(), FALSE);
+    BYTE reply[8] = { 0 };
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 0;
+    pOptions->m_nNightmareMode = 1;
+    CHECK(message.OnSettingsNightmareMode(nHostLocation + 1, reply, sizeof(reply)) == FALSE);
+    CHECK(pOptions->m_nNightmareMode == 1);
+    CHECK(message.OnSettingsNightmareMode(nHostLocation, reply, sizeof(reply)) == TRUE);
+    CHECK(pOptions->m_nNightmareMode == 0);
+
+    network.m_nHostPlayer = nHostPlayer;
+    network.m_bIsHost = TRUE;
+    network.m_nServiceProvider = nServiceProvider;
+}
+
+// CBaldurMessage::OnLeaveAreaNameRequestToServer (0x438BF0) handles the
+// LEAVEAREANAME/82 request: with the session open and owned it resolves the
+// character and the trigger from their remote ids, parses the area name,
+// refuses through several guards (characters still being created, a blocking
+// demand, a paused game, a dialog mode, the area-transition permission, a
+// host-permitted dialog) with a one-byte permit reply, and otherwise makes the
+// area transition itself. The engine's null provider stops the reply, so the
+// answers are the observable; the wire byte and the transition are read-only.
+TEST_CASE("msg: the leave-area-name request answers the guards and refuses a paused game", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+    const BOOL bPaused = g_pBaldurChitin->m_pEngineWorld->m_bPaused;
+    const BOOLEAN bHostPermittedDialog = pGame->GetMultiplayerSettings()->m_bHostPermittedDialog;
+
+    // 3-byte network header, then {remotePlayer1, remoteObject1,
+    // remotePlayer2, remoteObject2, BYTE areaNameLength} and no name.
+    BYTE payload[3 + 4 * sizeof(DWORD) + sizeof(BYTE)] = {};
+
+    // A closed session, or a client, answers FALSE before the payload.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == FALSE);
+
+    // The host refuses (permit 0) while the game is paused: no transition.
+    network.m_bIsHost = TRUE;
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == TRUE);
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = bPaused;
+
+    // A pending host dialog refuses too.
+    pGame->GetMultiplayerSettings()->m_bHostPermittedDialog = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == TRUE);
+    pGame->GetMultiplayerSettings()->m_bHostPermittedDialog = bHostPermittedDialog;
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}
+
+// CBaldurMessage::BroadcastDemandCharacterSlotReply (0x42F480): for the slot
+// (or all six) it denies the party character, notes whether the control is
+// local (no service provider, or the network's local player owns it), releases
+// it, and - for a local object or the host - replies the character to every
+// other named player through DemandCharacterSlotReply. With the progress bar
+// in place each slot adds 500000 and the bar stops waiting after the first
+// send. The engine's null provider stops the sends, so the bar is the
+// observable; the wire bytes are read-only evidence.
+TEST_CASE("msg: the demand-slot broadcast walks the slots and drives the progress bar", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // The game with its party member (the first slot's character).
+    REQUIRE(PartyMember() != NULL);
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const LONG nProgress = g_pChitin->cProgressBar.m_nActionProgress;
+    const BOOLEAN bWaiting = g_pChitin->cProgressBar.m_bWaiting;
+
+    // A closed session answers FALSE and leaves the bar alone.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, TRUE) == FALSE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress);
+
+    // One slot (the party's) with the bar in place: TRUE and one step.
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, TRUE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress + 500000);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == FALSE);
+
+    // All six slots add six steps, the five empty ones included.
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(TRUE, 0, TRUE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress + 500000 + 6 * 500000);
+
+    // Without the bar nothing is added and the answer stays TRUE.
+    const LONG nProgress2 = g_pChitin->cProgressBar.m_nActionProgress;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, FALSE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress2);
+
+    g_pChitin->cProgressBar.m_nActionProgress = nProgress;
+    g_pChitin->cProgressBar.m_bWaiting = bWaiting;
+    network.m_bConnectionEstablished = bConnection;
+}
+
+TEST_CASE("player character: OnUpdateCharacterSlotReply's session guard and its no-character reply", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+
+    // A closed session answers FALSE before parsing anything.
+    network.m_bConnectionEstablished = FALSE;
+    BYTE reply[8] = { 0 };
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 0; // slot 0
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 1; // has a character
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == FALSE);
+
+    // An open session with no character in the slot only answers TRUE: the
+    // handler returns before it reads the marshalled part.
+    network.m_bConnectionEstablished = TRUE;
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 0;
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+
+    // A slot past the party never indexes the character array; with no
+    // character it still only answers TRUE.
+    reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 6;
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+}
+
+TEST_CASE("player character: the slot reply retargets both type AIs to the slot's id", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pOld = PartyMember();
+    HostSession session;
+    REQUIRE(session.Open());
+
+    if (pOld == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character in the Characters folder");
+    }
+    const LONG nOldCharacter = pOld->GetId();
+    const WORD nAnimation = pOld->m_baseStats.m_animationType;
+
+    // The reply the client sends: the party creature marshalled whole.
+    CSavedGamePartyCreature partyCreature;
+    pOld->Marshal(partyCreature, TRUE);
+    BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
+    REQUIRE(pCreature != NULL);
+    REQUIRE(partyCreature.m_creatureSize > 0);
+
+    BYTE* pStats = NULL;
+    LONG nStats = 0;
+    pOld->m_derivedStats.Marshal(&pStats, &nStats);
+    REQUIRE(nStats >= 0x188);
+    // The reply carries the 0x188-byte template the handler reads.
+    const LONG nStatsInReply = 0x188;
+
+    // {header; SHORT slot; BYTE has; stats; WORD animation; WORD icons;
+    //  CSavedGamePartyCreature; creature; DWORD biographyLength}. The struct's
+    // offset is relative to the payload, so the handler's +header restores it.
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const DWORD nCreatureAt = cnt + sizeof(SHORT) + sizeof(BYTE) + nStatsInReply
+        + sizeof(WORD) + sizeof(WORD) + sizeof(CSavedGamePartyCreature);
+    std::vector<BYTE> reply(nCreatureAt + partyCreature.m_creatureSize + sizeof(DWORD), 0);
+
+    *reinterpret_cast<SHORT*>(&reply[cnt]) = 0;
+    cnt += sizeof(SHORT);
+    reply[cnt] = 1;
+    cnt += sizeof(BYTE);
+    memcpy(&reply[cnt], pStats, nStatsInReply);
+    cnt += nStatsInReply;
+    *reinterpret_cast<WORD*>(&reply[cnt]) = nAnimation;
+    cnt += sizeof(WORD);
+    *reinterpret_cast<WORD*>(&reply[cnt]) = 0; // no portrait icons
+    cnt += sizeof(WORD);
+
+    partyCreature.m_creatureOffset = nCreatureAt - CNetwork::SPEC_MSG_HEADER_LENGTH;
+    memcpy(&reply[cnt], &partyCreature, sizeof(CSavedGamePartyCreature));
+    cnt += sizeof(CSavedGamePartyCreature);
+    memcpy(&reply[cnt], pCreature, partyCreature.m_creatureSize);
+    cnt += partyCreature.m_creatureSize;
+    *reinterpret_cast<DWORD*>(&reply[cnt]) = 0; // no biography override
+    cnt += sizeof(DWORD);
+    REQUIRE(cnt == reply.size());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    network.m_bConnectionEstablished = TRUE;
+
+    CHECK(message.OnUpdateCharacterSlotReply(0, reply.data(), static_cast<DWORD>(reply.size())) == TRUE);
+
+    // The sprite that replaced the slot's own remembers nOldCharacter in BOTH
+    // type AIs (0x42EDEE and 0x42EE05), not the temporary sprite's id.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pNew = NULL;
+    REQUIRE(pGame->GetObjectArray()->GetShare(nOldCharacter,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pNew),
+                INFINITE)
+        == CGameObjectArray::SUCCESS);
+    CHECK(pNew->m_liveTypeAI.m_nInstance == nOldCharacter);
+    CHECK(pNew->m_startTypeAI.m_nInstance == nOldCharacter);
+    pGame->GetObjectArray()->ReleaseShare(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    delete[] pStats;
+    delete[] pCreature;
 }

@@ -3,6 +3,7 @@
 #include "CAIScript.h"
 #include "CBaldurChitin.h"
 #include "CGameAIBase.h"
+#include "CGameAnimationType.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
@@ -34,6 +35,7 @@
 #include "CStore.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
+#include "CWorldMap.h"
 #include "Icewind586B70.h"
 #include "compat/marshal_ptr.h"
 
@@ -579,6 +581,9 @@ const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;
 // 0x84CF99
 const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_ADD = 65;
 
+// 0x84CF9A
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL = 67;
+
 // 0x84CF9F
 const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR = 80;
 
@@ -693,11 +698,17 @@ const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREALUA = 88;
 // 0x84CFD4
 const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST = 82;
 
+// 0x84CFD5
+const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY = 114;
+
 // 0x84CFDB
 const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREANAME = 120;
 
 // 0x84CFDC
 const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REQUEST = 82;
+
+// 0x84CFDD
+const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY = 114;
 
 // 0x4294F0
 CBaldurMessage::CBaldurMessage()
@@ -921,9 +932,99 @@ BOOLEAN CBaldurMessage::sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTem
 // 0x429A90
 BOOLEAN CBaldurMessage::OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CResRef cResRef;
+    CAreaFile areaFile;
+    CGameFile gameFile;
+    CWorldMapFile worldMapFile;
+    CStoreFile storeFile;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    DWORD nType = *reinterpret_cast<DWORD*>(pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    // NOTE: The original copies the rest of the message into a fixed stack
+    // buffer and builds the CString from it (0x429BDA); the length is
+    // dwSize - header - sizeof(DWORD).
+    CString sResName(reinterpret_cast<char*>(pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+        dwSize - CNetwork::SPEC_MSG_HEADER_LENGTH - sizeof(DWORD));
+
+    cResRef = CResRef(sResName);
+
+    DWORD nSize;
+    if (nType == 1010) { // CAreaFile
+        areaFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = areaFile.GetDataSize();
+    } else if (nType == 1013) { // CGameFile
+        gameFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = gameFile.GetDataSize();
+    } else if (nType == 1015) { // CWorldMapFile
+        worldMapFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = worldMapFile.GetDataSize();
+    } else if (nType == 1014) { // CStoreFile
+        g_pBaldurChitin->GetObjectGame()->DemandServerStore(cResRef, TRUE);
+        storeFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = storeFile.GetDataSize();
+    } else {
+        // NOTE: The original answers an unknown type with nType zero bytes
+        // (the size field and the zeroed data); see the disassembly at
+        // 0x42A064 and the buffer zeroing at 0x42A125.
+        nSize = nType;
+    }
+
+    DWORD dwBufSize = sResName.GetLength() + nSize + 9;
+    BYTE* pMessage = CreateBuffer(dwBufSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    // The original zeroes the whole buffer before filling it (0x42A125).
+    memset(pMessage, 0, dwBufSize);
+
+    DWORD nOffset = 0;
+    pMessage[nOffset] = static_cast<BYTE>(sResName.GetLength());
+    nOffset += 1;
+    memcpy(pMessage + nOffset, static_cast<const char*>(sResName), sResName.GetLength());
+    nOffset += sResName.GetLength();
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = nType;
+    nOffset += sizeof(DWORD);
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = nSize;
+    nOffset += sizeof(DWORD);
+
+    if (nType == 1010) {
+        memcpy(pMessage + nOffset, areaFile.GetData(), nSize);
+    } else if (nType == 1013) {
+        memcpy(pMessage + nOffset, gameFile.GetData(), nSize);
+    } else if (nType == 1015) {
+        memcpy(pMessage + nOffset, worldMapFile.GetData(), nSize);
+    } else if (nType == 1014) {
+        memcpy(pMessage + nOffset, storeFile.GetData(), nSize);
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_RESOURCE,
+        MSG_SUBTYPE_RESOURCE_DEMAND_REPLY,
+        pMessage,
+        dwBufSize);
+
+    if (nType == 1010) {
+        areaFile.ReleaseData();
+    } else if (nType == 1013) {
+        gameFile.ReleaseData();
+    } else if (nType == 1015) {
+        worldMapFile.ReleaseData();
+    } else if (nType == 1014) {
+        storeFile.ReleaseData();
+    }
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x42AA10
@@ -2277,9 +2378,149 @@ BOOL CBaldurMessage::PurgeDroppedPlayers()
 }
 
 // 0x42D860
-void CBaldurMessage::UpdateDemandCharacters(unsigned char a1, int a2, unsigned char a3)
+void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return;
+    }
+
+    INT nFirst;
+    INT nLast;
+    if (bUpdateAllCharacters == TRUE) {
+        nFirst = 0;
+        nLast = 5;
+    } else {
+        nFirst = nUpdatedCharacterSlot;
+        nLast = nUpdatedCharacterSlot;
+    }
+
+    // The original keeps this flag in the first argument's stack slot and
+    // clears it before the loop; the first demanded (remote) slot sets it, so
+    // an update-all also raises the waiting bar for its first remote
+    // character. The end-of-function cleanup runs only when this flag and
+    // `bProgressBarInPlace` are both set.
+    BOOLEAN bManageProgressBar = FALSE;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    for (INT nSlot = nFirst; nSlot <= nLast; nSlot++) {
+        LONG nCharacterId = static_cast<SHORT>(nSlot) < 6
+            ? pGame->m_characters[static_cast<SHORT>(nSlot)]
+            : CGameObjectArray::INVALID_INDEX;
+
+        CGameSprite* pSprite;
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+
+            INT nControlledBy = pGame->GetMultiplayerSettings()->GetCharacterControlledByPlayer(nSlot);
+            // NOTE: The exe compares the low bytes (0x42D9B4/0x42D9C8).
+            if (static_cast<BYTE>(nControlledBy) != static_cast<BYTE>(g_pChitin->cNetwork.m_nLocalPlayer)) {
+                if (bManageProgressBar == FALSE) {
+                    if (bProgressBarInPlace == TRUE
+                        && g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
+                        g_pChitin->cProgressBar.m_nWaitingReason = 19714;
+                        g_pChitin->cProgressBar.m_bWaiting = TRUE;
+                    }
+                    bManageProgressBar = TRUE;
+                }
+
+                // Ask the character's controller for an update and wait for
+                // its reply, pumping the blocking messages while waiting.
+                g_pChitin->cNetwork.GetPlayerName(nControlledBy, sPlayerName);
+                DemandCharacterSlotUpdate(static_cast<SHORT>(nSlot), static_cast<SHORT>(nControlledBy));
+
+                while (!g_pChitin->cNetwork.PeekSpecificMessage(sPlayerName,
+                    MSG_TYPE_PLAYERCHAR,
+                    MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY)) {
+                    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+                        break;
+                    }
+
+                    if (g_pChitin->cNetwork.GetPlayerID(nControlledBy) == 0) {
+                        break;
+                    }
+
+                    g_pBaldurChitin->GetBaldurMessage()->HandleBlockingMessages();
+
+                    g_pChitin->m_bDisplayStale = TRUE;
+                    SleepEx(60, FALSE);
+                }
+
+                BOOLEAN bReplied = FALSE;
+                if (g_pChitin->cNetwork.m_bConnectionEstablished
+                    && g_pChitin->cNetwork.GetPlayerID(nControlledBy) != 0) {
+                    DWORD dwSize;
+                    BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sPlayerName,
+                        MSG_TYPE_PLAYERCHAR,
+                        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+                        dwSize);
+                    OnUpdateCharacterSlotReply(nControlledBy, pMessage, dwSize);
+                    bReplied = TRUE;
+                }
+
+                // The controller answered or disconnected; if it did not
+                // answer, ask the host for the same character. The original
+                // skips this when the controller's reply was fetched.
+                if (bReplied == FALSE
+                    && g_pChitin->cNetwork.m_bIsHost != TRUE
+                    && g_pChitin->cNetwork.m_bConnectionEstablished
+                    && static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer) != static_cast<BYTE>(nControlledBy)) {
+                    INT nHostPlayer = g_pChitin->cNetwork.m_nHostPlayer;
+
+                    g_pChitin->cNetwork.GetPlayerName(nHostPlayer, sPlayerName);
+                    DemandCharacterSlotUpdate(static_cast<SHORT>(nSlot), static_cast<SHORT>(nHostPlayer));
+
+                    while (!g_pChitin->cNetwork.PeekSpecificMessage(sPlayerName,
+                        MSG_TYPE_PLAYERCHAR,
+                        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY)) {
+                        if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+                            break;
+                        }
+
+                        if (g_pChitin->cNetwork.GetPlayerID(nHostPlayer) == 0) {
+                            break;
+                        }
+
+                        g_pBaldurChitin->GetBaldurMessage()->HandleBlockingMessages();
+
+                        g_pChitin->m_bDisplayStale = TRUE;
+                        SleepEx(60, FALSE);
+                    }
+
+                    if (g_pChitin->cNetwork.m_bConnectionEstablished
+                        && g_pChitin->cNetwork.GetPlayerID(nHostPlayer) != 0) {
+                        DWORD dwSize;
+                        BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sPlayerName,
+                            MSG_TYPE_PLAYERCHAR,
+                            MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+                            dwSize);
+                        OnUpdateCharacterSlotReply(nHostPlayer, pMessage, dwSize);
+                    }
+                }
+            }
+        }
+
+        if (bProgressBarInPlace == TRUE) {
+            // NOTE: The DWORD at 0x8518A8 (500000).
+            g_pChitin->cProgressBar.m_nActionProgress += 500000;
+        }
+    }
+
+    if (bManageProgressBar == TRUE && bProgressBarInPlace == TRUE) {
+        g_pChitin->cProgressBar.m_bWaiting = FALSE;
+        g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
+    }
 }
 
 // 0x42DCF0
@@ -2360,6 +2601,43 @@ void CBaldurMessage::BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, 
         g_pChitin->cProgressBar.m_bWaiting = FALSE;
         g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
     }
+}
+
+// 0x42DF50
+BOOLEAN CBaldurMessage::DemandCharacterSlotUpdate(SHORT nCharacterSlot, SHORT nPlayerSlot)
+{
+    CString sPlayerName;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nPlayerSlot, sPlayerName);
+    if (strcmp(sPlayerName, "") == 0) {
+        return FALSE;
+    }
+
+    DWORD dwSize = sizeof(SHORT);
+    BYTE* pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<SHORT*>(pMessage) = nCharacterSlot;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND,
+        pMessage,
+        dwSize);
+
+    // NOTE: The exe pre-sizes the caller's name buffer (0x42E07A).
+    sPlayerName.GetBuffer(0x80);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x42E0C0
@@ -2530,6 +2808,300 @@ BOOLEAN CBaldurMessage::sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLE
     return TRUE;
 }
 
+// 0x42E630
+// The client's answer to the host's PLAYERCHAR/85 demand, carrying the slot's
+// character: {SHORT slot; BYTE hasCharacter; 0x188-byte derived stats; WORD
+// animation; WORD icon count; DWORD icons[]; CSavedGamePartyCreature; the
+// creature block; DWORD biography length; char biography[]}. The sprite built
+// from it replaces the slot's old sprite in place.
+BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    SHORT nSlot = *reinterpret_cast<SHORT*>(pData + cnt);
+    BOOLEAN bHasCharacter = pData[cnt + sizeof(SHORT)];
+    cnt += sizeof(SHORT) + sizeof(BYTE);
+
+    if (bHasCharacter != TRUE) {
+        return TRUE;
+    }
+
+    LONG nOldCharacter = nSlot < 6
+        ? pGame->m_characters[nSlot]
+        : CGameObjectArray::INVALID_INDEX;
+
+    CGameSprite* pOldSprite = NULL;
+
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pOldSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    BOOLEAN bSaved = FALSE;
+    BOOLEAN bOldHidden = FALSE;
+    BOOLEAN bOldSelected = FALSE;
+    LONG nOldRemotePlayer = 0;
+    LONG nOldRemoteObject = 0;
+    CGameArea* pOldArea = NULL;
+    CPoint ptOldPos(0, 0);
+    LONG nOldPosZ = 0;
+    BYTE nOldVertListType = 0;
+    POSITION posOldVertList = NULL;
+    SHORT nOldSequence = 0;
+    SHORT nOldHitPoints = 0;
+    SHORT nOldDirection = 0;
+    BOOLEAN bOldInfravision = FALSE;
+    SHORT nOldCanBeSeen = 0;
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        bOldHidden = pOldSprite->field_70F2 != 0;
+        pOldSprite->sub_723BF0(FALSE, FALSE);
+        bOldSelected = pOldSprite->m_bSelected != FALSE;
+        if (bOldSelected) {
+            pOldSprite->Unselect();
+        }
+        nOldRemoteObject = pOldSprite->m_remoteObjectID;
+        nOldRemotePlayer = pOldSprite->m_remotePlayerID;
+        pOldArea = pOldSprite->m_pArea;
+        ptOldPos = pOldSprite->GetPos();
+        nOldPosZ = pOldSprite->m_posZ;
+        nOldVertListType = pOldSprite->GetVertListType();
+        posOldVertList = pOldSprite->GetVertListPos();
+        nOldSequence = pOldSprite->m_nSequence;
+        nOldHitPoints = pOldSprite->m_baseStats.m_hitPoints;
+        nOldDirection = pOldSprite->m_nDirection;
+        bOldInfravision = pOldSprite->m_bInfravisionOn != FALSE;
+        nOldCanBeSeen = pOldSprite->m_canBeSeen;
+
+        if (pOldArea != NULL) {
+            pOldSprite->RemoveReplacementFromArea();
+        }
+
+        pGame->GetObjectArray()->ReleaseDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        bSaved = TRUE;
+    }
+
+    // The object-array traffic below pumps messages; the original sets the
+    // OnObjectAdd guard around it (0x42E87F/0x42EA6D).
+    m_bInOnObjectAdd = TRUE;
+
+    DWORD nStatsOffset = cnt;
+    cnt += 0x188;
+
+    WORD nAnimation = *reinterpret_cast<WORD*>(pData + cnt);
+    cnt += sizeof(WORD);
+
+    WORD nIcons = *reinterpret_cast<WORD*>(pData + cnt);
+    cnt += sizeof(WORD);
+
+    // __LINE__: 4263 (0x10A7) at 0x42E8AC.
+    UTIL_ASSERT(nIcons < 128);
+
+    DWORD nIconsOffset = cnt;
+    cnt += sizeof(DWORD) * nIcons;
+
+    CSavedGamePartyCreature* pCreature = reinterpret_cast<CSavedGamePartyCreature*>(pData + cnt);
+    pCreature->m_creatureOffset += CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BOOLEAN bPortrait = pGame->GetCharacterPortraitNum(nOldCharacter) != -1;
+
+    CGameSprite* pSprite = new CGameSprite(pData + pCreature->m_creatureOffset,
+        pCreature->m_creatureSize,
+        bPortrait,
+        0,
+        -1,
+        0,
+        0,
+        0x7FFFFFFF,
+        CPoint(-1, -1),
+        0); // the facing push at 0x42E942 is 0, not -1
+
+    if (pSprite == NULL) {
+        m_bInOnObjectAdd = FALSE;
+        return FALSE;
+    }
+
+    // TODO: 0x42E9C5-0x42EA1D the world screen's portrait control check that
+    // decides whether EnablePortrait runs; the port always enables it.
+    pGame->EnablePortrait(static_cast<BYTE>(nSlot), TRUE);
+
+    pSprite->Unmarshal(pCreature, TRUE, FALSE);
+
+    pSprite->sub_723BF0(bOldHidden, FALSE);
+
+    CGameObject* pObject;
+    pGame->GetObjectArray()->Delete(pSprite->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+
+    m_bInOnObjectAdd = FALSE;
+
+    // Move the new sprite onto the old character's index.
+    pGame->GetObjectArray()->ChangeEntry(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        pSprite,
+        INFINITE);
+
+    rc = CGameObjectArray::SHARED;
+    while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED) {
+        rc = pGame->GetObjectArray()->GetDeny(nOldCharacter,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    }
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return TRUE;
+    }
+
+    pSprite = static_cast<CGameSprite*>(pObject);
+
+    // The derived stats arrive as the marshalled template (0x188 bytes).
+    pSprite->m_derivedStats.Unmarshal(pData + nStatsOffset, 0x188);
+
+    pSprite->UnequipAll(TRUE);
+
+    // Take the new sprite out of the search bitmap while its animation is
+    // replaced; its old list type and personal space decide the square.
+    if (pSprite->m_pArea != NULL) {
+        BYTE nListType = pSprite->m_animation.GetListType();
+        // NOTE: The BYTE at 0x84C50E is 2 (the back list).
+        if (nListType != 2) {
+            CPoint ptGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+            BOOLEAN bOnSearchMap = pSprite->field_7430 != 0;
+            pSprite->m_pArea->m_search.RemoveObject(
+                ptGrid,
+                pSprite->GetAIType().m_nEnemyAlly,
+                pSprite->m_animation.GetPersonalSpace(),
+                pSprite->field_54A8,
+                bOnSearchMap);
+        }
+    }
+
+    // The slot's animation type replaces the marshalled one.
+    if (pSprite->m_animation.m_animation != NULL) {
+        delete pSprite->m_animation.m_animation;
+    }
+    pSprite->m_animation.m_animation = CGameAnimationType::SetAnimationType(
+        nAnimation,
+        pSprite->m_baseStats.m_colors,
+        pSprite->m_nDirection);
+
+    if (pSprite->m_pArea != NULL) {
+        BYTE nListType = pSprite->m_animation.GetListType();
+        if (nListType != 2) {
+            CPoint ptGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+            BOOLEAN bOnSearchMap = pSprite->field_7430 != 0;
+            pSprite->m_pArea->m_search.AddObject(
+                ptGrid,
+                pSprite->GetAIType().m_nEnemyAlly,
+                pSprite->m_animation.GetPersonalSpace(),
+                pSprite->field_54A8,
+                bOnSearchMap);
+        }
+    }
+
+    pSprite->EquipAll(TRUE);
+
+    if (pSprite->m_pArea != NULL) {
+        pSprite->JumpToPoint(pSprite->GetPos(), TRUE);
+    }
+
+    // Both type AIs remember this sprite's new instance: the exe copies
+    // m_liveTypeAI twice (0x42ED6E and 0x42ED9A) and Sets both copies
+    // (0x42EDEE live, 0x42EE05 start).
+    CAIObjectType liveType(pSprite->m_liveTypeAI);
+    liveType.m_nInstance = nOldCharacter;
+    pSprite->m_liveTypeAI.Set(liveType);
+    pSprite->m_startTypeAI.Set(liveType);
+
+    pSprite->m_canBeSeen = nOldCanBeSeen;
+    pSprite->m_id = nOldCharacter;
+
+    if (bSaved) {
+        pSprite->m_remoteObjectID = nOldRemoteObject;
+        pSprite->m_remotePlayerID = nOldRemotePlayer;
+
+        // TODO: 0x6F3B80 not ported: the sprite's re-placement in the old
+        // area (area, position, z, list type, vert list position, infravision).
+        (void)pOldArea;
+        (void)ptOldPos;
+        (void)nOldPosZ;
+        (void)nOldVertListType;
+        (void)posOldVertList;
+        (void)bOldInfravision;
+
+        // NOTE: The BYTE at 0x85BBBD is 10.
+        if (nOldSequence != 10) {
+            BYTE nSequence = static_cast<BYTE>(nOldSequence);
+            pSprite->CheckSequence(nSequence);
+            pSprite->SetSequence(nSequence);
+            pSprite->SetDirection(nOldDirection);
+        }
+
+        CPoint ptOldGrid(ptOldPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptOldPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+        CPoint ptNewGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+            pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+        if ((ptOldGrid.x != ptNewGrid.x || ptOldGrid.y != ptNewGrid.y)
+            && nOldHitPoints > 0) {
+            pSprite->JumpToPoint(ptOldPos, FALSE);
+        }
+
+        if (bOldSelected) {
+            pSprite->Select();
+        }
+
+        pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+    }
+
+    // The portrait icons travel in the reply.
+    pSprite->m_portraitIcons.RemoveAll();
+    for (SHORT nIcon = 0; nIcon < static_cast<SHORT>(nIcons); nIcon++) {
+        DWORD nIconId = *reinterpret_cast<DWORD*>(pData + nIconsOffset + sizeof(DWORD) * nIcon);
+        pSprite->m_portraitIcons.AddTail(reinterpret_cast<int*>(nIconId));
+    }
+
+    // The biography override string follows the creature block.
+    DWORD nTextOffset = cnt + 0x340 + pCreature->m_creatureSize;
+    DWORD nTextLength = *reinterpret_cast<DWORD*>(pData + nTextOffset);
+    if (nTextLength != 0) {
+        STR_RES strText;
+        strText.szText = CString(reinterpret_cast<const char*>(pData + nTextOffset + sizeof(DWORD)), nTextLength);
+
+        STR_RES strOld;
+        if (g_pBaldurChitin->m_cTlkTable.m_override.Fetch(pSprite->m_baseStats.m_biography, strOld)) {
+            g_pBaldurChitin->m_cTlkTable.m_override.Remove(pSprite->m_baseStats.m_biography);
+        }
+        g_pBaldurChitin->m_cTlkTable.m_override.AddUserEntry(pSprite->m_baseStats.m_biography, strText);
+    }
+
+    pGame->GetObjectArray()->ReleaseDeny(nOldCharacter,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // TODO: 0x42F060-0x42F07D the active engine's portrait refresh
+    // (vtable +0x108, the old character id) when EnablePortrait ran.
+
+    return TRUE;
+}
+
 // 0x42F100
 BOOLEAN CBaldurMessage::DemandCharacterSlot(SHORT nCharacterSlot, BOOLEAN bDemandFromHost, SHORT nPlayerSlot)
 {
@@ -2617,9 +3189,96 @@ BOOLEAN CBaldurMessage::OnDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWOR
 // 0x42F480
 BOOLEAN CBaldurMessage::BroadcastDemandCharacterSlotReply(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace)
 {
-    // TODO: Incomplete.
+    // NOTE: Unused.
+    CString sUnused;
 
-    return FALSE;
+    BOOLEAN bSent = FALSE;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    INT nFirst;
+    INT nLast;
+    if (bUpdateAllCharacters == TRUE) {
+        nFirst = 0;
+        nLast = 5;
+    } else {
+        nFirst = nUpdatedCharacterSlot;
+        nLast = nUpdatedCharacterSlot;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    for (INT nSlot = nFirst; nSlot <= nLast; nSlot++) {
+        LONG nCharacterId = static_cast<SHORT>(nSlot) < 6
+            ? pGame->m_characters[static_cast<SHORT>(nSlot)]
+            : CGameObjectArray::INVALID_INDEX;
+
+        CGameSprite* pSprite;
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            BOOLEAN bLocal = g_pChitin->cNetwork.m_nServiceProvider == 0
+                ? TRUE
+                : g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID;
+
+            pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+
+            if (bLocal == TRUE || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+                if (!bSent) {
+                    if (bProgressBarInPlace == TRUE
+                        && g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
+                        g_pChitin->cProgressBar.m_nWaitingReason = 19715;
+                        g_pChitin->cProgressBar.m_bWaiting = TRUE;
+                    }
+                    bSent = TRUE;
+                }
+
+                // The reply goes to every other player with a name.
+                for (INT nPlayer = 0; nPlayer < CMultiplayerSettings::MAX_PLAYERS; nPlayer++) {
+                    PLAYER_ID nPlayerId = g_pChitin->cNetwork.GetPlayerID(nPlayer);
+                    if (nPlayerId == 0) {
+                        continue;
+                    }
+
+                    if (nPlayerId == g_pChitin->cNetwork.m_idLocalPlayer) {
+                        continue;
+                    }
+
+                    CString sSendTo;
+                    g_pChitin->cNetwork.GetPlayerName(nPlayer, sSendTo);
+                    if (sSendTo == "") {
+                        continue;
+                    }
+
+                    DemandCharacterSlotReply(sSendTo, static_cast<SHORT>(nSlot), TRUE);
+                }
+            }
+        }
+
+        if (bProgressBarInPlace == TRUE) {
+            // NOTE: The DWORD at 0x8518A8 (500000).
+            g_pChitin->cProgressBar.m_nActionProgress += 500000;
+        }
+    }
+
+    if (bSent == TRUE && bProgressBarInPlace == TRUE) {
+        g_pChitin->cProgressBar.m_bWaiting = FALSE;
+        g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
+    }
+
+    // NOTE: The exe leaves no explicit return value here (EAX is whatever the
+    // last call left); the only caller ignores it.
+    return TRUE;
 }
 
 // 0x42F750
@@ -2918,25 +3577,294 @@ BOOL CBaldurMessage::ObjectControlRequest(LONG localObjectID)
 // 0x430C50
 BOOL CBaldurMessage::ObjectControl()
 {
-    // TODO: Incomplete.
+    BYTE* pData;
+    DWORD dwSize;
 
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    CGameRemoteObjectArray* pRemoteObjectArray = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
+
+    // NOTE: The exe tests the count outside the lock; MarshalControlChanges
+    // would answer FALSE too.
+    if (pRemoteObjectArray->m_nControlsChanged == 0) {
+        return FALSE;
+    }
+
+    if (!pRemoteObjectArray->MarshalControlChanges(&pData, &dwSize)) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_OBJECT,
+        MSG_SUBTYPE_OBJECT_CONTROL,
+        pData,
+        dwSize);
+
+    delete pData;
+
+    // NOTE: The original's only epilogue zeroes EAX, so it answers FALSE even
+    // after the broadcast (the callers ignore the value).
     return FALSE;
 }
 
 // 0x4319C0
 BOOLEAN CBaldurMessage::OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    // The request after the 3-byte header:
+    //   {BYTE source; DWORD remotePlayerID; DWORD remoteObjectID;
+    //    SHORT slotNum; SHORT count; BYTE hasItem;
+    //    [BYTE resRefLen; char resRef[]; WORD use1; WORD use2; WORD use3;
+    //     WORD wear; DWORD flags]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nSource = pMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    SHORT nSlotNum = *reinterpret_cast<SHORT*>(pMessage + nOffset);
+    nOffset += sizeof(SHORT);
+    SHORT nCount = *reinterpret_cast<SHORT*>(pMessage + nOffset);
+    nOffset += sizeof(SHORT);
+    BYTE bHasItem = pMessage[nOffset];
+    nOffset += sizeof(BYTE);
 
-    return FALSE;
+    CItem* pItem = NULL;
+    if (bHasItem == 1) {
+        // NOTE: The original copies the resref into a 12-byte zeroed stack
+        // buffer without a length check (0x431A52-0x431A88).
+        BYTE szResRef[12] = { 0 };
+        BYTE nResRefLen = pMessage[nOffset];
+        nOffset += sizeof(BYTE);
+        memcpy(szResRef, pMessage + nOffset, nResRefLen);
+        nOffset += nResRefLen;
+
+        WORD useCount1 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD useCount2 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD useCount3 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD wear = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        DWORD flags = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+        nOffset += sizeof(DWORD);
+
+        pItem = new CItem(CResRef(szResRef), useCount1, useCount2, useCount3, wear, flags);
+    }
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+    // __LINE__: 6751
+    UTIL_ASSERT_MSG(nOffset == dwSize, "cnt == dwSize");
+
+    LONG nLocalObjectID = 0;
+    BOOLEAN bResult = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+        nRemotePlayerID, nRemoteObjectID, nLocalObjectID);
+
+    // The handler refuses to swap while the blocking-message loop runs.
+    if (m_bInHandleBlockingMessages == TRUE) {
+        bResult = FALSE;
+    }
+
+    // NOTE: The exe compares the low bytes (0x431B63 reads byte [chitin+0x10E0]).
+    BOOLEAN bFromServer = static_cast<BYTE>(nMsgFrom) == static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer);
+    STRREF errorCode = -1;
+
+    if (bResult == TRUE) {
+        switch (nSource) {
+        case 0x47: { // SwapItemGround
+            bResult = g_pBaldurChitin->GetObjectGame()->SwapItemGround(nLocalObjectID,
+                nSlotNum,
+                pItem,
+                errorCode,
+                nCount,
+                bFromServer);
+            break;
+        }
+        case 0x67: { // SwapItemPersonalInventory
+            INT nPortrait = g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nLocalObjectID);
+            if (nPortrait == -1) {
+                bResult = FALSE;
+            } else {
+                bResult = g_pBaldurChitin->GetObjectGame()->SwapItemPersonalInventory(nPortrait,
+                    pItem,
+                    nSlotNum,
+                    errorCode,
+                    nCount,
+                    bFromServer,
+                    TRUE);
+            }
+            break;
+        }
+        case 0x50: { // SwapItemPersonal
+            INT nPortrait = g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nLocalObjectID);
+            if (nPortrait == -1) {
+                bResult = FALSE;
+            } else {
+                bResult = g_pBaldurChitin->GetObjectGame()->SwapItemPersonal(nPortrait,
+                    nSlotNum,
+                    pItem,
+                    errorCode,
+                    nCount,
+                    bFromServer);
+            }
+            break;
+        }
+        default:
+            bResult = FALSE;
+            break;
+        }
+    }
+
+    SwapItemReply(nMsgFrom, bResult, pItem, errorCode);
+
+    return TRUE;
+}
+
+// 0x431CA0
+BOOLEAN CBaldurMessage::SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode)
+{
+    CString sPlayerName;
+    CString sResRef;
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // {BYTE result; [BYTE hasItem; [BYTE resRefLen; char resRef[];
+    //  WORD use1; WORD use2; WORD use3; WORD wear; DWORD flags]];
+    //  DWORD errorCode}
+    // NOTE: The second byte is "has an item", a local BOOLEAN in the dead
+    // nMsgFrom argument slot (0x431D52-0x431D59), not the result again.
+    BOOLEAN bHasItem = bResult == TRUE && pItem != NULL;
+
+    DWORD dwSize;
+    if (bResult != TRUE) {
+        dwSize = 5;
+    } else if (!bHasItem) {
+        // A successful swap that leaves no item to return: {result, 0;
+        // errorCode} (6 bytes).
+        dwSize = 6;
+    } else {
+        pItem->GetResRef().CopyToString(sResRef);
+        // NOTE: The original masks the length to a byte before adding 19
+        // (0x431D3F-0x431D4E).
+        dwSize = (sResRef.GetLength() & 0xFF) + 19;
+    }
+
+    BYTE* pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD nOffset = 0;
+
+    pMessage[nOffset] = bResult;
+    nOffset += sizeof(BYTE);
+
+    if (bResult == TRUE) {
+        pMessage[nOffset] = bHasItem;
+        nOffset += sizeof(BYTE);
+
+        if (bHasItem) {
+            pMessage[nOffset] = static_cast<BYTE>(sResRef.GetLength());
+            nOffset += sizeof(BYTE);
+
+            memcpy(pMessage + nOffset, static_cast<const char*>(sResRef), sResRef.GetLength());
+            nOffset += sResRef.GetLength();
+
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(0);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(1);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(2);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->m_wear;
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<DWORD*>(pMessage + nOffset) = pItem->m_flags;
+            nOffset += sizeof(DWORD);
+        }
+    }
+
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = errorCode;
+    nOffset += sizeof(DWORD);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+    // __LINE__: 6935
+    UTIL_ASSERT_MSG(nOffset == dwSize, "cnt == dwSize");
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_SWAPITEM,
+        MSG_SUBTYPE_SWAPITEM_REPLY,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x432C50
 BOOLEAN CBaldurMessage::SendChatMessage(CString& sChatMessage)
 {
-    // TODO: Incomplete.
+    CString sMessage;
+    CString sTarget;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        // Not connected: the chat answers the joke instead of the text.
+        sTarget = "";
+        sMessage = "You talking to me?";
+    } else {
+        CString sLocalName = g_pChitin->cNetwork.m_sLocalPlayerName;
+        CString sName;
+        INT nColon = sChatMessage.Find(":");
+        BOOLEAN bTarget = FALSE;
+
+        if (nColon != -1) {
+            // A "name: text" whose name is a player in the session is a
+            // whisper to that player.
+            sName = sChatMessage.Left(nColon);
+            bTarget = g_pChitin->cNetwork.FindPlayerIDByName(sName, FALSE) != 0;
+        }
+
+        if (bTarget) {
+            sTarget = sName;
+            sMessage = CString("[") + sLocalName + "->" + sName + "]:  " + sChatMessage.Mid(nColon + 1);
+        } else {
+            sTarget = "";
+            sMessage = CString("[") + sLocalName + "]:  " + sChatMessage;
+        }
+    }
+
+    // NOTE: The original does not write the decorated text back to the
+    // caller's CString: the tail is `sMessage = sMessage + ""` (an identity
+    // append whose temporary reuses the argument's dead stack slot).
+    m_cChatBuffer.AddMessage(sMessage);
+
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        DWORD dwSize = sMessage.GetLength() + 1;
+        BYTE* pMessage = CreateBuffer(dwSize);
+        if (pMessage == NULL) {
+            return FALSE;
+        }
+
+        *pMessage = static_cast<BYTE>(sMessage.GetLength());
+        memcpy(pMessage + 1, static_cast<const char*>(sMessage), sMessage.GetLength());
+
+        DWORD dwFlags = CNetwork::SEND_GUARANTEED;
+        if (sTarget == "") {
+            dwFlags |= CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_JOINING_PLAYERS;
+        }
+
+        g_pChitin->cNetwork.SendMessage_(sTarget, dwFlags, pMessage, dwSize);
+
+        DestroyBuffer(pMessage);
+    }
+
+    return TRUE;
 }
 
 // 0x433080
@@ -4285,9 +5213,139 @@ void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
 // 0x437950
 BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CString sParchment;
+    CString sAreaName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost != TRUE) {
+        return FALSE;
+    }
+
+    // This is the host's permit handler; the requester's name is the reply
+    // recipient.
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The request after the 3-byte header (there is no dwSize check in the
+    // original, the two lengths are trusted):
+    //   {DWORD remotePlayerID; DWORD remoteObjectID;
+    //    LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[]; BYTE areaNameLen; char areaName[]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nCharacterId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID, nRemoteObjectID, nCharacterId) == FALSE) {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    LONG nX = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    LONG nY = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    SHORT nDirection = *reinterpret_cast<SHORT*>(pByteMessage + nOffset);
+    nOffset += sizeof(SHORT);
+
+    BYTE nParchmentLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    sParchment = CString(reinterpret_cast<char*>(pByteMessage + nOffset), nParchmentLength);
+    nOffset += nParchmentLength;
+
+    BYTE nAreaNameLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    sAreaName = CString(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaNameLength);
+    nOffset += nAreaNameLength;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
+
+    BYTE nReply = 1;
+
+    // The leave is refused while another player is looking at a character
+    // (the inventory screen) or at the level-up screen; the requesting
+    // character gets the matching feedback.
+    WORD nFeedback = 0;
+    if (pSettings->sub_518560() > 0) {
+        // "Cannot leave area while remote player is in inventory screen."
+        nFeedback = 26826;
+    } else if (pSettings->sub_5186A0() > 0) {
+        // "Cannot leave area while remote player is in the level up screen."
+        nFeedback = 41398;
+    }
+
+    if (nFeedback != 0) {
+        if (nCharacterId != CGameObjectArray::INVALID_INDEX) {
+            CGameSprite* pSprite;
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pSprite->FeedBack(nFeedback, 0, 0, 0, -1, 0, 0);
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+
+        nReply = 0;
+    }
+
+    // A paused game answers 4, overriding the response computed below.
+    BYTE nReplyOverride = 0xFF;
+    if (g_pBaldurChitin->m_pEngineWorld->m_bPaused == TRUE) {
+        nReplyOverride = 4;
+        nReply = 0;
+    }
+
+    if (pGame->GetGameSave()->m_mode == 0x182 || pGame->GetGameSave()->m_mode == 0x502) {
+        nReply = 0;
+    }
+
+    if (pSettings->m_bHostPermittedDialog == TRUE || nReply != 1) {
+        nReply = m_bInHandleBlockingMessages == TRUE ? 3 : 0;
+    } else if (pGame->GetArea(sAreaName) != NULL) {
+        // The destination is already loaded.
+        nReply = 3;
+    }
+
+    if (nReplyOverride != 0xFF) {
+        nReply = nReplyOverride;
+    }
+
+    DWORD dwReplySize = sizeof(BYTE);
+    BYTE* pReply = CreateBuffer(dwReplySize);
+    if (pReply == NULL) {
+        return FALSE;
+    }
+
+    *pReply = nReply;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_LEAVEAREALUA,
+        MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY,
+        pReply,
+        dwReplySize);
+
+    DestroyBuffer(pReply);
+
+    // Only the 1 answer performs the transition.
+    if (nReply == 1) {
+        pGame->sub_5C3B20(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
+    }
+
+    return TRUE;
 }
 
 // A party's travel through a party required region (LeaveAreaName,
@@ -4341,9 +5399,126 @@ BYTE CBaldurMessage::sub_438710(LONG nCharacterId, LONG nTriggerId, CString sAre
 // 0x438BF0
 BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CString sAreaName;
+    LONG nCharacterId;
+    LONG nTriggerId;
+    BOOLEAN bPermit;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    BYTE* pMessage = pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The two objects, then the length-prefixed area name.
+    LONG nLocalObject;
+    if (pGame->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pMessage),
+            *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID)),
+            nLocalObject)
+        == TRUE) {
+        nCharacterId = nLocalObject;
+    } else {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    if (pGame->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pMessage + sizeof(PLAYER_ID) + sizeof(LONG)),
+            *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(PLAYER_ID)),
+            nLocalObject)
+        == TRUE) {
+        nTriggerId = nLocalObject;
+    } else {
+        nTriggerId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE* pArea = pMessage
+        + sizeof(PLAYER_ID) + sizeof(LONG)
+        + sizeof(PLAYER_ID) + sizeof(LONG);
+    sAreaName = CString(reinterpret_cast<const char*>(pArea + sizeof(BYTE)), pArea[0]);
+
+    bPermit = TRUE;
+
+    // A character still being created or imported blocks the transition; the
+    // character is told why through the two feedback strings.
+    STRREF nFeedback = 0;
+    if (pGame->GetMultiplayerSettings()->sub_518560() > 0) { // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        nFeedback = 26826;
+    } else if (pGame->GetMultiplayerSettings()->sub_5186A0() > 0) { // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        nFeedback = 41398;
+    }
+
+    if (nFeedback != 0) {
+        if (nCharacterId != CGameObjectArray::INVALID_INDEX) {
+            CGameSprite* pSprite;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pSprite->FeedBack(nFeedback, 0, 0, 0, -1, 0, 0);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+
+        bPermit = FALSE;
+    }
+
+    // A blocking demand, a paused game, a dialog mode or a player without the
+    // area-transition permission refuses too.
+    if (m_bInHandleBlockingMessages == TRUE) {
+        bPermit = FALSE;
+    }
+
+    if (g_pBaldurChitin->m_pEngineWorld->m_bPaused == TRUE) {
+        bPermit = FALSE;
+    }
+
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bPermit = FALSE;
+    }
+
+    if (!pGame->GetMultiplayerSettings()->GetPermission(nMsgFrom, CGamePermission::AREA_TRANSITION)) {
+        bPermit = FALSE;
+    }
+
+    if (pGame->GetMultiplayerSettings()->m_bHostPermittedDialog == TRUE || bPermit != TRUE) {
+        bPermit = FALSE;
+    } else {
+        pGame->sub_5C4AD0(nCharacterId, nTriggerId, CString(sAreaName)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    }
+
+    BYTE* pReply = CreateBuffer(sizeof(BOOLEAN));
+    if (pReply == NULL) {
+        return FALSE;
+    }
+
+    *pReply = bPermit;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_LEAVEAREANAME,
+        MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY,
+        pReply,
+        sizeof(BOOLEAN));
+
+    DestroyBuffer(pReply);
+
+    return TRUE;
 }
 
 // 0x4381A0
@@ -6216,7 +7391,7 @@ BOOLEAN CBaldurMessage::OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage
         return FALSE;
     }
 
-    if (nMsgFrom != g_pChitin->cNetwork.GetHostPlayerID()) {
+    if (nMsgFrom != g_pChitin->cNetwork.FindPlayerLocationByID(g_pChitin->cNetwork.GetHostPlayerID(), FALSE)) {
         return FALSE;
     }
 
@@ -6226,11 +7401,64 @@ BOOLEAN CBaldurMessage::OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage
 }
 
 // 0x43D590
+// The client's request for the host's nightmare setting; when `wait` it also
+// takes the reply and stores it in the options (the unlisted host reply).
 BOOLEAN CBaldurMessage::DemandSettingsNightmareMode(BOOLEAN wait)
 {
-    // TODO: Incomplete.
+    CString sHostName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MPSETTINGS,
+        MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE,
+        NULL,
+        0);
+
+    if (wait != TRUE) {
+        return TRUE;
+    }
+
+    while (!g_pChitin->cNetwork.PeekSpecificMessage(sHostName,
+               MSG_TYPE_MPSETTINGS,
+               MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE)
+        && g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+        HandleBlockingMessages();
+
+        g_pChitin->m_bDisplayStale = TRUE;
+        SleepEx(60, FALSE);
+    }
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    DWORD dwSize;
+    BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sHostName,
+        MSG_TYPE_MPSETTINGS,
+        MSG_SUBTYPE_MPSETTINGS_NIGHTMAREMODE,
+        dwSize);
+
+    // NOTE: The exe re-checks the session and compares the host's player
+    // location with itself before storing the reply (0x43D754-0x43D791).
+    if (g_pChitin->cNetwork.GetSessionOpen()
+        && g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nNightmareMode = pMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    }
+
+    delete pMessage;
+
+    return TRUE;
 }
 
 // 0x43D810

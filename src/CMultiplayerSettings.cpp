@@ -607,7 +607,10 @@ int CMultiplayerSettings::sub_518560()
     int count = 0;
 
     for (int index = 0; index < 6; index++) {
-        if (field_AC[index] != -1) {
+        // NOTE: The original compares the byte with -1 (0xFF); with the
+        // `unsigned char` array a plain `!= -1` compares 255 with -1 and
+        // counts every slot.
+        if (field_AC[index] != 0xFF) {
             count++;
         }
     }

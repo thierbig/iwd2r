@@ -210,6 +210,7 @@ public:
 
     static const BYTE MSG_TYPE_OBJECT;
     static const BYTE MSG_SUBTYPE_OBJECT_ADD;
+    static const BYTE MSG_SUBTYPE_OBJECT_CONTROL;
 
     static const BYTE MSG_TYPE_PLAYERCHAR;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND;
@@ -258,14 +259,17 @@ public:
 
     static const BYTE MSG_TYPE_LEAVEAREALUA;
     static const BYTE MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST;
+    static const BYTE MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY;
 
     static const BYTE MSG_TYPE_LEAVEAREANAME;
     static const BYTE MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REQUEST;
+    static const BYTE MSG_SUBTYPE_LEAVEAREANAME_PERMIT_REPLY;
 
     CBaldurMessage();
     ~CBaldurMessage();
     BOOLEAN DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp);
     BOOLEAN sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp);
+    BOOLEAN OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);
@@ -302,8 +306,9 @@ public:
     BOOL OnKickPlayerHoofedOut(INT nMsgFrom);
     BOOL AddDroppedPlayer(PLAYER_ID playerID);
     BOOL PurgeDroppedPlayers();
-    void UpdateDemandCharacters(unsigned char a1, int a2, unsigned char a3);
+    void UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
     void BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
+    BOOLEAN DemandCharacterSlotUpdate(SHORT nCharacterSlot, SHORT nPlayerSlot);
     BOOLEAN OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo);
     BOOLEAN DemandCharacterSlot(SHORT nCharacterSlot, BOOLEAN bDemandFromHost, SHORT nPlayerSlot);
@@ -316,6 +321,7 @@ public:
     BOOL ObjectControlRequest(LONG localObjectID);
     BOOL ObjectControl();
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
+    BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN SendChatMessage(CString& sChatMessage);
     BOOLEAN OnChatMessage(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     void SetSignalDefaultSecondsToTimeout();

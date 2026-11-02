@@ -655,6 +655,7 @@ public:
     SHORT JumpToPoint(CPoint dest, BOOL spriteUpdate);
     SHORT Face();
     SHORT FaceObject(CGameAIBase* pObject);
+    void sub_751BD0();
     SHORT LeaveParty();
     void MoveGlobal(const CString& sArea, const CPoint& ptStart);
     SHORT GroupAttack(CGameSprite* pTarget);
