@@ -252,6 +252,9 @@ public:
     static const BYTE MSG_SUBTYPE_VERSION_SERVER;
     static const BYTE VERSION_NUM_FIELDS;
 
+    static const BYTE MSG_TYPE_WEATHER;
+    static const BYTE MSG_SUBTYPE_WEATHER_BROADCAST;
+
     static const BYTE MSG_TYPE_LEAVEAREALUA;
     static const BYTE MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST;
 
@@ -342,7 +345,7 @@ public:
     BOOLEAN SendMovieRequestToServer(CResRef cResMovie);
     BOOLEAN MovieAnnounceStatus(CResRef cResMovie);
     BOOLEAN SendReformPartyAnnounceStatus();
-    void WeatherBroadcast(WORD wWeatherFlags);
+    BOOLEAN WeatherBroadcast(WORD wWeatherFlags);
     void TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime);
     void TimeChangeToServer(ULONG deltaTime);
     BOOLEAN OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
