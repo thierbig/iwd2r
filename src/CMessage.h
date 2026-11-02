@@ -204,6 +204,10 @@ public:
     static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
 
+    static const BYTE MSG_TYPE_MOVIE;
+    static const BYTE MSG_SUBTYPE_MOVIE_REQUEST;
+    static const BYTE MSG_SUBTYPE_MOVIE_ANNOUNCE;
+
     static const BYTE MSG_TYPE_OBJECT;
     static const BYTE MSG_SUBTYPE_OBJECT_ADD;
 

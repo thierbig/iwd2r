@@ -558,6 +558,15 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST = 99;
 // 0x84CF91
 const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA = 82;
 
+// 0x84CF92
+const BYTE CBaldurMessage::MSG_TYPE_MOVIE = 78;
+
+// 0x84CF93
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST = 82;
+
+// 0x84CF94
+const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE = 65;
+
 // 0x84CF98
 const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;
 
@@ -3558,9 +3567,52 @@ BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 // 0x436690
 BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    CString sHostName;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // NOTE: Uninline.
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_REQUEST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // FIXME: `cResMovie` should be reference.
@@ -3568,9 +3620,44 @@ BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 // 0x4369E0
 BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
 {
-    // TODO: Incomplete.
+    CString sResMovie;
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    cResMovie.CopyToString(sResMovie);
+
+    dwSize = sResMovie.GetLength() + sizeof(BYTE);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<BYTE*>(pByteMessage + cnt) = static_cast<BYTE>(sResMovie.GetLength());
+    cnt += sizeof(BYTE);
+
+    memcpy(pByteMessage + cnt,
+        sResMovie.GetBuffer(sResMovie.GetLength()),
+        sResMovie.GetLength());
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MOVIE,
+        MSG_SUBTYPE_MOVIE_ANNOUNCE,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x436DF0
