@@ -836,6 +836,35 @@ void CProjectile::CallBack()
 // 0x530790
 CProjectile84D8B8::CProjectile84D8B8()
 {
+    // NOTE: The exe has the base CProjectile constructor (0x529490) inlined
+    // here whole, then stamps vtable 0x84D8B8; the implicit base construction
+    // already performs these stores, so the re-statement below mirrors the
+    // exe's instruction stream rather than adding state. It is the fork's
+    // constructor body completed with the four stores its class model puts on
+    // CProjectileTravelling instead (m_driftDecay, field_E6,
+    // m_bTrackTargetHeight, m_bSparkle).
+    m_nSpellLevel = 0;
+    m_projectileType = 0;
+    m_speed = 0;
+    m_sourceId = 0;
+    m_targetId = 0;
+    m_nSparkleColour = 0;
+    m_driftDecay = 0;
+    field_E6 = 0;
+    m_pArea = NULL;
+    m_nStartHeight = 0;
+    m_nCurrentHeight = 0;
+    m_nStartDistance = 0;
+    field_17C = 0;
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_bHasHeight = FALSE;
+    m_bTrackTargetHeight = FALSE;
+    m_bSparkle = FALSE;
+    m_fireSoundRef = "";
+    m_loopFireSound = FALSE;
+    m_arrivalSoundRef = "";
+    m_loopArrivalSound = FALSE;
+    field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
 // 0x5295D0
