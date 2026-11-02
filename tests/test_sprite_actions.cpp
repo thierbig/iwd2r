@@ -3303,3 +3303,45 @@ TEST_CASE("sprite: JoinParty overflows a full party without moving the gold", "[
     CHECK(pJoiner->m_special1Script != NULL);
     CHECK(pJoiner->m_movementScript != NULL);
 }
+
+TEST_CASE("sprite: JumpToArea (225) queues the party member for an unloaded area", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    REQUIRE(pCharacter->GetArea() != NULL);
+    ClearMessages();
+
+    // Action 225: string1 is the area, dest the point and specifics the
+    // facing; the dispatcher passes a delay of 0. An area the game does not
+    // have loaded goes through the move list.
+    CAIAction action(225, CAIObjectType::NOONE, 3, 0, 0);
+    action.m_string1 = "AR9999";
+    action.m_dest = CPoint(120, 240);
+    pCharacter->SetCurrAction(action);
+
+    const INT nMoves = pGame->m_cMoveList.GetCount();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    REQUIRE(pGame->m_cMoveList.GetCount() == nMoves + 1);
+
+    CMoveListEntry* pEntry = pGame->m_cMoveList.GetTail();
+    REQUIRE(pEntry != NULL);
+    CHECK(pEntry->m_nSpriteId == pCharacter->GetId());
+    CHECK(pEntry->m_ptDestination == CPoint(120, 240));
+    CHECK(pEntry->m_nFacing == 3);
+    CHECK(pEntry->m_nDelay == 0);
+    CHECK(pEntry->m_areaResRef == CResRef("AR9999"));
+
+    ClearMessages();
+}
