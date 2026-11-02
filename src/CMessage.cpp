@@ -659,6 +659,15 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MPSYNCH_REQUEST = 82;
 // 0x84CFCA
 const BYTE CBaldurMessage::MSG_SUBTYPE_MPSYNCH_REPLY = 80;
 
+// 0x84CFCB
+const BYTE CBaldurMessage::MSG_TYPE_TIME = 84;
+
+// 0x84CFCC
+const BYTE CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST = 116;
+
+// 0x84CFCD
+const BYTE CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER = 99;
+
 // 0x84CFCE
 const BYTE CBaldurMessage::MSG_TYPE_VERSION = 86;
 
@@ -3861,13 +3870,71 @@ void CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
 // 0x4370B0
 void CBaldurMessage::TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime)
 {
-    // TODO: Incomplete.
+    BYTE* pByteMessage;
+    DWORD dwSize;
+    DWORD cnt;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return;
+    }
+
+    dwSize = sizeof(ULONG) + sizeof(BOOLEAN);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return;
+    }
+
+    cnt = 0;
+
+    *reinterpret_cast<ULONG*>(pByteMessage + cnt) = nGameTime;
+    cnt += sizeof(ULONG);
+
+    *reinterpret_cast<BOOLEAN*>(pByteMessage + cnt) = bCompressTime;
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_TIME,
+        MSG_SUBTYPE_TIME_SYNCH_BROADCAST,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
 }
 
 // 0x437240
 void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
 {
-    // TODO: Incomplete.
+    CString sHostName;
+    BYTE* pByteMessage;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return;
+    }
+
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return;
+    }
+
+    pByteMessage = CreateBuffer(sizeof(DWORD));
+    if (pByteMessage == NULL) {
+        return;
+    }
+
+    *reinterpret_cast<DWORD*>(pByteMessage) = deltaTime;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_TIME,
+        MSG_SUBTYPE_TIME_CHANGE_TO_SERVER,
+        pByteMessage,
+        sizeof(DWORD));
+
+    DestroyBuffer(pByteMessage);
 }
 
 // 0x437950
