@@ -630,9 +630,6 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
 // 0x84CFB3
 const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST = 83;
 
-// 0x84CFB2
-const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
-
 // 0x84CFB8
 const BYTE CBaldurMessage::MSG_TYPE_SIGNAL = 83;
 
@@ -4581,7 +4578,7 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteM
             } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
 
             if (rc == CGameObjectArray::SUCCESS) {
-                pSprite->FeedBack(nFeedback, 0, 0, -1, 0, 0, 0);
+                pSprite->FeedBack(nFeedback, 0, 0, 0, -1, 0, 0);
                 pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
                     INFINITE);
