@@ -2046,11 +2046,12 @@ void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nU
         nLast = nUpdatedCharacterSlot;
     }
 
-    // The original keeps this flag in the first argument's stack slot: it
-    // starts as `bUpdateAllCharacters` and is forced TRUE on the first slot,
-    // so the cleanup at the end always runs. A single-slot update creates
-    // and displays the progress bar itself, an update-all does not.
-    BOOLEAN bManageProgressBar = bUpdateAllCharacters;
+    // The original keeps this flag in the first argument's stack slot and
+    // clears it before the loop; the first demanded (remote) slot sets it, so
+    // an update-all also raises the waiting bar for its first remote
+    // character. The end-of-function cleanup runs only when this flag and
+    // `bProgressBarInPlace` are both set.
+    BOOLEAN bManageProgressBar = FALSE;
 
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     for (INT nSlot = nFirst; nSlot <= nLast; nSlot++) {
@@ -2073,7 +2074,8 @@ void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nU
                 INFINITE);
 
             INT nControlledBy = pGame->GetMultiplayerSettings()->GetCharacterControlledByPlayer(nSlot);
-            if (nControlledBy != g_pChitin->cNetwork.m_nLocalPlayer) {
+            // NOTE: The exe compares the low bytes (0x42D9B4/0x42D9C8).
+            if (static_cast<BYTE>(nControlledBy) != static_cast<BYTE>(g_pChitin->cNetwork.m_nLocalPlayer)) {
                 if (bManageProgressBar == FALSE) {
                     if (bProgressBarInPlace == TRUE
                         && g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
@@ -2123,7 +2125,7 @@ void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nU
                 if (bReplied == FALSE
                     && g_pChitin->cNetwork.m_bIsHost != TRUE
                     && g_pChitin->cNetwork.m_bConnectionEstablished
-                    && g_pChitin->cNetwork.m_nHostPlayer != nControlledBy) {
+                    && static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer) != static_cast<BYTE>(nControlledBy)) {
                     INT nHostPlayer = g_pChitin->cNetwork.m_nHostPlayer;
 
                     g_pChitin->cNetwork.GetPlayerName(nHostPlayer, sPlayerName);
@@ -2142,7 +2144,7 @@ void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nU
 
                         g_pBaldurChitin->GetBaldurMessage()->HandleBlockingMessages();
 
-                        g_pChitin->m_bDisplayStale = FALSE;
+                        g_pChitin->m_bDisplayStale = TRUE;
                         SleepEx(60, FALSE);
                     }
 
@@ -2165,7 +2167,7 @@ void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nU
         }
     }
 
-    if (bManageProgressBar == TRUE) {
+    if (bManageProgressBar == TRUE && bProgressBarInPlace == TRUE) {
         g_pChitin->cProgressBar.m_bWaiting = FALSE;
         g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
     }
@@ -2279,6 +2281,9 @@ BOOLEAN CBaldurMessage::DemandCharacterSlotUpdate(SHORT nCharacterSlot, SHORT nP
         MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND,
         pMessage,
         dwSize);
+
+    // NOTE: The exe pre-sizes the caller's name buffer (0x42E07A).
+    sPlayerName.GetBuffer(0x80);
 
     DestroyBuffer(pMessage);
 

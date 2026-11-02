@@ -176,12 +176,16 @@ TEST_CASE("CBaldurMessage::UpdateDemandCharacters walks the slots and drives the
     network.m_bIsHost = TRUE;
 
     // Update all: slots 0..5 are all absent, so each is skipped and still
-    // advances the bar by 500000.
+    // advances the bar by 500000. The bar flag starts FALSE and no slot was
+    // handled, so the cleanup must not clear a waiting bar (the old
+    // initialiser copied bUpdateAllCharacters and always cleaned up).
     g_pChitin->cProgressBar.m_nActionProgress = 0;
+    g_pChitin->cProgressBar.m_bWaiting = TRUE;
     message.UpdateDemandCharacters(TRUE, 0, TRUE);
     CHECK(g_pChitin->cProgressBar.m_nActionProgress == 6 * 500000);
     CHECK(g_pChitin->cProgressBar.m_nWaitingReason == 0);
-    CHECK(g_pChitin->cProgressBar.m_bWaiting == FALSE);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == TRUE);
+    g_pChitin->cProgressBar.m_bWaiting = FALSE;
 
     // A single slot is one iteration; every character is absent, so the
     // GetDeny-success branch (which shows the bar with reason 19714 and
