@@ -17497,6 +17497,15 @@ void CMessageRemoveSummonLink::MarshalMessage(BYTE** pData, DWORD* dwSize)
     }
 }
 
+// NOTE: Inlined in IcewindCGameEffectSummon::SpawnFromResRef (0x55FAD0):
+// the vtable 0x84D360 store and the four ids.
+CMessageAddSummonLink::CMessageAddSummonLink(LONG summonedId, LONG caller, LONG target, LONG masterId)
+    : CMessage(caller, target)
+{
+    m_summonedId = summonedId;
+    m_masterId = masterId;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x4F6C10

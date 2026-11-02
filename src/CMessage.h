@@ -1505,6 +1505,21 @@ public:
     /* 000C */ LONG m_summonedId;
 };
 
+// The link half of a summon (vtable 0x84D360, 0x14 bytes): SpawnFromResRef
+// posts it right after the spawned creature joins the area so the summon
+// registry (Icewind586B70) learns the new link. Caller, target and
+// m_summonedId carry the spawned sprite, m_masterId the summoner. In a
+// single player game only the ctor runs; the network overrides (Marshal
+// 0x512310, Unmarshal 0x5124D0, Run 0x5125A0) are omitted (single player
+// only, docs/adr/0002-single-player-only.md).
+class CMessageAddSummonLink : public CMessage {
+public:
+    CMessageAddSummonLink(LONG summonedId, LONG caller, LONG target, LONG masterId);
+
+    /* 000C */ LONG m_summonedId;
+    /* 0010 */ LONG m_masterId;
+};
+
 // The SaveGame action's message (vtable 0x84888C): saves the game under a
 // name made of the strref's text.
 class CMessageSaveGame : public CMessage {

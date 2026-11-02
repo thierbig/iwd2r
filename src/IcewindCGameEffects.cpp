@@ -1,16 +1,21 @@
 #include "IcewindCGameEffects.h"
 
+#include "CAIObjectType.h"
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
+#include "CGameAnimationType.h"
 #include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
 #include "CMessage.h"
+#include "CPathSearch.h"
 #include "CProjectile.h"
 #include "CProjectile850F9C.h"
 #include "CProjectileArea.h"
 #include "CProjectileSingleTarget.h"
 #include "CScreenWorld.h"
 #include "CUtil.h"
+#include "Icewind586B70.h"
 #include "IcewindCVisualEffect.h"
 #include "IcewindMisc.h"
 
@@ -934,6 +939,113 @@ void IcewindCGameEffectSummon::PlayGroupVFX(int vfxId)
         m_target,
         0,
         0);
+}
+
+// 0x55FAD0
+CGameSprite* IcewindCGameEffectSummon::SpawnFromResRef(const CString& resRef, const CPoint* pTarget)
+{
+    // The target point converts to search-grid coordinates first; the open
+    // square search runs on the grid, the answer converts back afterwards.
+    POINT spawnGrid;
+    spawnGrid.y = pTarget->y / CPathSearch::GRID_SQUARE_SIZEY;
+    spawnGrid.x = pTarget->x / CPathSearch::GRID_SQUARE_SIZEX;
+
+    CGameArea* pArea = m_pSprite->GetArea();
+    if (pArea == NULL) {
+        return NULL;
+    }
+
+    // __FILE__: .\Include\ObjAnimation.h
+    // __LINE__: 2093
+    UTIL_ASSERT(m_pSprite->m_animation.m_animation != NULL);
+
+    // The exe's 0x548B80 takes (POINT* out, int gridX, int gridY,
+    // const BYTE* terrainTable, BYTE personalSpace, SHORT nDirection) and
+    // writes the answer through the out slot (ret 0x18); our tree spells it
+    // as the CPoint-returning CSearchBitmap::GetNearestOpenSquare.
+    CPoint ptSpawn = pArea->m_search.GetNearestOpenSquare(CPoint(spawnGrid.x, spawnGrid.y),
+        m_pSprite->GetTerrainTable(),
+        m_pSprite->m_animation.m_animation->GetPersonalSpace(),
+        -1);
+
+    CCreatureFile creature;
+    creature.SetResRef(CResRef(resRef), TRUE, TRUE);
+
+    CGameSprite* pSpawned = new CGameSprite(creature.GetData(),
+        creature.GetDataSize(),
+        0,
+        IcewindMisc::sub_585310(m_pSprite) ? 2 : 0, // GOOD 2 / EVIL 0
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        0x7fffffff,
+        CPoint(-1, -1),
+        0);
+    pSpawned->SetResRef(CResRef(resRef));
+    creature.ReleaseData();
+
+    // The exe's plain-new codegen (new 0x9D16 + je) lands here with a null
+    // sprite when the allocation fails.
+    if (pSpawned == NULL) {
+        return NULL;
+    }
+
+    pSpawned->m_baseStats.m_generalState |= STATE_SUMMONED_CREATURE; // sprite+0x5BC
+
+    if (field_190 != 0) {
+        CAIObjectType type(pSpawned->GetAIType());
+        BOOL ally = FALSE;
+
+        if (field_190 == 1) {
+            ally = (IcewindMisc::sub_585310(m_pSprite) == 1);
+        } else if (field_190 == 2) {
+            ally = (IcewindMisc::sub_585310(m_pSprite) != 1);
+        }
+
+        if (ally) {
+            g_pBaldurChitin->GetObjectGame()->AddCharacterToAllies(pSpawned->m_id);
+            type.SetEnemyAlly(CAIOBJECTTYPE_EA_ALLY);
+        } else {
+            type.SetEnemyAlly(CAIOBJECTTYPE_EA_ENEMY);
+        }
+
+        pSpawned->SetAIType(type, FALSE, FALSE);
+        pSpawned->m_liveTypeAI.Set(type); // sprite+0x3DFA
+    }
+
+    // The deny is taken but neither the result nor the out object is read:
+    // the code already holds pSpawned.
+    CGameObject* pObject;
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(pSpawned->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+
+    // __FILE__: .\Include\ObjAnimation.h
+    // __LINE__: 2086
+    UTIL_ASSERT(pSpawned->m_animation.m_animation != NULL);
+
+    pSpawned->AddToArea(pArea,
+        CPoint(ptSpawn.x * CPathSearch::GRID_SQUARE_SIZEX,
+            ptSpawn.y * CPathSearch::GRID_SQUARE_SIZEY),
+        0,
+        pSpawned->m_animation.m_animation->GetListType());
+    pSpawned->SetFacing(m_pSprite->GetDirection(m_pSprite->GetPos()));
+    pSpawned->m_posStart = pSpawned->m_pos;
+
+    Icewind586B70::Instance()->sub_586D60(m_pSprite, pSpawned);
+
+    CMessage* pMessage = new CMessageAddSummonLink(pSpawned->m_id,
+        pSpawned->m_id,
+        pSpawned->m_id,
+        m_pSprite->m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(pSpawned->m_id,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    return pSpawned;
 }
 
 // 0x55FA10

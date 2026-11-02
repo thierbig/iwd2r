@@ -216,6 +216,8 @@ public:
 
     virtual void ResolveSourceSprite();
 
+    virtual CGameSprite* SpawnFromResRef(const CString& resRef, const CPoint* pTarget);
+
     void AddSummonVisualHit(CGameSprite* pSpawned, int mode);
     void PlayGroupVFX(int vfxId);
 
