@@ -17810,6 +17810,42 @@ void CMessage97::MarshalMessage(BYTE** pData, DWORD* dwSize)
     UTIL_ASSERT(*dwSize == 20);
 }
 
+// 0x5140D0
+void CMessage97::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CAIScript* pScript = new CAIScript;
+
+            // The exe builds its two by-value CResRef arguments through the
+            // CResRef(BYTE*) converting constructor (0x78A9D0: memcpy + MakeUpper)
+            // from an inlined GetResRef(), so both the script's resref and the
+            // one handed to Read are uppercased copies of m_resScript. The first
+            // is installed via CAIScript::SetResRef (0x514220), which our tree
+            // has not imported; m_cResRef is public, so assign it directly.
+            CResRef resScript(m_resScript);
+            resScript.MakeUpper();
+            pScript->m_cResRef = resScript;
+            pScript->Read(resScript, TRUE);
+            static_cast<CGameSprite*>(pObject)->SetScript(static_cast<SHORT>(m_nScript), pScript);
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x4F6CC0
