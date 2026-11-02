@@ -1434,6 +1434,15 @@ CProjectileArea84F3AC::~CProjectileArea84F3AC()
 {
 }
 
+// The DBFireball half of the same fold (0x85099C slot 0): both members are
+// trivial (a BYTE flag and a LONG timer), so the empty braces are the whole
+// body. The exe ICF-folds this copy onto the Acid Fog row above, so the
+// definition carries no address marker of its own; it exists so the class
+// declares every slot its vtable overrides.
+CProjectileDBFireball::~CProjectileDBFireball()
+{
+}
+
 // 0x576BA0
 void CProjectileDBFireball::AIUpdate()
 {
