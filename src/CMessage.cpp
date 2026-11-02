@@ -2423,9 +2423,184 @@ BOOL CBaldurMessage::ObjectControl()
 // 0x4319C0
 BOOLEAN CBaldurMessage::OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    // The request after the 3-byte header:
+    //   {BYTE source; DWORD remotePlayerID; DWORD remoteObjectID;
+    //    SHORT slotNum; SHORT count; BYTE hasItem;
+    //    [BYTE resRefLen; char resRef[]; WORD use1; WORD use2; WORD use3;
+    //     WORD wear; DWORD flags]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nSource = pMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    SHORT nSlotNum = *reinterpret_cast<SHORT*>(pMessage + nOffset);
+    nOffset += sizeof(SHORT);
+    SHORT nCount = *reinterpret_cast<SHORT*>(pMessage + nOffset);
+    nOffset += sizeof(SHORT);
+    BYTE bHasItem = pMessage[nOffset];
+    nOffset += sizeof(BYTE);
 
-    return FALSE;
+    CItem* pItem = NULL;
+    if (bHasItem == 1) {
+        // NOTE: The original copies the resref into a 12-byte zeroed stack
+        // buffer without a length check (0x431A52-0x431A88).
+        BYTE szResRef[12] = { 0 };
+        BYTE nResRefLen = pMessage[nOffset];
+        nOffset += sizeof(BYTE);
+        memcpy(szResRef, pMessage + nOffset, nResRefLen);
+        nOffset += nResRefLen;
+
+        WORD useCount1 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD useCount2 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD useCount3 = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        WORD wear = *reinterpret_cast<WORD*>(pMessage + nOffset);
+        nOffset += sizeof(WORD);
+        DWORD flags = *reinterpret_cast<DWORD*>(pMessage + nOffset);
+        nOffset += sizeof(DWORD);
+
+        pItem = new CItem(CResRef(szResRef), useCount1, useCount2, useCount3, wear, flags);
+    }
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+    // __LINE__: 6751
+    UTIL_ASSERT_MSG(nOffset == dwSize, "cnt == dwSize");
+
+    LONG nLocalObjectID = 0;
+    BOOLEAN bResult = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+        nRemotePlayerID, nRemoteObjectID, nLocalObjectID);
+
+    // The handler refuses to swap while the blocking-message loop runs.
+    if (m_bInHandleBlockingMessages == TRUE) {
+        bResult = FALSE;
+    }
+
+    BOOLEAN bFromServer = nMsgFrom == g_pChitin->cNetwork.m_nHostPlayer;
+    STRREF errorCode = -1;
+
+    if (bResult == TRUE) {
+        switch (nSource) {
+        case 0x47: { // SwapItemGround
+            bResult = g_pBaldurChitin->GetObjectGame()->SwapItemGround(nLocalObjectID,
+                nSlotNum,
+                pItem,
+                errorCode,
+                nCount,
+                bFromServer);
+            break;
+        }
+        case 0x67: { // SwapItemPersonalInventory
+            INT nPortrait = g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nLocalObjectID);
+            if (nPortrait == -1) {
+                bResult = FALSE;
+            } else {
+                bResult = g_pBaldurChitin->GetObjectGame()->SwapItemPersonalInventory(nPortrait,
+                    pItem,
+                    nSlotNum,
+                    errorCode,
+                    nCount,
+                    bFromServer,
+                    TRUE);
+            }
+            break;
+        }
+        case 0x50: { // SwapItemPersonal
+            INT nPortrait = g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nLocalObjectID);
+            if (nPortrait == -1) {
+                bResult = FALSE;
+            } else {
+                bResult = g_pBaldurChitin->GetObjectGame()->SwapItemPersonal(nPortrait,
+                    nSlotNum,
+                    pItem,
+                    errorCode,
+                    nCount,
+                    bFromServer);
+            }
+            break;
+        }
+        default:
+            bResult = FALSE;
+            break;
+        }
+    }
+
+    SwapItemReply(nMsgFrom, bResult, pItem, errorCode);
+
+    return TRUE;
+}
+
+// 0x431CA0
+BOOLEAN CBaldurMessage::SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode)
+{
+    CString sPlayerName;
+    CString sResRef;
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // {BYTE result; [BYTE result; BYTE resRefLen; char resRef[];
+    //  WORD use1; WORD use2; WORD use3; WORD wear; DWORD flags];
+    //  DWORD errorCode}
+    DWORD dwSize = 5;
+    if (bResult == TRUE && pItem != NULL) {
+        pItem->GetResRef().CopyToString(sResRef);
+        // NOTE: The original masks the length to a byte before adding 19
+        // (0x431D3F-0x431D4E).
+        dwSize = (sResRef.GetLength() & 0xFF) + 19;
+    }
+
+    BYTE* pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD nOffset = 0;
+
+    pMessage[nOffset] = bResult;
+    nOffset += sizeof(BYTE);
+
+    if (bResult == TRUE) {
+        pMessage[nOffset] = bResult;
+        nOffset += sizeof(BYTE);
+
+        pMessage[nOffset] = static_cast<BYTE>(sResRef.GetLength());
+        nOffset += sizeof(BYTE);
+
+        memcpy(pMessage + nOffset, static_cast<const char*>(sResRef), sResRef.GetLength());
+        nOffset += sResRef.GetLength();
+
+        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(0);
+        nOffset += sizeof(WORD);
+        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(1);
+        nOffset += sizeof(WORD);
+        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(2);
+        nOffset += sizeof(WORD);
+        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->m_wear;
+        nOffset += sizeof(WORD);
+        *reinterpret_cast<DWORD*>(pMessage + nOffset) = pItem->m_flags;
+        nOffset += sizeof(DWORD);
+    }
+
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = errorCode;
+    nOffset += sizeof(DWORD);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CBaldurMessage.cpp
+    // __LINE__: 6935
+    UTIL_ASSERT_MSG(nOffset == dwSize, "cnt == dwSize");
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_SWAPITEM,
+        MSG_SUBTYPE_SWAPITEM_REPLY,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x432C50
