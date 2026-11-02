@@ -34,6 +34,7 @@ public:
     CAIResponse* Find(CTypedPtrList<CPtrList, CAITrigger*>& triggerList, CGameAIBase* caller);
     void Add(const CAICondition& condition, const CAIResponseSet& responseSet);
     void Read(CResRef cNewResRef, BOOL playerScript);
+    void SetResRef(CResRef cNewResRef);
 
     BOOL IsEmpty();
 

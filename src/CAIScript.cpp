@@ -59,6 +59,12 @@ CAIScript::~CAIScript()
     m_caList.RemoveAll();
 }
 
+// 0x514220
+void CAIScript::SetResRef(CResRef cNewResRef)
+{
+    m_cResRef = cNewResRef;
+}
+
 // 0x40EBA0
 CAIResponse* CAIScript::Find(CTypedPtrList<CPtrList, CAITrigger*>& triggerList, CGameAIBase* caller)
 {
