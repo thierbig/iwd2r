@@ -3234,3 +3234,248 @@ TEST_CASE("map world: SendMapWorldRevealArea sends the length-prefixed area to e
 
     network.m_nServiceProvider = nServiceProvider;
 }
+
+TEST_CASE("resource: the demand sends type and resref, and the reply processor writes the file", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    const INT nServiceProvider = network.m_nServiceProvider;
+    const INT nHostPlayer = network.m_nHostPlayer;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    // The demand is the client's: a host sends nothing.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // A client whose host name is unknown sends nothing either.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = -1;
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == FALSE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The client's demand: {0xFF, 82, 68, DWORD type, resref}.
+    network.m_nHostPlayer = 0;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, TRUE, FALSE, TRUE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_RESOURCE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND);
+    {
+        DWORD nType = 0;
+        memcpy(&nType, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nType == 1013);
+    }
+    CHECK(memcmp(CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD), "ICEWIND2", 8) == 0);
+
+    // Without the send the client only answers TRUE.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 32);
+    CHECK(message.DemandResourceFromServer(CString("ICEWIND2"), 1013, FALSE, FALSE, TRUE) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The reply processor takes {BYTE len; char resref[]; DWORD type; DWORD
+    // size; BYTE data[]} after the 3-byte header and writes it at the path.
+    BYTE payload[3 + 1 + 8 + 4 + 4 + 6];
+    memset(payload, 0, sizeof(payload));
+    payload[CNetwork::SPEC_MSG_FLAG] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    payload[CNetwork::SPEC_MSG_TYPE] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    payload[CNetwork::SPEC_MSG_SUBTYPE] = CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY;
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    payload[cnt] = 8;
+    cnt += sizeof(BYTE);
+    memcpy(payload + cnt, "WORLDMAP", 8);
+    cnt += 8;
+    {
+        const DWORD nType = 1015;
+        memcpy(payload + cnt, &nType, sizeof(DWORD));
+        cnt += sizeof(DWORD);
+        const DWORD nSize = 6;
+        memcpy(payload + cnt, &nSize, sizeof(DWORD));
+        cnt += sizeof(DWORD);
+    }
+    memcpy(payload + cnt, "REPLY!", 6);
+
+    const fs::path written = g_view / "temp" / "WORLDMAP.WMP";
+    std::error_code ec;
+    fs::remove(written, ec);
+
+    // A host processes no reply and a closed session neither.
+    network.m_bIsHost = TRUE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == FALSE);
+    network.m_bIsHost = FALSE;
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(message.sub_42A3F0(payload, sizeof(payload), TRUE) == TRUE);
+    {
+        std::ifstream in(written, std::ios::binary);
+        std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        CHECK(bytes == std::vector<char>({ 'R', 'E', 'P', 'L', 'Y', '!' }));
+    }
+    fs::remove(written, ec);
+
+    network.m_nHostPlayer = nHostPlayer;
+    network.m_bIsHost = TRUE;
+    network.m_nServiceProvider = nServiceProvider;
+}
+
+TEST_CASE("time: the synch and change messages write their TIME wire bytes", "[uimisc][message][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
+    const INT nServiceProvider = network.m_nServiceProvider;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+
+    // A closed session writes nothing: neither sender leaves a packet.
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    network.m_bConnectionEstablished = FALSE;
+    message.TimeSynchBroadcast(0x12345678, TRUE);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    // The synch is the host's: {0xFF, 84, 116, DWORD gameTime, BYTE compress}.
+    network.m_bConnectionEstablished = TRUE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeSynchBroadcast(0x12345678, TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_TIME);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    {
+        DWORD nGameTime = 0;
+        memcpy(&nGameTime, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nGameTime == 0x12345678);
+    }
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)] == 1);
+
+    // The change is the client's: {0xFF, 84, 99, DWORD deltaTime}.
+    network.m_bIsHost = FALSE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_TYPE] == CBaldurMessage::MSG_TYPE_TIME);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_SUBTYPE] == CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    {
+        DWORD nDeltaTime = 0;
+        memcpy(&nDeltaTime, CNetwork::STATIC_MESSAGE_BUFFER + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(DWORD));
+        CHECK(nDeltaTime == 0x12345678);
+    }
+
+    // A host does not send the change (and does not disturb the buffer).
+    network.m_bIsHost = TRUE;
+    memset(CNetwork::STATIC_MESSAGE_BUFFER, 0, 16);
+    message.TimeChangeToServer(0x12345678);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[CNetwork::SPEC_MSG_FLAG] == 0);
+
+    network.m_nServiceProvider = nServiceProvider;
+}
+
+// CBaldurMessage::OnUpdateDemandCharacterSlot (0x42E0C0) answers a
+// PLAYERCHAR/85 demand: with the session open it takes the slot's character
+// (or not) and replies through its marshal helper (0x42E1B0: the derived
+// stats, the animation id, the portrait icons, the party creature block and
+// the custom bio) as PLAYERCHAR/117 to the requesting player (or all, when
+// the name is empty). The engine's null provider stops SendSpecificMessage
+// before the static buffer, so the answer is the observable here; the payload
+// is the evidence's read-only part.
+TEST_CASE("msg: the demand-slot update answers a closed session and drives the reply", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+
+    // 3-byte network header then {SHORT slot}.
+    BYTE payload[5] = {};
+    SHORT nSlot = 0;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+
+    // A closed session answers FALSE before the slot lookup.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == FALSE);
+
+    // With the session open the party's slot 0 takes the marshal path (the
+    // reply's send stops at the null provider) and the answer is TRUE.
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == TRUE);
+
+    // A slot without a character sends the header-only reply, also TRUE.
+    nSlot = 5;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == TRUE);
+
+    network.m_bConnectionEstablished = bConnection;
+}
+
+// CBaldurMessage::OnDemandCharacterSlotReply (0x42FA60) handles PLAYERCHAR/100,
+// the reply to a slot demand: with the session open it reads {SHORT slot;
+// BOOLEAN hasCharacter}. Without a character it clears the slot, and a client
+// asks the controlling player for the character; the host signals the deletion
+// instead. With a character it builds a CGameSprite from the marshalled block,
+// sets it into the slot, enables the portrait and installs the custom bio as a
+// TLK user entry - that path needs a full marshalled sprite and is read-only
+// evidence. The engine's null provider stops the settings broadcast.
+TEST_CASE("msg: the demand-slot reply answers a closed session and clears an empty slot", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+
+    // 3-byte network header, then {SHORT slot; BOOLEAN hasCharacter}.
+    BYTE payload[6] = {};
+    SHORT nSlot = 5;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+    payload[CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(nSlot)] = FALSE;
+
+    // A closed session answers FALSE before the payload is read.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == FALSE);
+
+    // A client clears the empty slot and asks nobody (the slot holds no
+    // character in the multiplayer settings).
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == TRUE);
+    CHECK(g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nSlot) == CGameObjectArray::INVALID_INDEX);
+
+    // The host clears it and signals the deletion.
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == TRUE);
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}
