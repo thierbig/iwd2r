@@ -1,7 +1,7 @@
 ---
 address: 0x5BDBA0
 name: CInfGame::sub_5BDBA0
-exemption: "a reputation setter read out of the exe: one WORD store of the argument x10 at +0x387a (m_nReputation), then, when the second argument is nonzero, a signed clamp to 200 with intermediate stores and a floor of 10"
+exemption: unmeasured WSO import: world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised
 kind: read-only
 ghidra_version: 12.1.4
 ---
