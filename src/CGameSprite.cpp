@@ -14386,8 +14386,13 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 225:
-        // TODO: 0x72A976-0x72A9A7 not ported (JumpToArea).
-        returnValue = ACTION_ERROR;
+        // JumpToArea (0x72A976-0x72A9A7): the action's string1 is the area,
+        // its dest the point and its specifics the facing; the dispatcher
+        // passes a delay of 0.
+        returnValue = JumpToArea(m_curAction.GetString1(),
+            m_curAction.GetDest(),
+            static_cast<SHORT>(m_curAction.GetSpecifics()),
+            0);
         goto done;
     case 229:
         // FaceObject (0x72A9B7-0x72A9DF)
