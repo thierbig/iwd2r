@@ -9707,6 +9707,15 @@ static void PartyTransitionMoveSprite(CGameSprite* pSprite,
     }
 }
 
+// 0x5C3B20
+void CInfGame::sub_5C3B20(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirection, CString sAreaName, CString sParchment)
+{
+    // TODO: Incomplete. The 4,001-byte LeaveAreaLUA transition (the
+    // destination area load, the party move and the LEAVEAREALUA 88/65
+    // broadcast) is a follow-up; the host permit handler (CBaldurMessage
+    // 0x437950) only answers 1 and calls this.
+}
+
 // The host's transition of the whole party through a party required travel
 // region `nTriggerId` (CBaldurMessage 0x438710 for the character
 // `nCharacterId`, LeaveAreaName's leader): the world screen comes back, the

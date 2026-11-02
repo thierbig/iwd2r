@@ -151,6 +151,7 @@ public:
     void CharacterExport(LONG nCharacterId, CString sFileName);
     CGameArea* LoadArea(CString areaName, BYTE nTravelScreenImageToUse, BOOLEAN bProgressBarRequired, BOOLEAN bProgressBarInPlace);
     void sub_5C4AD0(LONG nCharacterId, LONG nTriggerId, CString sAreaName);
+    void sub_5C3B20(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirection, CString sAreaName, CString sParchment);
     void Marshal(BYTE** pGame, DWORD* nGame, BOOLEAN bProgressBarInPlace);
     BOOLEAN CanSaveGame(STRREF& strError, BOOLEAN bInRestGame, BOOLEAN bInStore);
     BOOL BackupQuickSave();
