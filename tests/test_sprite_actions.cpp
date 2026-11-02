@@ -19,6 +19,7 @@
 #include "CObjectMarker.h"
 #include "CPathSearch.h"
 #include "CResDLG.h"
+#include "CScreenConnection.h"
 #include "CScreenCreateChar.h"
 #include "CScreenWorld.h"
 #include "CSearchBitmap.h"
@@ -3535,4 +3536,199 @@ TEST_CASE("sprite: LeaveParty brings an overflow character into the freed slot",
     CHECK(pGame->GetCharacterPortraitNum(nOverflowId) != -1);
     CHECK(pGame->m_characterOverflow.GetCount() == 0);
     CHECK(pGame->m_nCharacters == CINFGAME_MAXCHARACTERS);
+}
+
+TEST_CASE("sprite: LeaveParty updates the active screen's selected portrait", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    CGameSprite* pLeaver = new CGameSprite(candidates[1].data(),
+        static_cast<LONG>(candidates[1].size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pLeaver->m_pArea = pArea;
+    REQUIRE(pGame->AddCharacterToParty(pLeaver->GetId(), -1) == TRUE);
+    REQUIRE(pGame->GetCharacterPortraitNum(pLeaver->GetId()) == 1);
+
+    // A screen other than the world (the connection screen) is active. Its
+    // selected portrait is out of range: the handler's GetSelectedCharacter
+    // call on it normalizes it to 0.
+    CBaldurEngine* pEngine = static_cast<CBaldurEngine*>(g_pBaldurChitin->m_pEngineConnection);
+    g_pBaldurChitin->pActiveEngine = pEngine;
+    pEngine->SetSelectedCharacter(5);
+    REQUIRE(pEngine->m_nSelectedCharacter == 5);
+
+    // Action 21 through the sprite's dispatcher.
+    CAIAction leaveParty;
+    leaveParty.m_actionID = 21;
+    pLeaver->SetCurrAction(leaveParty);
+    CHECK(pLeaver->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CHECK(pEngine->m_nSelectedCharacter == 0);
+    CHECK(pGame->GetCharacterPortraitNum(pLeaver->GetId()) == -1);
+}
+
+TEST_CASE("sprite: LeaveParty leaves the world screen's selected portrait alone", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    CGameSprite* pLeaver = new CGameSprite(candidates[1].data(),
+        static_cast<LONG>(candidates[1].size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pLeaver->m_pArea = pArea;
+    REQUIRE(pGame->AddCharacterToParty(pLeaver->GetId(), -1) == TRUE);
+    REQUIRE(pGame->GetCharacterPortraitNum(pLeaver->GetId()) == 1);
+
+    // The world screen is active and holds a sentinel selection. The handler
+    // skips it, so the sentinel is not touched (the block's
+    // GetSelectedCharacter would otherwise normalize it).
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    g_pBaldurChitin->pActiveEngine = pWorld;
+    pWorld->m_nSelectedCharacter = 5;
+    REQUIRE(pWorld->m_nSelectedCharacter == 5);
+
+    CAIAction leaveParty;
+    leaveParty.m_actionID = 21;
+    pLeaver->SetCurrAction(leaveParty);
+    CHECK(pLeaver->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CHECK(pWorld->m_nSelectedCharacter == 5);
+}
+
+TEST_CASE("sprite: LeaveParty starts the corpse timer from the member's 0x2 flag", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    CGameSprite* pDead = new CGameSprite(candidates[1].data(),
+        static_cast<LONG>(candidates[1].size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pDead->m_pArea = pArea;
+    pDead->m_derivedStats.m_generalState = STATE_DEAD;
+    pDead->m_baseStats.m_flags = 0x2;
+    pDead->m_expirationTime = 0;
+    REQUIRE(pGame->AddCharacterToParty(pDead->GetId(), -1) == TRUE);
+
+    const ULONG nGameTime = 12345;
+    pGame->GetWorldTimer()->m_gameTime = nGameTime;
+
+    CAIAction leaveParty;
+    leaveParty.m_actionID = 21;
+    pDead->SetCurrAction(leaveParty);
+    CHECK(pDead->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CHECK(pDead->m_expirationTime == nGameTime);
+}
+
+TEST_CASE("sprite: LeaveParty ignores the 0x800 flag in the corpse timer test", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    CGameSprite* pDead = new CGameSprite(candidates[1].data(),
+        static_cast<LONG>(candidates[1].size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pDead->m_pArea = pArea;
+    pDead->m_derivedStats.m_generalState = STATE_DEAD;
+    pDead->m_baseStats.m_flags = 0x800;
+    pDead->m_expirationTime = 0;
+    REQUIRE(pGame->AddCharacterToParty(pDead->GetId(), -1) == TRUE);
+
+    pGame->GetWorldTimer()->m_gameTime = 12345;
+
+    CAIAction leaveParty;
+    leaveParty.m_actionID = 21;
+    pDead->SetCurrAction(leaveParty);
+    CHECK(pDead->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CHECK(pDead->m_expirationTime == 0);
 }

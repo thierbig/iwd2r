@@ -23523,8 +23523,8 @@ SHORT CGameSprite::LeaveParty()
                 FALSE);
         }
 
-        if ((m_baseStats.m_flags & 0x800) != 0
-            && (m_derivedStats.m_generalState & STATE_DEAD) != 0) {
+        if ((m_derivedStats.m_generalState & STATE_DEAD) != 0
+            && (m_baseStats.m_flags & 0x2) != 0) {
             m_expirationTime = pGame->GetWorldTimer()->m_gameTime;
         }
 
@@ -23573,8 +23573,8 @@ SHORT CGameSprite::LeaveParty()
             }
         }
 
-        // Everything carried (except the fist) goes to the protagonist, and
-        // the slot is emptied.
+        // Items whose file flags have bit 0x1 (everything carried except the
+        // fist) go to the protagonist, and the slot is emptied.
         for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
             if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
                 continue;
@@ -23611,14 +23611,16 @@ SHORT CGameSprite::LeaveParty()
         pGame->SelectToolbar();
     }
 
-    // The world screen's selected portrait follows the party.
-    if (g_pBaldurChitin->pActiveEngine != g_pBaldurChitin->m_pEngineWorld) {
+    // The active screen's selected portrait follows the party. The world
+    // screen is skipped: it handles the selection itself.
+    CWarp* pActiveEngine = g_pBaldurChitin->pActiveEngine;
+    if (pActiveEngine == g_pBaldurChitin->m_pEngineWorld) {
         return ACTION_DONE;
     }
 
-    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
-    if (pWorld->GetSelectedCharacter() == pGame->GetCharacterPortraitNum(m_id)) {
-        pWorld->OnPortraitLClick(pGame->GetCharacterPortraitNum(pGame->GetProtagonist()));
+    CBaldurEngine* pEngine = static_cast<CBaldurEngine*>(pActiveEngine);
+    if (pEngine->GetSelectedCharacter() == pGame->GetCharacterPortraitNum(m_id)) {
+        pEngine->OnPortraitLClick(pGame->GetCharacterPortraitNum(pGame->GetProtagonist()));
     }
 
     return ACTION_DONE;
