@@ -779,8 +779,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::UpdateSkillsPanel",
   "address": "0x60EB60",
-  "category": "same",
-  "their_len": 2313,
+  "category": "theirs_changed_ours_base",
+  "their_len": 2363,
   "our_len": 2313
  },
  {
@@ -1251,8 +1251,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenSkillsPlusMinus::AdjustValue",
   "address": "0x61A980",
-  "category": "same",
-  "their_len": 1857,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1888,
   "our_len": 1857
  },
  {
@@ -1427,8 +1427,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlButtonCharacterSkillsPlusMinus::AdjustValue",
   "address": "0x5F8610",
-  "category": "same",
-  "their_len": 1722,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1773,
   "our_len": 1722
  },
  {
@@ -1515,8 +1515,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::ResetSkillsPanel",
   "address": "0x60C700",
-  "category": "same",
-  "their_len": 1654,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1670,
   "our_len": 1654
  },
  {
@@ -1571,8 +1571,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenMemorizedDivineSpellSelection::OnLButtonClick",
   "address": "0x620E10",
-  "category": "same",
-  "their_len": 1632,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1690,
   "our_len": 1632
  },
  {
@@ -1803,8 +1803,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::OnLButtonClick",
   "address": "0x61B460",
-  "category": "same",
-  "their_len": 1539,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1594,
   "our_len": 1539
  },
  {
@@ -1931,16 +1931,16 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenMemorizedArcaneSpellSelection::OnLButtonClick",
   "address": "0x620560",
-  "category": "same",
-  "their_len": 1484,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1490,
   "our_len": 1484
  },
  {
   "file": "src/CChitin.cpp",
   "name": "CChitin::SynchronousUpdate",
   "address": "0x790B70",
-  "category": "same",
-  "their_len": 1475,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1542,
   "our_len": 1475
  },
  {
@@ -2051,8 +2051,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::ResetArcaneSpellsPanel",
   "address": "0x60A5C0",
-  "category": "same",
-  "their_len": 1438,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1697,
   "our_len": 1438
  },
  {
@@ -2155,8 +2155,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::ResetAbility",
   "address": "0x60BE30",
-  "category": "same",
-  "their_len": 1381,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1659,
   "our_len": 1381
  },
  {
@@ -2203,8 +2203,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::UpdateArcaneSpellsPanel",
   "address": "0x60EF70",
-  "category": "same",
-  "their_len": 1372,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1551,
   "our_len": 1372
  },
  {
@@ -2563,7 +2563,7 @@
   "file": "src/CSpell.cpp",
   "name": "CSpell::CheckUsableBy",
   "address": "0x54AA40",
-  "category": "same",
+  "category": "theirs_changed_ours_base",
   "their_len": 1275,
   "our_len": 1275
  },
@@ -2891,8 +2891,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::UpdateMemorizeArcaneSpellsPanel",
   "address": "0x60F430",
-  "category": "same",
-  "their_len": 1191,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1164,
   "our_len": 1191
  },
  {
@@ -3251,8 +3251,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenAbilitiesPlusMinus::OnLButtonDown",
   "address": "0x619220",
-  "category": "same",
-  "their_len": 1111,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1136,
   "our_len": 1111
  },
  {
@@ -3387,8 +3387,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenAbilitiesRecall::OnLButtonClick",
   "address": "0x619B60",
-  "category": "same",
-  "their_len": 1085,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1121,
   "our_len": 1085
  },
  {
@@ -3403,8 +3403,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::sub_725330",
   "address": "0x725330",
-  "category": "same",
-  "their_len": 1078,
+  "category": "theirs_changed_ours_base",
+  "their_len": 1146,
   "our_len": 1078
  },
  {
@@ -3931,16 +3931,16 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CScreenCharacter::ResetPopupPanel",
   "address": "0x5E0880",
-  "category": "same",
-  "their_len": 977,
+  "category": "theirs_changed_ours_base",
+  "their_len": 989,
   "our_len": 977
  },
  {
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::GetSkillCost",
   "address": "0x764310",
-  "category": "same",
-  "their_len": 974,
+  "category": "theirs_changed_ours_base",
+  "their_len": 999,
   "our_len": 974
  },
  {
@@ -5491,8 +5491,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenSkillsPlusMinus::OnLButtonDown",
   "address": "0x61A830",
-  "category": "same",
-  "their_len": 807,
+  "category": "theirs_changed_ours_base",
+  "their_len": 838,
   "our_len": 807
  },
  {
@@ -5531,8 +5531,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenFeatsPlusMinus::OnLButtonDown",
   "address": "0x623150",
-  "category": "same",
-  "their_len": 804,
+  "category": "theirs_changed_ours_base",
+  "their_len": 835,
   "our_len": 804
  },
  {
@@ -6475,8 +6475,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenSkillsHotArea::OnHotAreaClick",
   "address": "0x61F430",
-  "category": "same",
-  "their_len": 693,
+  "category": "theirs_changed_ours_base",
+  "their_len": 744,
   "our_len": 693
  },
  {
@@ -6851,8 +6851,8 @@
   "file": "src/IcewindCGameEffects.cpp",
   "name": "IcewindCGameEffectSlowPoison::ApplyEffect",
   "address": "0x55F180",
-  "category": "same",
-  "their_len": 665,
+  "category": "theirs_changed_ours_base",
+  "their_len": 683,
   "our_len": 665
  },
  {
@@ -7451,8 +7451,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenFeatsHotArea::OnHotAreaClick",
   "address": "0x622AC0",
-  "category": "same",
-  "their_len": 606,
+  "category": "theirs_changed_ours_base",
+  "their_len": 657,
   "our_len": 606
  },
  {
@@ -8475,7 +8475,7 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::Render",
   "address": "0x61B750",
-  "category": "same",
+  "category": "theirs_changed_ours_base",
   "their_len": 535,
   "our_len": 535
  },
@@ -8483,16 +8483,16 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenMemorizedArcaneSpellSelection::Render",
   "address": "0x620970",
-  "category": "same",
-  "their_len": 535,
+  "category": "theirs_changed_ours_base",
+  "their_len": 507,
   "our_len": 535
  },
  {
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenMemorizedDivineSpellSelection::Render",
   "address": "0x6212D0",
-  "category": "same",
-  "their_len": 535,
+  "category": "theirs_changed_ours_base",
+  "their_len": 506,
   "our_len": 535
  },
  {
@@ -9571,7 +9571,7 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGenKnownArcaneSpellSelection::SetSpell",
   "address": "0x61B290",
-  "category": "same",
+  "category": "theirs_changed_ours_base",
   "their_len": 483,
   "our_len": 483
  },
@@ -14827,8 +14827,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenFeats::OnScroll",
   "address": "0x622E80",
-  "category": "same",
-  "their_len": 264,
+  "category": "theirs_changed_ours_base",
+  "their_len": 253,
   "our_len": 264
  },
  {
@@ -15619,8 +15619,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::RecallMemoryAbilities",
   "address": "0x610850",
-  "category": "same",
-  "their_len": 247,
+  "category": "theirs_changed_ours_base",
+  "their_len": 323,
   "our_len": 247
  },
  {
@@ -16059,8 +16059,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenSkills::OnPageUp",
   "address": "0x61A430",
-  "category": "same",
-  "their_len": 234,
+  "category": "theirs_changed_ours_base",
+  "their_len": 255,
   "our_len": 234
  },
  {
@@ -16147,8 +16147,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenFeats::OnPageUp",
   "address": "0x622D30",
-  "category": "same",
-  "their_len": 231,
+  "category": "theirs_changed_ours_base",
+  "their_len": 252,
   "our_len": 231
  },
  {
@@ -16291,8 +16291,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlScrollBarCharacterSkills::OnPageUp",
   "address": "0x5F80E0",
-  "category": "same",
-  "their_len": 228,
+  "category": "theirs_changed_ours_base",
+  "their_len": 267,
   "our_len": 228
  },
  {
@@ -16443,8 +16443,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlScrollBarCharacterFeats::OnPageUp",
   "address": "0x5F6A80",
-  "category": "same",
-  "their_len": 225,
+  "category": "theirs_changed_ours_base",
+  "their_len": 264,
   "our_len": 225
  },
  {
@@ -17067,8 +17067,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenFeats::OnScrollDown",
   "address": "0x622C80",
-  "category": "same",
-  "their_len": 213,
+  "category": "theirs_changed_ours_base",
+  "their_len": 234,
   "our_len": 213
  },
  {
@@ -17339,8 +17339,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlScrollBarCharacterFeats::OnScrollDown",
   "address": "0x5F69D0",
-  "category": "same",
-  "their_len": 207,
+  "category": "theirs_changed_ours_base",
+  "their_len": 228,
   "our_len": 207
  },
  {
@@ -18371,8 +18371,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenSkills::OnScrollUp",
   "address": "0x61A300",
-  "category": "same",
-  "their_len": 195,
+  "category": "theirs_changed_ours_base",
+  "their_len": 216,
   "our_len": 195
  },
  {
@@ -18571,8 +18571,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlScrollBarCharGenFeats::OnScrollUp",
   "address": "0x622BE0",
-  "category": "same",
-  "their_len": 193,
+  "category": "theirs_changed_ours_base",
+  "their_len": 214,
   "our_len": 193
  },
  {
@@ -18995,8 +18995,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlScrollBarCharacterSkills::OnScrollUp",
   "address": "0x5F7FB0",
-  "category": "same",
-  "their_len": 189,
+  "category": "theirs_changed_ours_base",
+  "their_len": 228,
   "our_len": 189
  },
  {
@@ -19331,8 +19331,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlScrollBarCharacterFeats::OnScrollUp",
   "address": "0x5F6930",
-  "category": "same",
-  "their_len": 187,
+  "category": "theirs_changed_ours_base",
+  "their_len": 226,
   "our_len": 187
  },
  {
@@ -24900,8 +24900,8 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CUIControlButtonCharGen61A130::OnLButtonClick",
   "address": "0x61A2A0",
-  "category": "same",
-  "their_len": 126,
+  "category": "theirs_changed_ours_base",
+  "their_len": 130,
   "our_len": 126
  },
  {
@@ -27503,8 +27503,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::GetSkillValue",
   "address": "0x7642D0",
-  "category": "same",
-  "their_len": 97,
+  "category": "theirs_changed_ours_base",
+  "their_len": 122,
   "our_len": 97
  },
  {
@@ -33884,7 +33884,7 @@
  {
   "file": "src/CResTile.cpp",
   "name": "CResTile::GetTileData",
-  "address": null,
+  "address": "0x780770",
   "category": "same",
   "their_len": 46,
   "our_len": 46
@@ -35748,7 +35748,7 @@
  {
   "file": "src/CUIControlBase.cpp",
   "name": "CUIControlBase::SetInactiveRender",
-  "address": null,
+  "address": "0x4D25A0",
   "category": "same_stub",
   "their_len": 36,
   "our_len": 36
@@ -39758,8 +39758,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::JumpToArea",
   "address": "0x766140",
-  "category": "same_stub",
-  "their_len": 21,
+  "category": "theirs_real_ours_stub",
+  "their_len": 1075,
   "our_len": 21
  },
  {
@@ -46438,16 +46438,16 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::MoveGlobal",
   "address": "0x74F6D0",
-  "category": "same_stub",
-  "their_len": 2,
+  "category": "theirs_real_ours_stub",
+  "their_len": 575,
   "our_len": 2
  },
  {
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::MoveOntoArea",
   "address": "0x766380",
-  "category": "same_stub",
-  "their_len": 2,
+  "category": "theirs_real_ours_stub",
+  "their_len": 893,
   "our_len": 2
  },
  {
@@ -46550,32 +46550,32 @@
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::ChangeBiography",
   "address": "0x5C3790",
-  "category": "same_stub",
-  "their_len": 2,
+  "category": "theirs_real_ours_stub",
+  "their_len": 1623,
   "our_len": 2
  },
  {
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::ReputationAdjustment",
   "address": "0x5BDC00",
-  "category": "same_stub",
-  "their_len": 2,
-  "our_len": 2
+  "category": "both_changed_differ",
+  "their_len": 1984,
+  "our_len": 1954
  },
  {
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::SwapCharacters",
   "address": "0x5AF160",
-  "category": "same_stub",
-  "their_len": 2,
-  "our_len": 2
+  "category": "both_changed_differ",
+  "their_len": 1226,
+  "our_len": 1177
  },
  {
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::sub_5BDBA0",
   "address": "0x5BDBA0",
-  "category": "same_stub",
-  "their_len": 2,
+  "category": "theirs_real_ours_stub",
+  "their_len": 123,
   "our_len": 2
  },
  {
@@ -51511,7 +51511,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitVisual::IcewindCSpellHitVisual",
   "address": "0x56BF30",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 5102,
   "our_len": 0
  },
@@ -51552,15 +51552,14 @@
   "name": "CGameSprite::sub_71C0C0",
   "address": "0x71C0C0",
   "category": "only_theirs",
-  "their_len": 4254,
-  "our_len": 0,
-  "address_source": "sub-name"
+  "their_len": 4261,
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::Fire",
   "address": "0x5791D0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 3950,
   "our_len": 0
  },
@@ -51584,7 +51583,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitVisual::AIUpdate",
   "address": "0x56D0A0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 3634,
   "our_len": 0
  },
@@ -51690,7 +51689,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTravelling::Render",
   "address": "0x52B190",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2964,
   "our_len": 0
  },
@@ -51698,10 +51697,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::Fire",
   "address": "0x579EF0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2951,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CMessage.cpp",
@@ -51715,7 +51713,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCallLightning::Render",
   "address": "0x534DD0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2771,
   "our_len": 0
  },
@@ -51723,7 +51721,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSunray::Render",
   "address": "0x57ED30",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2745,
   "our_len": 0
  },
@@ -51771,7 +51769,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::AIUpdate",
   "address": "0x578AB0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2680,
   "our_len": 0
  },
@@ -51787,7 +51785,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitParticle::AIUpdate",
   "address": "0x56E650",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2625,
   "our_len": 0
  },
@@ -51803,7 +51801,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTravelling::AimAtPoint",
   "address": "0x52BD20",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2539,
   "our_len": 0
  },
@@ -51819,7 +51817,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::AimAtPoint",
   "address": "0x578ED0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2439,
   "our_len": 0
  },
@@ -51876,7 +51874,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileImpactBAM::Render",
   "address": "0x5363F0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2171,
   "our_len": 0
  },
@@ -51884,7 +51882,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectilePhaseBAM::Render",
   "address": "0x535A40",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 2148,
   "our_len": 0
  },
@@ -51964,18 +51962,17 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSPMAGMIS::Fire",
   "address": "0x530C90",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1969,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CNetwork.cpp",
   "name": "CNetworkWindow::ReceiveCall",
   "address": "0x7A3B50",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1954,
-  "our_len": 0
+  "our_len": 1982
  },
  {
   "file": "src/CGameSprite.cpp",
@@ -52022,7 +52019,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitVisual::Render",
   "address": "0x56D730",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1721,
   "our_len": 0
  },
@@ -52063,19 +52060,17 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::OnArrival",
   "address": "0x56F410",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1605,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::Fire",
   "address": "0x56F820",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1594,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -52179,27 +52174,25 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTravelling::GetCellBounds",
   "address": "0x52B6B0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1450,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileScorcher::Strike",
   "address": "0x57C1D0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1419,
-  "our_len": 0
+  "our_len": 1510
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::DeliverEffects",
   "address": "0x57A670",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1373,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CMessage.cpp",
@@ -52213,16 +52206,15 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCallLightning::Fire",
   "address": "0x535100",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1353,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSunray::Fire",
   "address": "0x57F050",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1353,
   "our_len": 0
  },
@@ -52230,7 +52222,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitParticle::Render",
   "address": "0x56EA90",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1344,
   "our_len": 0
  },
@@ -52246,9 +52238,9 @@
   "file": "src/CNetwork.cpp",
   "name": "CNetworkWindow::FrameSend",
   "address": "0x7A2590",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1294,
-  "our_len": 0
+  "our_len": 1216
  },
  {
   "file": "src/CResFile.cpp",
@@ -52262,7 +52254,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::AIUpdate",
   "address": "0x56FAF0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1274,
   "our_len": 0
  },
@@ -52278,7 +52270,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::UpdateDirectionSequence",
   "address": "0x579860",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1245,
   "our_len": 0
  },
@@ -52326,7 +52318,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitVisual::~IcewindCSpellHitVisual",
   "address": "0x56CF00",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1198,
   "our_len": 0
  },
@@ -52334,15 +52326,14 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::StrikeTarget",
   "address": "0x5701E0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1187,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::PutBackItem",
-  "address": null,
+  "address": "0x5C7440",
   "category": "only_theirs",
   "their_len": 1127,
   "our_len": 0
@@ -52359,7 +52350,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSunray::AIUpdate",
   "address": "0x57EB30",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1123,
   "our_len": 0
  },
@@ -52423,16 +52414,15 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::OnArrival",
   "address": "0x57A530",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1054,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitParticle::IcewindCSpellHitParticle",
   "address": "0x56E280",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1051,
   "our_len": 0
  },
@@ -52440,7 +52430,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCallLightning::AIUpdate",
   "address": "0x534C10",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 1044,
   "our_len": 0
  },
@@ -52521,7 +52511,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectilePhaseBAM::AIUpdate",
   "address": "0x5357B0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 916,
   "our_len": 0
  },
@@ -52554,7 +52544,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::GetCellBounds",
   "address": "0x578970",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 886,
   "our_len": 0
  },
@@ -52602,7 +52592,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileBAM::Fire",
   "address": "0x57D230",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 826,
   "our_len": 0
  },
@@ -52610,19 +52600,17 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::GatherTargets",
   "address": "0x56FED0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 814,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::CProjectileCone",
   "address": "0x579B40",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 807,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -52645,19 +52633,17 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::Pulse",
   "address": "0x57A970",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 773,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileFireball::CProjectileFireball",
   "address": "0x571E80",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 770,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CInfGame.cpp",
@@ -52695,10 +52681,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTravelling::UpdateDirectionSequence",
   "address": "0x52C8C0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 699,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -52737,7 +52722,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSummonVFX::Fire",
   "address": "0x57E710",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 663,
   "our_len": 0
  },
@@ -52753,7 +52738,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileBAM::CProjectileBAM",
   "address": "0x57CAC0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 652,
   "our_len": 0
  },
@@ -52761,10 +52746,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCallLightningStrike::Strike",
   "address": "0x574AA0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 641,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -52788,7 +52772,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectilePhaseBAM::Fire",
   "address": "0x535D20",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 601,
   "our_len": 0
  },
@@ -52854,7 +52838,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileBAM::AIUpdate",
   "address": "0x57CEE0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 551,
   "our_len": 0
  },
@@ -52913,7 +52897,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileTravellingVFX::IcewindCProjectileTravellingVFX",
   "address": "0x578110",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 515,
   "our_len": 0
  },
@@ -52921,7 +52905,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileImpactBAM::CProjectileImpactBAM",
   "address": "0x535F20",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 513,
   "our_len": 0
  },
@@ -52938,19 +52922,17 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCloudkill::CProjectileCloudkill",
   "address": "0x571310",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 509,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileStinkingCloud::CProjectileStinkingCloud",
   "address": "0x574B80",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 509,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -52981,10 +52963,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileMMissiT::CProjectileMMissiT",
   "address": "0x57E030",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 486,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53023,7 +53004,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileImpactBAM::Fire",
   "address": "0x5366F0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 480,
   "our_len": 0
  },
@@ -53155,10 +53136,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileFireSeed::CProjectileFireSeed",
   "address": "0x572110",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 408,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53215,10 +53195,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileGrease::CProjectileGrease",
   "address": "0x572670",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 396,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CGameAIBase.cpp",
@@ -53257,10 +53236,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileWeb::CProjectileWeb",
   "address": "0x574EB0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 379,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53282,10 +53260,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileFireStorm::CProjectileFireStorm",
   "address": "0x572290",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 369,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53307,25 +53284,23 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCone::AIUpdate",
   "address": "0x579E50",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 354,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileEntangle::CProjectileEntangle",
   "address": "0x571CE0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 344,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CGameAnimationTypeEffect.cpp",
   "name": "CGameAnimationTypeEffect::OverrideAnimation",
   "address": "0x55DBD0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 343,
   "our_len": 0
  },
@@ -53333,7 +53308,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectilePhaseBAM::CProjectilePhaseBAM",
   "address": "0x535320",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 340,
   "our_len": 0
  },
@@ -53341,7 +53316,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSunray::CProjectileSunray",
   "address": "0x57E860",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 334,
   "our_len": 0
  },
@@ -53384,7 +53359,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileCallLightning::CProjectileCallLightning",
   "address": "0x5348C0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 302,
   "our_len": 0
  },
@@ -53392,10 +53367,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileStrike::CProjectileStrike",
   "address": "0x5300E0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 298,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53493,7 +53467,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileImpactBAM::AIUpdate",
   "address": "0x536380",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 236,
   "our_len": 0
  },
@@ -53517,7 +53491,7 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSummonVFX::CProjectileSummonVFX",
   "address": "0x57E490",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 235,
   "our_len": 0
  },
@@ -53550,7 +53524,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitParticle::RemoveFromArea",
   "address": "0x56ECF0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 223,
   "our_len": 0
  },
@@ -53558,14 +53532,14 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCSpellHitVisual::RemoveFromArea",
   "address": "0x56D9B0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 223,
   "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectile::IsTargetImmune",
-  "address": null,
+  "address": "0x536FC0",
   "category": "only_theirs",
   "their_len": 221,
   "our_len": 0
@@ -53582,10 +53556,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileEyeOfStone::CProjectileEyeOfStone",
   "address": "0x572E60",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 206,
-  "our_len": 0,
-  "address_source": "fork-header"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53609,10 +53582,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileSleep::CProjectileSleep",
   "address": "0x574300",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 206,
-  "our_len": 0,
-  "address_source": "fork-header"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53730,10 +53702,9 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileDispelMagic::CProjectileDispelMagic",
   "address": "0x577B20",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 129,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
@@ -53748,15 +53719,15 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileScorcher::Fire",
   "address": "0x57B1D0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 124,
-  "our_len": 0
+  "our_len": 116
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTravelling::SetRange",
   "address": "0x52B150",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 121,
   "our_len": 0
  },
@@ -53790,7 +53761,7 @@
   "file": "src/CGameAnimationTypeMonsterLarge16.cpp",
   "name": "CGameAnimationTypeMonsterLarge16::GetCurrentSequenceAndFrame",
   "address": "0x6C2D70",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 101,
   "our_len": 0
  },
@@ -53838,19 +53809,17 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectileTurnUndead::CProjectileTurnUndead",
   "address": "0x576CF0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 94,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::Strike",
   "address": "0x5701B0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 91,
-  "our_len": 0,
-  "address_source": "fork-decl"
+  "our_len": 0
  },
  {
   "file": "src/CUIControlEditMultiLine.cpp",
@@ -53938,7 +53907,7 @@
   "file": "src/CProjectile.cpp",
   "name": "IcewindCProjectileSpellHit::Render",
   "address": "0x56F3F0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 67,
   "our_len": 0
  },
@@ -54012,7 +53981,7 @@
   "file": "src/CMessage.cpp",
   "name": "CMessage105::GetMsgType",
   "address": "0x40A0E0",
-  "category": "only_theirs",
+  "category": "both_changed_differ",
   "their_len": 42,
   "our_len": 0
  },
@@ -54916,8 +54885,8 @@
   "file": "src/CGameEffect.cpp",
   "name": "CGameEffect::sub_4A3310",
   "address": "0x4A3310",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 5635,
   "our_len": 6243
  },
  {
@@ -54956,9 +54925,9 @@
   "file": "src/CGameAIBase.cpp",
   "name": "CGameAIBase::ForceSpell",
   "address": "0x461190",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 4619
+  "category": "both_changed_differ",
+  "their_len": 6586,
+  "our_len": 5048
  },
  {
   "file": "src/CGameArea.cpp",
@@ -54988,8 +54957,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::CheckQuickLists",
   "address": "0x71ABA0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 3541,
   "our_len": 3664
  },
  {
@@ -55036,8 +55005,8 @@
   "file": "src/CInfButtonArray.cpp",
   "name": "CInfButtonArray::sub_5950F0",
   "address": "0x5950F0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 2710,
   "our_len": 3361
  },
  {
@@ -55068,8 +55037,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::sub_763E40",
   "address": "0x763E40",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 3925,
   "our_len": 2919
  },
  {
@@ -55140,8 +55109,8 @@
   "file": "src/CGameEffect.cpp",
   "name": "CGameEffectPoison::ApplyEffect",
   "address": "0x4AF610",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 2060,
   "our_len": 2383
  },
  {
@@ -55155,7 +55124,7 @@
  {
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::AddExperienceParty",
-  "address": null,
+  "address": "0x5C0BB0",
   "category": "only_ours",
   "their_len": 0,
   "our_len": 2369
@@ -55177,12 +55146,12 @@
   "our_len": 2326
  },
  {
-  "file": "src/CVidImage.cpp",
-  "name": "CVidImage::GetTint",
+  "file": "src/CVidBitmap.cpp",
+  "name": "CVidBitmap::GetTintValues",
   "address": "0x7B4230",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 2240
+  "category": "both_changed_differ",
+  "their_len": 2518,
+  "our_len": 0
  },
  {
   "file": "src/CScreenCharacter.cpp",
@@ -55217,12 +55186,12 @@
   "our_len": 2113
  },
  {
-  "file": "src/CInfGame.cpp",
-  "name": "CInfGame::CheckIfSpriteCanUseItem",
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::CanUseItem",
   "address": "0x5B9D20",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 2113
+  "category": "both_changed_differ",
+  "their_len": 2087,
+  "our_len": 0
  },
  {
   "file": "src/CGameAnimationTypeMonsterMulti.cpp",
@@ -55380,8 +55349,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::GetRaceString",
   "address": "0x722090",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 1792,
   "our_len": 1756
  },
  {
@@ -55396,8 +55365,8 @@
   "file": "src/CGameAIBase.cpp",
   "name": "CGameAIBase::GetTargetShareAIType",
   "address": "0x45C030",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 1668,
   "our_len": 1729
  },
  {
@@ -55506,12 +55475,12 @@
   "our_len": 1538
  },
  {
-  "file": "src/CVidImage.cpp",
-  "name": "CVidImage::GetAdd",
+  "file": "src/CVidBitmap.cpp",
+  "name": "CVidBitmap::GetAddValues",
   "address": "0x7B4600",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 1530
+  "category": "both_changed_differ",
+  "their_len": 1539,
+  "our_len": 0
  },
  {
   "file": "src/CScreenSpellbook.cpp",
@@ -55661,8 +55630,8 @@
   "file": "src/CInfButtonArray.cpp",
   "name": "CInfButtonArray::sub_5957C0",
   "address": "0x5957C0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 1087,
   "our_len": 1130
  },
  {
@@ -55718,8 +55687,8 @@
   "file": "src/CGameEffect.cpp",
   "name": "CGameEffect::sub_4A3FF0",
   "address": "0x4A3FF0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 964,
   "our_len": 1075
  },
  {
@@ -55750,8 +55719,8 @@
   "file": "src/CGameAIBase.cpp",
   "name": "CGameAIBase::SeeTarget",
   "address": "0x44DAC0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 918,
   "our_len": 1018
  },
  {
@@ -55795,12 +55764,12 @@
   "our_len": 969
  },
  {
-  "file": "src/CVidImage.cpp",
-  "name": "CVidImage::GetLight",
+  "file": "src/CVidBitmap.cpp",
+  "name": "CVidBitmap::GetLightValues",
   "address": "0x7B4800",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 946
+  "category": "both_changed_differ",
+  "their_len": 1087,
+  "our_len": 0
  },
  {
   "file": "src/CMoveList.cpp",
@@ -56063,8 +56032,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::sub_7567F0",
   "address": "0x7567F0",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 697,
   "our_len": 622
  },
  {
@@ -56175,8 +56144,8 @@
   "file": "src/CInfGame.cpp",
   "name": "CInfGame::CheckIfPlayerInPortraitSlotCanUseItem",
   "address": "0x5B9C60",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 676,
   "our_len": 526
  },
  {
@@ -56207,8 +56176,8 @@
   "file": "src/CGameSprite.cpp",
   "name": "CGameSprite::HandlePersistantEffects",
   "address": "0x733200",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 450,
   "our_len": 464
  },
  {
@@ -56375,10 +56344,9 @@
   "file": "src/CRuleTables.cpp",
   "name": "CRuleTables::sub_547620",
   "address": "0x547620",
-  "category": "only_ours",
-  "their_len": 0,
-  "our_len": 224,
-  "address_source": "sub-name"
+  "category": "both_changed_differ",
+  "their_len": 271,
+  "our_len": 224
  },
  {
   "file": "src/CVidMode.cpp",
@@ -56472,8 +56440,8 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectile84D8B8::Fire",
   "address": "0x529950",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "both_changed_differ",
+  "their_len": 170,
   "our_len": 128
  },
  {
@@ -57049,8 +57017,8 @@
   "file": "src/CProjectile.cpp",
   "name": "CProjectile84D8B8::CProjectile84D8B8",
   "address": "0x530790",
-  "category": "only_ours",
-  "their_len": 0,
+  "category": "theirs_real_ours_stub",
+  "their_len": 335,
   "our_len": 2
  },
  {
@@ -58105,9 +58073,9 @@
   "file": "src/CScreenCreateChar.cpp",
   "name": "CScreenCreateChar::OnDoneButtonClick",
   "address": "0x615F50",
-  "category": "theirs_changed_ours_base",
-  "their_len": 8773,
-  "our_len": 8771
+  "category": "both_changed_differ",
+  "their_len": 8918,
+  "our_len": 8797
  },
  {
   "file": "src/CScreenSinglePlayer.cpp",
@@ -58202,7 +58170,7 @@
   "name": "CGameSprite::sub_763A40",
   "address": "0x763A40",
   "category": "theirs_changed_ours_base",
-  "their_len": 5344,
+  "their_len": 5368,
   "our_len": 5020
  },
  {
@@ -58242,7 +58210,7 @@
   "name": "CScreenConnection::TimerAsynchronousUpdate",
   "address": "0x5FB3E0",
   "category": "theirs_changed_ours_base",
-  "their_len": 4467,
+  "their_len": 4492,
   "our_len": 4106
  },
  {
@@ -58530,7 +58498,7 @@
   "name": "CScreenCreateChar::ResetFeatsPanel",
   "address": "0x60CA10",
   "category": "theirs_changed_ours_base",
-  "their_len": 2555,
+  "their_len": 2685,
   "our_len": 2549
  },
  {
@@ -58578,7 +58546,7 @@
   "name": "CScreenCreateChar::ResetMemorizeDivineSpellsPanel",
   "address": "0x60AF60",
   "category": "theirs_changed_ours_base",
-  "their_len": 2326,
+  "their_len": 2328,
   "our_len": 2285
  },
  {
@@ -58650,7 +58618,7 @@
   "name": "CScreenCreateChar::ResetMemorizeArcaneSpellsPanel",
   "address": "0x60A920",
   "category": "theirs_changed_ours_base",
-  "their_len": 2190,
+  "their_len": 2259,
   "our_len": 2159
  },
  {
@@ -58714,7 +58682,7 @@
   "name": "CUIControlButtonCharGenFeatsPlusMinus::AdjustValue",
   "address": "0x6232A0",
   "category": "theirs_changed_ours_base",
-  "their_len": 1935,
+  "their_len": 1973,
   "our_len": 1920
  },
  {
@@ -59034,7 +59002,7 @@
   "name": "CScreenCreateChar::ResetMemorizeDomainSpellsPanel",
   "address": "0x60B610",
   "category": "theirs_changed_ours_base",
-  "their_len": 1338,
+  "their_len": 1570,
   "our_len": 1317
  },
  {
@@ -60674,7 +60642,7 @@
   "name": "CBaldurChitin::AllocResObject",
   "address": "0x423210",
   "category": "theirs_changed_ours_base",
-  "their_len": 596,
+  "their_len": 624,
   "our_len": 556
  },
  {
@@ -63849,8 +63817,8 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlButtonCharacterSkillsPlusMinus::OnLButtonDown",
   "address": "0x5F84E0",
-  "category": "ours_changed_theirs_base",
-  "their_len": 746,
+  "category": "both_changed_differ",
+  "their_len": 797,
   "our_len": 756
  },
  {
@@ -64225,16 +64193,16 @@
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlButtonCharacterSkillsHotArea::OnHotAreaClick",
   "address": "0x5F88D0",
-  "category": "ours_changed_theirs_base",
-  "their_len": 560,
+  "category": "both_changed_differ",
+  "their_len": 611,
   "our_len": 570
  },
  {
   "file": "src/CScreenCharacter.cpp",
   "name": "CUIControlButtonCharacterFeatsHotArea::OnHotAreaClick",
   "address": "0x5F6830",
-  "category": "ours_changed_theirs_base",
-  "their_len": 557,
+  "category": "both_changed_differ",
+  "their_len": 608,
   "our_len": 567
  },
  {
@@ -67571,7 +67539,7 @@
   "name": "CInfGame::SelectToolbar",
   "address": "0x5ADAE0",
   "category": "both_changed_differ",
-  "their_len": 1209,
+  "their_len": 1270,
   "our_len": 1105
  },
  {
@@ -69051,7 +69019,7 @@
   "name": "CGameEffectSkillUnsummon::ApplyEffect",
   "address": "0x4B4BD0",
   "category": "both_changed_differ",
-  "their_len": 169,
+  "their_len": 342,
   "our_len": 356
  },
  {
@@ -69429,5 +69397,525 @@
   "category": "both_stub_diff",
   "their_len": 2,
   "our_len": 15
+ },
+ {
+  "file": "src/CInfGame.cpp",
+  "name": "CGameObjectArray::HasNoRestBlockingSpellStates",
+  "address": "0x5C9300",
+  "category": "both_changed_differ",
+  "their_len": 577,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileMagicMissileMulti::CProjectileMagicMissileMulti",
+  "address": "0x5309C0",
+  "category": "both_changed_differ",
+  "their_len": 550,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameEffect.cpp",
+  "name": "CPersistantEffectListRegenerated::AIUpdate",
+  "address": "0x51E8B0",
+  "category": "both_changed_differ",
+  "their_len": 371,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "IcewindCProjectileSpellHit::SetStrikeAllyFilter",
+  "address": "0x5703F0",
+  "category": "both_changed_differ",
+  "their_len": 236,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "IcewindCProjectileSpellHit::SetStrikeTargetFilter",
+  "address": "0x5704E0",
+  "category": "both_changed_differ",
+  "their_len": 236,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::SpellPoint",
+  "address": "0x742840",
+  "category": "both_changed_differ",
+  "their_len": 12700,
+  "our_len": 12538
+ },
+ {
+  "file": "src/CGameArea.cpp",
+  "name": "CGameArea::CheckRestEncounter",
+  "address": "0x46FEA0",
+  "category": "both_changed_differ",
+  "their_len": 5874,
+  "our_len": 5455
+ },
+ {
+  "file": "src/CInfGame.cpp",
+  "name": "CInfGame::AddExperienceParty",
+  "address": "0x5C0BB0",
+  "category": "both_changed_differ",
+  "their_len": 2082,
+  "our_len": 2369
+ },
+ {
+  "file": "src/CGameArea.cpp",
+  "name": "CGameArea::ApplyEffectToSprites",
+  "address": "0x46E130",
+  "category": "both_changed_differ",
+  "their_len": 1219,
+  "our_len": 1774
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileArrow::CProjectileArrow",
+  "address": "0x2",
+  "category": "both_changed_differ",
+  "their_len": 520,
+  "our_len": 551
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileTremor::CProjectileTremor",
+  "address": "0x850558",
+  "category": "both_changed_differ",
+  "their_len": 58,
+  "our_len": 49
+ },
+ {
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::UseItemPoint",
+  "address": "0x7473E0",
+  "category": "only_theirs",
+  "their_len": 6762,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "IcewindCProjectileSpellHit::IcewindCProjectileSpellHit",
+  "address": "0x4C4A90",
+  "category": "only_theirs",
+  "their_len": 1558,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCGameEffects.cpp",
+  "name": "IcewindCGameEffectSummon::ApplyEffect",
+  "address": "0x55F710",
+  "category": "only_theirs",
+  "their_len": 1120,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::GetLightLevel",
+  "address": "0x71F480",
+  "category": "only_theirs",
+  "their_len": 1069,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageRemoveSummonLink::MarshalMessage",
+  "address": "0x512FE0",
+  "category": "only_theirs",
+  "their_len": 797,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageUnsummon::MarshalMessage",
+  "address": "0x512830",
+  "category": "only_theirs",
+  "their_len": 797,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessage97::MarshalMessage",
+  "address": "0x513F00",
+  "category": "only_theirs",
+  "their_len": 773,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessage97::Run",
+  "address": "0x5140D0",
+  "category": "only_theirs",
+  "their_len": 613,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageRemoveSummonLink::UnmarshalMessage",
+  "address": "0x513100",
+  "category": "only_theirs",
+  "their_len": 456,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageUnsummon::UnmarshalMessage",
+  "address": "0x512950",
+  "category": "only_theirs",
+  "their_len": 456,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameAIBase.cpp",
+  "name": "CGameAIBase::WaitAnimation",
+  "address": "0x4525CC",
+  "category": "only_theirs",
+  "their_len": 445,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessage97::UnmarshalMessage",
+  "address": "0x514040",
+  "category": "only_theirs",
+  "their_len": 413,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageContinueDialog::CMessageContinueDialog",
+  "address": "0x4F5400",
+  "category": "only_theirs",
+  "their_len": 234,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "IcewindCProjectileSpellHit::ResName::Set",
+  "address": "0x537220",
+  "category": "only_theirs",
+  "their_len": 228,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileSPMAGMIS::CProjectileSPMAGMIS",
+  "address": "0x44",
+  "category": "only_theirs",
+  "their_len": 226,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::CompressTime",
+  "address": "0x6FC260",
+  "category": "only_theirs",
+  "their_len": 45,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileTravelling::~CProjectileTravelling",
+  "address": "0x52B010",
+  "category": "only_theirs",
+  "their_len": 39,
+  "our_len": 0
+ },
+ {
+  "file": "src/CGameSprite.cpp",
+  "name": "CGameSprite::DebugDump",
+  "address": "0x6FD9F0",
+  "category": "only_theirs",
+  "their_len": 32,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageRemoveSummonLink::CMessageRemoveSummonLink",
+  "address": "0x4F6BC0",
+  "category": "only_theirs",
+  "their_len": 26,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessageUnsummon::CMessageUnsummon",
+  "address": "0x4F6B60",
+  "category": "only_theirs",
+  "their_len": 26,
+  "our_len": 0
+ },
+ {
+  "file": "src/CAIScript.cpp",
+  "name": "CAIScript::SetResRef",
+  "address": "0x514220",
+  "category": "only_theirs",
+  "their_len": 23,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessage97::GetMsgSubType",
+  "address": "0x4F6C80",
+  "category": "only_theirs",
+  "their_len": 11,
+  "our_len": 0
+ },
+ {
+  "file": "src/CMessage.cpp",
+  "name": "CMessage97::CMessage97",
+  "address": "0x4F6C50",
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileAcidFog::~CProjectileAcidFog",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileAcidStorm::~CProjectileAcidStorm",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileBigBoulder::~CProjectileBigBoulder",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileCallLightningStrike::~CProjectileCallLightningStrike",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileCircleOfDeath::~CProjectileCircleOfDeath",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileCloudkill::~CProjectileCloudkill",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileCorrosiveFog::~CProjectileCorrosiveFog",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileDispelMagic::~CProjectileDispelMagic",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileEntangle::~CProjectileEntangle",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileEyeOfStone::~CProjectileEyeOfStone",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileFieryCloud::~CProjectileFieryCloud",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileFireSeed::~CProjectileFireSeed",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileFireStorm::~CProjectileFireStorm",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileFlameStrike::~CProjectileFlameStrike",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileGrease::~CProjectileGrease",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileHaltUndead::~CProjectileHaltUndead",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileHoldAnimal::~CProjectileHoldAnimal",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileHoldMonster::~CProjectileHoldMonster",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileIceStorm::~CProjectileIceStorm",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileInsectPlague::~CProjectileInsectPlague",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectilePortalAnimFlip::~CProjectilePortalAnimFlip",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectilePowerWordKill::~CProjectilePowerWordKill",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileProduceFire::~CProjectileProduceFire",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileSleep::~CProjectileSleep",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileSnowballSwarm::~CProjectileSnowballSwarm",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileSpikeStones::~CProjectileSpikeStones",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileStinkingCloud::~CProjectileStinkingCloud",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileSymbolOfDeath::~CProjectileSymbolOfDeath",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileTremor::~CProjectileTremor",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileTurnUndead::~CProjectileTurnUndead",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
+ },
+ {
+  "file": "src/CProjectile.cpp",
+  "name": "CProjectileWeb::~CProjectileWeb",
+  "address": null,
+  "category": "only_theirs",
+  "their_len": 2,
+  "our_len": 0
  }
 ]
