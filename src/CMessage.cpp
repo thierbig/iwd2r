@@ -18699,6 +18699,35 @@ void CMessageUnsummon::MarshalMessage(BYTE** pData, DWORD* dwSize)
     }
 }
 
+// 0x512950
+BOOL CMessageUnsummon::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 28668
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    // An unknown remote object is kept as an invalid id instead of rejecting
+    // the message.
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+        remoteObjectID,
+        localObjectID) == TRUE) {
+        m_summonedId = localObjectID;
+    } else {
+        m_summonedId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    return TRUE;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x512FE0
