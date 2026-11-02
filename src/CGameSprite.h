@@ -681,6 +681,7 @@ public:
     SHORT LeaveAreaName();
     SHORT Help();
     SHORT Rest();
+    SHORT UseItemPoint();
     SHORT JoinParty();
     SHORT RemoveSpell();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
