@@ -3600,3 +3600,57 @@ TEST_CASE("nightmare: the host's setting, its demand and the reply", "[uimisc][m
     network.m_bIsHost = TRUE;
     network.m_nServiceProvider = nServiceProvider;
 }
+
+// CBaldurMessage::OnLeaveAreaNameRequestToServer (0x438BF0) handles the
+// LEAVEAREANAME/82 request: with the session open and owned it resolves the
+// character and the trigger from their remote ids, parses the area name,
+// refuses through several guards (characters still being created, a blocking
+// demand, a paused game, a dialog mode, the area-transition permission, a
+// host-permitted dialog) with a one-byte permit reply, and otherwise makes the
+// area transition itself. The engine's null provider stops the reply, so the
+// answers are the observable; the wire byte and the transition are read-only.
+TEST_CASE("msg: the leave-area-name request answers the guards and refuses a paused game", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+    const BOOL bPaused = g_pBaldurChitin->m_pEngineWorld->m_bPaused;
+    const BOOLEAN bHostPermittedDialog = pGame->GetMultiplayerSettings()->m_bHostPermittedDialog;
+
+    // 3-byte network header, then {remotePlayer1, remoteObject1,
+    // remotePlayer2, remoteObject2, BYTE areaNameLength} and no name.
+    BYTE payload[3 + 4 * sizeof(DWORD) + sizeof(BYTE)] = {};
+
+    // A closed session, or a client, answers FALSE before the payload.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == FALSE);
+
+    // The host refuses (permit 0) while the game is paused: no transition.
+    network.m_bIsHost = TRUE;
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == TRUE);
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = bPaused;
+
+    // A pending host dialog refuses too.
+    pGame->GetMultiplayerSettings()->m_bHostPermittedDialog = TRUE;
+    CHECK(pMessage->OnLeaveAreaNameRequestToServer(0, payload, sizeof(payload)) == TRUE);
+    pGame->GetMultiplayerSettings()->m_bHostPermittedDialog = bHostPermittedDialog;
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}
