@@ -699,6 +699,9 @@ const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREALUA = 88;
 // 0x84CFD4
 const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST = 82;
 
+// 0x84CFD5
+const BYTE CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY = 114;
+
 // 0x84CFDB
 const BYTE CBaldurMessage::MSG_TYPE_LEAVEAREANAME = 120;
 
@@ -4500,9 +4503,139 @@ void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
 // 0x437950
 BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CString sParchment;
+    CString sAreaName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost != TRUE) {
+        return FALSE;
+    }
+
+    // This is the host's permit handler; the requester's name is the reply
+    // recipient.
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The request after the 3-byte header (there is no dwSize check in the
+    // original, the two lengths are trusted):
+    //   {DWORD remotePlayerID; DWORD remoteObjectID;
+    //    LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[]; BYTE areaNameLen; char areaName[]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nCharacterId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID, nRemoteObjectID, nCharacterId) == FALSE) {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    LONG nX = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    LONG nY = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    SHORT nDirection = *reinterpret_cast<SHORT*>(pByteMessage + nOffset);
+    nOffset += sizeof(SHORT);
+
+    BYTE nParchmentLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    sParchment = CString(reinterpret_cast<char*>(pByteMessage + nOffset), nParchmentLength);
+    nOffset += nParchmentLength;
+
+    BYTE nAreaNameLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    sAreaName = CString(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaNameLength);
+    nOffset += nAreaNameLength;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
+
+    BYTE nReply = 1;
+
+    // The leave is refused while another player is looking at a character
+    // (the inventory screen) or at the level-up screen; the requesting
+    // character gets the matching feedback.
+    WORD nFeedback = 0;
+    if (pSettings->sub_518560() > 0) {
+        // "Cannot leave area while remote player is in inventory screen."
+        nFeedback = 26826;
+    } else if (pSettings->sub_5186A0() > 0) {
+        // "Cannot leave area while remote player is in the level up screen."
+        nFeedback = 41398;
+    }
+
+    if (nFeedback != 0) {
+        if (nCharacterId != CGameObjectArray::INVALID_INDEX) {
+            CGameSprite* pSprite;
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pSprite->FeedBack(nFeedback, 0, 0, -1, 0, 0, 0);
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+
+        nReply = 0;
+    }
+
+    // A paused game answers 4, overriding the response computed below.
+    BYTE nReplyOverride = 0xFF;
+    if (g_pBaldurChitin->m_pEngineWorld->m_bPaused == TRUE) {
+        nReplyOverride = 4;
+        nReply = 0;
+    }
+
+    if (pGame->GetGameSave()->m_mode == 0x182 || pGame->GetGameSave()->m_mode == 0x502) {
+        nReply = 0;
+    }
+
+    if (pSettings->m_bHostPermittedDialog == TRUE || nReply != 1) {
+        nReply = m_bInHandleBlockingMessages == TRUE ? 3 : 0;
+    } else if (pGame->GetArea(sAreaName) != NULL) {
+        // The destination is already loaded.
+        nReply = 3;
+    }
+
+    if (nReplyOverride != 0xFF) {
+        nReply = nReplyOverride;
+    }
+
+    DWORD dwReplySize = sizeof(BYTE);
+    BYTE* pReply = CreateBuffer(dwReplySize);
+    if (pReply == NULL) {
+        return FALSE;
+    }
+
+    *pReply = nReply;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_LEAVEAREALUA,
+        MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY,
+        pReply,
+        dwReplySize);
+
+    DestroyBuffer(pReply);
+
+    // Only the 1 answer performs the transition.
+    if (nReply == 1) {
+        pGame->sub_5C3B20(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
+    }
+
+    return TRUE;
 }
 
 // A party's travel through a party required region (LeaveAreaName,
