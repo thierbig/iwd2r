@@ -33,6 +33,7 @@
 #include "CStore.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
+#include "CWorldMap.h"
 #include "Icewind586B70.h"
 #include "compat/marshal_ptr.h"
 
@@ -629,6 +630,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
 // 0x84CFB3
 const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST = 83;
 
+// 0x84CFB2
+const BYTE CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND_REPLY = 82;
+
 // 0x84CFB8
 const BYTE CBaldurMessage::MSG_TYPE_SIGNAL = 83;
 
@@ -926,9 +930,99 @@ BOOLEAN CBaldurMessage::sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTem
 // 0x429A90
 BOOLEAN CBaldurMessage::OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+    CResRef cResRef;
+    CAreaFile areaFile;
+    CGameFile gameFile;
+    CWorldMapFile worldMapFile;
+    CStoreFile storeFile;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    DWORD nType = *reinterpret_cast<DWORD*>(pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    // NOTE: The original copies the rest of the message into a fixed stack
+    // buffer and builds the CString from it (0x429BDA); the length is
+    // dwSize - header - sizeof(DWORD).
+    CString sResName(reinterpret_cast<char*>(pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+        dwSize - CNetwork::SPEC_MSG_HEADER_LENGTH - sizeof(DWORD));
+
+    cResRef = CResRef(sResName);
+
+    DWORD nSize;
+    if (nType == 1010) { // CAreaFile
+        areaFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = areaFile.GetDataSize();
+    } else if (nType == 1013) { // CGameFile
+        gameFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = gameFile.GetDataSize();
+    } else if (nType == 1015) { // CWorldMapFile
+        worldMapFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = worldMapFile.GetDataSize();
+    } else if (nType == 1014) { // CStoreFile
+        g_pBaldurChitin->GetObjectGame()->DemandServerStore(cResRef, TRUE);
+        storeFile.SetResRef(cResRef, TRUE, TRUE);
+        nSize = storeFile.GetDataSize();
+    } else {
+        // NOTE: The original answers an unknown type with nType zero bytes
+        // (the size field and the zeroed data); see the disassembly at
+        // 0x42A064 and the buffer zeroing at 0x42A125.
+        nSize = nType;
+    }
+
+    DWORD dwBufSize = sResName.GetLength() + nSize + 9;
+    BYTE* pMessage = CreateBuffer(dwBufSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    // The original zeroes the whole buffer before filling it (0x42A125).
+    memset(pMessage, 0, dwBufSize);
+
+    DWORD nOffset = 0;
+    pMessage[nOffset] = static_cast<BYTE>(sResName.GetLength());
+    nOffset += 1;
+    memcpy(pMessage + nOffset, static_cast<const char*>(sResName), sResName.GetLength());
+    nOffset += sResName.GetLength();
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = nType;
+    nOffset += sizeof(DWORD);
+    *reinterpret_cast<DWORD*>(pMessage + nOffset) = nSize;
+    nOffset += sizeof(DWORD);
+
+    if (nType == 1010) {
+        memcpy(pMessage + nOffset, areaFile.GetData(), nSize);
+    } else if (nType == 1013) {
+        memcpy(pMessage + nOffset, gameFile.GetData(), nSize);
+    } else if (nType == 1015) {
+        memcpy(pMessage + nOffset, worldMapFile.GetData(), nSize);
+    } else if (nType == 1014) {
+        memcpy(pMessage + nOffset, storeFile.GetData(), nSize);
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_RESOURCE,
+        MSG_SUBTYPE_RESOURCE_DEMAND_REPLY,
+        pMessage,
+        dwBufSize);
+
+    if (nType == 1010) {
+        areaFile.ReleaseData();
+    } else if (nType == 1013) {
+        gameFile.ReleaseData();
+    } else if (nType == 1015) {
+        worldMapFile.ReleaseData();
+    } else if (nType == 1014) {
+        storeFile.ReleaseData();
+    }
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x42AA10

@@ -409,3 +409,69 @@ TEST_CASE("msg: the resource suggest carries the type, flags and resref on RESOU
     network.m_nServiceProvider = nProvider;
     network.m_bConnectionEstablished = bConnection;
 }
+
+// CBaldurMessage::OnResourceDemanded (0x429A90): the host-only RESOURCE 82/68
+// handler. The resource loading needs the game files, so the unit test pins
+// the guards and the one branch that never loads a resource: an unknown type
+// falls through to the default (nSize = nType) and answers with the echoed
+// packet {BYTE nameLen, name, DWORD type, DWORD size, data}. The reply goes
+// through SendSpecificMessage, so with a non-null provider its wire bytes are
+// in the static buffer: [0]=0xFF flag, [1]=82 type, [2]=82 reply subtype.
+TEST_CASE("CBaldurMessage::OnResourceDemanded answers only the host and echoes an unknown type", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    BYTE packet[3 + 4 + 4];
+    memset(packet, 0, sizeof(packet));
+    DWORD nType = 1;
+    memcpy(packet + 3, &nType, sizeof(nType));
+    memcpy(packet + 7, "TEST", 4);
+
+    // No session: the first guard answers FALSE and the buffer is untouched.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    memset(pBuffer, 0xCD, 4);
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client does not answer the demand.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // The host: an unknown type (1) takes the default case, nSize = nType = 1,
+    // so the reply payload is 4 + 1 + 9 = 14 bytes. A non-null provider makes
+    // SendSpecificMessage marshal it; the send itself fails (DirectPlay is
+    // gone) and is ignored.
+    network.m_bIsHost = TRUE;
+    network.m_psPlayerName[0] = "sender";
+    network.m_pPlayerID[0] = 1;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    memset(pBuffer, 0xCD, 3 + 14 + 1);
+    CHECK(message.OnResourceDemanded(0, packet, sizeof(packet)) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 82);
+    CHECK(pBuffer[2] == 82);
+    const BYTE* pPayload = pBuffer + 3;
+    CHECK(pPayload[0] == 4);
+    CHECK(memcmp(pPayload + 1, "TEST", 4) == 0);
+    DWORD nEchoType;
+    memcpy(&nEchoType, pPayload + 5, sizeof(nEchoType));
+    DWORD nEchoSize;
+    memcpy(&nEchoSize, pPayload + 9, sizeof(nEchoSize));
+    CHECK(nEchoType == 1);
+    CHECK(nEchoSize == 1);
+    CHECK(pPayload[13] == 0); // the one zeroed data byte
+    CHECK(pPayload[14] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}

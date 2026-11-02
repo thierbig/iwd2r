@@ -43,6 +43,12 @@ class CWorldMapFile : public CResHelper<CResWorldMap, 1015> {
 public:
     BYTE* GetData();
     DWORD GetDataSize();
+    void ReleaseData()
+    {
+        if (pRes != NULL) {
+            pRes->Release();
+        }
+    }
 };
 
 #endif /* CWORLDMAP_H_ */

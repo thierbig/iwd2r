@@ -60,6 +60,12 @@ class CStoreFile : public CResHelper<CResStore, 1014> {
 public:
     void* GetData();
     DWORD GetDataSize();
+    void ReleaseData()
+    {
+        if (pRes != NULL) {
+            pRes->Release();
+        }
+    }
 };
 
 #endif /* CSTORE_H_ */

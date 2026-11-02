@@ -517,6 +517,12 @@ class CGameFile : public CResHelper<CResGame, 1013> {
 public:
     BYTE* GetData();
     DWORD GetDataSize();
+    void ReleaseData()
+    {
+        if (pRes != NULL) {
+            pRes->Release();
+        }
+    }
 };
 
 // 0x8B4F84: the keymap's spell resrefs, entries 53 to 371 of the original's
