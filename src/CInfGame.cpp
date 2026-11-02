@@ -7818,7 +7818,17 @@ DWORD CInfGame::GetScrollSpeed()
 // 0x5BDBA0
 void CInfGame::sub_5BDBA0(int a1, BOOL a2)
 {
-    // TODO: Incomplete.
+    // Sets the reputation from whole points (1..20); stored x10. The clamps
+    // run only when told to, matching the three separate stores in the exe.
+    m_nReputation = static_cast<SHORT>(a1 * 10);
+    if (a2 != FALSE) {
+        if (m_nReputation > 200) {
+            m_nReputation = 200;
+        }
+        if (m_nReputation < 10) {
+            m_nReputation = 10;
+        }
+    }
 }
 
 // 0x5BDC00
