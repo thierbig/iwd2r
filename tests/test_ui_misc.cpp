@@ -3431,3 +3431,51 @@ TEST_CASE("msg: the demand-slot update answers a closed session and drives the r
 
     network.m_bConnectionEstablished = bConnection;
 }
+
+// CBaldurMessage::OnDemandCharacterSlotReply (0x42FA60) handles PLAYERCHAR/100,
+// the reply to a slot demand: with the session open it reads {SHORT slot;
+// BOOLEAN hasCharacter}. Without a character it clears the slot, and a client
+// asks the controlling player for the character; the host signals the deletion
+// instead. With a character it builds a CGameSprite from the marshalled block,
+// sets it into the slot, enables the portrait and installs the custom bio as a
+// TLK user entry - that path needs a full marshalled sprite and is read-only
+// evidence. The engine's null provider stops the settings broadcast.
+TEST_CASE("msg: the demand-slot reply answers a closed session and clears an empty slot", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+
+    // 3-byte network header, then {SHORT slot; BOOLEAN hasCharacter}.
+    BYTE payload[6] = {};
+    SHORT nSlot = 5;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+    payload[CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(nSlot)] = FALSE;
+
+    // A closed session answers FALSE before the payload is read.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == FALSE);
+
+    // A client clears the empty slot and asks nobody (the slot holds no
+    // character in the multiplayer settings).
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == TRUE);
+    CHECK(g_pBaldurChitin->GetObjectGame()->GetCharacterSlot(nSlot) == CGameObjectArray::INVALID_INDEX);
+
+    // The host clears it and signals the deletion.
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->OnDemandCharacterSlotReply(0, payload, sizeof(payload)) == TRUE);
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}

@@ -2725,9 +2725,103 @@ BOOLEAN CBaldurMessage::DemandCharacterSlotReply(CString& sSendTo, SHORT nCharac
 // 0x42FA60
 BOOLEAN CBaldurMessage::OnDemandCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
-    // TODO: Incomplete.
+    STR_RES strRes;
+    SHORT nCharacterSlot;
+    BOOLEAN bSendCharInfo;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    nCharacterSlot = *reinterpret_cast<SHORT*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    bSendCharInfo = *reinterpret_cast<BOOLEAN*>(pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (bSendCharInfo == TRUE) {
+        CSavedGamePartyCreature* pCreature = reinterpret_cast<CSavedGamePartyCreature*>(
+            pMessage + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT) + sizeof(BOOLEAN));
+
+        m_bInOnObjectAdd = TRUE;
+
+        DWORD dwBioOffset = CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(SHORT) + sizeof(BOOLEAN)
+            + sizeof(CSavedGamePartyCreature) + pCreature->m_creatureSize;
+
+        // The marshalled offset is payload-relative; the block starts after
+        // the 3-byte network header.
+        pCreature->m_creatureOffset += CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+        CGameSprite* pSprite = new CGameSprite(pMessage + pCreature->m_creatureOffset,
+            static_cast<LONG>(pCreature->m_creatureSize),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+
+        // NOTE: The exe's SetResRef takes the CString; ours takes a CResRef,
+        // whose CString constructor is the same copy.
+        CString sResRef;
+        sResRef = pCreature->m_creatureResRef;
+        pSprite->SetResRef(CResRef(sResRef));
+
+        if (pSprite == NULL) {
+            return FALSE;
+        }
+
+        pGame->EnablePortrait(static_cast<BYTE>(nCharacterSlot), TRUE);
+
+        pSprite->Unmarshal(pCreature, TRUE, FALSE);
+
+        m_bInOnObjectAdd = FALSE;
+
+        pGame->SetCharacterSlot(nCharacterSlot, pSprite->m_id);
+
+        if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+            pGame->GetMultiplayerSettings()->SignalCharacterStatus(nCharacterSlot,
+                CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED,
+                TRUE,
+                TRUE);
+        }
+
+        // The custom biography, when the reply carried one: the base stats'
+        // STRREF gets a TLK user entry.
+        DWORD nCustomBio = *reinterpret_cast<DWORD*>(pMessage + dwBioOffset);
+        if (nCustomBio != 0) {
+            CString sBio(reinterpret_cast<const char*>(pMessage + dwBioOffset + sizeof(DWORD)),
+                static_cast<int>(nCustomBio));
+
+            if (g_pBaldurChitin->GetTlkTable().m_override.Fetch(pSprite->GetBaseStats()->m_biography, strRes)) {
+                g_pBaldurChitin->GetTlkTable().m_override.Remove(pSprite->GetBaseStats()->m_biography);
+            }
+
+            strRes.szText = sBio;
+            g_pBaldurChitin->GetTlkTable().m_override.AddUserEntry(pSprite->GetBaseStats()->m_biography, strRes);
+        }
+    } else {
+        // No character for the slot: it is cleared, and a client asks the
+        // controlling player for the character it should hold.
+        pGame->ClearCharacterSlot(nCharacterSlot);
+
+        if (g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+            if (pGame->GetMultiplayerSettings()->GetCharacterStatus(nCharacterSlot) == CMultiplayerSettings::CHARSTATUS_CHARACTER) {
+                BYTE nHostPlayer = static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer);
+                DemandCharacterSlot(nCharacterSlot, FALSE, nHostPlayer);
+            }
+        }
+
+        if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+            pGame->GetMultiplayerSettings()->SignalCharacterStatus(nCharacterSlot,
+                CMultiplayerSettings::CHARSTATUS_SIGNAL_DELETED,
+                TRUE,
+                TRUE);
+        }
+    }
+
+    return TRUE;
 }
 
 // 0x42FE20
