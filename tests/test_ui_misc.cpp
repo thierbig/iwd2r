@@ -3197,3 +3197,55 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(engine->field_102 == bar);
     CHECK(barBase->m_bActive == TRUE);
 }
+
+// CBaldurMessage::BroadcastDemandCharacterSlotReply (0x42F480): for the slot
+// (or all six) it denies the party character, notes whether the control is
+// local (no service provider, or the network's local player owns it), releases
+// it, and - for a local object or the host - replies the character to every
+// other named player through DemandCharacterSlotReply. With the progress bar
+// in place each slot adds 500000 and the bar stops waiting after the first
+// send. The engine's null provider stops the sends, so the bar is the
+// observable; the wire bytes are read-only evidence.
+TEST_CASE("msg: the demand-slot broadcast walks the slots and drives the progress bar", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // The game with its party member (the first slot's character).
+    REQUIRE(PartyMember() != NULL);
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const LONG nProgress = g_pChitin->cProgressBar.m_nActionProgress;
+    const BOOLEAN bWaiting = g_pChitin->cProgressBar.m_bWaiting;
+
+    // A closed session answers FALSE and leaves the bar alone.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, TRUE) == FALSE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress);
+
+    // One slot (the party's) with the bar in place: TRUE and one step.
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, TRUE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress + 500000);
+    CHECK(g_pChitin->cProgressBar.m_bWaiting == FALSE);
+
+    // All six slots add six steps, the five empty ones included.
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(TRUE, 0, TRUE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress + 500000 + 6 * 500000);
+
+    // Without the bar nothing is added and the answer stays TRUE.
+    const LONG nProgress2 = g_pChitin->cProgressBar.m_nActionProgress;
+    CHECK(pMessage->BroadcastDemandCharacterSlotReply(FALSE, 0, FALSE) == TRUE);
+    CHECK(g_pChitin->cProgressBar.m_nActionProgress == nProgress2);
+
+    g_pChitin->cProgressBar.m_nActionProgress = nProgress;
+    g_pChitin->cProgressBar.m_bWaiting = bWaiting;
+    network.m_bConnectionEstablished = bConnection;
+}
