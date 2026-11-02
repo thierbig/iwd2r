@@ -2028,9 +2028,147 @@ BOOL CBaldurMessage::PurgeDroppedPlayers()
 }
 
 // 0x42D860
-void CBaldurMessage::UpdateDemandCharacters(unsigned char a1, int a2, unsigned char a3)
+void CBaldurMessage::UpdateDemandCharacters(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return;
+    }
+
+    INT nFirst;
+    INT nLast;
+    if (bUpdateAllCharacters == TRUE) {
+        nFirst = 0;
+        nLast = 5;
+    } else {
+        nFirst = nUpdatedCharacterSlot;
+        nLast = nUpdatedCharacterSlot;
+    }
+
+    // The original keeps this flag in the first argument's stack slot: it
+    // starts as `bUpdateAllCharacters` and is forced TRUE on the first slot,
+    // so the cleanup at the end always runs. A single-slot update creates
+    // and displays the progress bar itself, an update-all does not.
+    BOOLEAN bManageProgressBar = bUpdateAllCharacters;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    for (INT nSlot = nFirst; nSlot <= nLast; nSlot++) {
+        LONG nCharacterId = static_cast<SHORT>(nSlot) < 6
+            ? pGame->m_characters[static_cast<SHORT>(nSlot)]
+            : CGameObjectArray::INVALID_INDEX;
+
+        CGameSprite* pSprite;
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+
+            INT nControlledBy = pGame->GetMultiplayerSettings()->GetCharacterControlledByPlayer(nSlot);
+            if (nControlledBy != g_pChitin->cNetwork.m_nLocalPlayer) {
+                if (bManageProgressBar == FALSE) {
+                    if (bProgressBarInPlace == TRUE
+                        && g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
+                        g_pChitin->cProgressBar.m_nWaitingReason = 19714;
+                        g_pChitin->cProgressBar.m_bWaiting = TRUE;
+                    }
+                    bManageProgressBar = TRUE;
+                }
+
+                // Ask the character's controller for an update and wait for
+                // its reply, pumping the blocking messages while waiting.
+                g_pChitin->cNetwork.GetPlayerName(nControlledBy, sPlayerName);
+                DemandCharacterSlotUpdate(static_cast<SHORT>(nSlot), static_cast<SHORT>(nControlledBy));
+
+                while (!g_pChitin->cNetwork.PeekSpecificMessage(sPlayerName,
+                    MSG_TYPE_PLAYERCHAR,
+                    MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY)) {
+                    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+                        break;
+                    }
+
+                    if (g_pChitin->cNetwork.GetPlayerID(nControlledBy) == 0) {
+                        break;
+                    }
+
+                    g_pBaldurChitin->GetBaldurMessage()->HandleBlockingMessages();
+
+                    g_pChitin->m_bDisplayStale = TRUE;
+                    SleepEx(60, FALSE);
+                }
+
+                BOOLEAN bReplied = FALSE;
+                if (g_pChitin->cNetwork.m_bConnectionEstablished
+                    && g_pChitin->cNetwork.GetPlayerID(nControlledBy) != 0) {
+                    DWORD dwSize;
+                    BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sPlayerName,
+                        MSG_TYPE_PLAYERCHAR,
+                        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+                        dwSize);
+                    OnUpdateCharacterSlotReply(nControlledBy, pMessage, dwSize);
+                    bReplied = TRUE;
+                }
+
+                // The controller answered or disconnected; if it did not
+                // answer, ask the host for the same character. The original
+                // skips this when the controller's reply was fetched.
+                if (bReplied == FALSE
+                    && g_pChitin->cNetwork.m_bIsHost != TRUE
+                    && g_pChitin->cNetwork.m_bConnectionEstablished
+                    && g_pChitin->cNetwork.m_nHostPlayer != nControlledBy) {
+                    INT nHostPlayer = g_pChitin->cNetwork.m_nHostPlayer;
+
+                    g_pChitin->cNetwork.GetPlayerName(nHostPlayer, sPlayerName);
+                    DemandCharacterSlotUpdate(static_cast<SHORT>(nSlot), static_cast<SHORT>(nHostPlayer));
+
+                    while (!g_pChitin->cNetwork.PeekSpecificMessage(sPlayerName,
+                        MSG_TYPE_PLAYERCHAR,
+                        MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY)) {
+                        if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+                            break;
+                        }
+
+                        if (g_pChitin->cNetwork.GetPlayerID(nHostPlayer) == 0) {
+                            break;
+                        }
+
+                        g_pBaldurChitin->GetBaldurMessage()->HandleBlockingMessages();
+
+                        g_pChitin->m_bDisplayStale = FALSE;
+                        SleepEx(60, FALSE);
+                    }
+
+                    if (g_pChitin->cNetwork.m_bConnectionEstablished
+                        && g_pChitin->cNetwork.GetPlayerID(nHostPlayer) != 0) {
+                        DWORD dwSize;
+                        BYTE* pMessage = g_pChitin->cNetwork.FetchSpecificMessage(sPlayerName,
+                            MSG_TYPE_PLAYERCHAR,
+                            MSG_SUBTYPE_PLAYERCHAR_UPDATE_REPLY,
+                            dwSize);
+                        OnUpdateCharacterSlotReply(nHostPlayer, pMessage, dwSize);
+                    }
+                }
+            }
+        }
+
+        if (bProgressBarInPlace == TRUE) {
+            // NOTE: The DWORD at 0x8518A8 (500000).
+            g_pChitin->cProgressBar.m_nActionProgress += 500000;
+        }
+    }
+
+    if (bManageProgressBar == TRUE) {
+        g_pChitin->cProgressBar.m_bWaiting = FALSE;
+        g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
+    }
 }
 
 // 0x42DCF0
@@ -2113,10 +2251,56 @@ void CBaldurMessage::BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, 
     }
 }
 
+// 0x42DF50
+BOOLEAN CBaldurMessage::DemandCharacterSlotUpdate(SHORT nCharacterSlot, SHORT nPlayerSlot)
+{
+    CString sPlayerName;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nPlayerSlot, sPlayerName);
+    if (sPlayerName == "") {
+        return FALSE;
+    }
+
+    DWORD dwSize = sizeof(SHORT);
+    BYTE* pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<SHORT*>(pMessage) = nCharacterSlot;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
+}
+
 // 0x42E0C0
 BOOLEAN CBaldurMessage::OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
     // TODO: Incomplete.
+
+    return FALSE;
+}
+
+// 0x42E630
+BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
+{
+    // TODO: Incomplete. The 2,766-byte handler unmarshals the character
+    // update and owns the fetched message in the original; it is out of
+    // scope for this task, so the message is freed here.
+
+    delete pMessage;
 
     return FALSE;
 }
