@@ -12,7 +12,6 @@
 
 #include "CBaldurChitin.h"
 #include "CChitin.h"
-#include "CMessage.h"
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CNetwork.h"
@@ -20,8 +19,6 @@
 
 #include <cstring>
 #include <memory>
-
-#include <cstring>
 
 extern CChitin* g_pChitin;
 
