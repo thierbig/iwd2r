@@ -578,6 +578,9 @@ const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;
 // 0x84CF99
 const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_ADD = 65;
 
+// 0x84CF9A
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL = 67;
+
 // 0x84CF9F
 const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR = 80;
 
@@ -2917,8 +2920,37 @@ BOOL CBaldurMessage::ObjectControlRequest(LONG localObjectID)
 // 0x430C50
 BOOL CBaldurMessage::ObjectControl()
 {
-    // TODO: Incomplete.
+    BYTE* pData;
+    DWORD dwSize;
 
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    CGameRemoteObjectArray* pRemoteObjectArray = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
+
+    // NOTE: The exe tests the count outside the lock; MarshalControlChanges
+    // would answer FALSE too.
+    if (pRemoteObjectArray->m_nControlsChanged == 0) {
+        return FALSE;
+    }
+
+    if (!pRemoteObjectArray->MarshalControlChanges(&pData, &dwSize)) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_OBJECT,
+        MSG_SUBTYPE_OBJECT_CONTROL,
+        pData,
+        dwSize);
+
+    delete pData;
+
+    // NOTE: The original's only epilogue zeroes EAX, so it answers FALSE even
+    // after the broadcast (the callers ignore the value).
     return FALSE;
 }
 

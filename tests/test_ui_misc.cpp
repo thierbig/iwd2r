@@ -3198,6 +3198,66 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(barBase->m_bActive == TRUE);
 }
 
+// CBaldurMessage::ObjectControl (0x430C50): the host's pump. With the session
+// open and owned and a control change queued it marshals the list (OBJECT/67
+// to all players, guaranteed) and the marshal consumes the queue. The queue is
+// the observable here - the engine's null provider stops SendSpecificMessage
+// before the static buffer, and the original answers FALSE from its only
+// epilogue whether or not it broadcast.
+TEST_CASE("msg: ObjectControl broadcasts the queued control changes once", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    CGameRemoteObjectArray* pArray = g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray();
+    REQUIRE(pArray->m_nControlsChanged == 0);
+    REQUIRE(pArray->m_pControlsChanged == NULL);
+
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bIsHost = network.m_bIsHost;
+
+    // The queue as ChangeControl leaves one entry.
+    CGameRemoteObjectControlChange* pChange = new CGameRemoteObjectControlChange();
+    pChange->oldPlayerID = 5;
+    pChange->oldObjectID = 0x00010002;
+    pChange->newPlayerID = 1;
+    pChange->newObjectID = 0x00010003;
+    pChange->localControl = TRUE;
+    pChange->pNext = NULL;
+    pArray->m_nControlsChanged = 1;
+    pArray->m_pControlsChanged = pChange;
+    pArray->m_pControlsChangedTail = pChange;
+
+    // A closed session, or a client, answers FALSE and leaves the queue alone.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 1);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 1);
+
+    // The host marshals and consumes it; the answer is FALSE either way, as
+    // the original's single epilogue zeroes EAX.
+    network.m_bIsHost = TRUE;
+    CHECK(pMessage->ObjectControl() == FALSE);
+    CHECK(pArray->m_nControlsChanged == 0);
+    CHECK(pArray->m_pControlsChanged == NULL);
+    CHECK(pArray->m_pControlsChangedTail == NULL);
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bIsHost;
+}
+
 TEST_CASE("map world: SendMapWorldRevealArea sends the length-prefixed area to every player", "[uimisc][message][data]")
 {
     if (DataDir() == nullptr) {
