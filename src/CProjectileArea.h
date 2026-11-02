@@ -154,6 +154,8 @@ public:
 class CProjectileArea84F3AC : public CProjectileArea {
 public:
     CProjectileArea84F3AC();
+    // 0x5768A0
+    /* 0000 */ ~CProjectileArea84F3AC() override;
     /* 0098 */ void CreateSecondary(LONG nTargetId) override;
 };
 
@@ -313,6 +315,26 @@ public:
     CProjectileArea8502E8();
 };
 
+// The portal animation flipping hack (projectile types 294 open and 297
+// close, vtable 0x850420): not a spell — the engine reuses an area
+// projectile as the door overlay. The ctor runs the base at 2000 around
+// and retargets to NOT_SPRITE only; no visuals, no members of its own.
+class CProjectilePortalAnimFlip : public CProjectileArea {
+public:
+    // 0x5756C0
+    CProjectilePortalAnimFlip();
+};
+
+// Tremor (SPPR719, projectile type 306, vtable 0x850558): the family's
+// most minimal spell leaf — beyond the base ctor at 0x100 around it only
+// loads the looping area sound ARE_P27 into the first explosion and
+// widens the radius to 0x15E. No members of its own.
+class CProjectileTremor : public CProjectileArea {
+public:
+    // 0x575B90
+    CProjectileTremor();
+};
+
 // A breath (projectile type 349, vtable 0x85072C): it arrives on its
 // seventh tick, DBreatH and lingering DBreatA, 200 around.
 class CProjectileArea85072C : public CProjectileArea {
@@ -401,14 +423,15 @@ public:
 
 // Delayed Blast Fireball (SPWI714, projectile type 360, vtable 0x85099C): a
 // Fireball-shaped carrier whose landing does not detonate — its OnArrival
-// (0x576CE0, not yet recovered) only latches the exploded flag, and this
-// AIUpdate override waits until something comes within 100 of the resting
-// bead before firing the base detonation. The ctor (0x576990) is parked from
-// i064 and OnArrival is not declared either, so only the AIUpdate override is
-// declared (never declare a slot without its body).
+// (0x576CE0, batch i069) only latches the exploded flag, and this AIUpdate
+// override waits until something comes within 100 of the resting bead before
+// firing the base detonation. The ctor (0x576990) is parked from i064 and
+// stays undeclared with it (never declare a slot without its body).
 class CProjectileDBFireball : public CProjectileArea {
 public:
     /* 000C */ void AIUpdate() override;
+    // 0x576CE0
+    /* 0070 */ void OnArrival() override;
 
     /* 065E */ BYTE m_bBlasted;
     /* 0660 */ LONG m_scanTimer;

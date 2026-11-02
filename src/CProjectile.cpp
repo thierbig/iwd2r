@@ -1407,6 +1407,32 @@ CProjectileProduceFire::CProjectileProduceFire()
     m_nRadius = 60;
 }
 
+// 0x5756C0
+CProjectilePortalAnimFlip::CProjectilePortalAnimFlip()
+    : CProjectileArea(0x7D0)
+{
+    m_targetType.Set(CAIObjectType::NOT_SPRITE);
+}
+
+// 0x575B90
+CProjectileTremor::CProjectileTremor()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_sound = "ARE_P27";
+    m_nRadius = 0x15E;
+}
+
+// 0x5768A0. Acid Fog's slot-0 destructor. The body at 0x5768A0 is the
+// deleting thunk MSVC emits beside every destructor definition; the exe
+// ICF-folds every empty spell-hit leaf onto it — Tremor's 0x850558,
+// PortalAnimFlip's 0x850420 and DBFireball's 0x85099C all carry 0x5768A0
+// as slot 0, and the scalar half 0x575B20 is a bare jump to the base
+// dtor 0x56F1F0. The fog adds no members of its own, so ours is the
+// empty braces that chain to CProjectileArea::~CProjectileArea.
+CProjectileArea84F3AC::~CProjectileArea84F3AC()
+{
+}
+
 // 0x576BA0
 void CProjectileDBFireball::AIUpdate()
 {
@@ -1433,6 +1459,15 @@ void CProjectileDBFireball::AIUpdate()
     }
 
     m_animation->FrameAdvance();
+}
+
+// 0x576CE0. Vtable slot 0x70 of 0x85099C: the landing does not detonate —
+// the bead only latches the exploded flag so the AIUpdate scan above (and
+// the base teardown) sees the arrival; the actual burst comes later through
+// CProjectileArea::OnArrival.
+void CProjectileDBFireball::OnArrival()
+{
+    m_bExploded = TRUE;
 }
 
 // The exe keeps these in the zero-initialized virtual tail of .data — the
@@ -1743,6 +1778,19 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE);
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x57F760. The tornado's slot-0 destructor: the body at 0x57F760 is the
+// deleting thunk (call the scalar body 0x57F780, free this when the flag's
+// bit 0 is set), and the scalar body is the compiler's member teardown —
+// the loop sound's CSound dtor first (+0x2F0), then the strike tracker map
+// at +0x2C2 (each node's value through 0x582670, the node freed, the tree
+// orphaned), then the CProjectileSingleTarget dtor. Our tracker is parked
+// as raw bytes (+0x2BA), so the empty braces spell the source truth: the
+// members go down implicitly, in reverse declaration order, exactly what
+// the exe runs.
+CProjectileWhirlwind::~CProjectileWhirlwind()
+{
 }
 
 // 0x57FF80

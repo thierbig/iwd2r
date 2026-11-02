@@ -230,12 +230,18 @@ public:
 // the exe's index (12-n) mod 16, while the rose that indexes it —
 // CGameSprite::GetDirection, 0=south/4=west/8=north/12=east — matches the
 // exe's order) and OnArrival 0x580270 (docs/wso/import-parked/580270.json —
-// its only callee is that parked pick). The fork's dtor (0x57F760) has not
-// been queued. None of those slots is declared — a declared-but-undefined
-// virtual would become the key function and leave the vtable unemitted —
-// so the class inherits the base virtuals for them.
+// its only callee is that parked pick). The dtor 0x57F760 landed in batch
+// i069; the parked slots stay undeclared — a declared-but-undefined virtual
+// would become the key function and leave the vtable unemitted — so the
+// class inherits the base virtuals for them.
 class CProjectileWhirlwind : public CProjectileSingleTarget {
 public:
+    // 0x57F760. Empty braces: the scalar body 0x57F780 is the compiler's
+    // member teardown (the loop sound's CSound dtor first, then the strike
+    // tracker map), which the parked tracker's raw bytes cannot spell until
+    // that type is imported.
+    /* 0000 */ ~CProjectileWhirlwind() override;
+
     // 0x57FF80. Points the loop sound at ARE_P23, makes it fire-and-forget
     // on channel 15 of the area, starts it at the tornado's position, then
     // launches through the base Fire with INVALID_INDEX for the target —
