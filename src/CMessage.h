@@ -269,6 +269,7 @@ public:
     ~CBaldurMessage();
     BOOLEAN DemandResourceFromServer(const CString& sResName, UINT nType, BOOLEAN bSendMessage, BOOLEAN bWaitForMessage, BOOLEAN bSaveToTemp);
     BOOLEAN sub_42A3F0(BYTE* pData, DWORD dwSize, BOOLEAN bSaveToTemp);
+    BOOLEAN OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);
