@@ -1898,7 +1898,6 @@ TEST_CASE("sprite: ChangeAnimation builds the new creature and retargets the scr
     CGameArea* pArea = pCharacter->GetArea();
     REQUIRE(pArea != NULL);
     pArea->SortLists();
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
 
     // A timed effect on the old sprite, to see it copied to the new one.
     ITEM_EFFECT itemEffect;
@@ -1908,6 +1907,8 @@ TEST_CASE("sprite: ChangeAnimation builds the new creature and retargets the scr
         CGameAIBase::EFFECT_LIST_TIMED, FALSE, TRUE);
     const INT nEffects = pCharacter->m_timedEffectList.GetCount();
     const SHORT nHitPoints = pCharacter->m_baseStats.m_hitPoints;
+    const CResRef callerResRef(pCharacter->m_resRef);
+    const CString callerScriptName(pCharacter->GetScriptName());
 
     // The action: 194 with the goblin's CRE (tests/test_combat.cpp's 10GOB).
     CAIAction change(194, CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0);
@@ -1922,31 +1923,48 @@ TEST_CASE("sprite: ChangeAnimation builds the new creature and retargets the scr
 
     // The change.
     ClearMessages();
+    std::vector<LONG> idsBefore;
+    for (CGameObject* pObject : ObjectsOfType(pArea, CGameObject::TYPE_SPRITE)) {
+        idsBefore.push_back(static_cast<CGameSprite*>(pObject)->GetId());
+    }
     pCharacter->m_curAction = change;
     CHECK(pCharacter->ChangeAnimation() == CGameAIBase::ACTION_DONE);
     pArea->SortLists();
 
-    // The area's variable for the script name now holds another sprite's id.
-    CVariable* pVariable = pArea->m_namedCreatures.FindKey(CString(pCharacter->GetScriptName()));
-    REQUIRE(pVariable != NULL);
-    CHECK(pVariable->m_intValue != pCharacter->GetId());
-
-    CGameObject* pObject = NULL;
-    BYTE rc = pGame->GetObjectArray()->GetShare(pVariable->m_intValue,
-        CGameObjectArray::THREAD_ASYNCH,
-        &pObject,
-        INFINITE);
-    REQUIRE(rc == CGameObjectArray::SUCCESS);
-    REQUIRE(pObject != NULL);
-    auto* pNew = static_cast<CGameSprite*>(pObject);
+    // The new sprite is the one the change added (the area already has other
+    // 10GOB creatures) with the CRE's resref.
+    CGameSprite* pNew = NULL;
+    for (CGameObject* pObject : ObjectsOfType(pArea, CGameObject::TYPE_SPRITE)) {
+        auto* pCandidate = static_cast<CGameSprite*>(pObject);
+        if (std::find(idsBefore.begin(), idsBefore.end(), pCandidate->GetId()) == idsBefore.end()
+            && pCandidate->m_resRef == CResRef("10GOB")) {
+            pNew = pCandidate;
+            break;
+        }
+    }
+    REQUIRE(pNew != NULL);
     CHECK(pNew != pCharacter);
-    CHECK(pNew->m_resRef == CResRef("10GOB"));
     CHECK(pNew->m_pArea == pArea);
+    CHECK(pNew->m_resRef == CResRef("10GOB"));
     CHECK(pNew->m_baseStats.m_hitPoints == nHitPoints);
     CHECK(pNew->m_timedEffectList.GetCount() == nEffects);
-    pGame->GetObjectArray()->ReleaseShare(pVariable->m_intValue,
-        CGameObjectArray::THREAD_ASYNCH,
-        INFINITE);
+
+    // Constructor arguments 3 and 4 are the portrait flag and 0, not the other
+    // way round (0x75EE52 pushes 0 as `type` and the flag as `a3`).
+    CHECK(pNew->m_type == 0);
+
+    // Both SetResRef calls are the new sprite's (0x75EE94 and 0x75EF1F): the
+    // caller keeps its own resref.
+    CHECK(pCharacter->m_resRef == callerResRef);
+
+    // The area's variable is keyed by the new sprite's script name, not the
+    // caller's (0x75EFCB calls GetScriptName on the new sprite).
+    CVariable* pVariable = pArea->m_namedCreatures.FindKey(CString(pNew->GetScriptName()));
+    REQUIRE(pVariable != NULL);
+    CHECK(pVariable->m_intValue == pNew->GetId());
+    if (CString(pNew->GetScriptName()) != callerScriptName) {
+        CHECK(pArea->m_namedCreatures.FindKey(callerScriptName) == NULL);
+    }
 
     // The three visual hits, 0xE/0xC/0xD, from the caller to the new sprite.
     WORD flags = 0;

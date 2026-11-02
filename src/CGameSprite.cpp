@@ -27195,8 +27195,8 @@ SHORT CGameSprite::ChangeAnimation()
 
     CGameSprite* pSprite = new CGameSprite(creatureFile.GetData(),
         creatureFile.GetDataSize(),
+        bPortrait,
         0,
-        static_cast<WORD>(bPortrait),
         m_expirationTime,
         m_huntingRange,
         m_followRange,
@@ -27204,8 +27204,8 @@ SHORT CGameSprite::ChangeAnimation()
         m_posStart,
         m_nDirection);
 
-    // NOTE: The two SetResRef calls (0x75EE94 and 0x75EF1F) are the new
-    // sprite's and this one's, both with the action's string1.
+    // NOTE: Both SetResRef calls (0x75EE94 and 0x75EF1F) are the new sprite's,
+    // both with the action's string1.
     pSprite->SetResRef(cResRef);
     creatureFile.ReleaseData();
 
@@ -27222,7 +27222,7 @@ SHORT CGameSprite::ChangeAnimation()
         return ACTION_INTERRUPTABLE;
     }
 
-    SetResRef(cResRef);
+    pSprite->SetResRef(cResRef);
 
     // __FILE__: .\Include\ObjAnimation.h
     // __LINE__: 2086
@@ -27231,9 +27231,9 @@ SHORT CGameSprite::ChangeAnimation()
     // The animation's list type decides the area list the new sprite joins.
     pSprite->AddToArea(m_pArea, ptRef, 0, pSprite->m_animation.m_animation->GetListType());
 
-    // The area remembers that this sprite's script is now the new one.
+    // The area remembers the new sprite's script name.
     CVariable variable;
-    variable.SetName(GetScriptName());
+    variable.SetName(pSprite->GetScriptName());
     variable.m_intValue = pSprite->m_id;
     m_pArea->m_namedCreatures.AddKey(variable);
 
