@@ -1502,15 +1502,17 @@ public:
 };
 
 // Remote half of Icewind586B70::Unsummon: other machines replay the poof.
+// The network face of the exe class with vtable 0x84C3A8 (0x10 bytes): the
+// ctor 0x4F6B60 and the marshal pair 0x512830/0x512950. The dispatch face
+// (GetCommType 0x453510, GetMsgType 0x40A0E0, GetMsgSubType 0x4AD380,
+// Run 0x5129D0) is ported under CMessage89, the other face of the same exe
+// class; the overrides stay undeclared here so the ctor can define the
+// vtable without undefined entries.
 class CMessageUnsummon : public CMessage {
 public:
     CMessageUnsummon(LONG summonedId, LONG caller, LONG target);
-    SHORT GetCommType() override;
-    BYTE GetMsgType() override;
-    BYTE GetMsgSubType() override;
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
-    void Run() override;
 
     /* 000C */ LONG m_summonedId;
 };
