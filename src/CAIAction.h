@@ -36,6 +36,8 @@ public:
     static const SHORT SPELLPOINT;
     static const SHORT USEITEMPOINT;
     static const SHORT ATTACKNOSOUND;
+    static const SHORT RANDOMFLY;
+    static const SHORT SETTARGETFLY;
     static const SHORT ATTACKONEROUND;
     static const SHORT LEAVEAREALUA;
     static const SHORT FORCESPELL;

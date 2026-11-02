@@ -2,6 +2,7 @@
 
 #include "CBaldurChitin.h"
 #include "CGameArea.h"
+#include "CGameChunk.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
 #include "CGameEffect.h"
@@ -837,6 +838,15 @@ CProjectile84D8B8::CProjectile84D8B8()
 {
 }
 
+// 0x5295D0
+void CProjectileBAM::SetVidCell(CResRef resRef)
+{
+    if (m_animation != NULL) {
+        delete m_animation;
+    }
+    m_animation = new CVidCell(resRef, FALSE);
+}
+
 // 0x5297B0
 CProjectileSparkleExplosion::CProjectileSparkleExplosion(CResRef resRef)
     : CProjectileBAM(resRef)
@@ -856,6 +866,129 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     // NOTE: OnArrival's Delete fails (the projectile was never added to the
     // object array), so the projectile deletes itself here.
     delete this;
+}
+
+// 0x52CA10
+CProjectileSparkle::CProjectileSparkle(SHORT nPaletteType)
+    : CProjectileBAM(CResRef("SPMAGMIS"))
+{
+    m_shadow = NULL;
+    field_1D8 = 0;
+    field_1DA = 0;
+    m_nDirection = 0;
+    field_1DE = FALSE;
+    field_29C = 0;
+    m_bLimitedLifetime = FALSE;
+    m_nLifetime = 0;
+
+    m_animation->SequenceSet(0);
+
+    m_speed = static_cast<SHORT>(m_speed << 1);
+    field_1CA = 0xF;
+    field_1CE = 0xB;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = TRUE;
+    field_1D2 = 0x80;
+    field_1D4 = FALSE;
+    m_fireSoundRef = "";
+    field_E6 |= 8;
+
+    if (nPaletteType != 0) {
+        if (nPaletteType == CVidPalette::TYPE_RANGE) {
+            m_palette.SetRange(0, 0x21, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+            m_animation->SetPalette(m_palette);
+        } else {
+            UTIL_ASSERT(FALSE);
+        }
+    }
+
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x52CCE0
+CProjectileExploding::CProjectileExploding(CResRef resRef)
+    : CProjectileBAM(resRef)
+    , m_targetType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0)
+{
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    m_childProjectileType = 0x4E;
+    m_strikesLeft = 1;
+    m_nState = 0;
+    m_lingerPeriod = 100;
+    m_lingerCountdown = 0;
+    m_targetType.Set(CAIObjectType::ANYONE);
+    m_strikeRange = 0x100;
+    m_preCheckRange = 0x100;
+    m_bPreScan = 0;
+    m_bBurstPending = 0;
+    field_1BE = 0;
+    m_bExplodeCell1Active = 0;
+    m_bExplodeCell2Active = 0;
+    m_bCheckNonSprites = 0;
+    m_burstType = 0xFF;
+}
+
+// 0x52E940
+//
+// The weapon missile's burst: the fireball (CGameObject85BFE8) with its
+// colour ranges set from the leaf's own explosion colour range — the strike
+// range around, expanding at half the flight speed, destroyed by the first
+// wall it meets, no duration of its own.
+void CProjectileExplodingWeapon::Explode()
+{
+    BYTE colorRangeValues[7];
+    memset(colorRangeValues, m_explodeColorRange, sizeof(colorRangeValues));
+    new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
+        static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
+// 0x52F1C0
+//
+// The flame missile's burst: the same fireball with the colour ranges
+// hardwired to 0x43.
+void CProjectileExplodingFlame::Explode()
+{
+    BYTE colorRangeValues[7];
+    memset(colorRangeValues, 0x43, sizeof(colorRangeValues));
+    new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
+        static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
+// 0x52F760
+//
+// The skull trap's burst: the ShSkull sound (the resref the parked ctor
+// stored at +0x4B4) fire-and-forget on channel 14, then the bone chunk
+// spray the shatter effect throws — one CGameChunk per count, sized by the
+// trap's own child type, thrown sideways at up to 5 either way and upwards
+// at one of three speeds, the chunk lifetime the shatter effect uses.
+void CProjectileSkullTrap::Explode()
+{
+    CSound sound;
+    CString sSound(""); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+    // NOTE: the exe passes a stack buffer it never writes here.
+    BYTE colorRangeValues[7];
+
+    sound.SetResRef(m_explodeSound, TRUE, TRUE);
+    sound.SetFireForget(TRUE);
+    sound.SetChannel(14, reinterpret_cast<DWORD_PTR>(m_pArea));
+    sound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    BYTE nChunks = static_cast<BYTE>(rand() % 16 + 10);
+    while (nChunks != 0) {
+        LONG nPosZDelta = rand() % 3 * 3 + 3; // the exe draws this one first
+        CPoint ptVelocity;
+        ptVelocity.y = rand() % 11 - 5; // …then y…
+        ptVelocity.x = rand() % 11 - 5; // …then x
+        new CGameChunk(m_nType, colorRangeValues, sSound, m_pArea, m_pos,
+            ptVelocity, -m_posZ, nPosZDelta, (CHUNK_DURATION + 1) << 2,
+            CHUNK_DURATION + 1);
+        nChunks--;
+    }
 }
 
 // 0x531360
@@ -887,6 +1020,23 @@ CProjectileBoulder::CProjectileBoulder()
     field_1D8 = 16;
     m_fireSoundRef = "";
     m_speed = static_cast<SHORT>(m_speed * 3 / 2);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x531790
+CProjectileDart::CProjectileDart()
+    : CProjectileBAM(CResRef("DART"))
+{
+    m_animation->SequenceSet(0);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 3);
     m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
     m_sVisualEffect = "";
     field_182 = CGameObjectArray::INVALID_INDEX;
@@ -963,6 +1113,49 @@ CProjectileAcidBlob::CProjectileAcidBlob()
     field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
+// 0x5324A0
+CProjectileArrow::CProjectileArrow()
+    : CProjectileBAM(CResRef("ARARROW"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(5, 0x1B, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(4, 0x17, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(2, 0x2E, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = TRUE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x532720
+CProjectileSPFLMARR::CProjectileSPFLMARR()
+    : CProjectileBAM(CResRef("SPFLMARR"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(1, 0x2E, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 16;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 5);
+    m_trailTick = 0;
+    memset(m_trailColorRanges, 0x41, sizeof(m_trailColorRanges));
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
 // 0x533DE0
 void CProjectileFollowUp::CallBack()
 {
@@ -992,6 +1185,256 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
     m_checkLOS = TRUE;
 }
 
+// 0x56F1F0
+//
+// The exe's body is the compiler-generated member destruction — the set,
+// the two CSounds, the three explosion strings (third to first), the
+// target-hits map, the two embedded CVidCells, the target filter's CString,
+// then the CProjectileSingleTarget dtor (0x5783E0). Ours is the empty
+// braces the compiler emits the same destruction from.
+CProjectileArea::~CProjectileArea()
+{
+}
+
+// 0x56FDC0
+//
+// The second explosion's description: the base (two empty strings and the
+// visual effect), then the animation-mode byte clear and the field_2E
+// sentinel INT_MAX (the fork names them m_animMode and m_maxMovingSpawn —
+// the cap on moving pieces the emission may still spawn).
+CProjectileAreaExplosion2::CProjectileAreaExplosion2()
+{
+    field_2C = 0;
+    field_2E = 0x7FFFFFFF;
+}
+
+// 0x56FE30
+//
+// The third explosion description's ctor: no burned points yet, the two
+// chance bytes and the trailing flags clear, a 250 density base, a 6-tick
+// emission period and a 30 density-ramp divisor. (The exe also stores
+// uninitialized stack bytes into the two string flags at +0x00/+0x10 — a
+// VC6 artifact our default-constructed string members cover; our
+// CProjectileArea ctor at 0x56EDD0 stores these same values again after the
+// member ctor has run, so the net construction is unchanged.)
+CProjectileAreaExplosion3::CProjectileAreaExplosion3()
+{
+    m_pPoints = NULL;
+    field_30 = 0;
+    field_34 = 0;
+    field_35 = 0;
+    field_36 = 0;
+    field_38 = 250;
+    field_3C = 6;
+    field_40 = 30;
+    field_44 = 0;
+}
+
+// 0x571170
+CProjectileAcidStorm::CProjectileAcidStorm()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "AStormX";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "AStormA";
+    m_explosion3.m_sound = "ARE_M04";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_36 = TRUE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 45;
+    field_1D8 = 1;
+    m_nRadius = 200;
+}
+
+// 0x571930
+CProjectileCircleOfDeath::CProjectileCircleOfDeath()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "DSpellX";
+    m_explosion1.m_sound = "EFF_M42";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 300;
+}
+
+// 0x572830
+CProjectileHoldAnimal::CProjectileHoldAnimal()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 200;
+}
+
+// 0x572B30
+CProjectileHoldMonster::CProjectileHoldMonster()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 200;
+}
+
+// 0x573160
+CProjectileHaltUndead::CProjectileHaltUndead()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "EnchanX";
+    m_explosion1.m_sound = "ARE_M21";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 150;
+}
+
+// 0x573460
+CProjectileIceStorm::CProjectileIceStorm()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "IStormX";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "IStormA";
+    m_explosion3.m_sound = "ARE_M04";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 100;
+    field_1D8 = 1;
+    m_nRadius = 200;
+}
+
+// 0x573600
+CProjectileFieryCloud::CProjectileFieryCloud()
+    : CProjectileArea(0x100)
+{
+    field_65E = 0;
+    m_explosion1.m_animation = "ICloudX";
+    m_explosion1.m_sound = "EFF_M40";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_animation = "ICloudR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 13;
+    m_explosion3.m_animation = "ICloudA";
+    m_explosion3.m_sound = "ARE_M05";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 1500;
+    m_explosion3.field_44 = TRUE;
+    m_nDuration = 1050;
+    field_1D8 = 1;
+    m_nRadius = 100;
+}
+
+// 0x573AF0
+CProjectileInsectPlague::CProjectileInsectPlague()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "IPlaguX";
+    m_explosion1.m_sound = "RNG_P01";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_animation = "IPlaguR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 13;
+    m_explosion3.m_animation = "IPlaguA";
+    m_explosion3.m_sound = "ARE_P02";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10;
+    m_nHitModulus = 10;
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_nTriggerCountdown = 0;
+    m_nDuration = 1500;
+    field_1D8 = 1;
+    m_nRadius = 250;
+}
+
+// 0x573E90
+CProjectilePowerWordKill::CProjectilePowerWordKill()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "PWKillX";
+    m_explosion1.m_sound = "EFF_M39";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10000;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    m_nRadius = 150;
+}
+
+// 0x574140
+CProjectileProduceFire::CProjectileProduceFire()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "PFireX";
+    m_explosion1.m_sound = "EFF_P45";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_animation = "PFireA";
+    m_explosion3.m_sound = "ARE_P03";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 750;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10000;
+    m_nDuration = 100;
+    field_1D8 = 1;
+    m_nRadius = 60;
+}
+
+// 0x576BA0
+void CProjectileDBFireball::AIUpdate()
+{
+    if (m_bExploded == 0) {
+        CProjectileArea::AIUpdate();
+        return;
+    }
+    if (m_bBlasted == 1) {
+        CProjectileArea::AIUpdate();
+        return;
+    }
+
+    if (++m_scanTimer == 5) {
+        m_scanTimer = 0;
+
+        CTypedPtrList<CPtrList, LONG*> targets;
+        m_pArea->GetAllInRange(m_posVertList, m_pos, CAIObjectType::ANYONE, 100, m_terrainTable, targets, TRUE, FALSE);
+        m_pArea->GetAllInRangeBack(m_pos, CAIObjectType::ANYONE, 100, m_terrainTable, targets, TRUE, FALSE, FALSE);
+
+        if (targets.GetCount() != 0) {
+            CProjectileArea::OnArrival();
+            m_bBlasted = TRUE;
+        }
+    }
+
+    m_animation->FrameAdvance();
+}
+
 // The exe keeps these in the zero-initialized virtual tail of .data — the
 // raw range ends at 0x8C6000, and the elements sit at 0x8E52D4/0x8E52D8/
 // 0x8E52DC with the flag at 0x8E52E8 — so the loaded image starts them all
@@ -1000,6 +1443,63 @@ CProjectileMAGMISS::CProjectileMAGMISS(SHORT count, USHORT /*unused*/)
 std::vector<CPoint> IcewindCProjectileScorcher::m_offsets;
 // 0x8E52E8
 BYTE IcewindCProjectileScorcher::m_offsetsInitialized = FALSE;
+
+// 0x577590
+CProjectileBigBoulder::CProjectileBigBoulder()
+    : CProjectileArea(100)
+{
+    const char* szTravel = "BIGBOLDR";
+    if (strlen(szTravel) != 0) {
+        field_1DE = TRUE;
+        SetTravelAnimation(CResRef(szTravel));
+        m_bTravels = TRUE;
+    } else {
+        field_1DE = FALSE;
+        m_bTravels = FALSE;
+    }
+
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = FALSE;
+    m_nTriggerInterval = 10;
+    m_nTriggerCountdown = 0;
+    m_nHitModulus = 10;
+    field_1D8 = 1;
+    m_nRadius = 100;
+    m_speed = 7;
+    m_fireSoundRef = CResRef("AM6103e");
+    m_arrivalSoundRef = CResRef("AM5101e");
+}
+
+// 0x5778A0
+//
+// Everything the spell is lives in the first explosion: the SoPainX burst
+// on the EFF_P49 sound with the copy-from-back mode set on the visual
+// effect — the same first-explosion shape the spell-hit cases of
+// DecodeProjectile build inline. The base is handed 256, then the radius
+// is widened to 300.
+CProjectileSymbolOfDeath::CProjectileSymbolOfDeath()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "SoPainX";
+    m_explosion1.m_sound = "EFF_P49";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_nRadius = 300;
+}
+
+// 0x579DE0
+//
+// The exe's body is the compiler-generated member destruction: the vector
+// buffer freed through the triple at +0x2F6/+0x2FA/+0x2FE, then the
+// refcounted puff name released at +0x2E2 (count byte at ptr−1, the block
+// freed when the count reaches 0 or was the 0xFF sentinel), then the
+// CProjectileSingleTarget dtor (0x5783E0). Ours is the empty braces the
+// compiler emits the same destruction from — m_puffPoints is declared
+// after m_sPuff, so it dies first. Neither this body nor the deleting
+// wrapper 0x579DC0 stores the vtable: the cone is a leaf, and no virtual
+// dispatch happens during the teardown.
+CProjectile850DDC::~CProjectile850DDC()
+{
+}
 
 // 0x57AEB0
 IcewindCProjectileScorcher::IcewindCProjectileScorcher()
@@ -1243,4 +1743,39 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE);
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x57FF80
+// The tornado's own launch: it starts the ARE_P23 loop (fire-and-forget on
+// channel 15 of the area, at the tornado's position) and goes through the
+// base with INVALID_INDEX for the target — the tornado never homes.
+void CProjectileWhirlwind::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)target;
+
+    m_loopSound.SetResRef(CResRef("ARE_P23"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    CProjectileSingleTarget::Fire(pArea, source, CGameObjectArray::INVALID_INDEX, targetPos, nHeight, nType);
+}
+
+// 0x580B30
+// Push the picked target point out to m_beamRange past it along the caster->
+// target heading, so the bolt overshoots its mark and rakes the whole line,
+// then launch through the base.
+void CProjectileLightningBolt::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    CGameObject* pSource;
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(
+            source, CGameObjectArray::THREAD_ASYNCH, &pSource, INFINITE)
+        == CGameObjectArray::SUCCESS) {
+        const CPoint& casterPos = pSource->GetPos();
+        CPoint endPoint = IcewindMisc::sub_5847B0(targetPos,
+            targetPos.x - casterPos.x, targetPos.y - casterPos.y, m_beamRange);
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(
+            source, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        CProjectileSingleTarget::Fire(pArea, source, target, endPoint, nHeight, nType);
+    }
 }

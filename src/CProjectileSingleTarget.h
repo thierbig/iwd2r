@@ -2,6 +2,7 @@
 #define CPROJECTILESINGLETARGET_H_
 
 #include "CProjectile.h"
+#include "CSound.h"
 #include "CVidBitmap.h"
 #include "CVidCell.h"
 #include "CVidPalette.h"
@@ -70,6 +71,8 @@ public:
 class CProjectile850DDC : public CProjectileSingleTarget {
 public:
     CProjectile850DDC(const char* szAnimation, const char* szPuff);
+    // 0x579DE0
+    /* 0000 */ ~CProjectile850DDC() override;
     /* 000C */ void AIUpdate() override;
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
     /* 0070 */ void OnArrival() override;
@@ -183,6 +186,72 @@ public:
     // 0x8D48B0; native size 0x2BE). It is the last member, so the VC6-vs-ours
     // std::set size drift stays inside sizeof.
     /* 02AE */ std::set<LONG> m_struckTargets;
+};
+
+// The lightning-bolt carrier (vtable 0x8513BC): pushes the picked target
+// point out past the target so the bolt rakes the whole line. WillScarlettOhara
+// models the family as CProjectileLightningBolt
+// < IcewindCProjectileTravellingVFX < CProjectileTravelling; the exe Fire
+// 0x580B30 closes with CProjectileSingleTarget::Fire (0x5791D0), which is
+// the anchor used here (the same substitution as the two classes above).
+class CProjectileLightningBolt : public CProjectileSingleTarget {
+public:
+    // 0x580B30. Reads the caster's position, pushes the target point out to
+    // m_beamRange past the target along the caster->target heading, then
+    // launches through the base Fire.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+    // The ctor 0x5806C0 is parked (docs/wso/import-parked/5806C0.json — it
+    // embeds the fork-only IcewindCProjectileTargetMap at +0x2B2 through its
+    // ctor 0x55ACC0, self-wiring the owner back-pointer at +0x2B6 and the
+    // service period 2 / strike interval 33 stamps at +0x2CA/+0x2D2), as are
+    // the dtor body 0x580770 (docs/wso/import-parked/580770.json) and slot
+    // 0x000C (AIUpdate 0x5808A0, docs/wso/import-parked/5808A0.json — the
+    // strike tracker it walks is that same map), so the class inherits the
+    // base virtuals for those slots; a declared-but-undefined dtor would
+    // become the key function and leave the vtable unemitted, breaking the
+    // link.
+    // Distance the shot is pushed past the picked target: the radius handed
+    // to IcewindMisc::sub_5847B0 in Fire (a DWORD read at +0x2AE in the exe).
+    /* 02AE */ LONG m_beamRange;
+};
+
+// The whirlwind (vtable 0x851444): a tornado that wanders the area on a
+// seeded course, playing ARE_P23 over its whole life and striking the
+// sprites it passes. WillScarlettOhara models the family as
+// CProjectileWhirlwind < IcewindCProjectileTravellingVFX <
+// CProjectileTravelling; the exe Fire 0x57FF80 closes with
+// CProjectileSingleTarget::Fire (0x5791D0), which is the anchor used here
+// (the same substitution as the classes above). The ctor 0x57F640 is parked
+// (docs/wso/import-parked/57F640.json — it wires the fork-only
+// IcewindCProjectileTargetMap strike tracker at +0x2BA), as are AIUpdate
+// 0x57F8D0 (docs/wso/import-parked/57F8D0.json), PickWanderPoint 0x5800E0
+// (docs/wso/import-parked/5800E0.json — the fork's 16-entry step table is
+// mirrored against the exe's jump table at 0x58022C: the fork's case n is
+// the exe's index (12-n) mod 16, while the rose that indexes it —
+// CGameSprite::GetDirection, 0=south/4=west/8=north/12=east — matches the
+// exe's order) and OnArrival 0x580270 (docs/wso/import-parked/580270.json —
+// its only callee is that parked pick). The fork's dtor (0x57F760) has not
+// been queued. None of those slots is declared — a declared-but-undefined
+// virtual would become the key function and leave the vtable unemitted —
+// so the class inherits the base virtuals for them.
+class CProjectileWhirlwind : public CProjectileSingleTarget {
+public:
+    // 0x57FF80. Points the loop sound at ARE_P23, makes it fire-and-forget
+    // on channel 15 of the area, starts it at the tornado's position, then
+    // launches through the base Fire with INVALID_INDEX for the target —
+    // the tornado never homes.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+
+    // +0x2BA..+0x2EF is the strike tracker the parked ctor builds (the
+    // fork-only IcewindCProjectileTargetMap); kept as raw bytes until that
+    // type is imported.
+    /* 02AE */ LONG m_nLifetime;
+    /* 02B2 */ LONG m_nLegBudget;
+    /* 02B6 */ LONG field_2B6;
+    /* 02BA */ BYTE field_2BA[0x36];
+    /* 02F0 */ CSound m_loopSound;
+    /* 0354 */ BYTE m_bFinishing;
+    /* 0356 */ LONG m_wanderSeed;
 };
 
 #endif /* CPROJECTILESINGLETARGET_H_ */

@@ -8517,6 +8517,436 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i064": {
+      "assigned_at": "2026-11-01T07:19:17+00:00",
+      "branch": "p3/wso-i064",
+      "closed_at": "2026-11-01T11:27:18+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5808A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::AIUpdate",
+          "our_len": 0,
+          "their_len": 1516
+        },
+        {
+          "address": "0x576990",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDBFireball::CProjectileDBFireball",
+          "our_len": 0,
+          "their_len": 797
+        },
+        {
+          "address": "0x5800E0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::PickWanderPoint",
+          "our_len": 0,
+          "their_len": 698
+        },
+        {
+          "address": "0x5745E0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSnowballSwarm::CProjectileSnowballSwarm",
+          "our_len": 0,
+          "their_len": 634
+        },
+        {
+          "address": "0x52CA10",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSparkle::CProjectileSparkle",
+          "our_len": 0,
+          "their_len": 623
+        },
+        {
+          "address": "0x529660",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::SetTravelPalette",
+          "our_len": 0,
+          "their_len": 589
+        },
+        {
+          "address": "0x52D7F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::OnArrival",
+          "our_len": 0,
+          "their_len": 585
+        },
+        {
+          "address": "0x580B30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::Fire",
+          "our_len": 0,
+          "their_len": 550
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i065": {
+      "assigned_at": "2026-11-01T11:28:32+00:00",
+      "branch": "p3/wso-i065",
+      "closed_at": "2026-11-01T12:41:59+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x576BA0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDBFireball::AIUpdate",
+          "our_len": 0,
+          "their_len": 547
+        },
+        {
+          "address": "0x5324A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileArrow::CProjectileArrow",
+          "our_len": 0,
+          "their_len": 520
+        },
+        {
+          "address": "0x532720",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSPFLMARR::CProjectileSPFLMARR",
+          "our_len": 0,
+          "their_len": 513
+        },
+        {
+          "address": "0x52F260",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSkullTrap::CProjectileSkullTrap",
+          "our_len": 0,
+          "their_len": 499
+        },
+        {
+          "address": "0x573AF0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileInsectPlague::CProjectileInsectPlague",
+          "our_len": 0,
+          "their_len": 485
+        },
+        {
+          "address": "0x573600",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFieryCloud::CProjectileFieryCloud",
+          "our_len": 0,
+          "their_len": 474
+        },
+        {
+          "address": "0x52E230",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingWeapon::CProjectileExplodingWeapon",
+          "our_len": 0,
+          "their_len": 473
+        },
+        {
+          "address": "0x52E9F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingFlame::CProjectileExplodingFlame",
+          "our_len": 0,
+          "their_len": 470
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i066": {
+      "assigned_at": "2026-11-01T12:43:16+00:00",
+      "branch": "p3/wso-i066",
+      "closed_at": "2026-11-01T14:06:40+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x52CCE0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExploding::CProjectileExploding",
+          "our_len": 0,
+          "their_len": 415
+        },
+        {
+          "address": "0x57F640",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::CProjectileWhirlwind",
+          "our_len": 0,
+          "their_len": 403
+        },
+        {
+          "address": "0x577590",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBigBoulder::CProjectileBigBoulder",
+          "our_len": 0,
+          "their_len": 401
+        },
+        {
+          "address": "0x574140",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileProduceFire::CProjectileProduceFire",
+          "our_len": 0,
+          "their_len": 397
+        },
+        {
+          "address": "0x571170",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileAcidStorm::CProjectileAcidStorm",
+          "our_len": 0,
+          "their_len": 332
+        },
+        {
+          "address": "0x573460",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileIceStorm::CProjectileIceStorm",
+          "our_len": 0,
+          "their_len": 332
+        },
+        {
+          "address": "0x57FF80",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::Fire",
+          "our_len": 0,
+          "their_len": 309
+        },
+        {
+          "address": "0x531790",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileDart::CProjectileDart",
+          "our_len": 0,
+          "their_len": 286
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i067": {
+      "assigned_at": "2026-11-01T14:07:47+00:00",
+      "branch": "p3/wso-i067",
+      "closed_at": "2026-11-01T14:53:19+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x56FE30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitEmissionRanged::IcewindCSpellHitEmissionRanged",
+          "our_len": 0,
+          "their_len": 271
+        },
+        {
+          "address": "0x52E940",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingWeapon::Explode",
+          "our_len": 0,
+          "their_len": 260
+        },
+        {
+          "address": "0x52F1C0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileExplodingFlame::Explode",
+          "our_len": 0,
+          "their_len": 245
+        },
+        {
+          "address": "0x573160",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHaltUndead::CProjectileHaltUndead",
+          "our_len": 0,
+          "their_len": 206
+        },
+        {
+          "address": "0x573E90",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectilePowerWordKill::CProjectilePowerWordKill",
+          "our_len": 0,
+          "their_len": 206
+        },
+        {
+          "address": "0x571930",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCircleOfDeath::CProjectileCircleOfDeath",
+          "our_len": 0,
+          "their_len": 205
+        },
+        {
+          "address": "0x572830",
+          "address_source": "fork-header",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHoldAnimal::CProjectileHoldAnimal",
+          "our_len": 0,
+          "their_len": 205
+        },
+        {
+          "address": "0x572B30",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileHoldMonster::CProjectileHoldMonster",
+          "our_len": 0,
+          "their_len": 205
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i068": {
+      "assigned_at": "2026-11-01T14:57:24+00:00",
+      "branch": "p3/wso-i068",
+      "closed_at": "2026-11-01T18:06:09+00:00",
+      "files": [
+        "src/CProjectile.cpp"
+      ],
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x56F1F0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::~IcewindCProjectileSpellHit",
+          "our_len": 0,
+          "their_len": 203
+        },
+        {
+          "address": "0x52F760",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSkullTrap::Explode",
+          "our_len": 0,
+          "their_len": 181
+        },
+        {
+          "address": "0x579DE0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::~CProjectileCone",
+          "our_len": 0,
+          "their_len": 168
+        },
+        {
+          "address": "0x56FDC0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitEmission::IcewindCSpellHitEmission",
+          "our_len": 0,
+          "their_len": 167
+        },
+        {
+          "address": "0x5778A0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSymbolOfDeath::CProjectileSymbolOfDeath",
+          "our_len": 0,
+          "their_len": 128
+        },
+        {
+          "address": "0x580270",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileWhirlwind::OnArrival",
+          "our_len": 0,
+          "their_len": 121
+        },
+        {
+          "address": "0x5806C0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileLightningBolt::CProjectileLightningBolt",
+          "our_len": 0,
+          "their_len": 106
+        },
+        {
+          "address": "0x5295D0",
+          "address_source": "fork-decl",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::SetVidCell",
+          "our_len": 0,
+          "their_len": 78
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   }
 }

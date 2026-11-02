@@ -564,6 +564,8 @@ public:
     SHORT Follow();
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);
+    SHORT RandomWalk();
+    SHORT PickLock(CGameObject* pTarget);
     void sub_71D0B0();
     void sub_72FBF0();
     void CheckSequence(BYTE& sequence);
@@ -624,6 +626,7 @@ public:
     void CheckModal();
     CGameObject* GetTargetShare();
     SHORT MoveToObject(CGameObject* pTarget);
+    SHORT MoveToObjectFormation(CGameSprite* pTarget); // #guess name: action 215
     SHORT MoveToPoint();
     SHORT MoveToPoint(const CPoint& dest, LONG range);
     SHORT Dialog(CGameSprite* pTarget);
@@ -631,6 +634,7 @@ public:
     SHORT Interact(CGameSprite* pTarget);
     SHORT StartDialog(CGameSprite* pTarget);
     SHORT UseDoor();
+    SHORT TryBash(CGameObject* pTarget);
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
     SHORT SpellPoint();
@@ -654,6 +658,7 @@ public:
     void MoveGlobal(const CString& sArea, const CPoint& ptStart);
     SHORT GroupAttack(CGameSprite* pTarget);
     SHORT Enemy();
+    SHORT RandomFly();
     SHORT SetDialog();
     void SelectWeaponAbility(unsigned char buttonNum, unsigned char abilityNum, unsigned char feedBack, unsigned char retry);
     void sub_756930(CItem* pItem, CItem* pLauncher);
@@ -671,10 +676,14 @@ public:
     SHORT sub_75F240();
     SHORT sub_75F3D0(int a1);
     SHORT LeaveArea();
+    SHORT LeaveAreaLUA();
     SHORT LeaveAreaName();
     SHORT Help();
     SHORT Rest();
+    SHORT JoinParty();
+    SHORT RemoveSpell();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
+    SHORT RunAwayFromNoLeaveArea(CGameSprite* pTarget);
     SHORT ForceHide(CGameSprite* pSprite);
     SHORT sub_7615F0(int a1);
     void sub_761650();
