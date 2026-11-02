@@ -672,6 +672,7 @@ public:
     SHORT EquipRanged();
     SHORT GiveItem(CGameAIBase* pTarget);
     SHORT ChangeAnimation();
+    SHORT GiveEquipmentToParty();
     SHORT StartStore(CGameSprite* pTarget);
     const CAIObjectType& GetLiveAIType();
     SHORT GetCasterLevel(CSpell* pSpell, BYTE nClass, DWORD nSpecialization);

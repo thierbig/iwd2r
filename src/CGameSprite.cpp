@@ -14424,8 +14424,9 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 224:
-        // TODO: 0x72A9A7-0x72A9B7 not ported (0x757720).
-        returnValue = ACTION_ERROR;
+        // Engine-internal action 224 (0x72A9A7-0x72A9B7), no ACTION.IDS
+        // entry.
+        returnValue = GiveEquipmentToParty();
         goto done;
     case 225:
         // JumpToArea (0x72A976-0x72A9A7): the action's string1 is the area,
@@ -33982,6 +33983,78 @@ SHORT CGameSprite::GiveItem(CGameAIBase* pTarget)
 
         CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, pTarget->GetId());
         g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+    }
+
+    return ACTION_DONE;
+}
+
+// 0x757720
+// The engine-internal action 224 (no ACTION.IDS entry; the issue calls it so):
+// every equipped item whose ITM file flags carry 0x4 (the droppable bit
+// DropItem and DropInventory test), the fist's excluded, is unequipped and
+// given to the first party member whose object share comes back, one
+// CMessageAddItem each, on the same tail as GiveItem.
+// NOTE: 0x757853 tests m_equipment.m_items[SLOT_AMULET] - the original's own
+// condition, kept: with an amulet equipped nothing is handed out.
+SHORT CGameSprite::GiveEquipmentToParty()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    for (int nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = m_equipment.m_items[nSlot];
+        if (pItem == NULL
+            || nSlot == CGameSpriteEquipment::SLOT_FIST
+            || (pItem->GetFlagsFile() & 0x4) == 0) {
+            continue;
+        }
+
+        Unequip(nSlot);
+        m_equipment.m_items[nSlot] = NULL;
+
+        BOOL bFound = FALSE;
+        for (SHORT nIndex = pGame->m_nCharacters - 1; nIndex >= 0 && !bFound; nIndex--) {
+            LONG nId = nIndex < pGame->m_nCharacters
+                ? pGame->m_characterPortraits[nIndex]
+                : CGameObjectArray::INVALID_INDEX;
+            CGameObject* pObject;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                continue;
+            }
+
+            // NOTE: This loop shares the outer slot counter, as the exe does
+            // (edi at [esp+0x18]): it starts where the outer loop left off,
+            // steps nSlot itself, and the outer loop steps again after it.
+            // Two visible consequences, kept from the original: after a
+            // handout the next slot is skipped (its item stays equipped);
+            // and with the amulet slot occupied the loop runs nSlot up to
+            // NUM_SLOT, so only the first droppable item is unequipped and
+            // its slot cleared before the walk ends (the item is lost).
+            // Almost certainly an original bug.
+            for (; nSlot < CGameSpriteEquipment::NUM_SLOT && !bFound; nSlot++) {
+                // 0x757866's `test al,al` on the SLOT_FIST byte (0x85BD83).
+                if (m_equipment.m_items[CGameSpriteEquipment::SLOT_AMULET] == NULL
+                    && CGameSpriteEquipment::SLOT_FIST != 0) {
+                    bFound = TRUE;
+                    pGame->AddDisposableItem(pItem);
+
+                    CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, nId);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+                }
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
     }
 
     return ACTION_DONE;
