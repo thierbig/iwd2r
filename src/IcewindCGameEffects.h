@@ -217,6 +217,7 @@ public:
     virtual void ResolveSourceSprite();
 
     void AddSummonVisualHit(CGameSprite* pSpawned, int mode);
+    void PlayGroupVFX(int vfxId);
 
     /* 018C */ CGameSprite* m_pSprite;
     /* 0190 */ int field_190;

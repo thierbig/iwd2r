@@ -910,6 +910,32 @@ void IcewindCGameEffectSummon::ResolveSourceSprite()
         INFINITE);
 }
 
+// 0x55F930
+void IcewindCGameEffectSummon::PlayGroupVFX(int vfxId)
+{
+    if (vfxId == 0) {
+        return;
+    }
+
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(static_cast<WORD>(vfxId + 1), NULL, 0);
+
+    CMessageFireProjectile* pMessage = new CMessageFireProjectile(pProjectile->m_projectileType,
+        CGameObjectArray::INVALID_INDEX,
+        m_target,
+        0,
+        m_pSprite->m_id,
+        m_pSprite->m_id,
+        0);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+    pProjectile->Fire(m_pSprite->GetArea(),
+        m_pSprite->m_id,
+        m_pSprite->m_id,
+        m_target,
+        0,
+        0);
+}
+
 // 0x55FA10
 void IcewindCGameEffectSummon::AddSummonVisualHit(CGameSprite* pSpawned, int mode)
 {
