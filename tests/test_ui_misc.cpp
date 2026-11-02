@@ -3197,3 +3197,47 @@ TEST_CASE("engine: OnMouseWheel's remembered scroll bars", "[uimisc][engine]")
     CHECK(engine->field_102 == bar);
     CHECK(barBase->m_bActive == TRUE);
 }
+
+// CBaldurMessage::OnUpdateDemandCharacterSlot (0x42E0C0) answers a
+// PLAYERCHAR/85 demand: with the session open it takes the slot's character
+// (or not) and replies through its marshal helper (0x42E1B0: the derived
+// stats, the animation id, the portrait icons, the party creature block and
+// the custom bio) as PLAYERCHAR/117 to the requesting player (or all, when
+// the name is empty). The engine's null provider stops SendSpecificMessage
+// before the static buffer, so the answer is the observable here; the payload
+// is the evidence's read-only part.
+TEST_CASE("msg: the demand-slot update answers a closed session and drives the reply", "[uimisc][msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+
+    // 3-byte network header then {SHORT slot}.
+    BYTE payload[5] = {};
+    SHORT nSlot = 0;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+
+    // A closed session answers FALSE before the slot lookup.
+    network.m_bConnectionEstablished = FALSE;
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == FALSE);
+
+    // With the session open the party's slot 0 takes the marshal path (the
+    // reply's send stops at the null provider) and the answer is TRUE.
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == TRUE);
+
+    // A slot without a character sends the header-only reply, also TRUE.
+    nSlot = 5;
+    std::memcpy(payload + CNetwork::SPEC_MSG_HEADER_LENGTH, &nSlot, sizeof(nSlot));
+    CHECK(pMessage->OnUpdateDemandCharacterSlot(0, payload, sizeof(payload)) == TRUE);
+
+    network.m_bConnectionEstablished = bConnection;
+}

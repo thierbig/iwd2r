@@ -284,6 +284,7 @@ public:
     void UpdateDemandCharacters(unsigned char a1, int a2, unsigned char a3);
     void BroadcastUpdateCharacterSlot(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
     BOOLEAN OnUpdateDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
+    BOOLEAN sub_42E1B0(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo);
     BOOLEAN DemandCharacterSlot(SHORT nCharacterSlot, BOOLEAN bDemandFromHost, SHORT nPlayerSlot);
     BOOLEAN OnDemandCharacterSlot(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN BroadcastDemandCharacterSlotReply(BOOLEAN bUpdateAllCharacters, INT nUpdatedCharacterSlot, BOOLEAN bProgressBarInPlace);
