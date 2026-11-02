@@ -7534,6 +7534,47 @@ class XrecTest(unittest.TestCase):
             '}\n')
         self.assertEqual(f['CThing::Beta'], ('0x402000', '{return2;}'))
 
+    def test_xrec_comment_hex_is_no_marker(self):
+        # A comment line that merely mentions a hex number is not a marker:
+        # Will's tree had `// 0x44-0x48). nCount = ...` above
+        # CProjectileSPMAGMIS::CProjectileSPMAGMIS and xrec filed it at 0x44.
+        # Prose is skipped and the real marker below it still wins.
+        f = xrec.funcs(
+            '// 0x5A1234\n'
+            '// see 0x5A0000\n'
+            '// 0x44-0x48). nCount = the band\'s missile count\n'
+            'int CProjectileSPMAGMIS::CProjectileSPMAGMIS(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CProjectileSPMAGMIS::CProjectileSPMAGMIS'],
+                         ('0x5A1234', '{return2;}'))
+
+    def test_xrec_no_marker_gets_no_address(self):
+        # The same prose comments with no real marker anywhere: no address,
+        # not 0x44, not 0x5A0000.
+        f = xrec.funcs(
+            '// see 0x5A0000\n'
+            '// 0x5A0000 is the twin\n'
+            '// 0x44-0x48). nCount = the band\'s missile count\n'
+            'int CProjectileSPMAGMIS::CProjectileSPMAGMIS(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CProjectileSPMAGMIS::CProjectileSPMAGMIS'],
+                         (None, '{return2;}'))
+
+    def test_xrec_plain_marker_line_only(self):
+        # A standalone `// 0xADDR` line is still the marker (the whole line,
+        # as labels.ADDRESS has it).
+        f = xrec.funcs(
+            '// 0x5A1234\n'
+            'int CThing::Beta(void)\n'
+            '{\n'
+            '    return 2;\n'
+            '}\n')
+        self.assertEqual(f['CThing::Beta'], ('0x5A1234', '{return2;}'))
+
     def test_xrec_matches_renamed_function_by_address(self):
         real = '{ints=m_x;s+=x;s+=m_y;s-=x;return s==0&&x!=0;}'
         theirs = xrec.funcs('// 0x401000\nint CThing::HisName(int x)\n%s\n' % real)

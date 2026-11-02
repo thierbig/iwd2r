@@ -15,9 +15,11 @@ integration waves work from.
 
 A function is matched between the trees by its // 0xADDR comment first (a
 renamed function is still the function) and by name second; the address is
-read from the signature's own line or the nearest line above with text on it
-(comment and blank lines between the marker and the signature are skipped, as
-labels.definitions skips them), the convention of both trees. An address two functions of one tree carry (shared thunks and
+read from the nearest line above that is a standalone `// 0xADDR` line —
+the whole line, labels.ADDRESS, the rule labels.definitions applies (comment
+and blank lines between the marker and the signature are skipped; a comment
+line that merely mentions a hex number never supplies it), the convention of
+both trees. An address two functions of one tree carry (shared thunks and
 unknown addresses get stamped alike) is no key; those functions match by
 name. Bodies are compared brace-matched, whitespace and comments
 stripped: rough but symmetric, so the noise lands on both sides alike.
@@ -37,6 +39,10 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                'ghidra'))
+import labels  # noqa: E402
+
 CATEGORIES = ['same', 'same_stub', 'only_theirs', 'only_ours',
               'theirs_real_ours_stub', 'ours_real_theirs_stub',
               'theirs_changed_ours_base', 'ours_changed_theirs_base',
@@ -54,7 +60,6 @@ def show(ref, path):
 
 
 sig = re.compile(r'^(?:[A-Za-z_][\w:<>,*&\s]*?\s+)?([A-Za-z_]\w*(?:::[~A-Za-z_]\w*)+|[A-Za-z_]\w*::operator\S*)\s*\([^;{]*\)\s*(?:const)?\s*\{', re.M)
-addr = re.compile(r'//\s*(0x[0-9A-Fa-f]+)')
 
 
 def blank_comments(text):
@@ -65,22 +70,21 @@ def blank_comments(text):
 
 
 def signature_addr(text, masked, m):
-    """The // 0xADDR comment of one signature match: on its own line, or on
-    the nearest line above with text on it — comment and blank lines between
-    the marker and the signature are skipped, as labels.definitions skips
-    them. Read from the unmasked text."""
+    """The // 0xADDR comment of one signature match: the nearest line above
+    that is a standalone `// 0xADDR` line — the whole line, labels.ADDRESS,
+    the rule labels.definitions applies. Comment and blank lines between the
+    marker and the signature are skipped, and skipping a comment line never
+    takes its hex (`// 0x44-0x48). text` and `// see 0x5A0000` are comments,
+    not markers). Read from the unmasked text."""
     line = masked.rfind('\n', 0, m.start()) + 1
-    windows = [(line, m.end())]
     while line:
         start = masked.rfind('\n', 0, line - 1) + 1
-        windows.append((start, line - 1))
         if masked[start:line - 1].strip():
-            break
-        line = start
-    for a, b in windows:
-        hit = addr.search(text[a:b])
+            break  # a non-comment line sits between the signature and any marker
+        hit = labels.ADDRESS.match(text[start:line - 1])
         if hit:
-            return hit.group(1)
+            return '0x' + hit.group(1)
+        line = start
     return None
 
 
