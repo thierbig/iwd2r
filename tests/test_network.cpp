@@ -161,3 +161,43 @@ TEST_CASE("CBaldurMessage::OnSwapItemRequest replies a miss for an unknown remot
     network.m_bIsHost = FALSE;
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
+
+// CBaldurMessage::SwapItemReply (0x431CA0): a successful swap with no item to
+// return is the 6-byte {result, hasItem = 0, errorCode} packet — the second
+// byte is "has an item" (a local BOOLEAN in the dead nMsgFrom slot,
+// 0x431D52-0x431D59), not the result again, and there is no item block to
+// dereference.
+TEST_CASE("CBaldurMessage::SwapItemReply answers a successful swap with no item", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    memset(pBuffer, 0xCD, 3 + 6 + 1);
+    CHECK(message.SwapItemReply(0, TRUE, NULL, -1) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 73);
+    CHECK(pBuffer[2] == 114);
+    CHECK(pBuffer[3] == 1); // result
+    CHECK(pBuffer[4] == 0); // no item to return
+    CHECK(pBuffer[5] == 0xFF); // errorCode = -1
+    CHECK(pBuffer[6] == 0xFF);
+    CHECK(pBuffer[7] == 0xFF);
+    CHECK(pBuffer[8] == 0xFF);
+    CHECK(pBuffer[9] == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}

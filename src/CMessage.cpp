@@ -2479,7 +2479,8 @@ BOOLEAN CBaldurMessage::OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dw
         bResult = FALSE;
     }
 
-    BOOLEAN bFromServer = nMsgFrom == g_pChitin->cNetwork.m_nHostPlayer;
+    // NOTE: The exe compares the low bytes (0x431B63 reads byte [chitin+0x10E0]).
+    BOOLEAN bFromServer = static_cast<BYTE>(nMsgFrom) == static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer);
     STRREF errorCode = -1;
 
     if (bResult == TRUE) {
@@ -2541,11 +2542,21 @@ BOOLEAN CBaldurMessage::SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pIte
 
     g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
 
-    // {BYTE result; [BYTE result; BYTE resRefLen; char resRef[];
-    //  WORD use1; WORD use2; WORD use3; WORD wear; DWORD flags];
+    // {BYTE result; [BYTE hasItem; [BYTE resRefLen; char resRef[];
+    //  WORD use1; WORD use2; WORD use3; WORD wear; DWORD flags]];
     //  DWORD errorCode}
-    DWORD dwSize = 5;
-    if (bResult == TRUE && pItem != NULL) {
+    // NOTE: The second byte is "has an item", a local BOOLEAN in the dead
+    // nMsgFrom argument slot (0x431D52-0x431D59), not the result again.
+    BOOLEAN bHasItem = bResult == TRUE && pItem != NULL;
+
+    DWORD dwSize;
+    if (bResult != TRUE) {
+        dwSize = 5;
+    } else if (!bHasItem) {
+        // A successful swap that leaves no item to return: {result, 0;
+        // errorCode} (6 bytes).
+        dwSize = 6;
+    } else {
         pItem->GetResRef().CopyToString(sResRef);
         // NOTE: The original masks the length to a byte before adding 19
         // (0x431D3F-0x431D4E).
@@ -2563,25 +2574,27 @@ BOOLEAN CBaldurMessage::SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pIte
     nOffset += sizeof(BYTE);
 
     if (bResult == TRUE) {
-        pMessage[nOffset] = bResult;
+        pMessage[nOffset] = bHasItem;
         nOffset += sizeof(BYTE);
 
-        pMessage[nOffset] = static_cast<BYTE>(sResRef.GetLength());
-        nOffset += sizeof(BYTE);
+        if (bHasItem) {
+            pMessage[nOffset] = static_cast<BYTE>(sResRef.GetLength());
+            nOffset += sizeof(BYTE);
 
-        memcpy(pMessage + nOffset, static_cast<const char*>(sResRef), sResRef.GetLength());
-        nOffset += sResRef.GetLength();
+            memcpy(pMessage + nOffset, static_cast<const char*>(sResRef), sResRef.GetLength());
+            nOffset += sResRef.GetLength();
 
-        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(0);
-        nOffset += sizeof(WORD);
-        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(1);
-        nOffset += sizeof(WORD);
-        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(2);
-        nOffset += sizeof(WORD);
-        *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->m_wear;
-        nOffset += sizeof(WORD);
-        *reinterpret_cast<DWORD*>(pMessage + nOffset) = pItem->m_flags;
-        nOffset += sizeof(DWORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(0);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(1);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->GetUsageCount(2);
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<WORD*>(pMessage + nOffset) = pItem->m_wear;
+            nOffset += sizeof(WORD);
+            *reinterpret_cast<DWORD*>(pMessage + nOffset) = pItem->m_flags;
+            nOffset += sizeof(DWORD);
+        }
     }
 
     *reinterpret_cast<DWORD*>(pMessage + nOffset) = errorCode;
