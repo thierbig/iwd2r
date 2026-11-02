@@ -870,7 +870,7 @@ BOOL IcewindCGameEffectColorGlowDissipate::ApplyEffect(CGameSprite* pSprite)
 IcewindCGameEffectSummon::IcewindCGameEffectSummon(ITEM_EFFECT* effect, const CPoint& source, LONG sourceID, CPoint target)
     : CGameEffect(effect, source, sourceID, target, FALSE)
 {
-    m_pSprite = NULL;
+    field_18C = 0;
     field_190 = 0;
 }
 
@@ -890,98 +890,6 @@ void IcewindCGameEffectSummon::sub_49DB60(int a1)
     field_190 = a1;
 }
 
-// 0x55F710
-// The caster is resolved once and remembered; m_numDice d m_diceSize + 1 each
-// is added to m_effectAmount for the summon count. Each summon that passes the
-// registry limit check spawns from m_res, optionally carrying a timed Unsummon
-// bounded by m_duration; the visual mode and the closing vfx both key off
-// m_dwFlags.
-BOOL IcewindCGameEffectSummon::ApplyEffect(CGameSprite* pSprite)
-{
-    ResolveSourceSprite();
-
-    if (m_pSprite == NULL) {
-        m_pSprite = pSprite;
-    }
-
-    int total = m_effectAmount;
-    for (DWORD i = 0; i < m_numDice; ++i) {
-        total += (m_diceSize == 0 ? 0 : rand() % static_cast<int>(m_diceSize)) + 1;
-    }
-
-    CGameSprite* pCaster = m_pSprite;
-    for (int i = 0; i < total; ++i) {
-        if (!Icewind586B70::Instance()->sub_586CA0(pCaster)) {
-            pCaster->FeedBack(CGameSprite::FEEDBACK_TOOMANYSUMMONED, 0, 0, 0, -1, 0, 0);
-            break;
-        }
-
-        CString resRef = m_res.GetResRefStr();
-        CGameSprite* pSpawned = SpawnFromResRef(resRef, &m_target);
-
-        // The exe gates the rider with three compares against the duration
-        // type constants (0, 3, 0x1000) and then repeats a != 1 test the
-        // in-set check already excludes.
-        if (pSpawned != NULL
-            && (m_durationType == 0 || m_durationType == 3 || m_durationType == 0x1000)) {
-            DWORD now = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
-            CGameEffect* pUnsummon = IcewindMisc::CreateEffectSkillUnsummon(pSpawned,
-                (m_duration - now) / 15,
-                0);
-            pUnsummon->m_casterLevel = m_casterLevel;
-            pSpawned->AddEffect(pUnsummon, CGameAIBase::EFFECT_LIST_TIMED, TRUE, TRUE);
-        }
-
-        AddSummonVisualHit(pSpawned, (m_dwFlags != 0) ? 0x15 : 0);
-    }
-
-    int vfxId;
-    switch (m_dwFlags) {
-    case 1: vfxId = 0x120; break;
-    case 2: vfxId = 0x121; break;
-    case 3: vfxId = 0x122; break;
-    case 4: vfxId = 0x123; break;
-    case 5: vfxId = 0x124; break;
-    case 6: vfxId = 0x168; break;
-    case 0:
-    case 7: vfxId = 0; break;
-    default:
-        UTIL_ASSERT(FALSE);
-        vfxId = 0;
-        break;
-    }
-    PlayGroupVFX(vfxId);
-
-    m_done = TRUE;
-
-    return TRUE;
-}
-
-// 0x560140
-void IcewindCGameEffectSummon::ResolveSourceSprite()
-{
-    BYTE rc;
-
-    do {
-        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceID,
-            CGameObjectArray::THREAD_ASYNCH,
-            reinterpret_cast<CGameObject**>(&m_pSprite),
-            INFINITE);
-    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
-
-    if (rc == CGameObjectArray::BAD_INDEX) {
-        return;
-    }
-
-    if (rc != CGameObjectArray::SUCCESS) {
-        UTIL_ASSERT(FALSE); // __LINE__: 2076
-    }
-
-    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceID,
-        CGameObjectArray::THREAD_ASYNCH,
-        INFINITE);
-}
-
 // 0x55F930
 void IcewindCGameEffectSummon::PlayGroupVFX(int vfxId)
 {
@@ -995,14 +903,14 @@ void IcewindCGameEffectSummon::PlayGroupVFX(int vfxId)
         CGameObjectArray::INVALID_INDEX,
         m_target,
         0,
-        m_pSprite->m_id,
-        m_pSprite->m_id,
+        field_18C->m_id,
+        field_18C->m_id,
         0);
     g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
 
-    pProjectile->Fire(m_pSprite->GetArea(),
-        m_pSprite->m_id,
-        m_pSprite->m_id,
+    pProjectile->Fire(field_18C->GetArea(),
+        field_18C->m_id,
+        field_18C->m_id,
         m_target,
         0,
         0);
@@ -1017,22 +925,22 @@ CGameSprite* IcewindCGameEffectSummon::SpawnFromResRef(const CString& resRef, co
     spawnGrid.y = pTarget->y / CPathSearch::GRID_SQUARE_SIZEY;
     spawnGrid.x = pTarget->x / CPathSearch::GRID_SQUARE_SIZEX;
 
-    CGameArea* pArea = m_pSprite->GetArea();
+    CGameArea* pArea = field_18C->GetArea();
     if (pArea == NULL) {
         return NULL;
     }
 
     // __FILE__: .\Include\ObjAnimation.h
     // __LINE__: 2093
-    UTIL_ASSERT(m_pSprite->m_animation.m_animation != NULL);
+    UTIL_ASSERT(field_18C->m_animation.m_animation != NULL);
 
     // The exe's 0x548B80 takes (POINT* out, int gridX, int gridY,
     // const BYTE* terrainTable, BYTE personalSpace, SHORT nDirection) and
     // writes the answer through the out slot (ret 0x18); our tree spells it
     // as the CPoint-returning CSearchBitmap::GetNearestOpenSquare.
     CPoint ptSpawn = pArea->m_search.GetNearestOpenSquare(CPoint(spawnGrid.x, spawnGrid.y),
-        m_pSprite->GetTerrainTable(),
-        m_pSprite->m_animation.m_animation->GetPersonalSpace(),
+        field_18C->GetTerrainTable(),
+        field_18C->m_animation.m_animation->GetPersonalSpace(),
         -1);
 
     CCreatureFile creature;
@@ -1041,7 +949,7 @@ CGameSprite* IcewindCGameEffectSummon::SpawnFromResRef(const CString& resRef, co
     CGameSprite* pSpawned = new CGameSprite(creature.GetData(),
         creature.GetDataSize(),
         0,
-        IcewindMisc::sub_585310(m_pSprite) ? 2 : 0, // GOOD 2 / EVIL 0
+        IcewindMisc::sub_585310(field_18C) ? 2 : 0, // GOOD 2 / EVIL 0
         static_cast<DWORD>(-1),
         0,
         0,
@@ -1064,9 +972,9 @@ CGameSprite* IcewindCGameEffectSummon::SpawnFromResRef(const CString& resRef, co
         BOOL ally = FALSE;
 
         if (field_190 == 1) {
-            ally = (IcewindMisc::sub_585310(m_pSprite) == 1);
+            ally = (IcewindMisc::sub_585310(field_18C) == 1);
         } else if (field_190 == 2) {
-            ally = (IcewindMisc::sub_585310(m_pSprite) != 1);
+            ally = (IcewindMisc::sub_585310(field_18C) != 1);
         }
 
         if (ally) {
@@ -1097,15 +1005,15 @@ CGameSprite* IcewindCGameEffectSummon::SpawnFromResRef(const CString& resRef, co
             ptSpawn.y * CPathSearch::GRID_SQUARE_SIZEY),
         0,
         pSpawned->m_animation.m_animation->GetListType());
-    pSpawned->SetFacing(m_pSprite->GetDirection(m_pSprite->GetPos()));
+    pSpawned->SetFacing(field_18C->GetDirection(field_18C->GetPos()));
     pSpawned->m_posStart = pSpawned->m_pos;
 
-    Icewind586B70::Instance()->sub_586D60(m_pSprite, pSpawned);
+    Icewind586B70::Instance()->sub_586D60(field_18C, pSpawned);
 
     CMessage* pMessage = new CMessageAddSummonLink(pSpawned->m_id,
         pSpawned->m_id,
         pSpawned->m_id,
-        m_pSprite->m_id);
+        field_18C->m_id);
     g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
 
     g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(pSpawned->m_id,
