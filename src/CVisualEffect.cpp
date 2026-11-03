@@ -134,3 +134,49 @@ void CVisualEffect::AIUpdate()
     m_nExistanceCounter = static_cast<LONG>(static_cast<DWORD>(m_nExistanceCounter) + 1);
     m_posOld = m_pos;
 }
+
+// 0x554F00
+void CVisualEffect::Move(const CPoint& targetPos)
+{
+    LONG x = static_cast<LONG>(static_cast<DWORD>(targetPos.x) - static_cast<DWORD>(m_pos.x));
+    LONG y = static_cast<LONG>(static_cast<DWORD>(targetPos.y) << 2) / 3
+        - static_cast<LONG>(static_cast<DWORD>(m_pos.y) << 2) / 3;
+    m_nNewDirection = CVEFVidCell::GetDirection(m_pos, targetPos, static_cast<SHORT>(m_nNewDirection));
+    DWORD xx = static_cast<DWORD>(x) * static_cast<DWORD>(x);
+    DWORD yy = static_cast<DWORD>(y) * static_cast<DWORD>(y);
+    DWORD radius = static_cast<DWORD>(m_nSpeed) + 1;
+    LONG distance = static_cast<LONG>(static_cast<DWORD>(static_cast<LONG>(yy << 4) / 9) + xx);
+    if (distance > static_cast<LONG>(radius * radius)) {
+        LONG vx = static_cast<LONG>(static_cast<DWORD>(CVEFVidCell::OFFSET_FROMX_X[m_nNewDirection]) * static_cast<DWORD>(m_ptStartDeltaV.x)
+            + static_cast<DWORD>(CVEFVidCell::OFFSET_FROMY_X[m_nNewDirection]) * static_cast<DWORD>(m_ptStartDeltaV.y)) / 1000;
+        LONG vy = static_cast<LONG>(static_cast<DWORD>(CVEFVidCell::OFFSET_FROMX_Y[m_nNewDirection]) * static_cast<DWORD>(m_ptStartDeltaV.x)
+            + static_cast<DWORD>(CVEFVidCell::OFFSET_FROMY_Y[m_nNewDirection]) * static_cast<DWORD>(m_ptStartDeltaV.y)) / 1000;
+        LONG length = static_cast<LONG>(sqrt(static_cast<double>(static_cast<LONG>(xx + yy))) + 0.5);
+        if (length == 0) {
+            m_posDelta = CPoint(1, 1);
+        } else {
+            m_posDelta.x = static_cast<LONG>((static_cast<DWORD>(x) << 10) * static_cast<DWORD>(m_nSpeed)) / length;
+            m_posDelta.y = static_cast<LONG>((static_cast<DWORD>(y) << 10) * static_cast<DWORD>(m_nSpeed)) / length;
+            m_posDelta.x = static_cast<LONG>(static_cast<DWORD>(m_posDelta.x) + static_cast<DWORD>(vx));
+            m_posDelta.y = static_cast<LONG>(static_cast<DWORD>(m_posDelta.y) + static_cast<DWORD>(vy));
+        }
+        m_posExact.x = static_cast<LONG>(static_cast<DWORD>(m_posExact.x) + static_cast<DWORD>(m_posDelta.x));
+        m_posExact.y = static_cast<LONG>(static_cast<DWORD>(m_posExact.y) + static_cast<DWORD>(m_posDelta.y));
+        if (m_ptStartDeltaV.x < 0) {
+            m_ptStartDeltaV.x = m_ptStartDeltaV.x > static_cast<LONG>(0u - static_cast<DWORD>(m_nDeltaVDec))
+                ? 0 : static_cast<LONG>(static_cast<DWORD>(m_ptStartDeltaV.x) + static_cast<DWORD>(m_nDeltaVDec));
+        } else if (m_ptStartDeltaV.x > 0) {
+            m_ptStartDeltaV.x = m_ptStartDeltaV.x < m_nDeltaVDec
+                ? 0 : static_cast<LONG>(static_cast<DWORD>(m_ptStartDeltaV.x) - static_cast<DWORD>(m_nDeltaVDec));
+        }
+        if (m_ptStartDeltaV.y < 0) {
+            m_ptStartDeltaV.y = m_ptStartDeltaV.y > static_cast<LONG>(0u - static_cast<DWORD>(m_nDeltaVDec))
+                ? 0 : static_cast<LONG>(static_cast<DWORD>(m_ptStartDeltaV.y) + static_cast<DWORD>(m_nDeltaVDec));
+        } else if (m_ptStartDeltaV.y > 0) {
+            m_ptStartDeltaV.y = m_ptStartDeltaV.y < m_nDeltaVDec
+                ? 0 : static_cast<LONG>(static_cast<DWORD>(m_ptStartDeltaV.y) - static_cast<DWORD>(m_nDeltaVDec));
+        }
+        m_pos.x = m_posExact.x >> 10;
+        m_pos.y = (static_cast<LONG>(static_cast<DWORD>(m_posExact.y) * 3) / 4) >> 10;
+    }
+}
