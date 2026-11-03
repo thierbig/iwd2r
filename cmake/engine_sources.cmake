@@ -425,8 +425,6 @@ set(IWD2R_ENGINE_SOURCES
     "src/CVidPoly.h"
     "src/CVisibility.cpp"
     "src/CVisibility.h"
-    "src/CVisualEffect.cpp"
-    "src/CVisualEffect.h"
     "src/CVoice.cpp"
     "src/CVoice.h"
     "src/CWarp.cpp"

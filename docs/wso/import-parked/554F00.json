@@ -1,0 +1,7 @@
+{
+  "address": "0x554F00",
+  "name": "CVisualEffect::Move",
+  "file": "src/CVisualEffect.cpp",
+  "batch": "i074",
+  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x551670 CVEFVidCell::GetDirection, the dependency this batch imported for it (its only caller path routes every Move through GetDirection), so the row returns when a scenario exercises the wandering-visual movement path"
+}
