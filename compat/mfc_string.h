@@ -52,6 +52,8 @@ public:
     const char* GetString() const { return m_pchData; }
 
     int GetLength() const { return Header()->nDataLength; }
+    // MFC: allocated size minus the null terminator.
+    int GetAllocLength() const { return Header()->nAllocLength; }
     BOOL IsEmpty() const { return Header()->nDataLength == 0; }
     void Empty();
 
