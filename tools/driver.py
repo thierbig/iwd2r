@@ -1154,6 +1154,29 @@ def unmeasured_needs(run, left=()):
 COVERAGE_NOT_HIT = 'coverage: no scenario hits it'
 COVERAGE_UNHOOKABLE = 'Frida refuses the hook; coverage'
 
+# truth.frida_verdicts' detail for a row one side never calls (the other
+# does): 'called on one side only in <scenarios>'.
+ONE_SIDE_ONLY = 'called on one side only'
+
+
+def _caller_totals(address, traces):
+    """(original calls, ours calls) the row's per-side HITS totals sum to
+    across the scenarios truth.frida_verdicts read final totals in (the same
+    `hits`/`final` fields its one-side-only finding parses, never the note
+    text): the structured call counts of the row, (0, 0) when no scenario has
+    final totals for it."""
+    tag = _tool('truth').hook_name(address)
+    orig = ours = 0
+    for t in (traces or {}).values():
+        t = t if isinstance(t, dict) else {}
+        totals, final = t.get('hits'), t.get('final') or {}
+        if not (totals and totals.get('orig') and totals.get('ours')
+                and final.get('orig') and final.get('ours')):
+            continue        # truth read no final HITS totals here; neither do we
+        orig += totals['orig'].get(tag, 0)
+        ours += totals['ours'].get(tag, 0)
+    return orig, ours
+
 
 def unmeasured(address, run, park):
     return '%s: exercised by no scenario (%s); park it: %s' % (address, ', '.join(run), park)
@@ -4180,14 +4203,35 @@ class Driver:
             self.log('%s: unparked files not committed: %s' % (
                 batch_id, _one_line((r.stderr or '') + (r.stdout or ''))))
 
+    def _rule1_unmeasured(self, batch_id, worktree, address, needs, line, fail_head):
+        """Rule 1's marking (2026-10-26 ruling): ours never had this body, so
+        the import no longer needs coverage -- mark the evidence unmeasured
+        WSO import and let the row close unmeasured (wave.py unmeasured-imports
+        lists it).  True when marked; False when the marking failed, after
+        logging `<batch>: frida <ADDR> <fail_head>: marking its evidence failed
+        (...)`, leaving the caller to park the row.  `line` is the log line of
+        a successful marking."""
+        rel = _tool('wave')._evidence_rel(address)
+        try:
+            _write_unmeasured_evidence(os.path.join(worktree, rel), needs)
+        except (OSError, ValueError) as e:
+            self.log('%s: frida %s %s: marking its evidence failed (%s); parking it'
+                     % (batch_id, address, fail_head, _one_line(str(e), 200)))
+            return False
+        self._unmeasured_marked[address] = rel
+        self.log(line)
+        return True
+
     def _import_outcome(self, batch_id, worktree, row, status, detail, traces, mb, cite):
         """None when an import row measured equal and its evidence is now
         kind: trace (citing `cite`, a scenario whose compare returned 0), or
-        when a stub or only-theirs row was exercised by no scenario (rule 1
-        of the 2026-10-26 ruling: ours never had the body, so the import
-        needs no coverage; its evidence is marked unmeasured WSO import);
-        else the finding that parks it (the phase runs once per batch, so
-        nothing else can measure it)."""
+        when a stub or only-theirs row -- or a dependency the batch imported
+        with its rows -- was exercised by no scenario, or when the original
+        calls such a row and our build never does (not exercised in ours;
+        rule 1 of the 2026-10-26 ruling either way: ours never had the body,
+        so the import needs no coverage; its evidence is marked unmeasured
+        WSO import); else the finding that parks it (the phase runs once per
+        batch, so nothing else can measure it)."""
         a = row['address']
         kept = bool(row.get('kept'))
         ot = row.get('category') == 'only_theirs'
@@ -4195,6 +4239,29 @@ class Driver:
             return park_text(a, mb, needs, edit_back=not kept, kept=kept, only_theirs=ot)
         dep = (' It is a dependency you imported with the batch: park the rows that need '
                'it with it.' if row.get('dependency') else '')
+        # Rule 1 covers every row ours never had the body of: a stub or
+        # only-theirs row, and a dependency the batch imported with its rows
+        # (ours lacked it; that is why the batch imported it).
+        rule1 = not kept and (row.get('dependency')
+                              or row.get('category') in _tool('wave').RULE1_CATEGORIES)
+        if (status == 'not measured' and detail.startswith(ONE_SIDE_ONLY) and rule1
+                and (totals := _caller_totals(a, traces))[0] and not totals[1]):
+            # Rule 1, the caller side (2026-11-03 ruling): the original calls
+            # it and our build never does, so ours never reaches it -- not
+            # exercised in ours.  The reverse (ours calls it, the original
+            # never does) stays a park, below, as everything else does.
+            run, left = getattr(self, '_frida_ran', None) or (
+                list(_tool('truth').FRIDA_SCENARIOS), [])
+            needs = '%s: not exercised in ours (original %d calls, ours 0)' % (
+                ', '.join(run), totals[0])
+            if left:
+                needs += '; not hit per coverage: ' + ', '.join(left)
+            if self._rule1_unmeasured(
+                    batch_id, worktree, a, needs,
+                    '%s: frida %s caller finding: original %d calls, ours 0 '
+                    '(rule 1, imports unmeasured)' % (batch_id, a, totals[0]),
+                    'caller finding'):
+                return None
         if status == 'equal' and cite is None:
             if kept:
                 run = self._ran_scenarios()
@@ -4232,22 +4299,17 @@ class Driver:
                      else unmeasured_needs(run, left))
             if kept:
                 needs = kept_needs(run)
-            if not kept and row.get('category') in _tool('wave').RULE1_CATEGORIES:
+            if rule1:
                 # Rule 1 (2026-10-26 ruling): ours never had this body, so the
                 # import no longer needs coverage.  Mark the evidence and let
                 # the row close unmeasured (wave.py unmeasured-imports lists
                 # it); only a marking that fails falls back to parking it.
-                rel = _tool('wave')._evidence_rel(a)
-                try:
-                    _write_unmeasured_evidence(os.path.join(worktree, rel), needs)
-                except (OSError, ValueError) as e:
-                    self.log('%s: frida %s not-exercised: marking its evidence '
-                             'failed (%s); parking it' % (batch_id, a, _one_line(str(e), 200)))
-                else:
-                    self._unmeasured_marked[a] = rel
-                    self.log('%s: frida %s not-exercised: rule 1, imports '
-                             'unmeasured (evidence marked %s)'
-                             % (batch_id, a, _tool('wave').UNMEASURED_WSO))
+                if self._rule1_unmeasured(
+                        batch_id, worktree, a, needs,
+                        '%s: frida %s not-exercised: rule 1, imports '
+                        'unmeasured (evidence marked %s)'
+                        % (batch_id, a, _tool('wave').UNMEASURED_WSO),
+                        'not-exercised'):
                     return None
             text = unmeasured(a, run, park(needs))
         elif status == 'skipped':
