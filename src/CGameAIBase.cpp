@@ -23,6 +23,7 @@
 #include "CMessage.h"
 #include "CPathSearch.h"
 #include "CProjectile.h"
+#include "CProjectileSingleTarget.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
 #include "CScreenInventory.h"
