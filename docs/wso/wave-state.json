@@ -9494,6 +9494,166 @@
           "side": "ours"
         }
       }
+    },
+    "b040": {
+      "assigned_at": "2026-11-03T16:22:09+00:00",
+      "branch": "p3/wso-b040",
+      "closed_at": "2026-11-03T17:35:58+00:00",
+      "files": [
+        "src/CGameSprite.cpp",
+        "src/IcewindCGameEffects.cpp",
+        "src/CProjectile.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x733200",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "measured_body": "ad4285c163f7dcdfacbf4b3134727ecf201335795394ea427ebb2e33526b0723",
+          "name": "CGameSprite::HandlePersistantEffects",
+          "our_len": 464,
+          "their_len": 450
+        },
+        {
+          "address": "0x55F930",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/IcewindCGameEffects.cpp",
+          "name": "IcewindCGameEffectSummon::PlayGroupVFX",
+          "our_len": 428,
+          "their_len": 482
+        },
+        {
+          "address": "0x578970",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileTravellingVFX::GetCellBounds",
+          "our_len": 0,
+          "their_len": 886
+        },
+        {
+          "address": "0x57D230",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBAM::Fire",
+          "our_len": 0,
+          "their_len": 826
+        },
+        {
+          "address": "0x56FED0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::GatherTargets",
+          "our_len": 0,
+          "their_len": 814
+        },
+        {
+          "address": "0x579B40",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::CProjectileCone",
+          "our_len": 0,
+          "their_len": 807
+        },
+        {
+          "address": "0x57A970",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::Pulse",
+          "our_len": 0,
+          "their_len": 773
+        },
+        {
+          "address": "0x571E80",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileFireball::CProjectileFireball",
+          "our_len": 0,
+          "their_len": 770
+        },
+        {
+          "address": "0x52C8C0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::UpdateDirectionSequence",
+          "our_len": 0,
+          "their_len": 699
+        },
+        {
+          "address": "0x57E710",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSummonVFX::Fire",
+          "our_len": 0,
+          "their_len": 663
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x52C8C0": {
+          "case": "readout-52C8C0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x55F930": {
+          "case": "readout-55F930",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56FED0": {
+          "case": "readout-56FED0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x571E80": {
+          "case": "readout-571E80",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x578970": {
+          "case": "readout-578970",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x579B40": {
+          "case": "readout-579B40",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57A970": {
+          "case": "readout-57A970",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57D230": {
+          "case": "readout-57D230",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57E710": {
+          "case": "readout-57E710",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x733200": {
+          "case": "readout-733200",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"
