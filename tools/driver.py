@@ -947,7 +947,10 @@ ALLOWED_PATHS = ('src/', 'compat/', 'docs/evidence/', 'docs/MAP.md',
                  'docs/wso/import-parked/',
                  # an imported function's placeholder label goes with the
                  # import (import template, rule 2): src/ now defines it
-                 'tools/ghidra/extra_labels.txt')
+                 'tools/ghidra/extra_labels.txt',
+                 # an only-theirs row whose src/<file>.cpp our tree lacks
+                 # adds the new file to the engine sources (Task 69)
+                 'cmake/engine_sources.cmake')
 
 # The driver's files in a batch worktree (Task 33): a dirty one is restored
 # before the checks (a selfcheck that could not find the live state used to
