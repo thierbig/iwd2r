@@ -5510,6 +5510,7 @@ void CScreenCreateChar::OnDoneButtonClick()
                     // __FILE__: C:\Projects\Icewind2\src\Baldur\InfScreenCreateChar.cpp
                     // __LINE__: 9205
                     UTIL_ASSERT(FALSE);
+                    break;
                 }
 
                 if (m_nCurrentStep < 8) {
@@ -5577,6 +5578,13 @@ void CScreenCreateChar::OnDoneButtonClick()
                 cResRef = m_pPortraits->GetAt(pos);
                 cResRef.GetResRef(pSprite->m_baseStats.m_portraitLarge);
 
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\InfScreenCreateChar.cpp
+                // __LINE__: 9339
+                UTIL_ASSERT(m_pPortraits != NULL);
+
+                delete m_pPortraits;
+                m_pPortraits = NULL;
+
                 DismissPopup(pSprite);
                 DismissPopup(pSprite);
 
@@ -5601,10 +5609,11 @@ void CScreenCreateChar::OnDoneButtonClick()
                         }
                     }
 
-                    memcpy(pSprite->field_725A, sSound.GetBuffer(sSound.GetLength()), min(sSound.GetLength(), 32));
+                    DWORD nSoundCapacity = sSound.GetAllocLength();
+                    memcpy(pSprite->field_725A, sSound.GetBuffer(static_cast<INT>(nSoundCapacity)), min(nSoundCapacity, 32UL));
 
-                    if (sSound.GetLength() < 32) {
-                        pSprite->field_725A[sSound.GetLength()] = '\0';
+                    if (nSoundCapacity < 32) {
+                        pSprite->field_725A[nSoundCapacity] = '\0';
                     }
 
                     sSoundSetDir = g_pBaldurChitin->GetObjectGame()->GetDirSounds() + sSound + '\\';
@@ -5686,6 +5695,11 @@ void CScreenCreateChar::OnDoneButtonClick()
 
                     if (rc == CGameObjectArray::SUCCESS) {
                         DismissPopup(pSprite);
+                    } else {
+                        // NOTE: The exe unlocks the render lock here before
+                        //  joining the common ReleaseDeny + Unlock tail
+                        //  (0x616BF9); the tail's own Unlock is a no-op then.
+                        renderLock.Unlock();
                     }
                 }
                 break;
