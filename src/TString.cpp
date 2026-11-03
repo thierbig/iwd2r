@@ -88,3 +88,23 @@ BOOLEAN TString::PrepareAssign(UINT nLen, BOOLEAN bTrim)
     }
     return TRUE;
 }
+
+// 0x44BD40
+void TString::Detach()
+{
+    char* data = m_pData;
+    if (data == NULL) {
+        return;
+    }
+    BYTE references = static_cast<BYTE>(data[-1]);
+    if (references == 0 || references == 0xFF) {
+        return;
+    }
+    data[-1] = static_cast<char>(references - 1);
+    Tidy(FALSE);
+    UINT length = static_cast<UINT>(strlen(data));
+    if (PrepareAssign(length, TRUE)) {
+        memcpy(m_pData, data, length);
+        SetLength(length);
+    }
+}
