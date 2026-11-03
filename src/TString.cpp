@@ -17,3 +17,10 @@ void TString::Tidy(BOOLEAN bDealloc)
     m_nLen = 0;
     m_nRes = 0;
 }
+
+// 0x44BC00
+void TString::SetLength(UINT length)
+{
+    m_nLen = static_cast<INT>(length);
+    m_pData[length] = 0;
+}
