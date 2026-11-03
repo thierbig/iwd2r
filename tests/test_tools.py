@@ -7696,6 +7696,236 @@ class XrecTest(unittest.TestCase):
         self.assertEqual(sum(c.values()), 10)
 
 
+class XrecGapTest(unittest.TestCase):
+    """xrec: the address-gap pass (task 69) — their definitions our tree
+    has never carried, by address, whatever file they sit in: theirs-only
+    files, free functions and the overloads the shared-file pairing
+    collapses.  Ours is whatever a marker of ours names (a header inline
+    included); an address ours deleted on purpose never comes back."""
+
+    # Bodies that survive stubby() once whitespace-stripped, two lengths so
+    # the row order is deterministic.  The braces come from the templates.
+    BODY1 = ('    int s = 0; s += 1; s += 2; s += 3;\n'
+             '    return s == 0 && s != 1;\n')
+    STRIP1 = '{ints=0;s+=1;s+=2;s+=3;returns==0&&s!=1;}'
+    BODY2 = ('    int s = 0; s += 1; s += 2; s += 3; s += 4;\n'
+             '    return s == 0 && s != 1;\n')
+    STRIP2 = '{ints=0;s+=1;s+=2;s+=3;s+=4;returns==0&&s!=1;}'
+
+    KEEP = ('// 0x401000\n'
+            'int CThing::Keep(int x)\n'
+            '{\n'
+            '    int s = m_x; s += x; s += m_y; s -= x; return s == 0 && x != 0;\n'
+            '}\n')
+    INIT = ('// 0x7B7000\n'
+            'int CChitin3d::Init(void)\n'
+            '{\n'
+            '%s'
+            '}\n')
+    FREE = ('\n'
+            '// 0x7B7750\n'
+            'BOOL GLSetupEnumDrivers(void)\n'
+            '{\n'
+            '%s'
+            '}\n')
+    VISUAL = ('// 0x5A1000\n'
+              'int CVisualEffect::Play(void)\n'
+              '{\n'
+              '%s'
+              '}\n'
+              '\n'
+              '// 0x5A1001\n'
+              'int CVisualEffect::Stub(void)\n'
+              '{\n'
+              '    return 0;\n'
+              '}\n'
+              '\n'
+              '// 0x5A2000\n'
+              'int CVisualEffect::InlineTwin(int x)\n'
+              '{\n'
+              '    int s = m_x; s += x; s += m_y; s -= x; return s == 0 && x != 0;\n'
+              '}\n'
+              '\n'
+              'int CVisualEffect::NoMarker(void)\n'
+              '{\n'
+              '    int s = 0; s += 1; s += 2; s += 3; s += 4;\n'
+              '    return s == 0 && s != 1;\n'
+              '}\n')
+    BOTH_CTORS = ('// 0x75AB00\n'
+                  'CAIAction::CAIAction(void)\n'
+                  '{\n'
+                  '%s'
+                  '}\n'
+                  '\n'
+                  '// 0x75AAC0\n'
+                  'CAIAction::CAIAction(SHORT n, LONG l)\n'
+                  '{\n'
+                  '%s'
+                  '}\n')
+    ONE_CTOR = ('// 0x75AAC0\n'
+                'CAIAction::CAIAction(SHORT n, LONG l)\n'
+                '{\n'
+                '%s'
+                '}\n')
+    IS_SUPPORTED = ('// 0x421820\n'
+                    'BOOL IsSupportedOS(void)\n'
+                    '{\n'
+                    '%s'
+                    '}\n')
+    HEADER_INLINE = ('// 0x5A2000\n'
+                     'inline int CThing::InlineTwin(int x)\n'
+                     '{\n'
+                     '    int s = m_x; s += x; s += m_y; s -= x; return s == 0 && x != 0;\n'
+                     '}\n')
+
+    GAP_ADDRS = ['0x5A1000', '0x75AB00', '0x7B7750']  # the rows the pass owes
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = self._tmp.name
+        self.repo = os.path.join(self.tmp, 'repo')
+        os.makedirs(self.repo)
+        self._git('init', '-q', '-b', 'base')
+        self._write('src/Shared.cpp', self.KEEP)
+        self._write('src/CChitin3d.cpp', self.INIT % self.BODY1)
+        self._commit('base')
+        self._git('checkout', '-q', '-b', 'theirs')
+        self._write('src/CChitin3d.cpp',
+                    (self.INIT % self.BODY1) + (self.FREE % self.BODY2))
+        self._write('src/CVisualEffect.cpp', self.VISUAL % self.BODY2)
+        self._write('src/CAIAction.cpp',
+                    self.BOTH_CTORS % (self.BODY1, self.BODY2))
+        self._write('src/CScreenMultiPlayer.cpp',
+                    self.IS_SUPPORTED % self.BODY1)
+        self._commit('theirs')
+        self._git('checkout', '-q', '-b', 'ours', 'base')
+        self._write('src/CAIAction.cpp', self.ONE_CTOR % self.BODY2)
+        self._write('src/Thing.h', self.HEADER_INLINE)
+        self._write('src/Removed.cpp', self.IS_SUPPORTED % self.BODY1)
+        self._commit('ours carries the twins')
+        # The multiplayer screen goes for good, the way 32213cd5 removed it.
+        os.unlink(os.path.join(self.repo, 'src/Removed.cpp'))
+        self._commit('ours: remove the multiplayer screen for good')
+
+    # -- the fixture --------------------------------------------------------
+
+    def _git(self, *args):
+        env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t',
+                   GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t',
+                   GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+        return subprocess.run(['git', '-C', self.repo, *args], env=env,
+                              check=True, capture_output=True, text=True)
+
+    def _write(self, rel, text):
+        path = os.path.join(self.repo, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(text)
+
+    def _commit(self, msg):
+        self._git('add', '-A')
+        self._git('commit', '-qm', msg)
+
+    def report(self):
+        """xrec's rows over the fixture (xrec runs git in the cwd, so step
+        into the repo for the call)."""
+        out = os.path.join(self.tmp, 'rows.json')
+        old = os.getcwd()
+        os.chdir(self.repo)
+        self.addCleanup(os.chdir, old)
+        tot, n_gap, n_removed = xrec.report('base', 'theirs', 'ours', out)
+        with open(out) as f:
+            return json.load(f), tot, n_gap, n_removed
+
+    def test_gap_theirs_only_file_gives_one_real_row(self):
+        # (a) a theirs-only file: the real Play makes a row; the stub and the
+        # marker-less NoMarker never do (the pass is marker-carrying only)
+        rows, tot, n_gap, n_removed = self.report()
+        ve = [r for r in rows if r['file'] == 'src/CVisualEffect.cpp']
+        self.assertEqual(len(ve), 1, ve)
+        r = ve[0]
+        self.assertEqual((r['name'], r['address'], r['category'],
+                          r['their_len'], r['our_len']),
+                         ('CVisualEffect::Play', '0x5A1000', 'only_theirs',
+                          len(self.STRIP2), 0))
+
+    def test_gap_free_function_in_shared_file(self):
+        # (b) a free function (no ::) under a marker in a shared file:
+        # funcs() never sees it, the gap pass does.
+        rows, tot, n_gap, n_removed = self.report()
+        got = [r for r in rows if r['address'] == '0x7B7750']
+        self.assertEqual(len(got), 1, got)
+        r = got[0]
+        self.assertEqual((r['file'], r['name'], r['category'],
+                          r['their_len'], r['our_len']),
+                         ('src/CChitin3d.cpp', 'GLSetupEnumDrivers',
+                          'only_theirs', len(self.STRIP2), 0))
+
+    def test_gap_collapsed_overload_gets_its_own_row(self):
+        # (c) two overloads, ours has the last one: the shared-file pairing
+        # collapses theirs to it, the gap pass still rows the first.
+        rows, tot, n_gap, n_removed = self.report()
+        ct = sorted(r['address'] for r in rows
+                    if r['file'] == 'src/CAIAction.cpp')
+        self.assertEqual(ct, ['0x75AAC0', '0x75AB00'])
+        gap = [r for r in rows if r['file'] == 'src/CAIAction.cpp'
+               and r['category'] == 'only_theirs']
+        self.assertEqual([(g['address'], g['name'], g['our_len']) for g in gap],
+                         [('0x75AB00', 'CAIAction::CAIAction', 0)])
+        # the second overload is the pairing's own 'same' row, not a gap row
+        same = [r for r in rows if r['file'] == 'src/CAIAction.cpp'
+                and r['category'] == 'same']
+        self.assertEqual([r['address'] for r in same], ['0x75AAC0'])
+
+    def test_gap_rows_and_removed_by_us_count(self):
+        # (d) the address ours carried and deleted makes no row; the summary
+        # line carries the pass's own count and the removed-by-us skips.
+        rows, tot, n_gap, n_removed = self.report()
+        self.assertEqual(sorted(r['address'] for r in rows
+                                if r['category'] == 'only_theirs'),
+                         self.GAP_ADDRS)
+        self.assertNotIn('0x421820', [r['address'] for r in rows])
+        self.assertEqual(n_gap, 3)
+        self.assertEqual(n_removed, 1)
+        self.assertEqual(tot['only_theirs'], 3)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(xrec.main(['base', 'theirs', 'ours']), 0)
+        self.assertIn('address-gap rows: 3 (removed by us: 1 skipped)\n', out.getvalue())
+
+    def test_gap_address_ours_carries_in_a_header_only(self):
+        # (e) an inline in our header is ours: no row for its address.
+        rows, tot, n_gap, n_removed = self.report()
+        self.assertNotIn('0x5A2000', [r['address'] for r in rows])
+
+    def test_gap_recompare_files_the_only_theirs_rows(self):
+        # (f) recompare runs xrec for real over the fixture and the import
+        # queue files the gap rows (theirs was read through _xrec_rows).
+        wave = load_tool('wave')
+        state = os.path.join(self.tmp, 'wave-state.json')
+        with open(state, 'w') as f:
+            json.dump({'fork_base': 'a' * 40, 'batches': {}}, f)
+        disagreements = os.path.join(self.tmp, 'disagreements.json')
+        with open(disagreements, 'w') as f:
+            json.dump([], f)
+        tip = self._git('rev-parse', 'theirs').stdout.strip()
+        rc, out = wave.recompare(state, disagreements, repo=self.repo,
+                                 fetch=False, tip='theirs', base='base',
+                                 ours='ours')
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(
+            out, f'recompare: 0 new rows at {tip[:7]} '
+                 '(0 already queued, 0 decided)\n'
+                 'recompare import: 3 new rows (0 already queued, 0 decided)\n')
+        with open(disagreements) as f:
+            rows = json.load(f)
+        self.assertEqual(sorted(r['address'] for r in rows), self.GAP_ADDRS)
+        for r in rows:
+            self.assertEqual(r['category'], 'only_theirs')
+            self.assertEqual(r['our_len'], 0)
+
+
 class WsoFetchTest(unittest.TestCase):
     """wso_fetch: a dest resolves under <IWD2R_HOME>/wso and one containing
     '..' (or absolute) is rejected; --check lists files whose sha256 differs

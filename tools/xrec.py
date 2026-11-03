@@ -13,6 +13,16 @@ prints the counts and, with --json, writes one row per function,
 category then total body length descending: the ranked disagreement list the
 integration waves work from.
 
+An address-gap pass (task 69) then appends one only_theirs row per address
+theirs carries and ours never has: every function definition of any
+src/*.cpp of theirs — a theirs-only file, a free function (no ::) or an
+overload the shared-file pairing collapses — whose marker address no row of
+that pairing already carries and that no marker line of our src/**/*.cpp or
+src/**/*.h names, stubs skipped. An address that only ever appears as a
+removed marker line in our own history (one `git log -p` pass over src) is
+one we deleted on purpose: it makes no row and is counted in main()'s
+summary line as `removed by us`.
+
 A function is matched between the trees by its // 0xADDR comment first (a
 renamed function is still the function) and by name second; the address is
 read from the nearest line above that is a marker line — a comment that
@@ -22,7 +32,10 @@ annotated `// 0x5A1234 (virtual)` both count (comment and blank lines
 between the marker and the signature are skipped; a comment line that
 merely mentions a hex number never supplies it). That rule is this tool's
 alone, per the task 68b ruling; labels.definitions and our own tree keep
-the strict whole-line `// 0xADDR` form. An address two functions of one tree carry (shared thunks and
+the strict whole-line `// 0xADDR` form. The gap pass shares the marker rule
+and makes the address the identity: one row per address, the first real
+body of theirs wins, and a free function counts only directly under a
+marker at brace depth 0 (file scope). An address two functions of one tree carry (shared thunks and
 unknown addresses get stamped alike) is no key; those functions match by
 name. Bodies are compared brace-matched, whitespace and comments
 stripped: rough but symmetric, so the noise lands on both sides alike.
@@ -31,7 +44,8 @@ with git show and nothing else.
 
 funcs(text) parses one file, classify(theirs, ours, base) sorts one file's
 functions, report(base_ref, theirs_ref, ours_ref, out_json) runs the whole
-comparison. Standard library only.
+comparison, address_gap(theirs_ref, ours_ref, carried) is the gap pass.
+Standard library only.
 """
 
 import argparse
@@ -71,6 +85,12 @@ def show(ref, path):
 
 sig = re.compile(r'^(?:[A-Za-z_][\w:<>,*&\s]*?\s+)?([A-Za-z_]\w*(?:::[~A-Za-z_]\w*)+|[A-Za-z_]\w*::operator\S*)\s*\([^;{]*\)\s*(?:const)?\s*\{', re.M)
 
+# The address-gap pass's free functions (no ::): `<type> name(params)` then
+# `{`, same line or the next. The optional return type's class rejects `:`,
+# so a qualified name (`CAIAction::CAIAction`) can only match `sig`, never
+# twice. brace depth 0 at the match keeps in-class and in-function lines out.
+FREE = re.compile(r'^(?:[A-Za-z_][\w<>,*&\s]*?\s+)?([A-Za-z_]\w*)\s*\([^;{]*\)\s*(?:const\s*)?\{', re.M)
+
 
 def blank_comments(text):
     """Comments as spaces of the same length: matching and brace counting see
@@ -99,6 +119,20 @@ def signature_addr(text, masked, m):
     return None
 
 
+def _body(masked, m):
+    """The definition's body from its opening brace (a signature match's
+    last character), brace-matched, whitespace and comments stripped."""
+    i = m.end()-1; depth = 0; j = i
+    while j < len(masked):
+        c = masked[j]
+        if c=='{': depth+=1
+        elif c=='}':
+            depth-=1
+            if depth==0: break
+        j+=1
+    return re.sub(r'\s+','',masked[i:j+1])
+
+
 def funcs(text):
     """name -> (address, body): the // 0xADDR comment at the signature (None
     without one) and the body brace-matched, whitespace and comments
@@ -106,16 +140,30 @@ def funcs(text):
     masked = blank_comments(text)
     out = {}
     for m in sig.finditer(masked):
-        i = m.end()-1; depth = 0; j = i
-        while j < len(masked):
-            c = masked[j]
-            if c=='{': depth+=1
-            elif c=='}':
-                depth-=1
-                if depth==0: break
-            j+=1
-        out[m.group(1)] = (signature_addr(text, masked, m), re.sub(r'\s+','',masked[i:j+1]))
+        out[m.group(1)] = (signature_addr(text, masked, m), _body(masked, m))
     return out
+
+
+def marked_defs(text):
+    """(name, address, body) for every marker-carrying definition of one
+    file, in document order, overloads separate: what `funcs()` pairs (its
+    `sig` rule, the last overload aside) plus the free functions `sig` never
+    sees (`FREE`, at brace depth 0 directly under a marker). The gap pass's
+    view of a file."""
+    masked = blank_comments(text)
+    out = {}  # opening-brace offset -> definition; also the overload dedupe
+    for m in sig.finditer(masked):
+        a = signature_addr(text, masked, m)
+        if a is not None:
+            out[m.end()-1] = (m.group(1), a, _body(masked, m))
+    for m in FREE.finditer(masked):
+        before = masked[:m.start()]
+        if before.count('{') != before.count('}'):
+            continue  # inside a class or namespace: not file scope
+        a = signature_addr(text, masked, m)
+        if a is not None:
+            out.setdefault(m.end()-1, (m.group(1), a, _body(masked, m)))
+    return [out[k] for k in sorted(out)]
 
 
 def stubby(body):  # TODO-only / empty bodies
@@ -173,9 +221,75 @@ def classify(theirs, ours, base):
     return collections.Counter(p[2] for p in pairs(theirs, ours, base))
 
 
+def _canon(address):
+    return address if address is None else '0x' + address[2:].upper()
+
+
+def our_markers(ours_ref):
+    """Every address a marker line of ours names at ours_ref, over
+    src/**/*.cpp and src/**/*.h: the functions (and data) our tree carries,
+    headers included — an inline in a header is still ours."""
+    out = set()
+    ls = subprocess.run(['git','ls-tree','-r','--name-only',ours_ref,'src'],
+                        capture_output=True,text=True,errors='replace').stdout.split()
+    for p in ls:
+        if p.endswith('.cpp') or p.endswith('.h'):
+            for line in show(ours_ref, p).splitlines():
+                m = MARKER.match(line)
+                if m:
+                    out.add(_canon('0x' + m.group(1)))
+    return out
+
+
+def removed_markers(ours_ref, ours_at):
+    """The addresses ours deleted on purpose: every marker that ever appeared
+    as a removed line of our own src history — one `git log -p` pass, no
+    per-address git log -S — and that ours carries no more."""
+    out = set()
+    r = subprocess.run(['git','log','-p','--format=',ours_ref,'--','src'],
+                       capture_output=True,text=True,errors='replace')
+    for line in r.stdout.splitlines():
+        m = MARKER.match(line[1:]) if line.startswith('-') else None
+        if m:
+            out.add(_canon('0x' + m.group(1)))
+    return out - ours_at
+
+
+def address_gap(theirs_ref, ours_ref, carried):
+    """(rows, n_removed_skipped) for the pass: one only_theirs row per
+    address theirs carries and ours never has — every marker-carrying
+    definition of any src/*.cpp of theirs (shared and theirs-only files,
+    free functions and each overload separately), stubs skipped — that no
+    shared-file row of `report()` already carries (addresses in `carried`)
+    and that no marker of ours names. An address ours deleted on purpose
+    makes no row and is counted in n_removed_skipped. The address is the
+    identity: the first definition per address wins."""
+    ours_at = our_markers(ours_ref)
+    removed = removed_markers(ours_ref, ours_at)
+    skip = {_canon(a) for a in carried if a}
+    rows, seen, n_removed = [], set(), 0
+    for p in sorted(files(theirs_ref)):
+        for name, a, body in marked_defs(show(theirs_ref, p)):
+            if a is None or stubby(body):
+                continue  # marker-less: not the pass's to say, and no address
+            key = _canon(a)
+            if key in seen or key in skip or key in ours_at:
+                continue
+            seen.add(key)
+            if key in removed:
+                n_removed += 1
+                continue
+            rows.append({'file': p, 'name': name, 'address': key,
+                         'category': 'only_theirs',
+                         'their_len': len(body), 'our_len': 0})
+    return rows, n_removed
+
+
 def report(base_ref, theirs_ref, ours_ref, out_json):
-    """The Counter over all shared src/*.cpp files; writes out_json with one
-    row per function, sorted by category, then total length descending."""
+    """(Counter, n_gap, n_removed) over the shared src/*.cpp files plus the
+    address-gap rows (their only_theirs count is part of the Counter);
+    writes out_json with one row per function, sorted by category, then
+    total length descending."""
     tf, of = files(theirs_ref), files(ours_ref)
     tot = collections.Counter(); rows = []
     for p in sorted(tf & of):
@@ -184,6 +298,9 @@ def report(base_ref, theirs_ref, ours_ref, out_json):
             tot[cat] += 1
             rows.append({'file': p, 'name': name, 'address': a, 'category': cat,
                          'their_len': tlen, 'our_len': olen})
+    gap, n_removed = address_gap(theirs_ref, ours_ref, [r['address'] for r in rows])
+    tot['only_theirs'] += len(gap)
+    rows += gap
     rows.sort(key=lambda r: (CATEGORIES.index(r['category']), -(r['their_len'] + r['our_len']),
                              r['file'], r['name']))
     if out_json:
@@ -192,7 +309,7 @@ def report(base_ref, theirs_ref, ours_ref, out_json):
         with open(out_json, 'w', encoding='utf-8', newline='\n') as f:
             json.dump(rows, f, indent=1)
             f.write('\n')
-    return tot
+    return tot, len(gap), n_removed
 
 
 def main(argv=None):
@@ -202,11 +319,12 @@ def main(argv=None):
     ap.add_argument('ours', help='our tree')
     ap.add_argument('--json', metavar='OUT', help='also write the per-function rows there')
     args = ap.parse_args(argv)
-    tot = report(args.base, args.theirs, args.ours, args.json)
+    tot, n_gap, n_removed = report(args.base, args.theirs, args.ours, args.json)
     tf, of = files(args.theirs), files(args.ours)
     print("shared .cpp files:", len(tf & of), "| theirs-only files:", len(tf-of), "| ours-only files:", len(of-tf))
     for k in CATEGORIES:
         print(f"  {k:26} {tot[k]:6}")
+    print(f"\naddress-gap rows: {n_gap} (removed by us: {n_removed} skipped)")
     print("\ntheirs-only files: functions (real bodies) they recovered that we don't have at all:")
     n = sum(1 for p in sorted(tf-of) for v in funcs(show(args.theirs,p)).values() if not stubby(v[1]))
     print("  ", n, "functions across", len(tf-of), "files")
