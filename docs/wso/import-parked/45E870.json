@@ -1,0 +1,7 @@
+{
+  "address": "0x45E870",
+  "name": "TString::AssignString",
+  "file": "src/TString.cpp",
+  "batch": "i074",
+  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x448D50 TString::Tidy, 0x44BC00 TString::SetLength, 0x44BC20 TString::PrepareAssign, 0x44BE10 TString::Grow, 0x44BD40 TString::Detach and 0x45EA70 TString::MaxSize, the dependencies this batch imported for it (every AssignString path routes through them), so the row returns when a scenario exercises the shared-string assign path"
+}

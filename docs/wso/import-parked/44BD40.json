@@ -1,0 +1,7 @@
+{
+  "address": "0x44BD40",
+  "name": "TString::Detach",
+  "file": "src/TString.cpp",
+  "batch": "i074",
+  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised"
+}
