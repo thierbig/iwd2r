@@ -24,3 +24,9 @@ void TString::SetLength(UINT length)
     m_nLen = static_cast<INT>(length);
     m_pData[length] = 0;
 }
+
+// 0x45EA70
+UINT TString::MaxSize() const
+{
+    return 0xFFFFFFFD;
+}
