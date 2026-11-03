@@ -3557,7 +3557,8 @@ class Driver:
                 self._stage(batch_id, 'frida')
                 got = truth.frida_batch(batch_id, rows, sigs, map_text, scenarios=run_scenarios,
                                         run_frida=run_frida,
-                                        headers=truth._our_headers(worktree), info=info)
+                                        headers=truth._our_headers(worktree),
+                                        names=truth.our_names(worktree), info=info)
                 got = {key(a): v for a, v in got.items()}
             except Exception as e:
                 raise _StageError('frida', 'the Frida run raised %s; no row was measured, parked '

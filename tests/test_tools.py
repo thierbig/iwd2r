@@ -14221,7 +14221,10 @@ class DriverTest(unittest.TestCase):
 
     # -- Task 20 fix round 1 ------------------------------------------------
 
-    SRC_A = '// 0x402000\nint Draw()\n{\n  return %d;\n}\n'
+    # 0x402000 is the row the Frida phase hooks; its definition carries the
+    # name the map holds (?Roll@IcewindMisc@@...), as a build of this tree
+    # would -- the marker's name is what the phase resolves the row to.
+    SRC_A = '// 0x402000\nint IcewindMisc::Roll()\n{\n  return %d;\n}\n'
 
     def _wave_body(self, ret=1):
         _write(os.path.join(self.wt, 'src', 'A.cpp'), self.SRC_A % ret)
@@ -14525,7 +14528,8 @@ class DriverTest(unittest.TestCase):
 
     def test_driver_import_writes_no_trace_for_a_row_whose_source_file_is_dirty(self):
         d, batch = self._import_phase_driver()
-        _write(os.path.join(self.wt, 'src', 'A.cpp'), '// 0x401000\nint Render()\n{\n  return 1;\n}\n')
+        _write(os.path.join(self.wt, 'src', 'A.cpp'),
+               '// 0x401000\nint Rules::Render()\n{\n  return 1;\n}\n')
         self.git('add', '-A', cwd=self.wt)
         self.git('commit', '-qm', 'src', cwd=self.wt)
         self._uncommitted_body()
@@ -14688,7 +14692,8 @@ class DriverTest(unittest.TestCase):
     def test_driver_import_writes_no_trace_for_a_row_with_a_file_whose_source_is_dirty(self):
         d, batch = self._import_phase_driver()
         batch = dict(batch, rows=[dict(r, file='src/A.cpp') for r in batch['rows']])
-        _write(os.path.join(self.wt, 'src', 'A.cpp'), '// 0x401000\nint Render()\n{\n  return 1;\n}\n')
+        _write(os.path.join(self.wt, 'src', 'A.cpp'),
+               '// 0x401000\nint Rules::Render()\n{\n  return 1;\n}\n')
         self.git('add', '-A', cwd=self.wt)
         self.git('commit', '-qm', 'src', cwd=self.wt)
         self._uncommitted_body()
@@ -14705,7 +14710,7 @@ class DriverTest(unittest.TestCase):
         real = truth_mod.frida_batch
 
         def spy(*a, **kw):
-            got.append(kw.get('headers'))
+            got.append((kw.get('headers'), kw.get('names')))
             return real(*a, **kw)
         d = self._measured_driver(worker=_SeqWorker('# r\n\n## Verdicts\n\nverdict 0x401000 ours case dump-401000\nverdict 0x402000 ours case dump-402000\n'),
                                   frida=True, frida_build=self._frida_builder()[0],
@@ -14717,8 +14722,10 @@ class DriverTest(unittest.TestCase):
         with mock.patch.object(truth_mod, 'frida_batch', spy):
             d.run_batch('b011')
         self.assertEqual(len(got), 1)
-        self.assertEqual(got[0], truth_mod._our_headers(self.wt))
-        self.assertTrue(any('BOOLEAN Roll' in h for h in got[0]))
+        self.assertEqual(got[0][0], truth_mod._our_headers(self.wt))
+        self.assertTrue(any('BOOLEAN Roll' in h for h in got[0][0]))
+        # the names the phase resolves rows by are the measured checkout's own
+        self.assertEqual(got[0][1], truth_mod.our_names(self.wt))
 
     def test_driver_frida_runs_once_even_with_a_fix_round(self):
         calls = []
@@ -22573,6 +22580,46 @@ class TruthTest(unittest.TestCase):
         table = truth.hook_table([{'address': '0x1', 'name': 'Gone::Odd'}], {'0x1': 'int Odd(int a)'},
                                  ' 0001:00000000 ?Odd@Gone@@3HA 00400010 f x.obj\n', ['s'])
         self.assertIn('no calling convention', table['skipped']['0x1'])
+
+    def test_hook_table_resolves_our_name_by_the_rows_address(self):
+        # The address is the identity: a row may carry a name recorded before
+        # we renamed or split the class, so a name our markers give for the
+        # row's address is the one looked up in the map.
+        rows = [{'address': '0x5845D0', 'name': 'OldMisc::Roll'}]
+        table = truth.hook_table(rows, self.SIGS, self.MAP, ['s'],
+                                 names={0x5845D0: 'IcewindMisc::Roll'})
+        self.assertEqual([h['name'] for h in table['ours']['hooks']], ['fn_5845D0'])
+        self.assertEqual(table['ours']['hooks'][0]['rva'], '0x2230')
+        self.assertNotIn('0x5845D0', table['skipped'])
+        # without the mapping the stale name still finds no map entry
+        table = truth.hook_table(rows, self.SIGS, self.MAP, ['s'])
+        self.assertEqual(table['skipped']['0x5845D0'], 'no entry for OldMisc::Roll in our map')
+        # a skip reason names the looked-up name, not the row's
+        table = truth.hook_table([{'address': '0x777777', 'name': 'Old::Missing'}],
+                                 {'0x777777': 'void Missing(void)'}, self.MAP, ['s'],
+                                 names={0x777777: 'Gone::Elsewhere'})
+        self.assertEqual(table['skipped']['0x777777'], 'no entry for Gone::Elsewhere in our map')
+        # an address our names do not carry falls back to the row's name
+        table = truth.hook_table(self.ROWS, self.SIGS, self.MAP, ['s'],
+                                 names={0x5845D0: 'IcewindMisc::Roll'})
+        self.assertEqual(sorted(h['name'] for h in table['ours']['hooks']),
+                         ['fn_5845D0', 'fn_73F560', 'fn_777777'])
+        self.assertEqual(table['skipped']['0x888888'], 'no entry for Gone::Unmapped in our map')
+        self.assertEqual(table['skipped']['0x999999'],
+                         'ambiguous: 2 overloads of Gone::Twice in our map')
+
+    def test_hook_table_types_from_the_resolved_name(self):
+        # a prototype our headers declare only under the resolved name types it
+        rows = [{'address': '0x100', 'name': 'CTlkFile::Fetch'}]
+        sigs = {'0x100': self.TYPED_SIGS['0x100']}
+        table = truth.hook_table(rows, sigs, self.TYPED_MAP, ['s'], self.TYPED_HEADERS,
+                                 names={0x100: 'CTlkTable::Fetch'})
+        self.assertEqual(table['typed_from']['0x100'], 'ours')
+        orig = {h['name']: h for h in table['original']['hooks']}
+        self.assertEqual((orig['fn_100']['args'], orig['fn_100']['ret']), (['u32', 'ptr'], 'u8'))
+        # the row's own stale name would neither map nor type
+        table = truth.hook_table(rows, sigs, self.TYPED_MAP, ['s'], self.TYPED_HEADERS)
+        self.assertEqual(table['skipped']['0x100'], 'no entry for CTlkFile::Fetch in our map')
 
     @staticmethod
     def _trace(*calls):

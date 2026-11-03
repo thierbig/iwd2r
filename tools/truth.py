@@ -33,6 +33,8 @@ CASES_DIR = os.path.join(ROOT, 'oracle', 'cases')
 FRIDA_DIR = os.path.join(ROOT, 'tools', 'frida')
 sys.path.insert(0, FRIDA_DIR)
 import trace_diff  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, 'tools', 'ghidra'))
+import labels  # noqa: E402  the `// 0xADDR` markers of src, for our_names
 
 SECTION = '## Decompiled (Ghidra)'
 
@@ -789,7 +791,7 @@ def _typed_from_headers(texts, name, ghidra_argc, conv, ghidra_args=None, ghidra
     return conv, list(args), ret, list(slots), ('ghidra' in slots or ret_ghidra)
 
 
-def hook_table(rows, signatures, our_map, scenarios, headers=None):
+def hook_table(rows, signatures, our_map, scenarios, headers=None, names=None):
     """The hook tables for one batch: {'original': {'hooks': [...]}, 'ours':
     {'hooks': [...]}, 'scenarios': [...], 'skipped': {addr: reason},
     'ours_loaded_rva': '0x..' or None}.
@@ -799,8 +801,14 @@ def hook_table(rows, signatures, our_map, scenarios, headers=None):
     src/*.h: a function found there is typed from our prototype (args and
     return; typed_from[addr] is 'ours', or 'mixed' when a slot the header
     spells with an unknown type took Ghidra's), otherwise from the evidence
-    signature ('ghidra'); typed_slots[addr] says per argument which; our_map is the build's .map text (or a {name: rva} dict). Each
-    row gets one hook per target, named fn_<ADDR> so the traces line up: the
+    signature ('ghidra'); typed_slots[addr] says per argument which; our_map
+    is the build's .map text (or a {name: rva} dict). names ({int address:
+    our name}, optional; our_names builds it) resolves a row to our current
+    name at the row's address -- the address is the identity, and the row's
+    recorded name may predate a rename or a class split -- with row['name']
+    as the fallback; the resolved name is the one looked up in the map,
+    typed from the headers and named in a skip reason.
+    Each row gets one hook per target, named fn_<ADDR> so the traces line up: the
     original's by absolute addr, ours by rva. A row is listed in skipped, with
     no hook on either side, when its signature does not parse or has a
     convention or type the hooks cannot log, when our map has no entry, or
@@ -811,14 +819,16 @@ def hook_table(rows, signatures, our_map, scenarios, headers=None):
     from_text = isinstance(our_map, str)
     publics = parse_map(our_map) if from_text else dict(our_map)
     texts = [headers] if isinstance(headers, str) else list(headers or [])
+    names = names or {}
     original, ours, skipped, typed, slots = [], [], {}, {}, {}
     for row in rows:
         address = row['address']
         key = '0x' + address[2:].upper() if address.lower().startswith('0x') else '0x' + address.upper()
+        name = names.get(int(address, 16), row['name'])
         if from_text:
-            found = _map_matches(row['name'], publics)
+            found = _map_matches(name, publics)
         else:
-            found = {publics[row['name']]: None} if row['name'] in publics else {}
+            found = {publics[name]: None} if name in publics else {}
         rvas = sorted(found)
         decorated = found[rvas[0]] if len(rvas) == 1 else None
         sig = _hook_signature(signatures.get(address) or signatures.get(key), decorated)
@@ -834,7 +844,7 @@ def hook_table(rows, signatures, our_map, scenarios, headers=None):
             if conv_name:
                 argc = len(sig[1]) if not isinstance(sig, str) else None
                 mine = _typed_from_headers(
-                    texts, row['name'], argc, conv_name,
+                    texts, name, argc, conv_name,
                     sig[1] if not isinstance(sig, str) else None,
                     sig[2] if not isinstance(sig, str) else None)
                 if mine:
@@ -846,10 +856,10 @@ def hook_table(rows, signatures, our_map, scenarios, headers=None):
             skipped[key] = sig
             continue
         if not rvas:
-            skipped[key] = 'no entry for %s in our map' % row['name']
+            skipped[key] = 'no entry for %s in our map' % name
             continue
         if len(rvas) > 1:
-            skipped[key] = 'ambiguous: %d overloads of %s in our map' % (len(rvas), row['name'])
+            skipped[key] = 'ambiguous: %d overloads of %s in our map' % (len(rvas), name)
             continue
         typed[key] = typed_from
         conv, args, ret = sig
@@ -1827,17 +1837,21 @@ def frida_default(path=os.path.join(ROOT, CALIBRATION_REL)):
 
 
 def frida_batch(batch_id, rows, signatures, map_text, scenarios=FRIDA_SCENARIOS,
-                run_frida=frida_run, headers=None, info=None):
+                run_frida=frida_run, headers=None, info=None, names=None):
     """{'0x<ADDR>': (status, detail)} for the rows through one batched Frida
     differential run: the hook table from the signatures and our .map text,
     run_frida(batch_id, table, scenarios) for the traces, frida_verdicts to
     compare. headers (our src/*.h texts; default this checkout's) type the
-    hooks from our prototypes; info, a dict, receives typed_from and
+    hooks from our prototypes; names ({int address: our name}; default this
+    checkout's markers, see our_names) resolves each row to our name at its
+    address when the row's recorded name is stale; info, a dict, receives
+    typed_from and
     frida_verdicts' notes (frequency-only differences) and exact (the
     scenarios a compare=0 citation may name). run_frida is injectable (the
     default launches the game)."""
     table = hook_table(rows, signatures, map_text, list(scenarios),
-                       _our_headers() if headers is None else headers)
+                       _our_headers() if headers is None else headers,
+                       our_names() if names is None else names)
     if info is not None:
         info['typed_from'] = dict(table.get('typed_from', {}))
         info['typed_slots'] = {k: list(v) for k, v in table.get('typed_slots', {}).items()}
@@ -1865,6 +1879,20 @@ def _our_headers(root=None):
         with open(path, encoding='utf-8', errors='replace') as f:
             texts.append(f.read())
     return texts
+
+
+def our_names(root=None):
+    """{int address: our current name} of every `// 0xADDR` marker above a
+    function definition in src/**/*.cpp (under root, default this checkout;
+    labels.ours over definitions(), the scan re_status goes by too), the
+    first marker winning for an address carried twice. The Frida phases
+    resolve a row's function by this name: the address is the identity, and
+    a row may carry a name xrec recorded before we renamed or split its
+    class."""
+    found = {}
+    for address, name in labels.ours(os.path.join(root or ROOT, 'src')):
+        found.setdefault(address, name)
+    return found
 
 
 def _calibrate_frida(rows, read_evidence, map_path):
