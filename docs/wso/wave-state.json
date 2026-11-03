@@ -9350,6 +9350,150 @@
           "side": "ours"
         }
       }
+    },
+    "b039": {
+      "assigned_at": "2026-11-03T15:26:34+00:00",
+      "branch": "p3/wso-b039",
+      "closed_at": "2026-11-03T16:21:06+00:00",
+      "files": [
+        "src/CProjectile.cpp",
+        "src/CScreenCharacter.cpp",
+        "src/CVidBitmap.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x5701E0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::StrikeTarget",
+          "our_len": 0,
+          "their_len": 1187
+        },
+        {
+          "address": "0x5F88D0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCharacter.cpp",
+          "name": "CUIControlButtonCharacterSkillsHotArea::OnHotAreaClick",
+          "our_len": 570,
+          "their_len": 611
+        },
+        {
+          "address": "0x5F6830",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCharacter.cpp",
+          "name": "CUIControlButtonCharacterFeatsHotArea::OnHotAreaClick",
+          "our_len": 567,
+          "their_len": 608
+        },
+        {
+          "address": "0x57EB30",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSunray::AIUpdate",
+          "our_len": 0,
+          "their_len": 1123
+        },
+        {
+          "address": "0x7B4800",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CVidBitmap.cpp",
+          "name": "CVidBitmap::GetLightValues",
+          "our_len": 0,
+          "their_len": 1087
+        },
+        {
+          "address": "0x57A530",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::OnArrival",
+          "our_len": 0,
+          "their_len": 1054
+        },
+        {
+          "address": "0x56E280",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitParticle::IcewindCSpellHitParticle",
+          "our_len": 0,
+          "their_len": 1051
+        },
+        {
+          "address": "0x534C10",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCallLightning::AIUpdate",
+          "our_len": 0,
+          "their_len": 1044
+        },
+        {
+          "address": "0x5357B0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectilePhaseBAM::AIUpdate",
+          "our_len": 0,
+          "their_len": 916
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x534C10": {
+          "case": "readout-534C10",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5357B0": {
+          "case": "readout-5357B0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56E280": {
+          "case": "readout-56E280",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5701E0": {
+          "case": "readout-5701E0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57A530": {
+          "case": "readout-57A530",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57EB30": {
+          "case": "readout-57EB30",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5F6830": {
+          "case": "readout-5F6830",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5F88D0": {
+          "case": "readout-5F88D0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x7B4800": {
+          "case": "readout-7B4800",
+          "losing_kind": "trace",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"

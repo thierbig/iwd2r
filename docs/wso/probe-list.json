@@ -300,5 +300,15 @@
     "reading": "fork",
     "reason": "the detonated-phase loop-sound gate reads the third explosion's sound slot (+0x558, m_explosion3.m_sound) in the exe while our body gates on m_explosion2.m_sound (+0x51E) and the fork's reads +0x558, but the body lives in the unowned src/CProjectileArea.cpp and no probe/replay/trace case decides it",
     "source": "worker"
+  },
+  {
+    "address": "0x2",
+    "at": "2026-11-03T16:20:04+00:00",
+    "batch": "b039",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileArrow::CProjectileArrow",
+    "reading": "neither",
+    "reason": "parser noise: the address 0x2 is scraped from the fork's \"// 0x2/0x5/0x6)\" DecodeProjectile-type comment, and the bundle for 0x2 is empty (no functions.tsv entry, no decompile), so no runnable case can decide it; the real function is CProjectileArrow::CProjectileArrow @ 0x5324A0, where the fork's body and ours are value-equal (the fork defers the empty m_fireSoundRef and +0x17E seeds the original performs and ours writes explicitly, and both defer the same impact overrides), so neither tree is wrong \u2014 our body stays.",
+    "source": "worker"
   }
 ]
