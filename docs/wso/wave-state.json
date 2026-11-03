@@ -9201,6 +9201,155 @@
           "side": "ours"
         }
       }
+    },
+    "b038": {
+      "assigned_at": "2026-11-03T14:24:22+00:00",
+      "branch": "p3/wso-b038",
+      "closed_at": "2026-11-03T15:25:30+00:00",
+      "files": [
+        "src/CProjectile.cpp",
+        "src/CGameSprite.cpp",
+        "src/CScreenCreateChar.cpp",
+        "src/CInfGame.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x57A670",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::DeliverEffects",
+          "our_len": 0,
+          "their_len": 1373
+        },
+        {
+          "address": "0x535100",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCallLightning::Fire",
+          "our_len": 0,
+          "their_len": 1353
+        },
+        {
+          "address": "0x57F050",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSunray::Fire",
+          "our_len": 0,
+          "their_len": 1353
+        },
+        {
+          "address": "0x56EA90",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitParticle::Render",
+          "our_len": 0,
+          "their_len": 1344
+        },
+        {
+          "address": "0x7567F0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "measured_body": "a8e33d362a2b704c4e5ce6e37e5820cd5e99df4894cc78477963271930af9eb5",
+          "name": "CGameSprite::sub_7567F0",
+          "our_len": 622,
+          "their_len": 697
+        },
+        {
+          "address": "0x579860",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileTravellingVFX::UpdateDirectionSequence",
+          "our_len": 0,
+          "their_len": 1245
+        },
+        {
+          "address": "0x618D10",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCreateChar.cpp",
+          "name": "CScreenCreateChar::sub_618D10",
+          "our_len": 537,
+          "their_len": 700
+        },
+        {
+          "address": "0x5B9C60",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CInfGame.cpp",
+          "measured_body": "bd160c6f42a49e277a50fc1d44feda043142fe86a0355b93f2339b99ada3e370",
+          "name": "CInfGame::CheckIfPlayerInPortraitSlotCanUseItem",
+          "our_len": 526,
+          "their_len": 676
+        },
+        {
+          "address": "0x56CF00",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitVisual::~IcewindCSpellHitVisual",
+          "our_len": 0,
+          "their_len": 1198
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x535100": {
+          "case": "readout-535100",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56CF00": {
+          "case": "readout-56CF00",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56EA90": {
+          "case": "readout-56EA90",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x579860": {
+          "case": "readout-579860",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57A670": {
+          "case": "readout-57A670",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57F050": {
+          "case": "readout-57F050",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5B9C60": {
+          "case": "readout-5B9C60",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x618D10": {
+          "case": "readout-618D10",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x7567F0": {
+          "case": "readout-7567F0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"

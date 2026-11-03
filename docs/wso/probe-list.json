@@ -290,5 +290,15 @@
     "reading": "fork",
     "reason": "the exe's second (looping) sound block in OnArrival gates +0x558 and reads its resref at +0x554 \u2014 the third explosion description's sound slot \u2014 where our body reads m_explosion2 (src/CProjectileArea.cpp:271) and the fork's body matches the exe, but the function lives in a file this batch does not own and no probe, replay or trace case I can run decides it",
     "source": "worker"
+  },
+  {
+    "address": "0x56FAF0",
+    "at": "2026-11-03T15:24:27+00:00",
+    "batch": "b038",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::AIUpdate",
+    "reading": "fork",
+    "reason": "the detonated-phase loop-sound gate reads the third explosion's sound slot (+0x558, m_explosion3.m_sound) in the exe while our body gates on m_explosion2.m_sound (+0x51E) and the fork's reads +0x558, but the body lives in the unowned src/CProjectileArea.cpp and no probe/replay/trace case decides it",
+    "source": "worker"
   }
 ]
