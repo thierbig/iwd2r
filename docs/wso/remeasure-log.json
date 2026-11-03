@@ -1,0 +1,17 @@
+[
+  {
+    "asked": 35,
+    "at": "2026-11-03T18:11:20+00:00",
+    "branch": "p3/remeasure-noentry-1103",
+    "chunks": 1,
+    "chunks_done": 1,
+    "different": 0,
+    "equal": 2,
+    "measured": 2,
+    "mode": "rows",
+    "not_exercised": 28,
+    "other": 5,
+    "stamp": "20261103-124525",
+    "trace_evidence": 2
+  }
+]
