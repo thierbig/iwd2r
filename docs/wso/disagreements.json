@@ -70107,5 +70107,277 @@
   "category": "both_changed_differ",
   "their_len": 116,
   "our_len": 133
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupProbeDriver",
+  "address": "0x7B7DA0",
+  "category": "only_theirs",
+  "their_len": 59008,
+  "our_len": 0
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupResetDriver",
+  "address": "0x7BAAC0",
+  "category": "only_theirs",
+  "their_len": 22231,
+  "our_len": 0
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupValidateDriver",
+  "address": "0x7B7940",
+  "category": "only_theirs",
+  "their_len": 2967,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::Move",
+  "address": "0x554F00",
+  "category": "only_theirs",
+  "their_len": 2591,
+  "our_len": 0
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupGetDriverVersion",
+  "address": "0x7BB5D0",
+  "category": "only_theirs",
+  "their_len": 2013,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::AssignString",
+  "address": "0x45E870",
+  "category": "only_theirs",
+  "their_len": 1225,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::AIUpdate",
+  "address": "0x554B70",
+  "category": "only_theirs",
+  "their_len": 1138,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::DeliverStrike",
+  "address": "0x55AB80",
+  "category": "only_theirs",
+  "their_len": 909,
+  "our_len": 0
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupEnumDrivers",
+  "address": "0x7B7750",
+  "category": "only_theirs",
+  "their_len": 860,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffectFile::GetVEF",
+  "address": "0x5545E0",
+  "category": "only_theirs",
+  "their_len": 825,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::Load",
+  "address": "0x554D20",
+  "category": "only_theirs",
+  "their_len": 802,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::~CVisualEffect",
+  "address": "0x5549D0",
+  "category": "only_theirs",
+  "their_len": 673,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::ConstructCopy",
+  "address": "0x44BA90",
+  "category": "only_theirs",
+  "their_len": 673,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVEFVidCell::SetDirection",
+  "address": "0x551520",
+  "category": "only_theirs",
+  "their_len": 651,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::GatherTargets",
+  "address": "0x55AD90",
+  "category": "only_theirs",
+  "their_len": 623,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVEFVidCell::CalculatePos",
+  "address": "0x551490",
+  "category": "only_theirs",
+  "their_len": 592,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::SetAllDelete",
+  "address": "0x555200",
+  "category": "only_theirs",
+  "their_len": 520,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::CollectDueStrikes",
+  "address": "0x55A890",
+  "category": "only_theirs",
+  "their_len": 519,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::Compare",
+  "address": "0x4C5ED0",
+  "category": "only_theirs",
+  "their_len": 504,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::PrepareAssign",
+  "address": "0x44BC20",
+  "category": "only_theirs",
+  "their_len": 497,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVEFVidCell::FrameAdvance",
+  "address": "0x5513F0",
+  "category": "only_theirs",
+  "their_len": 474,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::Grow",
+  "address": "0x44BE10",
+  "category": "only_theirs",
+  "their_len": 444,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffect::CVisualEffect",
+  "address": "0x554870",
+  "category": "only_theirs",
+  "their_len": 389,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVisualEffectFile::CVisualEffectFile",
+  "address": "0x5544C0",
+  "category": "only_theirs",
+  "their_len": 312,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::Detach",
+  "address": "0x44BD40",
+  "category": "only_theirs",
+  "their_len": 304,
+  "our_len": 0
+ },
+ {
+  "file": "src/CChitin3d.cpp",
+  "name": "GLSetupSelectDriver",
+  "address": "0x7B7D40",
+  "category": "only_theirs",
+  "their_len": 272,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::Strike",
+  "address": "0x55AB20",
+  "category": "only_theirs",
+  "their_len": 264,
+  "our_len": 0
+ },
+ {
+  "file": "src/CVisualEffect.cpp",
+  "name": "CVEFVidCell::GetDirection",
+  "address": "0x551670",
+  "category": "only_theirs",
+  "their_len": 236,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::Service",
+  "address": "0x55A610",
+  "category": "only_theirs",
+  "their_len": 204,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::Tidy",
+  "address": "0x448D50",
+  "category": "only_theirs",
+  "their_len": 183,
+  "our_len": 0
+ },
+ {
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "name": "IcewindCProjectileTargetMap::IcewindCProjectileTargetMap",
+  "address": "0x55ACC0",
+  "category": "only_theirs",
+  "their_len": 163,
+  "our_len": 0
+ },
+ {
+  "file": "src/CResBIO.cpp",
+  "name": "CResBIO::Demand",
+  "address": "0x4029F0",
+  "category": "only_theirs",
+  "their_len": 130,
+  "our_len": 0
+ },
+ {
+  "file": "src/MfcCString.cpp",
+  "name": "CString::~CString",
+  "address": "0x7FCC1A",
+  "category": "only_theirs",
+  "their_len": 97,
+  "our_len": 0
+ },
+ {
+  "file": "src/TString.cpp",
+  "name": "TString::SetLength",
+  "address": "0x44BC00",
+  "category": "only_theirs",
+  "their_len": 52,
+  "our_len": 0
  }
 ]
