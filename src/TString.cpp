@@ -58,3 +58,33 @@ void TString::Grow(UINT nLen)
     m_nLen = static_cast<INT>(nKeep);
     m_pData[nKeep] = 0;
 }
+
+// 0x44BC20
+BOOLEAN TString::PrepareAssign(UINT nLen, BOOLEAN bTrim)
+{
+    if (nLen > 0xFFFFFFFD) {
+        Xlen();
+    }
+    if (m_pData != NULL && static_cast<BYTE>(m_pData[-1]) != 0 && static_cast<BYTE>(m_pData[-1]) != 0xFF) {
+        if (nLen == 0) {
+            m_pData[-1] = static_cast<char>(static_cast<BYTE>(m_pData[-1]) - 1);
+            Tidy(FALSE);
+            return FALSE;
+        }
+        Grow(nLen);
+    } else if (nLen == 0) {
+        if (bTrim) {
+            Tidy(TRUE);
+        } else if (m_pData != NULL) {
+            m_nLen = 0;
+            m_pData[0] = 0;
+        }
+        return FALSE;
+    } else if (bTrim && !(static_cast<UINT>(m_nRes) < 0x20 && nLen <= static_cast<UINT>(m_nRes))) {
+        Tidy(TRUE);
+        Grow(nLen);
+    } else if (static_cast<UINT>(m_nRes) < nLen) {
+        Grow(nLen);
+    }
+    return TRUE;
+}
