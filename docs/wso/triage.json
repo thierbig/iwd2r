@@ -4498,6 +4498,14 @@
     "reason": "the bodies differ beyond identifier names"
   },
   {
+    "address": "0x5C0BB0",
+    "class": "ambiguous",
+    "file": "src/CInfGame.cpp",
+    "name": "CInfGame::AddExperienceParty",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
     "address": "0x5B9C60",
     "class": "ambiguous",
     "file": "src/CInfGame.cpp",
@@ -4670,6 +4678,14 @@
     "class": "ambiguous",
     "file": "src/CProjectile.cpp",
     "name": "IcewindCProjectileSpellHit::Fire",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x56EDD0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::IcewindCProjectileSpellHit",
     "ours_ref": "first",
     "reason": "function not found in our tree"
   },
@@ -5034,6 +5050,14 @@
     "reason": "function not found in our tree"
   },
   {
+    "address": "0x531120",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSPMAGMIS::CProjectileSPMAGMIS",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
     "address": "0x56ECF0",
     "class": "ambiguous",
     "file": "src/CProjectile.cpp",
@@ -5119,7 +5143,7 @@
     "file": "src/CProjectile.cpp",
     "name": "CProjectile84D8B8::Fire",
     "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
+    "reason": "function not found in the fork"
   },
   {
     "address": "0x5309C0",
@@ -5158,6 +5182,46 @@
     "class": "ambiguous",
     "file": "src/CProjectile.cpp",
     "name": "CProjectileTremor::CProjectileTremor",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x5714E0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileAcidFog::CProjectileAcidFog",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x5747A0",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileSpikeStones::CProjectileSpikeStones",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x572470",
+    "class": "ambiguous",
+    "file": "src/CProjectile.cpp",
+    "name": "CProjectileFlameStrike::CProjectileFlameStrike",
+    "ours_ref": "first",
+    "reason": "function not found in our tree"
+  },
+  {
+    "address": "0x55FAD0",
+    "class": "ambiguous",
+    "file": "src/IcewindCGameEffects.cpp",
+    "name": "IcewindCGameEffectSummon::SpawnFromResRef",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x55F930",
+    "class": "ambiguous",
+    "file": "src/IcewindCGameEffects.cpp",
+    "name": "IcewindCGameEffectSummon::PlayGroupVFX",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
@@ -5247,7 +5311,7 @@
     "file": "src/CGameAIBase.cpp",
     "name": "CGameAIBase::ForceSpell",
     "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
+    "reason": "function not found in the fork"
   },
   {
     "address": "0x45C030",
@@ -5255,13 +5319,29 @@
     "file": "src/CGameAIBase.cpp",
     "name": "CGameAIBase::GetTargetShareAIType",
     "ours_ref": "first",
-    "reason": "the bodies differ beyond identifier names"
+    "reason": "function not found in the fork"
   },
   {
     "address": "0x44DAC0",
     "class": "ambiguous",
     "file": "src/CGameAIBase.cpp",
     "name": "CGameAIBase::SeeTarget",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x462F90",
+    "class": "ambiguous",
+    "file": "src/CGameAIBase.cpp",
+    "name": "CGameAIBase::StartCutScene",
+    "ours_ref": "first",
+    "reason": "the bodies differ beyond identifier names"
+  },
+  {
+    "address": "0x4658A0",
+    "class": "ambiguous",
+    "file": "src/CGameAIBase.cpp",
+    "name": "CGameAIBase::IncrementChapter",
     "ours_ref": "first",
     "reason": "the bodies differ beyond identifier names"
   },
