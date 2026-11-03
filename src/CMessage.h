@@ -121,7 +121,6 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_PROTAGONIST;
     static const BYTE MSG_SUBTYPE_CMESSAGE_START_COMBAT_MUSIC;
     static const BYTE MSG_SUBTYPE_CMESSAGE_96;
-    static const BYTE MSG_SUBTYPE_CMESSAGE_97;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
@@ -1598,12 +1597,13 @@ public:
 class CMessage97 : public CMessage {
 public:
     CMessage97(LONG caller, LONG target, INT nScript, const CResRef& resScript);
-    // GetCommType (0x4088A0) and GetMsgType (0x40A0E0) stay undeclared here:
-    // 0x40A0E0 is the shared CMessage-family getter already ported under
-    // CMessage89/CMessage96, 0x4088A0 is not ported, and with the ctor at
-    // 0x4F6C50 now out of line the class vtable (0x84D398) only links when
-    // every declared override is defined.
-    BYTE GetMsgSubType() override;
+    // GetCommType (0x4088A0), GetMsgType (0x40A0E0) and GetMsgSubType
+    // (0x4F6C80) stay undeclared here: 0x40A0E0 is the shared CMessage-family
+    // getter already ported under CMessage89/CMessage96, 0x4088A0 is not
+    // ported, 0x4F6C80 is parked (docs/wso/import-parked/4F6C80.json), and
+    // with the ctor at 0x4F6C50 now out of line the class vtable (0x84D398)
+    // only links when every declared override is defined - the slot falls
+    // back to the defined base CMessage::GetMsgSubType (src/CMessage.cpp:7602).
     void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
     BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;

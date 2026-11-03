@@ -353,9 +353,6 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_START_COMBAT_MUSIC = 94;
 // 0x84CF37
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_96 = 96;
 
-// 0x84CF38
-const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_97 = 97;
-
 // 0x84CF3A
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SCREENSHAKE = 99;
 
@@ -18841,12 +18838,6 @@ CMessage97::CMessage97(LONG caller, LONG target, INT nScript, const CResRef& res
     , m_nScript(nScript)
     , m_resScript(resScript)
 {
-}
-
-// 0x4F6C80
-BYTE CMessage97::GetMsgSubType()
-{
-    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_97;
 }
 
 // 0x513F00
