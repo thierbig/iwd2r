@@ -440,6 +440,8 @@ set(IWD2R_ENGINE_SOURCES
     "src/Icewind586B70.h"
     "src/IcewindCGameEffects.cpp"
     "src/IcewindCGameEffects.h"
+    "src/IcewindCProjectileTargetMap.cpp"
+    "src/IcewindCProjectileTargetMap.h"
     "src/IcewindCVisualEffect.cpp"
     "src/IcewindCVisualEffect.h"
     "src/IcewindMisc.cpp"
