@@ -22428,7 +22428,7 @@ SHORT CGameSprite::SpellPoint()
             } else if (nSpellType == 3) {
                 if (!pGame->m_songs.Find(CResRef(sResRef), nID)) {
                     // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
-                    // __LINE__: 13582
+                    // __LINE__: 13590
                     UTIL_ASSERT_MSG(FALSE, "Unknown spell");
                     return ACTION_ERROR;
                 }
@@ -22437,7 +22437,7 @@ SHORT CGameSprite::SpellPoint()
             } else if (nSpellType == 4) {
                 if (!pGame->m_shapeshifts.Find(CResRef(sResRef), nID)) {
                     // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreatureAI.cpp
-                    // __LINE__: 13594
+                    // __LINE__: 13606
                     UTIL_ASSERT_MSG(FALSE, "Unknown spell");
                     return ACTION_ERROR;
                 }
@@ -22670,8 +22670,10 @@ SHORT CGameSprite::SpellPoint()
         // (0x7443A4); see Spell's note for the leak.
         m_curProjectile = CProjectile::DecodeProjectile(pAbility->missileType, this, 0);
         m_curProjectile->m_sourceRes = m_curSpell->GetResRef();
-        DWORD nLevel = static_cast<BYTE>(nSpellLevel);
-        m_curProjectile->m_nSpellLevel = nLevel;
+        // NOTE: The exe stores the spell-failure flag here (0x7443DC), not
+        // the caster's spell level. The flag is provably FALSE on this path
+        // (a failed cast returned early), so the level is always zeroed.
+        m_curProjectile->m_nSpellLevel = bFailed;
 
         for (INT nEffect = 0; nEffect < pAbility->effectCount; nEffect++) {
             CGameEffect* pEffect = m_curSpell->GetAbilityEffect(nAbilityIndex,
@@ -22686,7 +22688,9 @@ SHORT CGameSprite::SpellPoint()
             pEffect->m_target = pt;
 
             if (pEffect->m_spellLevel != 0) {
-                pEffect->m_spellLevel = nLevel;
+                // NOTE: Same failure-flag store as the projectile's spell
+                // level above (0x744442) -- the effect's level is zeroed.
+                pEffect->m_spellLevel = bFailed;
             }
 
             IcewindMisc::sub_5860F0(this, pEffect);
@@ -22750,10 +22754,11 @@ SHORT CGameSprite::SpellPoint()
             0);
 
         if (m_curProjectile->m_projectileType == 304) {
-            INT nRandom = rand() % 1000000;
-            // TODO: The original also stores it in the projectile's +0x356
-            // (not ported yet).
-            pFire->field_20 = nRandom;
+            // The whirlwind wanders: seed its chain and mirror the seed in
+            // the message so every machine wanders alike (0x7445EF).
+            LONG wanderSeed = rand() % 1000000;
+            static_cast<CProjectileWhirlwind*>(m_curProjectile)->m_wanderSeed = wanderSeed;
+            pFire->field_20 = wanderSeed;
         }
 
         g_pBaldurChitin->GetMessageHandler()->AddMessage(pFire, FALSE);
