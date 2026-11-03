@@ -80,3 +80,14 @@ void CVEFVidCell::SetDirection(const CPoint& pos, const CPoint& oldPos, const CP
         }
     }
 }
+
+// 0x551670
+SHORT CVEFVidCell::GetDirection(const CPoint& pos, const CPoint& targetPos, SHORT nDirection)
+{
+    if (pos == targetPos) {
+        return nDirection;
+    }
+    CPoint start(pos.x, static_cast<LONG>(static_cast<DWORD>(pos.y) << 2) / 3);
+    CPoint target(targetPos.x, static_cast<LONG>(static_cast<DWORD>(targetPos.y) << 2) / 3);
+    return CGameSprite::GetDirection(start, target);
+}
