@@ -56,3 +56,27 @@ void CVEFVidCell::CalculatePos(const CPoint& pos)
     m_pos.x = static_cast<LONG>(static_cast<DWORD>(pos.x) + static_cast<DWORD>(x));
     m_pos.y = static_cast<LONG>(static_cast<DWORD>(pos.y) + static_cast<DWORD>(y));
 }
+
+// 0x551520
+void CVEFVidCell::SetDirection(const CPoint& pos, const CPoint& oldPos, const CPoint& targetPos, SHORT nDirection)
+{
+    if ((m_directionFlags & 1) != 0) {
+        if (m_pos == targetPos) {
+            m_newDirection = static_cast<SHORT>(m_direction);
+        } else {
+            CPoint start(m_pos.x, static_cast<LONG>(static_cast<DWORD>(m_pos.y) << 2) / 3);
+            CPoint target(targetPos.x, static_cast<LONG>(static_cast<DWORD>(targetPos.y) << 2) / 3);
+            m_newDirection = CGameSprite::GetDirection(start, target);
+        }
+    } else if ((m_directionFlags & 2) != 0) {
+        m_newDirection = nDirection;
+    } else {
+        if (oldPos == pos) {
+            m_newDirection = static_cast<SHORT>(m_direction);
+        } else {
+            CPoint start(oldPos.x, static_cast<LONG>(static_cast<DWORD>(oldPos.y) << 2) / 3);
+            CPoint target(pos.x, static_cast<LONG>(static_cast<DWORD>(pos.y) << 2) / 3);
+            m_newDirection = CGameSprite::GetDirection(start, target);
+        }
+    }
+}
