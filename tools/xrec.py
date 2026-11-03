@@ -19,9 +19,11 @@ src/*.cpp of theirs — a theirs-only file, a free function (no ::) or an
 overload the shared-file pairing collapses — whose marker address no row of
 that pairing already carries and that no marker line of our src/**/*.cpp or
 src/**/*.h names, stubs skipped. An address that only ever appears as a
-removed marker line in our own history (one `git log -p` pass over src) is
-one we deleted on purpose: it makes no row and is counted in main()'s
-summary line as `removed by us`.
+removed marker line in our own history (one `git log -p` pass over src), or
+that theirs carries only in a file ours deleted wholesale (a path of ours
+that shows in one `git log --diff-filter=D` pass and is gone at the ours
+ref), is one we deleted on purpose: it makes no row and is counted in
+main()'s summary line as `removed by us`.
 
 A function is matched between the trees by its // 0xADDR comment first (a
 renamed function is still the function) and by name second; the address is
@@ -255,17 +257,34 @@ def removed_markers(ours_ref, ours_at):
     return out - ours_at
 
 
+def deleted_files(ours_ref):
+    """The src/*.cpp paths ours deleted wholesale: every path of ours that
+    shows in one `git log --diff-filter=D --name-only` pass over src and is
+    gone at the ours ref — no per-file git log. A file we once had and
+    removed (e.g. the multiplayer screen) takes every address of theirs in
+    it with it, marker or no marker in our copy: removed by us."""
+    out = set()
+    r = subprocess.run(['git','log','--diff-filter=D','--name-only','--format=',ours_ref,'--','src'],
+                       capture_output=True,text=True,errors='replace')
+    for p in r.stdout.split():
+        if p.endswith('.cpp'):
+            out.add(p)
+    return out - files(ours_ref)
+
+
 def address_gap(theirs_ref, ours_ref, carried):
     """(rows, n_removed_skipped) for the pass: one only_theirs row per
     address theirs carries and ours never has — every marker-carrying
     definition of any src/*.cpp of theirs (shared and theirs-only files,
     free functions and each overload separately), stubs skipped — that no
     shared-file row of `report()` already carries (addresses in `carried`)
-    and that no marker of ours names. An address ours deleted on purpose
-    makes no row and is counted in n_removed_skipped. The address is the
-    identity: the first definition per address wins."""
+    and that no marker of ours names. An address ours deleted on purpose —
+    a removed marker line of ours, or a file of theirs ours deleted
+    wholesale — makes no row and is counted in n_removed_skipped. The
+    address is the identity: the first definition per address wins."""
     ours_at = our_markers(ours_ref)
     removed = removed_markers(ours_ref, ours_at)
+    gone = deleted_files(ours_ref)
     skip = {_canon(a) for a in carried if a}
     rows, seen, n_removed = [], set(), 0
     for p in sorted(files(theirs_ref)):
@@ -276,7 +295,7 @@ def address_gap(theirs_ref, ours_ref, carried):
             if key in seen or key in skip or key in ours_at:
                 continue
             seen.add(key)
-            if key in removed:
+            if p in gone or key in removed:
                 n_removed += 1
                 continue
             rows.append({'file': p, 'name': name, 'address': key,

@@ -7701,7 +7701,9 @@ class XrecGapTest(unittest.TestCase):
     has never carried, by address, whatever file they sit in: theirs-only
     files, free functions and the overloads the shared-file pairing
     collapses.  Ours is whatever a marker of ours names (a header inline
-    included); an address ours deleted on purpose never comes back."""
+    included); an address ours deleted on purpose — by a removed marker
+    line of ours, or by living in a file ours deleted wholesale — never
+    comes back."""
 
     # Bodies that survive stubby() once whitespace-stripped, two lengths so
     # the row order is deterministic.  The braces come from the templates.
@@ -7772,6 +7774,17 @@ class XrecGapTest(unittest.TestCase):
                     '{\n'
                     '%s'
                     '}\n')
+    THEIRS_OLD = ('// 0x601000\n'
+                  'int COldThing::Old(int x)\n'
+                  '{\n'
+                  '%s'
+                  '}\n')
+    OURS_OLD = ('// stubbed early, never recovered; our copy never carried a\n'
+                '// marker line, so the address only ever existed on their side\n'
+                'int COldThing::Old(int x)\n'
+                '{\n'
+                '    return 0;\n'
+                '}\n')
     HEADER_INLINE = ('// 0x5A2000\n'
                      'inline int CThing::InlineTwin(int x)\n'
                      '{\n'
@@ -7798,14 +7811,18 @@ class XrecGapTest(unittest.TestCase):
                     self.BOTH_CTORS % (self.BODY1, self.BODY2))
         self._write('src/CScreenMultiPlayer.cpp',
                     self.IS_SUPPORTED % self.BODY1)
+        self._write('src/COldThing.cpp', self.THEIRS_OLD % self.BODY2)
         self._commit('theirs')
         self._git('checkout', '-q', '-b', 'ours', 'base')
         self._write('src/CAIAction.cpp', self.ONE_CTOR % self.BODY2)
         self._write('src/Thing.h', self.HEADER_INLINE)
         self._write('src/Removed.cpp', self.IS_SUPPORTED % self.BODY1)
+        self._write('src/COldThing.cpp', self.OURS_OLD)
         self._commit('ours carries the twins')
-        # The multiplayer screen goes for good, the way 32213cd5 removed it.
+        # The multiplayer screen goes for good, the way 32213cd5 removed it;
+        # COldThing.cpp ours deletes wholesale, marker-less in our copy.
         os.unlink(os.path.join(self.repo, 'src/Removed.cpp'))
+        os.unlink(os.path.join(self.repo, 'src/COldThing.cpp'))
         self._commit('ours: remove the multiplayer screen for good')
 
     # -- the fixture --------------------------------------------------------
@@ -7880,24 +7897,40 @@ class XrecGapTest(unittest.TestCase):
 
     def test_gap_rows_and_removed_by_us_count(self):
         # (d) the address ours carried and deleted makes no row; the summary
-        # line carries the pass's own count and the removed-by-us skips.
+        # line carries the pass's own count and the removed-by-us skips
+        # (0x421820 by its removed marker, 0x601000 by its deleted file).
         rows, tot, n_gap, n_removed = self.report()
         self.assertEqual(sorted(r['address'] for r in rows
                                 if r['category'] == 'only_theirs'),
                          self.GAP_ADDRS)
         self.assertNotIn('0x421820', [r['address'] for r in rows])
         self.assertEqual(n_gap, 3)
-        self.assertEqual(n_removed, 1)
+        self.assertEqual(n_removed, 2)
         self.assertEqual(tot['only_theirs'], 3)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(xrec.main(['base', 'theirs', 'ours']), 0)
-        self.assertIn('address-gap rows: 3 (removed by us: 1 skipped)\n', out.getvalue())
+        self.assertIn('address-gap rows: 3 (removed by us: 2 skipped)\n', out.getvalue())
 
     def test_gap_address_ours_carries_in_a_header_only(self):
         # (e) an inline in our header is ours: no row for its address.
         rows, tot, n_gap, n_removed = self.report()
         self.assertNotIn('0x5A2000', [r['address'] for r in rows])
+
+    def test_gap_file_ours_deleted_wholesale_makes_no_row(self):
+        # (g) a file our history once had and deleted (COldThing.cpp, ours
+        # marker-less): every address of theirs in it counts as removed by
+        # us, even though no removed marker line of ours names the address.
+        hist = self._git('log', '-p', '--format=', 'ours', '--', 'src').stdout
+        self.assertNotIn('0x601000', hist)  # never a marker in our history
+        self.assertNotIn('src/COldThing.cpp',
+                         self._git('ls-tree', '-r', '--name-only', 'ours',
+                                   'src').stdout.split())
+        rows, tot, n_gap, n_removed = self.report()
+        self.assertNotIn('0x601000', [r['address'] for r in rows])
+        self.assertNotIn('src/COldThing.cpp', [r['file'] for r in rows])
+        self.assertEqual(n_gap, 3)
+        self.assertEqual(n_removed, 2)  # 0x421820 by marker, 0x601000 by file
 
     def test_gap_recompare_files_the_only_theirs_rows(self):
         # (f) recompare runs xrec for real over the fixture and the import
