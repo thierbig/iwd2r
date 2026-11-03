@@ -768,5 +768,243 @@
   "file": "src/CGameAIBase.cpp",
   "category": "both_changed_differ",
   "at": "2026-11-03T00:30:55+00:00"
+ },
+ {
+  "address": "0x7B7DA0",
+  "name": "GLSetupProbeDriver",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7BAAC0",
+  "name": "GLSetupResetDriver",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7B7940",
+  "name": "GLSetupValidateDriver",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x554F00",
+  "name": "CVisualEffect::Move",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7BB5D0",
+  "name": "GLSetupGetDriverVersion",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x45E870",
+  "name": "TString::AssignString",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x554B70",
+  "name": "CVisualEffect::AIUpdate",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55AB80",
+  "name": "IcewindCProjectileTargetMap::DeliverStrike",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7B7750",
+  "name": "GLSetupEnumDrivers",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x5545E0",
+  "name": "CVisualEffectFile::GetVEF",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x554D20",
+  "name": "CVisualEffect::Load",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x5549D0",
+  "name": "CVisualEffect::~CVisualEffect",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x44BA90",
+  "name": "TString::ConstructCopy",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x551520",
+  "name": "CVEFVidCell::SetDirection",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55AD90",
+  "name": "IcewindCProjectileTargetMap::GatherTargets",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x551490",
+  "name": "CVEFVidCell::CalculatePos",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x555200",
+  "name": "CVisualEffect::SetAllDelete",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55A890",
+  "name": "IcewindCProjectileTargetMap::CollectDueStrikes",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x4C5ED0",
+  "name": "TString::Compare",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x44BC20",
+  "name": "TString::PrepareAssign",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x5513F0",
+  "name": "CVEFVidCell::FrameAdvance",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x44BE10",
+  "name": "TString::Grow",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x554870",
+  "name": "CVisualEffect::CVisualEffect",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x5544C0",
+  "name": "CVisualEffectFile::CVisualEffectFile",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x44BD40",
+  "name": "TString::Detach",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7B7D40",
+  "name": "GLSetupSelectDriver",
+  "file": "src/CChitin3d.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55AB20",
+  "name": "IcewindCProjectileTargetMap::Strike",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x551670",
+  "name": "CVEFVidCell::GetDirection",
+  "file": "src/CVisualEffect.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55A610",
+  "name": "IcewindCProjectileTargetMap::Service",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x448D50",
+  "name": "TString::Tidy",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x55ACC0",
+  "name": "IcewindCProjectileTargetMap::IcewindCProjectileTargetMap",
+  "file": "src/IcewindCProjectileTargetMap.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x4029F0",
+  "name": "CResBIO::Demand",
+  "file": "src/CResBIO.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x7FCC1A",
+  "name": "CString::~CString",
+  "file": "src/MfcCString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
+ },
+ {
+  "address": "0x44BC00",
+  "name": "TString::SetLength",
+  "file": "src/TString.cpp",
+  "category": "only_theirs",
+  "at": "2026-11-03T19:41:29+00:00"
  }
 ]
