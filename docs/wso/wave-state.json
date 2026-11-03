@@ -9051,6 +9051,156 @@
           "side": "ours"
         }
       }
+    },
+    "b037": {
+      "assigned_at": "2026-11-03T13:08:13+00:00",
+      "branch": "p3/wso-b037",
+      "closed_at": "2026-11-03T14:23:16+00:00",
+      "files": [
+        "src/CGameEffect.cpp",
+        "src/CProjectile.cpp",
+        "src/CGameAIBase.cpp",
+        "src/CScreenCharacter.cpp",
+        "src/CVidBitmap.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x4A3FF0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameEffect.cpp",
+          "measured_body": "7ea263c0e26acf670589107e56f819738f99bc408a51e13c30bedd1341865558",
+          "name": "CGameEffect::sub_4A3FF0",
+          "our_len": 1075,
+          "their_len": 964
+        },
+        {
+          "address": "0x530C90",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSPMAGMIS::Fire",
+          "our_len": 0,
+          "their_len": 1969
+        },
+        {
+          "address": "0x44DAC0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameAIBase.cpp",
+          "measured_body": "d07abcfcac9c14983c294bb23343ea72ebb7541223e8460f3c40bdb4f3a32edb",
+          "name": "CGameAIBase::SeeTarget",
+          "our_len": 1018,
+          "their_len": 918
+        },
+        {
+          "address": "0x56D730",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitVisual::Render",
+          "our_len": 0,
+          "their_len": 1721
+        },
+        {
+          "address": "0x56F820",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::Fire",
+          "our_len": 0,
+          "their_len": 1594
+        },
+        {
+          "address": "0x56EDD0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileSpellHit::IcewindCProjectileSpellHit",
+          "our_len": 0,
+          "their_len": 1558
+        },
+        {
+          "address": "0x5F84E0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCharacter.cpp",
+          "name": "CUIControlButtonCharacterSkillsPlusMinus::OnLButtonDown",
+          "our_len": 756,
+          "their_len": 797
+        },
+        {
+          "address": "0x7B4600",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CVidBitmap.cpp",
+          "name": "CVidBitmap::GetAddValues",
+          "our_len": 0,
+          "their_len": 1539
+        },
+        {
+          "address": "0x52B6B0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::GetCellBounds",
+          "our_len": 0,
+          "their_len": 1450
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x44DAC0": {
+          "case": "readout-44DAC0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x4A3FF0": {
+          "case": "readout-4A3FF0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x52B6B0": {
+          "case": "readout-52B6B0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x530C90": {
+          "case": "readout-530C90",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56D730": {
+          "case": "readout-56D730",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56EDD0": {
+          "case": "readout-56EDD0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56F820": {
+          "case": "readout-56F820",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5F84E0": {
+          "case": "readout-5F84E0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x7B4600": {
+          "case": "readout-7B4600",
+          "losing_kind": "trace",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"

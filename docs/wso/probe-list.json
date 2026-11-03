@@ -280,5 +280,15 @@
     "reading": "fork",
     "reason": "the fork implements the exe's visual-effect block 0x5794F1-0x5796A8 store-for-store where ours TODOs it, but the row's read-only recall names no test or probe id that drives it",
     "source": "worker"
+  },
+  {
+    "address": "0x56F410",
+    "at": "2026-11-03T14:22:07+00:00",
+    "batch": "b037",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileSpellHit::OnArrival",
+    "reading": "fork",
+    "reason": "the exe's second (looping) sound block in OnArrival gates +0x558 and reads its resref at +0x554 \u2014 the third explosion description's sound slot \u2014 where our body reads m_explosion2 (src/CProjectileArea.cpp:271) and the fork's body matches the exe, but the function lives in a file this batch does not own and no probe, replay or trace case I can run decides it",
+    "source": "worker"
   }
 ]
