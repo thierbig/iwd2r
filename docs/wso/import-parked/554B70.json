@@ -1,7 +1,0 @@
-{
-  "address": "0x554B70",
-  "name": "CVisualEffect::AIUpdate",
-  "file": "src/CVisualEffect.cpp",
-  "batch": "i074",
-  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x5513F0 CVEFVidCell::FrameAdvance, 0x551490 CVEFVidCell::CalculatePos and 0x551520 CVEFVidCell::SetDirection, the dependencies this batch imported for it (AIUpdate drives every active animation through them), so the row returns when a scenario exercises the wandering-visual update path"
-}

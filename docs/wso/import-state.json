@@ -9368,36 +9368,12 @@
           "their_len": 2967
         },
         {
-          "address": "0x554F00",
-          "category": "only_theirs",
-          "file": "src/CVisualEffect.cpp",
-          "name": "CVisualEffect::Move",
-          "our_len": 0,
-          "their_len": 2591
-        },
-        {
           "address": "0x7BB5D0",
           "category": "only_theirs",
           "file": "src/CChitin3d.cpp",
           "name": "GLSetupGetDriverVersion",
           "our_len": 0,
           "their_len": 2013
-        },
-        {
-          "address": "0x45E870",
-          "category": "only_theirs",
-          "file": "src/TString.cpp",
-          "name": "TString::AssignString",
-          "our_len": 0,
-          "their_len": 1225
-        },
-        {
-          "address": "0x554B70",
-          "category": "only_theirs",
-          "file": "src/CVisualEffect.cpp",
-          "name": "CVisualEffect::AIUpdate",
-          "our_len": 0,
-          "their_len": 1138
         },
         {
           "address": "0x55AB80",
@@ -9409,6 +9385,122 @@
         }
       ],
       "status": "closed",
+      "unparked": [
+        {
+          "address": "0x45E870",
+          "at": "2026-11-03T23:57:04+00:00",
+          "category": "only_theirs",
+          "file": "src/TString.cpp",
+          "name": "TString::AssignString",
+          "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x448D50 TString::Tidy, 0x44BC00 TString::SetLength, 0x44BC20 TString::PrepareAssign, 0x44BE10 TString::Grow, 0x44BD40 TString::Detach and 0x45EA70 TString::MaxSize, the dependencies this batch imported for it (every AssignString path routes through them), so the row returns when a scenario exercises the shared-string assign path",
+          "our_len": 0,
+          "reason": "Task 71: rule 1 now covers import dependencies and rows ours never calls (i074 parked them for that)",
+          "their_len": 1225
+        },
+        {
+          "address": "0x554B70",
+          "at": "2026-11-03T23:57:04+00:00",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::AIUpdate",
+          "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x5513F0 CVEFVidCell::FrameAdvance, 0x551490 CVEFVidCell::CalculatePos and 0x551520 CVEFVidCell::SetDirection, the dependencies this batch imported for it (AIUpdate drives every active animation through them), so the row returns when a scenario exercises the wandering-visual update path",
+          "our_len": 0,
+          "reason": "Task 71: rule 1 now covers import dependencies and rows ours never calls (i074 parked them for that)",
+          "their_len": 1138
+        },
+        {
+          "address": "0x554F00",
+          "at": "2026-11-03T23:57:04+00:00",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::Move",
+          "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised; parks with 0x551670 CVEFVidCell::GetDirection, the dependency this batch imported for it (its only caller path routes every Move through GetDirection), so the row returns when a scenario exercises the wandering-visual movement path",
+          "our_len": 0,
+          "reason": "Task 71: rule 1 now covers import dependencies and rows ours never calls (i074 parked them for that)",
+          "their_len": 2591
+        }
+      ],
+      "verdicts": {}
+    },
+    "i075": {
+      "assigned_at": "2026-11-03T22:22:29+00:00",
+      "branch": "p3/wso-i075",
+      "closed_at": null,
+      "files": [
+        "src/CChitin3d.cpp",
+        "src/CVisualEffect.cpp",
+        "src/TString.cpp",
+        "src/IcewindCProjectileTargetMap.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7B7750",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupEnumDrivers",
+          "our_len": 0,
+          "their_len": 860
+        },
+        {
+          "address": "0x5545E0",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffectFile::GetVEF",
+          "our_len": 0,
+          "their_len": 825
+        },
+        {
+          "address": "0x554D20",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::Load",
+          "our_len": 0,
+          "their_len": 802
+        },
+        {
+          "address": "0x5549D0",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::~CVisualEffect",
+          "our_len": 0,
+          "their_len": 673
+        },
+        {
+          "address": "0x44BA90",
+          "category": "only_theirs",
+          "file": "src/TString.cpp",
+          "name": "TString::ConstructCopy",
+          "our_len": 0,
+          "their_len": 673
+        },
+        {
+          "address": "0x551520",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVEFVidCell::SetDirection",
+          "our_len": 0,
+          "their_len": 651
+        },
+        {
+          "address": "0x55AD90",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::GatherTargets",
+          "our_len": 0,
+          "their_len": 623
+        },
+        {
+          "address": "0x551490",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVEFVidCell::CalculatePos",
+          "our_len": 0,
+          "their_len": 592
+        }
+      ],
+      "status": "assigned",
       "verdicts": {}
     }
   },

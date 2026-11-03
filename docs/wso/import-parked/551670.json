@@ -1,7 +1,0 @@
-{
-  "address": "0x551670",
-  "name": "CVEFVidCell::GetDirection",
-  "file": "src/CVisualEffect.cpp",
-  "batch": "i074",
-  "needs": "world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised"
-}
