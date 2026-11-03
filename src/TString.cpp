@@ -108,3 +108,58 @@ void TString::Detach()
         SetLength(length);
     }
 }
+
+// 0x45E870
+TString& TString::AssignString(const TString& source, UINT start, UINT count)
+{
+    if (static_cast<UINT>(source.m_nLen) < start) {
+        Xran();
+    }
+    UINT length = static_cast<UINT>(source.m_nLen) - start;
+    if (count < length) {
+        length = count;
+    }
+    if (this == &source) {
+        UINT end = start + length;
+        if (static_cast<UINT>(m_nLen) < end) {
+            Xran();
+        }
+        Detach();
+        UINT tail = static_cast<UINT>(m_nLen) - end;
+        if (tail != 0) {
+            memmove(m_pData + end, m_pData + end + tail, static_cast<UINT>(m_nLen) - end - tail);
+            UINT remaining = static_cast<UINT>(m_nLen) - tail;
+            if (PrepareAssign(remaining, FALSE)) {
+                SetLength(remaining);
+            }
+        }
+        Detach();
+        UINT prefix = start < static_cast<UINT>(m_nLen) ? start : static_cast<UINT>(m_nLen);
+        if (prefix != 0) {
+            memmove(m_pData, m_pData + prefix, static_cast<UINT>(m_nLen) - prefix);
+            UINT remaining = static_cast<UINT>(m_nLen) - prefix;
+            if (PrepareAssign(remaining, FALSE)) {
+                SetLength(remaining);
+            }
+        }
+        return *this;
+    }
+    const char* data = source.m_pData != NULL ? source.m_pData : "";
+    if (length != 0 && length == static_cast<UINT>(source.m_nLen) && static_cast<BYTE>(data[-1]) < 0xFE) {
+        Tidy(TRUE);
+        m_pData = source.m_pData != NULL ? source.m_pData : const_cast<char*>("");
+        m_nLen = source.m_nLen;
+        m_nRes = source.m_nRes;
+        m_pData[-1] = static_cast<char>(static_cast<BYTE>(m_pData[-1]) + 1);
+    } else {
+        if (MaxSize() < length) {
+            Xlen();
+        }
+        if (PrepareAssign(length, TRUE)) {
+            data = source.m_pData != NULL ? source.m_pData : "";
+            memcpy(m_pData, data + start, length);
+            SetLength(length);
+        }
+    }
+    return *this;
+}
