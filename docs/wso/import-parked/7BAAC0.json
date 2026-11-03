@@ -1,0 +1,7 @@
+{
+  "address": "0x7BAAC0",
+  "name": "GLSetupResetDriver",
+  "file": "src/CChitin3d.cpp",
+  "batch": "i074",
+  "needs": "no Frida hook: no entry for GLSetupResetDriver in our map"
+}

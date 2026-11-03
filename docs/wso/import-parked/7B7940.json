@@ -1,0 +1,7 @@
+{
+  "address": "0x7B7940",
+  "name": "GLSetupValidateDriver",
+  "file": "src/CChitin3d.cpp",
+  "batch": "i074",
+  "needs": "no Frida hook: no entry for GLSetupValidateDriver in our map"
+}

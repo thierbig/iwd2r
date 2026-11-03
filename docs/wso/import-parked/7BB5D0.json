@@ -1,0 +1,7 @@
+{
+  "address": "0x7BB5D0",
+  "name": "GLSetupGetDriverVersion",
+  "file": "src/CChitin3d.cpp",
+  "batch": "i074",
+  "needs": "no Frida hook: no entry for GLSetupGetDriverVersion in our map"
+}
