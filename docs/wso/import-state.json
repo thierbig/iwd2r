@@ -9254,6 +9254,80 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i073": {
+      "assigned_at": "2026-11-02T22:50:54+00:00",
+      "branch": "p3/wso-i073",
+      "closed_at": "2026-11-03T00:28:56+00:00",
+      "files": [
+        "src/CProjectile.cpp",
+        "src/CGameSprite.cpp",
+        "src/CMessage.cpp",
+        "src/CAIScript.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x52B010",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::~CProjectileTravelling",
+          "our_len": 0,
+          "their_len": 39
+        },
+        {
+          "address": "0x6FD9F0",
+          "category": "only_theirs",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::DebugDump",
+          "our_len": 0,
+          "their_len": 32
+        },
+        {
+          "address": "0x4F6BC0",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageRemoveSummonLink::CMessageRemoveSummonLink",
+          "our_len": 0,
+          "their_len": 26
+        },
+        {
+          "address": "0x4F6B60",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessageUnsummon::CMessageUnsummon",
+          "our_len": 0,
+          "their_len": 26
+        },
+        {
+          "address": "0x514220",
+          "category": "only_theirs",
+          "file": "src/CAIScript.cpp",
+          "name": "CAIScript::SetResRef",
+          "our_len": 0,
+          "their_len": 23
+        },
+        {
+          "address": "0x4F6C80",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage97::GetMsgSubType",
+          "our_len": 0,
+          "their_len": 11
+        },
+        {
+          "address": "0x4F6C50",
+          "category": "only_theirs",
+          "file": "src/CMessage.cpp",
+          "name": "CMessage97::CMessage97",
+          "our_len": 0,
+          "their_len": 2
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
