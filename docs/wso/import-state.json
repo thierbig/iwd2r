@@ -9328,6 +9328,88 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i074": {
+      "assigned_at": "2026-11-03T19:43:17+00:00",
+      "branch": "p3/wso-i074",
+      "closed_at": "2026-11-03T22:21:22+00:00",
+      "files": [
+        "src/CChitin3d.cpp",
+        "src/CVisualEffect.cpp",
+        "src/TString.cpp",
+        "src/IcewindCProjectileTargetMap.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7B7DA0",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupProbeDriver",
+          "our_len": 0,
+          "their_len": 59008
+        },
+        {
+          "address": "0x7BAAC0",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupResetDriver",
+          "our_len": 0,
+          "their_len": 22231
+        },
+        {
+          "address": "0x7B7940",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupValidateDriver",
+          "our_len": 0,
+          "their_len": 2967
+        },
+        {
+          "address": "0x554F00",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::Move",
+          "our_len": 0,
+          "their_len": 2591
+        },
+        {
+          "address": "0x7BB5D0",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupGetDriverVersion",
+          "our_len": 0,
+          "their_len": 2013
+        },
+        {
+          "address": "0x45E870",
+          "category": "only_theirs",
+          "file": "src/TString.cpp",
+          "name": "TString::AssignString",
+          "our_len": 0,
+          "their_len": 1225
+        },
+        {
+          "address": "0x554B70",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::AIUpdate",
+          "our_len": 0,
+          "their_len": 1138
+        },
+        {
+          "address": "0x55AB80",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::DeliverStrike",
+          "our_len": 0,
+          "their_len": 909
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
