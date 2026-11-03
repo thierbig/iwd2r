@@ -91,3 +91,46 @@ SHORT CVEFVidCell::GetDirection(const CPoint& pos, const CPoint& targetPos, SHOR
     CPoint target(targetPos.x, static_cast<LONG>(static_cast<DWORD>(targetPos.y) << 2) / 3);
     return CGameSprite::GetDirection(start, target);
 }
+
+// 0x554B70
+void CVisualEffect::AIUpdate()
+{
+    CPoint targetPos = m_ptTargetPos;
+    Move(targetPos);
+    CGameObjectArray* objects = g_pBaldurChitin->GetObjectGame()->GetObjectArray();
+    POSITION pos = m_activeAnimations.GetHeadPosition();
+    POSITION current = pos;
+    while (pos != NULL) {
+        LONG id = m_activeAnimations.GetNext(pos);
+        CGameObject* object;
+        BYTE rc;
+        do {
+            rc = objects->GetDeny(id, CGameObjectArray::THREAD_ASYNCH, &object, INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+        if (rc == CGameObjectArray::SUCCESS) {
+            CVEFVidCell* animation = static_cast<CVEFVidCell*>(object);
+            if ((animation->m_bltFlagsExtra & 0x20) != 0) {
+                m_activeAnimations.RemoveAt(current);
+                delete object;
+                objects->ReleaseDeny(id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+                // 0x554C42 also skips updating the saved removal position.
+                continue;
+            } else {
+                animation->SetDirection(m_pos, m_posOld, targetPos, 0);
+                animation->CalculatePos(m_pos);
+                if ((m_flags & 1) != 0 && (animation->m_bltFlagsExtra & 4) != 0) {
+                    animation->m_posZ = m_posZ;
+                }
+                animation->FrameAdvance(m_nExistanceCounter);
+                if (animation->m_done) {
+                    m_activeAnimations.RemoveAt(current);
+                    delete object;
+                }
+            }
+            objects->ReleaseDeny(id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+        current = pos;
+    }
+    m_nExistanceCounter = static_cast<LONG>(static_cast<DWORD>(m_nExistanceCounter) + 1);
+    m_posOld = m_pos;
+}
