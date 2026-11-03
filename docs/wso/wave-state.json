@@ -9654,6 +9654,167 @@
           "side": "ours"
         }
       }
+    },
+    "b041": {
+      "assigned_at": "2026-11-03T17:46:48+00:00",
+      "branch": "p3/wso-b041",
+      "closed_at": "2026-11-03T18:59:35+00:00",
+      "files": [
+        "src/CProjectile.cpp",
+        "src/CInfGame.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x57CAC0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileBAM::CProjectileBAM",
+          "our_len": 0,
+          "their_len": 652
+        },
+        {
+          "address": "0x574AA0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCallLightningStrike::Strike",
+          "our_len": 0,
+          "their_len": 641
+        },
+        {
+          "address": "0x535D20",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectilePhaseBAM::Fire",
+          "our_len": 0,
+          "their_len": 601
+        },
+        {
+          "address": "0x5C9300",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CInfGame.cpp",
+          "name": "CGameObjectArray::HasNoRestBlockingSpellStates",
+          "our_len": 0,
+          "their_len": 577
+        },
+        {
+          "address": "0x57CEE0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "measured_body": "82bd3e156961c917e4d74a6fa4f0d440b7b15575359d030c434f1386a16af4e5",
+          "name": "CProjectileBAM::AIUpdate",
+          "our_len": 0,
+          "their_len": 551
+        },
+        {
+          "address": "0x5309C0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "measured_body": "4ebcebe16ae92ceb79b211fc5d915ea97840e3a7b313c2669b33d6becd10e08d",
+          "name": "CProjectileMagicMissileMulti::CProjectileMagicMissileMulti",
+          "our_len": 0,
+          "their_len": 550
+        },
+        {
+          "address": "0x578110",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileTravellingVFX::IcewindCProjectileTravellingVFX",
+          "our_len": 0,
+          "their_len": 515
+        },
+        {
+          "address": "0x535F20",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileImpactBAM::CProjectileImpactBAM",
+          "our_len": 0,
+          "their_len": 513
+        },
+        {
+          "address": "0x571310",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCloudkill::CProjectileCloudkill",
+          "our_len": 0,
+          "their_len": 509
+        },
+        {
+          "address": "0x574B80",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileStinkingCloud::CProjectileStinkingCloud",
+          "our_len": 0,
+          "their_len": 509
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x5309C0": {
+          "case": "readout-5309C0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x535D20": {
+          "case": "readout-535D20",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x535F20": {
+          "case": "readout-535F20",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x571310": {
+          "case": "readout-571310",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x574AA0": {
+          "case": "readout-574AA0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x574B80": {
+          "case": "readout-574B80",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x578110": {
+          "case": "readout-578110",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57CAC0": {
+          "case": "readout-57CAC0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57CEE0": {
+          "case": "readout-57CEE0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x5C9300": {
+          "case": "readout-5C9300",
+          "losing_kind": "trace",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"
