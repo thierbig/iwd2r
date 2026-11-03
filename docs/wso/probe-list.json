@@ -240,5 +240,45 @@
     "reading": "fork",
     "reason": "not exercised by any of the nine scenarios, so the adopted body stays unmeasured; edited back to the merge-base body (adoption-only INFORMATION_PANEL_* namespace block removed) and docs/evidence/5DAF30.md restored to the merge-base copy; row stays on the probe list",
     "source": "worker"
+  },
+  {
+    "address": "0x46FEA0",
+    "at": "2026-11-03T10:09:34+00:00",
+    "batch": "b034",
+    "file": "src/CGameArea.cpp",
+    "name": "CGameArea::CheckRestEncounter",
+    "reading": "fork",
+    "reason": "the fork's nSpawn%12 offsets index matches the exe's [esp+0x18] counter where ours' nBestRay% is wrong, but no probe, replay or trace case runs the function",
+    "source": "worker"
+  },
+  {
+    "address": "0x4AF610",
+    "at": "2026-11-03T10:09:34+00:00",
+    "batch": "b034",
+    "file": "src/CGameEffect.cpp",
+    "name": "CGameEffectPoison::ApplyEffect",
+    "reading": "neither",
+    "reason": "the exe leaves the mode-8 res unwritten (the fork matches, ours memsets) while ours alone keeps the exe's five per-arm alloc asserts, and the data test cannot reach mode 8",
+    "source": "worker"
+  },
+  {
+    "address": "0x55FAD0",
+    "at": "2026-11-03T10:09:34+00:00",
+    "batch": "b034",
+    "file": "src/IcewindCGameEffects.cpp",
+    "name": "IcewindCGameEffectSummon::SpawnFromResRef",
+    "reading": "neither",
+    "reason": "the exe's [data-8]==0 entry test is real-MFC nDataLength (our compat IsEmpty), so ours misses the empty-resref guard the fork has, while the fork misses the asserts/message/GetDeny/ctor/SetAIType axes ours has, and nothing exercises the entry path",
+    "source": "worker"
+  },
+  {
+    "address": "0x5791D0",
+    "at": "2026-11-03T10:09:34+00:00",
+    "batch": "b034",
+    "file": "src/CProjectile.cpp",
+    "name": "IcewindCProjectileTravellingVFX::Fire",
+    "reading": "fork",
+    "reason": "the fork implements the exe's visual-effect block 0x5794F1-0x5796A8 store-for-store where ours TODOs it, but the row's read-only recall names no test or probe id that drives it",
+    "source": "worker"
   }
 ]

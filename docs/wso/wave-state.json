@@ -8466,6 +8466,427 @@
           "side": "ours"
         }
       }
+    },
+    "b034": {
+      "assigned_at": "2026-11-03T00:32:23+00:00",
+      "branch": "p3/wso-b034",
+      "closed_at": "2026-11-03T10:18:18+00:00",
+      "files": [
+        "src/CGameSprite.cpp",
+        "src/CScreenCreateChar.cpp",
+        "src/CGameEffect.cpp",
+        "src/CGameAIBase.cpp",
+        "src/CInfButtonArray.cpp",
+        "src/CProjectile.cpp",
+        "src/CInfGame.cpp",
+        "src/CNetwork.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x742840",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::SpellPoint",
+          "our_len": 12538,
+          "their_len": 12700
+        },
+        {
+          "address": "0x615F50",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCreateChar.cpp",
+          "name": "CScreenCreateChar::OnDoneButtonClick",
+          "our_len": 8797,
+          "their_len": 8918
+        },
+        {
+          "address": "0x4A3310",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameEffect.cpp",
+          "measured_body": "1c41ded9f9e07a5e8891b5751d4ee70b61201f00a05616d447de3832998ddabc",
+          "name": "CGameEffect::sub_4A3310",
+          "our_len": 6243,
+          "their_len": 5635
+        },
+        {
+          "address": "0x461190",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameAIBase.cpp",
+          "name": "CGameAIBase::ForceSpell",
+          "our_len": 5048,
+          "their_len": 6586
+        },
+        {
+          "address": "0x607BB0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCreateChar.cpp",
+          "measured_body": "034f073d359d8cfefdf7f93aebfa3a049f015cdae85aad8496a0bc6817b5f8b1",
+          "name": "CScreenCreateChar::UpdateMainPanel",
+          "our_len": 5195,
+          "their_len": 5098
+        },
+        {
+          "address": "0x617D80",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCreateChar.cpp",
+          "name": "CScreenCreateChar::sub_617D80",
+          "our_len": 5392,
+          "their_len": 4326
+        },
+        {
+          "address": "0x610DC0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CScreenCreateChar.cpp",
+          "name": "CScreenCreateChar::UpdateCharacterSummary",
+          "our_len": 4325,
+          "their_len": 4188
+        },
+        {
+          "address": "0x71ABA0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "measured_body": "601d8ce9885e58e6692df1589a2f38542cfa5ced921b22d5814b4a8022ba0518",
+          "name": "CGameSprite::CheckQuickLists",
+          "our_len": 3664,
+          "their_len": 3541
+        },
+        {
+          "address": "0x763E40",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "measured_body": "7cfd3bd470d47cec02abe9adc5fee3232ef006fcbc9112183370d645729b327f",
+          "name": "CGameSprite::sub_763E40",
+          "our_len": 2919,
+          "their_len": 3925
+        },
+        {
+          "address": "0x5950F0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CInfButtonArray.cpp",
+          "measured_body": "1295ca311370aecb1b661976b6f2d4e154fc8ff1d12722f99d6ebe605cae9fe0",
+          "name": "CInfButtonArray::sub_5950F0",
+          "our_len": 3361,
+          "their_len": 2710
+        },
+        {
+          "address": "0x56BF30",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitVisual::IcewindCSpellHitVisual",
+          "our_len": 0,
+          "their_len": 5102
+        },
+        {
+          "address": "0x5C0BB0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CInfGame.cpp",
+          "measured_body": "10b33700a2e96f4d0e0e6bd212a9526bb40ad68f9e5cb21fc3331640411675da",
+          "name": "CInfGame::AddExperienceParty",
+          "our_len": 2369,
+          "their_len": 2082
+        },
+        {
+          "address": "0x5BDC00",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CInfGame.cpp",
+          "measured_body": "8a6bcad71d87d1129e0fbf81c9ad443aa19a27c91f958e4333ae8087a5de65bb",
+          "name": "CInfGame::ReputationAdjustment",
+          "our_len": 1954,
+          "their_len": 1984
+        },
+        {
+          "address": "0x7A3B50",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CNetwork.cpp",
+          "name": "CNetworkWindow::ReceiveCall",
+          "our_len": 1982,
+          "their_len": 1954
+        },
+        {
+          "address": "0x56D0A0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitVisual::AIUpdate",
+          "our_len": 0,
+          "their_len": 3634
+        },
+        {
+          "address": "0x722090",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameSprite.cpp",
+          "name": "CGameSprite::GetRaceString",
+          "our_len": 1756,
+          "their_len": 1792
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x461190": {
+          "case": "readout-461190",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x4A3310": {
+          "case": "readout-4A3310",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x56BF30": {
+          "case": "readout-56BF30",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56D0A0": {
+          "case": "readout-56D0A0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x5950F0": {
+          "case": "readout-5950F0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x5BDC00": {
+          "case": "readout-5BDC00",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x5C0BB0": {
+          "case": "readout-5C0BB0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x607BB0": {
+          "case": "readout-607BB0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x610DC0": {
+          "case": "readout-610DC0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x615F50": {
+          "case": "chr_druid_cast/named",
+          "losing_kind": null,
+          "side": "neither"
+        },
+        "0x617D80": {
+          "case": "readout-617D80",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x71ABA0": {
+          "case": "readout-71ABA0",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x722090": {
+          "case": "readout-722090",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x742840": {
+          "case": "chr_druid_cast/cast2_after",
+          "losing_kind": null,
+          "side": "neither"
+        },
+        "0x763E40": {
+          "case": "readout-763E40",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x7A3B50": {
+          "case": "readout-7A3B50",
+          "losing_kind": "trace",
+          "side": "ours"
+        }
+      }
+    },
+    "b035": {
+      "assigned_at": "2026-11-03T10:19:23+00:00",
+      "branch": "p3/wso-b035",
+      "closed_at": "2026-11-03T11:32:49+00:00",
+      "files": [
+        "src/CGameAIBase.cpp",
+        "src/CGameArea.cpp",
+        "src/CProjectile.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "docs-only",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x45C030",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameAIBase.cpp",
+          "name": "CGameAIBase::GetTargetShareAIType",
+          "our_len": 1729,
+          "their_len": 1668
+        },
+        {
+          "address": "0x46E130",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameArea.cpp",
+          "name": "CGameArea::ApplyEffectToSprites",
+          "our_len": 1774,
+          "their_len": 1219
+        },
+        {
+          "address": "0x462F90",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CGameAIBase.cpp",
+          "measured_body": "1859b031ea523633765b0155a1e0aa623f4cfaf3b15a0a4097e4e162ca4d8198",
+          "name": "CGameAIBase::StartCutScene",
+          "our_len": 1180,
+          "their_len": 1789
+        },
+        {
+          "address": "0x52B190",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileTravelling::Render",
+          "our_len": 0,
+          "their_len": 2964
+        },
+        {
+          "address": "0x579EF0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCone::Fire",
+          "our_len": 0,
+          "their_len": 2951
+        },
+        {
+          "address": "0x57C1D0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileScorcher::Strike",
+          "our_len": 1510,
+          "their_len": 1419
+        },
+        {
+          "address": "0x534DD0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCallLightning::Render",
+          "our_len": 0,
+          "their_len": 2771
+        },
+        {
+          "address": "0x57ED30",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileSunray::Render",
+          "our_len": 0,
+          "their_len": 2745
+        },
+        {
+          "address": "0x578AB0",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCProjectileTravellingVFX::AIUpdate",
+          "our_len": 0,
+          "their_len": 2680
+        },
+        {
+          "address": "0x56E650",
+          "category": "both_changed_differ",
+          "class": "ambiguous",
+          "file": "src/CProjectile.cpp",
+          "name": "IcewindCSpellHitParticle::AIUpdate",
+          "our_len": 0,
+          "their_len": 2625
+        }
+      ],
+      "status": "closed",
+      "verdicts": {
+        "0x45C030": {
+          "case": "readout-45C030",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x462F90": {
+          "case": "readout-462F90",
+          "losing_kind": "trace",
+          "measured": "frida",
+          "side": "ours"
+        },
+        "0x46E130": {
+          "case": "readout-46E130",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x52B190": {
+          "case": "readout-52B190",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x534DD0": {
+          "case": "readout-534DD0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x56E650": {
+          "case": "readout-56E650",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x578AB0": {
+          "case": "readout-578AB0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x579EF0": {
+          "case": "readout-579EF0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57C1D0": {
+          "case": "readout-57C1D0",
+          "losing_kind": "trace",
+          "side": "ours"
+        },
+        "0x57ED30": {
+          "case": "readout-57ED30",
+          "losing_kind": "trace",
+          "side": "ours"
+        }
+      }
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd"
