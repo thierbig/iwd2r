@@ -3776,9 +3776,10 @@ SHORT CGameAIBase::ForceSpell(CGameAIBase* target)
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356, a
-        // member of the class DecodeProjectile builds for this type (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x461A92) before the message
+        // copy at +0x20 (0x461A98).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
