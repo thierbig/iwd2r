@@ -41,3 +41,18 @@ void CVEFVidCell::FrameAdvance(LONG nCounter)
         m_done = TRUE;
     }
 }
+
+// 0x551490
+void CVEFVidCell::CalculatePos(const CPoint& pos)
+{
+    LONG x = m_offset.x;
+    LONG y = m_offset.y;
+    if ((m_offsetFlags & 1) != 0) {
+        x = static_cast<LONG>(static_cast<DWORD>(OFFSET_FROMX_X[m_newDirection]) * static_cast<DWORD>(m_offset.x)
+            + static_cast<DWORD>(OFFSET_FROMY_X[m_newDirection]) * static_cast<DWORD>(m_offset.y)) / 1000;
+        y = static_cast<LONG>(static_cast<DWORD>(OFFSET_FROMX_Y[m_newDirection]) * static_cast<DWORD>(m_offset.x)
+            + static_cast<DWORD>(OFFSET_FROMY_Y[m_newDirection]) * static_cast<DWORD>(m_offset.y)) / 1000;
+    }
+    m_pos.x = static_cast<LONG>(static_cast<DWORD>(pos.x) + static_cast<DWORD>(x));
+    m_pos.y = static_cast<LONG>(static_cast<DWORD>(pos.y) + static_cast<DWORD>(y));
+}
