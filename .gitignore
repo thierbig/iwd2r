@@ -409,3 +409,6 @@ docs/wso/claims.json.lock
 # ctest output a worker leaves behind when it runs the engine tests in a batch worktree
 Testing/
 .report.md
+
+# Task 72 emu-diff spike: Unicorn venv (tools/emu/emu_diff.py)
+.venv-emu/
