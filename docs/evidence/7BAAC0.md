@@ -1,7 +1,7 @@
 ---
 address: 0x7BAAC0
 name: GLSetupResetDriver
-exemption: "tears down GLSetup driver state that nothing in this tree sets up (our Init3d keeps loading opengl32.dll directly, so the probe never commits a driver); checked against the disassembly"
+exemption: unmeasured WSO import: world_entry, first_fight, walk_and_talk, action_bar, equip_shots, inventory, level_up, world_map: not exercised
 kind: read-only
 ghidra_version: 12.1.4
 ---
