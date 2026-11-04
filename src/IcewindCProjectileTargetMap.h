@@ -13,10 +13,10 @@
 // the exe's binary layout (vtable 0x84EEA8, two slots; sizeof 0x34 with
 // VC6's std::map at +0x08) and are informational only: our std::map lays
 // nodes out differently, so members drift by name rather than by address.
-// The service half - ctor (0x55ACC0), Service (0x55A610), GatherTargets
-// (0x55AD90), CollectDueStrikes (0x55A890) and Strike (0x55AB20) - is not
-// imported with this batch; the two virtuals below are declared so the
-// class keeps its exe vtable shape.
+// The rest of the service half - ctor (0x55ACC0), Service (0x55A610),
+// CollectDueStrikes (0x55A890) and Strike (0x55AB20) - is not imported with
+// this batch; the two virtuals below are declared so the class keeps its
+// exe vtable shape.
 
 struct IcewindCProjectileTargetEntry {
     /* 0000 */ LONG m_nTicksInRange;
