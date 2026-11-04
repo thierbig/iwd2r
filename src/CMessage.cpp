@@ -3622,7 +3622,7 @@ BOOL CBaldurMessage::ObjectControlRequest(LONG localObjectID)
             sHostName = g_pChitin->cNetwork.m_psPlayerName[g_pChitin->cNetwork.m_nHostPlayer];
         }
 
-        if (sHostName == "") {
+        if (strcmp(sHostName, "") == 0) {
             return FALSE;
         }
 
