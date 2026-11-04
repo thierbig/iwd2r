@@ -434,6 +434,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_SWAPITEM_REQUEST = 82;
 // 0x84CF5A
 const BYTE CBaldurMessage::MSG_SUBTYPE_SWAPITEM_REPLY = 114;
 
+// 0x84CF5E
+const BYTE CBaldurMessage::MSG_TYPE_CHAPTER = 74;
+
+// 0x84CF60
+const BYTE CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS = 97;
+
 // 0x84CF64
 const BYTE CBaldurMessage::MSG_TYPE_JOURNAL = 106;
 
@@ -4963,9 +4969,46 @@ BOOLEAN CBaldurMessage::OnPauseAnnounceStatus(INT nMsgFrom, BYTE* pMessage, DWOR
 // 0x434EB0
 BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
 {
-    // TODO: Incomplete.
+    CString sResRef;
+    BYTE* pByteMessage;
+    DWORD nLength;
+    DWORD dwSize;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // The payload is {BYTE nChapter; BYTE length; chars of the resref}.
+    cResRef.CopyToString(sResRef);
+
+    nLength = sResRef.GetLength();
+    dwSize = sizeof(BYTE) + sizeof(BYTE) + (nLength & 0xFF);
+
+    pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<BYTE*>(pByteMessage) = nChapter;
+    *(pByteMessage + sizeof(BYTE)) = static_cast<BYTE>(nLength);
+
+    // NOTE: The original copies and sends the full length, not the low byte
+    // the buffer was sized with (a resref is at most 8, so they agree).
+    memcpy(pByteMessage + sizeof(BYTE) + sizeof(BYTE),
+        sResRef.GetBuffer(nLength),
+        nLength);
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_CHAPTER,
+        MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS,
+        pByteMessage,
+        nLength + sizeof(BYTE) + sizeof(BYTE));
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
 }
 
 // 0x435360
