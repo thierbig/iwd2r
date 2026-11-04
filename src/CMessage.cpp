@@ -4932,7 +4932,7 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
         sResRef.GetBuffer(nLength),
         nLength);
 
-    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
         CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
         MSG_TYPE_CHAPTER,
         MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS,
