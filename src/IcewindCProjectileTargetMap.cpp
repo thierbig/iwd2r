@@ -10,6 +10,37 @@
 #include "CMessage.h"
 #include "CProjectile.h"
 
+// 0x55A890
+// Merge the fresh scan into m_targets and collect the victims due a strike.
+// Tracked entries that left the scan reset their in-range tick count; every
+// scanned id is inserted on first sight ({0, 0} entry) and is due when its
+// tick count hits a multiple of m_strikeInterval -- so on first contact --
+// while it has strikes left; the tick count always advances.
+std::list<LONG> IcewindCProjectileTargetMap::CollectDueStrikes(std::map<LONG, CPoint>& scan)
+{
+    std::list<LONG> due;
+
+    std::map<LONG, IcewindCProjectileTargetEntry>::iterator it;
+    for (it = m_targets.begin(); it != m_targets.end(); ++it) {
+        if (scan.find(it->first) == scan.end()) {
+            it->second.m_nTicksInRange = 0;
+        }
+    }
+
+    std::map<LONG, CPoint>::iterator scanIt;
+    for (scanIt = scan.begin(); scanIt != scan.end(); ++scanIt) {
+        IcewindCProjectileTargetEntry& entry = m_targets[scanIt->first];
+        if (entry.m_nStrikes < m_maxStrikesPerTarget
+            && entry.m_nTicksInRange % m_strikeInterval == 0) {
+            due.push_back(scanIt->first);
+            entry.m_nStrikes++;
+        }
+        entry.m_nTicksInRange++;
+    }
+
+    return due;
+}
+
 // 0x55AB80
 void IcewindCProjectileTargetMap::DeliverStrike(LONG targetId)
 {
