@@ -183,9 +183,18 @@ def _exe_flat(texts, cls, warn, seen=None):
     out = []
     base_start = 0
     for b in rec['bases']:
+        brec = texts.get(b)
+        if brec is None:
+            # base declared but no header under src/ (MFC CObject, template
+            # bases like CResHelper<CResItem, 1005>): treat as size 0.  The
+            # base's own member comments are unknown either way, so only the
+            # derived members (absolute comments) are affected -- and they
+            # are not shifted by base_start to begin with.
+            warn(f'{cls}: base {b!r} has no header; assumed empty')
+            continue
         for name, off, size in _exe_flat(texts, b, warn, seen):
             out.append((name, base_start + off, size))
-        bsz = exe_class_size(texts[b], resolve, warn)
+        bsz = exe_class_size(brec, resolve, warn)
         base_start = _align2(base_start + bsz)
 
     ms = sorted(rec['members'])
