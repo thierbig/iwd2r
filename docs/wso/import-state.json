@@ -9344,22 +9344,6 @@
       "pool": "glm",
       "rows": [
         {
-          "address": "0x7B7DA0",
-          "category": "only_theirs",
-          "file": "src/CChitin3d.cpp",
-          "name": "GLSetupProbeDriver",
-          "our_len": 0,
-          "their_len": 59008
-        },
-        {
-          "address": "0x7BAAC0",
-          "category": "only_theirs",
-          "file": "src/CChitin3d.cpp",
-          "name": "GLSetupResetDriver",
-          "our_len": 0,
-          "their_len": 22231
-        },
-        {
           "address": "0x7B7940",
           "category": "only_theirs",
           "file": "src/CChitin3d.cpp",
@@ -9418,6 +9402,28 @@
           "our_len": 0,
           "reason": "Task 71: rule 1 now covers import dependencies and rows ours never calls (i074 parked them for that)",
           "their_len": 2591
+        },
+        {
+          "address": "0x7B7DA0",
+          "at": "2026-11-04T04:56:05+00:00",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupProbeDriver",
+          "needs": "no Frida hook: no entry for GLSetupProbeDriver in our map",
+          "our_len": 0,
+          "reason": "imported by i077",
+          "their_len": 59008
+        },
+        {
+          "address": "0x7BAAC0",
+          "at": "2026-11-04T04:56:05+00:00",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupResetDriver",
+          "needs": "no Frida hook: no entry for GLSetupResetDriver in our map",
+          "our_len": 0,
+          "reason": "imported by i077",
+          "their_len": 22231
         }
       ],
       "verdicts": {}
@@ -9581,6 +9587,72 @@
           "name": "CVEFVidCell::FrameAdvance",
           "our_len": 0,
           "their_len": 474
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
+    },
+    "i077": {
+      "assigned_at": "2026-11-04T04:09:58+00:00",
+      "branch": "p3/wso-i077",
+      "closed_at": "2026-11-04T05:33:43+00:00",
+      "files": [
+        "src/CChitin3d.cpp",
+        "src/IcewindCProjectileTargetMap.cpp",
+        "src/CResBIO.cpp",
+        "src/MfcCString.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x7B7D40",
+          "category": "only_theirs",
+          "file": "src/CChitin3d.cpp",
+          "name": "GLSetupSelectDriver",
+          "our_len": 0,
+          "their_len": 272
+        },
+        {
+          "address": "0x55AB20",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::Strike",
+          "our_len": 0,
+          "their_len": 264
+        },
+        {
+          "address": "0x55A610",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::Service",
+          "our_len": 0,
+          "their_len": 204
+        },
+        {
+          "address": "0x55ACC0",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::IcewindCProjectileTargetMap",
+          "our_len": 0,
+          "their_len": 163
+        },
+        {
+          "address": "0x4029F0",
+          "category": "only_theirs",
+          "file": "src/CResBIO.cpp",
+          "name": "CResBIO::Demand",
+          "our_len": 0,
+          "their_len": 130
+        },
+        {
+          "address": "0x7FCC1A",
+          "category": "only_theirs",
+          "file": "src/MfcCString.cpp",
+          "name": "CString::~CString",
+          "our_len": 0,
+          "their_len": 97
         }
       ],
       "status": "closed",
