@@ -10,6 +10,23 @@
 #include "CMessage.h"
 #include "CProjectile.h"
 
+// 0x55A610 (vtable slot 0)
+// The service tick. The local scan map and due list destruct implicitly
+// where the binary inlines their teardown.
+void IcewindCProjectileTargetMap::Service()
+{
+    if (m_bDone == 1) {
+        return;
+    }
+    if (m_serviceCountdown < 1) {
+        std::map<LONG, CPoint> scan = GatherTargets();
+        std::list<LONG> due = CollectDueStrikes(scan);
+        Strike(due);
+        m_serviceCountdown = m_servicePeriod;
+    }
+    m_serviceCountdown--;
+}
+
 // 0x55A890
 // Merge the fresh scan into m_targets and collect the victims due a strike.
 // Tracked entries that left the scan reset their in-range tick count; every
@@ -41,6 +58,27 @@ std::list<LONG> IcewindCProjectileTargetMap::CollectDueStrikes(std::map<LONG, CP
     return due;
 }
 
+// 0x55AB20
+// Deliver the due strikes: skip the owner's source when m_bSkipSource, count
+// every other one against the total cap (overflow latches m_bDone and stops
+// servicing for good), then post the strike.
+void IcewindCProjectileTargetMap::Strike(std::list<LONG>& due)
+{
+    CProjectile* pOwner = static_cast<CProjectile*>(m_pOwner);
+    std::list<LONG>::iterator it;
+    for (it = due.begin(); it != due.end(); ++it) {
+        if (m_bSkipSource == 1 && *it == pOwner->m_sourceId) {
+            continue;
+        }
+        m_nStrikes++;
+        if (m_maxStrikesTotal < m_nStrikes) {
+            m_bDone = 1;
+            return;
+        }
+        DeliverStrike(*it);
+    }
+}
+
 // 0x55AB80
 void IcewindCProjectileTargetMap::DeliverStrike(LONG targetId)
 {
@@ -67,6 +105,25 @@ void IcewindCProjectileTargetMap::DeliverStrike(LONG targetId)
     }
     g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(targetId,
         CGameObjectArray::THREAD_ASYNCH, INFINITE);
+}
+
+// 0x55ACC0
+// The binary opens with the inlined VC6 std::map construction (shared _Nil
+// sentinel at 0x8E28C0, its refcount at 0x8E28BC, _Lockit guard calls); our
+// m_targets default construction stands for all of it. m_pOwner and m_nRange
+// are left uninitialized, faithfully -- every embedding projectile ctor fills
+// them right after this runs (the Whirlwind stores itself, range 70, period 3,
+// interval 33, total cap 8, skip-source).
+IcewindCProjectileTargetMap::IcewindCProjectileTargetMap()
+{
+    m_servicePeriod = 10;
+    m_serviceCountdown = 0;
+    m_strikeInterval = 10;
+    m_maxStrikesPerTarget = 100000;
+    m_maxStrikesTotal = 100000;
+    m_nStrikes = 0;
+    m_bDone = FALSE;
+    m_bSkipSource = FALSE;
 }
 
 // 0x55AD90
