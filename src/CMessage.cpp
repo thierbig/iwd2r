@@ -584,6 +584,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_ADD = 65;
 // 0x84CF9A
 const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL = 67;
 
+// 0x84CF9B
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_REQUEST = 99;
+
 // 0x84CF9F
 const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR = 80;
 
@@ -3569,9 +3572,83 @@ BOOL CBaldurMessage::ObjectControlSuggestion(PLAYER_ID playerToSuggestID, LONG l
 // 0x430980
 BOOL CBaldurMessage::ObjectControlRequest(LONG localObjectID)
 {
-    // TODO: Incomplete.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+        return FALSE;
+    }
 
-    return FALSE;
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        do {
+            rc = pGame->GetObjectArray()->GetShare(localObjectID,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED);
+    } while (rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    DWORD nRemotePlayerID = pObject->m_remotePlayerID;
+    LONG nRemoteObjectID = pObject->m_remoteObjectID;
+
+    pGame->GetObjectArray()->ReleaseShare(localObjectID,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // Already controlled by the local player: nothing to request.
+    if (nRemotePlayerID == g_pChitin->cNetwork.m_idLocalPlayer) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        // The host moves the control itself and queues the change for the
+        // next ObjectControl broadcast.
+        pGame->GetRemoteObjectArray()->ChangeControl(nRemotePlayerID,
+            nRemoteObjectID,
+            g_pChitin->cNetwork.m_idLocalPlayer,
+            localObjectID,
+            FALSE);
+    } else {
+        // A client asks the host by name.
+        CString sHostName;
+        if (g_pChitin->cNetwork.m_nHostPlayer == -1) {
+            sHostName = "";
+        } else {
+            sHostName = g_pChitin->cNetwork.m_psPlayerName[g_pChitin->cNetwork.m_nHostPlayer];
+        }
+
+        if (sHostName == "") {
+            return FALSE;
+        }
+
+        // {DWORD oldRemotePlayerID; DWORD oldRemoteObjectID;
+        //  DWORD localPlayerID; DWORD localObjectID}
+        DWORD* pMessage = reinterpret_cast<DWORD*>(CreateBuffer(4 * sizeof(DWORD)));
+        if (pMessage == NULL) {
+            return FALSE;
+        }
+
+        pMessage[0] = nRemotePlayerID;
+        pMessage[1] = nRemoteObjectID;
+        pMessage[2] = g_pChitin->cNetwork.m_idLocalPlayer;
+        pMessage[3] = localObjectID;
+
+        g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+            CNetwork::SEND_GUARANTEED,
+            MSG_TYPE_OBJECT,
+            MSG_SUBTYPE_OBJECT_CONTROL_REQUEST,
+            pMessage,
+            4 * sizeof(DWORD));
+
+        DestroyBuffer(reinterpret_cast<BYTE*>(pMessage));
+    }
+
+    return TRUE;
 }
 
 // 0x430C50

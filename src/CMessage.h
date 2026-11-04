@@ -211,6 +211,7 @@ public:
     static const BYTE MSG_TYPE_OBJECT;
     static const BYTE MSG_SUBTYPE_OBJECT_ADD;
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL;
+    static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_REQUEST;
 
     static const BYTE MSG_TYPE_PLAYERCHAR;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND;
