@@ -103,6 +103,50 @@ static LANGID GetUserDefaultLangID()
     return GetSystemDefaultLangID();
 }
 
+// The registry surface GLSetup touches ("Software\Silicon Graphics\OpenGL").
+// Modeled the same way as the shims above: no registry exists on this platform,
+// so every call fails (nonzero per the Win32 registry convention) and the
+// GLSetup probe sees no OverrideDispatch policy. HKEY itself comes from
+// compat/win_types.h; the access/type constants are not defined anywhere else
+// in this tree.
+
+#define HKEY_LOCAL_MACHINE ((HKEY)(LONG_PTR)0x80000002)
+#define KEY_QUERY_VALUE 0x0001
+#define KEY_ALL_ACCESS 0xF003F
+#define REG_DWORD 4
+
+static LONG RegOpenKeyExA(HKEY, LPCSTR, DWORD, DWORD, HKEY*)
+{
+    return 2; // ERROR_FILE_NOT_FOUND
+}
+
+static LONG RegQueryValueExA(HKEY, LPCSTR, DWORD*, DWORD*, BYTE*, DWORD*)
+{
+    return 2; // ERROR_FILE_NOT_FOUND
+}
+
+static LONG RegCreateKeyExA(HKEY, LPCSTR, DWORD, LPSTR, DWORD, DWORD,
+                            SECURITY_ATTRIBUTES*, HKEY*, DWORD*)
+{
+    return 2; // ERROR_FILE_NOT_FOUND
+}
+
+static LONG RegSetValueExA(HKEY, LPCSTR, DWORD, DWORD, const BYTE*, DWORD)
+{
+    return 2; // ERROR_FILE_NOT_FOUND
+}
+
+static LONG RegCloseKey(HKEY)
+{
+    return 0; // ERROR_SUCCESS
+}
+
+// Two WGL/pixel-format entry-point types the probe resolves but CVideo3d.h
+// declares no typedef for (its renderer never calls them). Declared file-locally
+// to match that header's calling-convention style.
+typedef BOOL(__stdcall* PFNWGLCOPYCONTEXTPROC)(HGLRC, HGLRC, UINT);
+typedef int(__stdcall* PFNGETPIXELFORMATPROC)(HDC);
+
 #ifndef _MSC_VER
 // ASCII stand-ins for the VC CRT multibyte helpers (single-byte locale only).
 static unsigned char* _mbslwr(unsigned char* string)
@@ -125,6 +169,13 @@ static int _mbsicmp(const unsigned char* a, const unsigned char* b)
         b++;
     }
     return std::tolower(*a) - std::tolower(*b);
+}
+
+// VC CRT name for the POSIX putenv; the env save/restore only matters when the
+// GLSetup probe actually runs, which it cannot on this platform.
+static int _putenv(const char*)
+{
+    return 0;
 }
 #endif
 
@@ -162,6 +213,87 @@ static unsigned int g_nGLSetupDrivers;
 // Detected driver table (up to 3 kept).
 // 0x906920
 static GLSETUP_DRIVER g_aGLSetupDrivers[3];
+
+// Index of the driver selected by GLSetupSelectDriver, or -1.
+// 0x8BB0A0
+static int g_nSelectedGLSetupDriver = -1;
+
+// Resolved WGL entry points of the driver selected via GLSetup (written by the
+// GL capability probe, read by Init3d).
+// 0x9074C8
+static PFNSWAPBUFFERSPROC      g_pfnGLSetupSwapBuffers;
+// 0x9074D0
+static PFNWGLCREATECONTEXTPROC g_pfnGLSetupWglCreateContext;
+// 0x9074D8
+static PFNWGLDELETECONTEXTPROC g_pfnGLSetupWglDeleteContext;
+// 0x9074DC
+static PFNWGLGETCURRENTDCPROC  g_pfnGLSetupWglGetCurrentDC;
+// 0x9074E4
+static PFNWGLMAKECURRENTPROC   g_pfnGLSetupWglMakeCurrent;
+
+// Remaining WGL entry points the probe resolves from the selected driver. Not
+// read by the current renderer (write-only here), but resolved by the binary so
+// they are reproduced faithfully.
+// 0x9074CC
+static PFNWGLCOPYCONTEXTPROC           g_pfnGLSetupWglCopyContext;
+// 0x9074D4
+static PFNWGLCREATELAYERCONTEXTPROC    g_pfnGLSetupWglCreateLayerContext;
+// 0x9074F4
+static PFNWGLDESCRIBELAYERPLANEPROC    g_pfnGLSetupWglDescribeLayerPlane;
+// 0x8BBCE4
+static PFNWGLGETCURRENTCONTEXTPROC     g_pfnGLSetupWglGetCurrentContext;
+// 0x9074FC
+static PFNWGLGETLAYERPALETTEENTRIESPROC g_pfnGLSetupWglGetLayerPaletteEntries;
+// 0x9074E0
+static PFNWGLGETPROCADDRESSPROC        g_pfnGLSetupWglGetProcAddress;
+// 0x907500
+static PFNWGLREALIZELAYERPALETTEPROC   g_pfnGLSetupWglRealizeLayerPalette;
+// 0x9074F8
+static PFNWGLSETLAYERPALETTEENTRIESPROC g_pfnGLSetupWglSetLayerPaletteEntries;
+// 0x9074E8
+static PFNWGLSHARELISTSPROC            g_pfnGLSetupWglShareLists;
+// 0x907504
+static PFNWGLSWAPLAYERBUFFERSPROC      g_pfnGLSetupWglSwapLayerBuffers;
+// 0x9074EC
+static PFNWGLUSEFONTBITMAPSAPROC       g_pfnGLSetupWglUseFontBitmapsA;
+// 0x9074F0
+static PFNWGLUSEFONTOUTLINESAPROC      g_pfnGLSetupWglUseFontOutlinesA;
+
+// Pixel-format entry points, sourced either from the driver's wgl* exports or
+// from gdi32.dll depending on whether the driver is the system opengl32.dll.
+// 0x8BBCD8
+static PFNCHOOSEPIXELFORMATPROC   g_pfnGLSetupChoosePixelFormat;
+// 0x8BBCDC
+static PFNDESCRIBEPIXELFORMATPROC g_pfnGLSetupDescribePixelFormat;
+// 0x9074C4
+static PFNGETPIXELFORMATPROC      g_pfnGLSetupGetPixelFormat;
+// 0x8BBCE0
+static PFNSETPIXELFORMATPROC      g_pfnGLSetupSetPixelFormat;
+
+// Driver module handles opened by the probe.
+// 0x906914
+static HMODULE g_hGLSetupDriver;
+// 0x906910
+static HMODULE g_hGLSetupGdi32;
+// 0x906918
+static HMODULE g_hGLSetupMini;
+
+// One-shot caches for the FX_GLIDE_NO_SPLASH env var and the SGI OpenGL
+// "OverrideDispatch" registry value (fetched once, kept for the process life).
+// 0x9074B4
+static int   g_bGLSetupSplashEnvChecked;
+// 0x9074B8
+static char* g_pszGLSetupSplashEnv;
+// 0x9074BC
+static int   g_bGLSetupDispatchChecked;
+// 0x9074C0
+static LPSTR g_pGLSetupOverrideDispatch;
+
+// Canonical paths of the primary and mini driver DLLs the probe committed to.
+// 0x9072A4
+static CHAR g_szGLSetupPrimaryPath[0x104];
+// 0x9073A8
+static CHAR g_szGLSetupMiniPath[0x104];
 
 // Candidate OpenGL driver DLLs probed, in priority order. dwFlags is merged
 // into the driver record's flags on a successful validate.
@@ -434,6 +566,479 @@ unsigned int GLSetupEnumDrivers(void)
         }
     }
     return g_nGLSetupDrivers;
+}
+
+// Tears the probed driver back down: releases the driver / mini / gdi32 module
+// handles, restores the FX_GLIDE_NO_SPLASH env var and the SGI OpenGL
+// "OverrideDispatch" registry value to the values cached before the probe, then
+// resets the whole OpenGL / WGL / GLU / pixel-format entry-point table and the
+// selected-driver state. Called on probe entry and again when a driver is
+// rejected.
+// 0x7BAAC0
+void GLSetupResetDriver(void)
+{
+    if (g_hGLSetupDriver != NULL) {
+        FreeLibrary(g_hGLSetupDriver);
+        g_hGLSetupDriver = NULL;
+    }
+    if (g_hGLSetupMini != NULL) {
+        FreeLibrary(g_hGLSetupMini);
+        g_hGLSetupMini = NULL;
+    }
+    if (g_hGLSetupGdi32 != NULL) {
+        FreeLibrary(g_hGLSetupGdi32);
+        g_hGLSetupGdi32 = NULL;
+    }
+
+    // Restore FX_GLIDE_NO_SPLASH to its pre-probe value (empty if it was unset).
+    if ((g_dwGLSetupControl & 0x10) == 0 && g_bGLSetupSplashEnvChecked != 0) {
+        const char* pszValue = g_pszGLSetupSplashEnv;
+        if (pszValue == NULL) {
+            pszValue = "";
+        }
+        if (strlen("FX_GLIDE_NO_SPLASH") + strlen(pszValue) < 0x100) {
+            CHAR szEnv[256];
+            sprintf(szEnv, "%s=%s", "FX_GLIDE_NO_SPLASH", pszValue);
+            _putenv(szEnv);
+        }
+        g_bGLSetupSplashEnvChecked = 0;
+    }
+
+    // Restore the OverrideDispatch registry value to its cached pre-probe value.
+    if ((g_dwGLSetupControl & 0x20) == 0 && g_bGLSetupDispatchChecked != 0) {
+        LPSTR pValue = g_pGLSetupOverrideDispatch;
+        HKEY  hKey = (HKEY)-1;
+        DWORD dwDisposition;
+        if (RegCreateKeyExA(HKEY_LOCAL_MACHINE, "Software\\Silicon Graphics\\OpenGL",
+                            0, NULL, 0, KEY_ALL_ACCESS, NULL, &hKey, &dwDisposition) == 0) {
+            RegSetValueExA(hKey, "OverrideDispatch", 0, REG_DWORD, (const BYTE*)&pValue, 4);
+            RegCloseKey(hKey);
+        }
+        g_bGLSetupDispatchChecked = 0;
+    }
+
+    // Reset every resolved entry point. Normally cleared to NULL; when control
+    // bit 0x40 is set the slots point at a shared safe-stub thunk instead so a
+    // stray GL call lands on a defined address rather than a null pointer.
+    void* pReset = NULL;
+    if ((g_dwGLSetupControl & 0x40) != 0) {
+        // HACK: safe-stub thunk -- an incremental-link jump thunk with no
+        // source-level symbol; referenced only here -- replaces 0x7BB5C0.
+        pReset = (void*)0x007BB5C0;
+    }
+
+    CVideo3d::glAccum = (PFNGLACCUMPROC)pReset;
+    CVideo3d::glAlphaFunc = (PFNGLALPHAFUNCPROC)pReset;
+    CVideo3d::glAreTexturesResident = (PFNGLARETEXTURESRESIDENTPROC)pReset;
+    CVideo3d::glArrayElement = (PFNGLARRAYELEMENTPROC)pReset;
+    CVideo3d::glBegin = (PFNGLBEGINPROC)pReset;
+    CVideo3d::glBindTexture = (PFNGLBINDTEXTUREPROC)pReset;
+    CVideo3d::glBitmap = (PFNGLBITMAPPROC)pReset;
+    CVideo3d::glBlendFunc = (PFNGLBLENDFUNCPROC)pReset;
+    CVideo3d::glCallList = (PFNGLCALLLISTPROC)pReset;
+    CVideo3d::glCallLists = (PFNGLCALLLISTSPROC)pReset;
+    CVideo3d::glClear = (PFNGLCLEARPROC)pReset;
+    CVideo3d::glClearAccum = (PFNGLCLEARACCUMPROC)pReset;
+    CVideo3d::glClearColor = (PFNGLCLEARCOLORPROC)pReset;
+    CVideo3d::glClearDepth = (PFNGLCLEARDEPTHPROC)pReset;
+    CVideo3d::glClearIndex = (PFNGLCLEARINDEXPROC)pReset;
+    CVideo3d::glClearStencil = (PFNGLCLEARSTENCILPROC)pReset;
+    CVideo3d::glClipPlane = (PFNGLCLIPPLANEPROC)pReset;
+    CVideo3d::glColor3b = (PFNGLCOLOR3BPROC)pReset;
+    CVideo3d::glColor3bv = (PFNGLCOLOR3BVPROC)pReset;
+    CVideo3d::glColor3d = (PFNGLCOLOR3DPROC)pReset;
+    CVideo3d::glColor3dv = (PFNGLCOLOR3DVPROC)pReset;
+    CVideo3d::glColor3f = (PFNGLCOLOR3FPROC)pReset;
+    CVideo3d::glColor3fv = (PFNGLCOLOR3FVPROC)pReset;
+    CVideo3d::glColor3i = (PFNGLCOLOR3IPROC)pReset;
+    CVideo3d::glColor3iv = (PFNGLCOLOR3IVPROC)pReset;
+    CVideo3d::glColor3s = (PFNGLCOLOR3SPROC)pReset;
+    CVideo3d::glColor3sv = (PFNGLCOLOR3SVPROC)pReset;
+    CVideo3d::glColor3ub = (PFNGLCOLOR3UBPROC)pReset;
+    CVideo3d::glColor3ubv = (PFNGLCOLOR3UBVPROC)pReset;
+    CVideo3d::glColor3ui = (PFNGLCOLOR3UIPROC)pReset;
+    CVideo3d::glColor3uiv = (PFNGLCOLOR3UIVPROC)pReset;
+    CVideo3d::glColor3us = (PFNGLCOLOR3USPROC)pReset;
+    CVideo3d::glColor3usv = (PFNGLCOLOR3USVPROC)pReset;
+    CVideo3d::glColor4b = (PFNGLCOLOR4BPROC)pReset;
+    CVideo3d::glColor4bv = (PFNGLCOLOR4BVPROC)pReset;
+    CVideo3d::glColor4d = (PFNGLCOLOR4DPROC)pReset;
+    CVideo3d::glColor4dv = (PFNGLCOLOR4DVPROC)pReset;
+    CVideo3d::glColor4f = (PFNGLCOLOR4FPROC)pReset;
+    CVideo3d::glColor4fv = (PFNGLCOLOR4FVPROC)pReset;
+    CVideo3d::glColor4i = (PFNGLCOLOR4IPROC)pReset;
+    CVideo3d::glColor4iv = (PFNGLCOLOR4IVPROC)pReset;
+    CVideo3d::glColor4s = (PFNGLCOLOR4SPROC)pReset;
+    CVideo3d::glColor4sv = (PFNGLCOLOR4SVPROC)pReset;
+    CVideo3d::glColor4ub = (PFNGLCOLOR4UBPROC)pReset;
+    CVideo3d::glColor4ubv = (PFNGLCOLOR4UBVPROC)pReset;
+    CVideo3d::glColor4ui = (PFNGLCOLOR4UIPROC)pReset;
+    CVideo3d::glColor4uiv = (PFNGLCOLOR4UIVPROC)pReset;
+    CVideo3d::glColor4us = (PFNGLCOLOR4USPROC)pReset;
+    CVideo3d::glColor4usv = (PFNGLCOLOR4USVPROC)pReset;
+    CVideo3d::glColorMask = (PFNGLCOLORMASKPROC)pReset;
+    CVideo3d::glColorMaterial = (PFNGLCOLORMATERIALPROC)pReset;
+    CVideo3d::glColorPointer = (PFNGLCOLORPOINTERPROC)pReset;
+    CVideo3d::glCopyPixels = (PFNGLCOPYPIXELSPROC)pReset;
+    CVideo3d::glCopyTexImage1D = (PFNGLCOPYTEXIMAGE1DPROC)pReset;
+    CVideo3d::glCopyTexImage2D = (PFNGLCOPYTEXIMAGE2DPROC)pReset;
+    CVideo3d::glCopyTexSubImage1D = (PFNGLCOPYTEXSUBIMAGE1DPROC)pReset;
+    CVideo3d::glCopyTexSubImage2D = (PFNGLCOPYTEXSUBIMAGE2DPROC)pReset;
+    CVideo3d::glCullFace = (PFNGLCULLFACEPROC)pReset;
+    CVideo3d::glDeleteLists = (PFNGLDELETELISTSPROC)pReset;
+    CVideo3d::glDeleteTextures = (PFNGLDELETETEXTURESPROC)pReset;
+    CVideo3d::glDepthFunc = (PFNGLDEPTHFUNCPROC)pReset;
+    CVideo3d::glDepthMask = (PFNGLDEPTHMASKPROC)pReset;
+    CVideo3d::glDepthRange = (PFNGLDEPTHRANGEPROC)pReset;
+    CVideo3d::glDisable = (PFNGLDISABLEPROC)pReset;
+    CVideo3d::glDisableClientState = (PFNGLDISABLECLIENTSTATEPROC)pReset;
+    CVideo3d::glDrawArrays = (PFNGLDRAWARRAYSPROC)pReset;
+    CVideo3d::glDrawBuffer = (PFNGLDRAWBUFFERPROC)pReset;
+    CVideo3d::glDrawElements = (PFNGLDRAWELEMENTSPROC)pReset;
+    CVideo3d::glDrawPixels = (PFNGLDRAWPIXELSPROC)pReset;
+    CVideo3d::glEdgeFlag = (PFNGLEDGEFLAGPROC)pReset;
+    CVideo3d::glEdgeFlagPointer = (PFNGLEDGEFLAGPOINTERPROC)pReset;
+    CVideo3d::glEdgeFlagv = (PFNGLEDGEFLAGVPROC)pReset;
+    CVideo3d::glEnable = (PFNGLENABLEPROC)pReset;
+    CVideo3d::glEnableClientState = (PFNGLENABLECLIENTSTATEPROC)pReset;
+    CVideo3d::glEnd = (PFNGLENDPROC)pReset;
+    CVideo3d::glEndList = (PFNGLENDLISTPROC)pReset;
+    CVideo3d::glEvalCoord1d = (PFNGLEVALCOORD1DPROC)pReset;
+    CVideo3d::glEvalCoord1dv = (PFNGLEVALCOORD1DVPROC)pReset;
+    CVideo3d::glEvalCoord1f = (PFNGLEVALCOORD1FPROC)pReset;
+    CVideo3d::glEvalCoord1fv = (PFNGLEVALCOORD1FVPROC)pReset;
+    CVideo3d::glEvalCoord2d = (PFNGLEVALCOORD2DPROC)pReset;
+    CVideo3d::glEvalCoord2dv = (PFNGLEVALCOORD2DVPROC)pReset;
+    CVideo3d::glEvalCoord2f = (PFNGLEVALCOORD2FPROC)pReset;
+    CVideo3d::glEvalCoord2fv = (PFNGLEVALCOORD2FVPROC)pReset;
+    CVideo3d::glEvalMesh1 = (PFNGLEVALMESH1PROC)pReset;
+    CVideo3d::glEvalMesh2 = (PFNGLEVALMESH2PROC)pReset;
+    CVideo3d::glEvalPoint1 = (PFNGLEVALPOINT1PROC)pReset;
+    CVideo3d::glEvalPoint2 = (PFNGLEVALPOINT2PROC)pReset;
+    CVideo3d::glFeedbackBuffer = (PFNGLFEEDBACKBUFFERPROC)pReset;
+    CVideo3d::glFinish = (PFNGLFINISHPROC)pReset;
+    CVideo3d::glFlush = (PFNGLFLUSHPROC)pReset;
+    CVideo3d::glFogf = (PFNGLFOGFPROC)pReset;
+    CVideo3d::glFogfv = (PFNGLFOGFVPROC)pReset;
+    CVideo3d::glFogi = (PFNGLFOGIPROC)pReset;
+    CVideo3d::glFogiv = (PFNGLFOGIVPROC)pReset;
+    CVideo3d::glFrontFace = (PFNGLFRONTFACEPROC)pReset;
+    CVideo3d::glFrustum = (PFNGLFRUSTUMPROC)pReset;
+    CVideo3d::glGenLists = (PFNGLGENLISTSPROC)pReset;
+    CVideo3d::glGenTextures = (PFNGLGENTEXTURESPROC)pReset;
+    CVideo3d::glGetBooleanv = (PFNGLGETBOOLEANVPROC)pReset;
+    CVideo3d::glGetClipPlane = (PFNGLGETCLIPPLANEPROC)pReset;
+    CVideo3d::glGetDoublev = (PFNGLGETDOUBLEVPROC)pReset;
+    CVideo3d::glGetError = (PFNGLGETERRORPROC)pReset;
+    CVideo3d::glGetFloatv = (PFNGLGETFLOATVPROC)pReset;
+    CVideo3d::glGetIntegerv = (PFNGLGETINTEGERVPROC)pReset;
+    CVideo3d::glGetLightfv = (PFNGLGETLIGHTFVPROC)pReset;
+    CVideo3d::glGetLightiv = (PFNGLGETLIGHTIVPROC)pReset;
+    CVideo3d::glGetMapdv = (PFNGLGETMAPDVPROC)pReset;
+    CVideo3d::glGetMapfv = (PFNGLGETMAPFVPROC)pReset;
+    CVideo3d::glGetMapiv = (PFNGLGETMAPIVPROC)pReset;
+    CVideo3d::glGetMaterialfv = (PFNGLGETMATERIALFVPROC)pReset;
+    CVideo3d::glGetMaterialiv = (PFNGLGETMATERIALIVPROC)pReset;
+    CVideo3d::glGetPixelMapfv = (PFNGLGETPIXELMAPFVPROC)pReset;
+    CVideo3d::glGetPixelMapuiv = (PFNGLGETPIXELMAPUIVPROC)pReset;
+    CVideo3d::glGetPixelMapusv = (PFNGLGETPIXELMAPUSVPROC)pReset;
+    CVideo3d::glGetPointerv = (PFNGLGETPOINTERVPROC)pReset;
+    CVideo3d::glGetPolygonStipple = (PFNGLGETPOLYGONSTIPPLEPROC)pReset;
+    CVideo3d::glGetString = (PFNGLGETSTRINGPROC)pReset;
+    CVideo3d::glGetTexEnvfv = (PFNGLGETTEXENVFVPROC)pReset;
+    CVideo3d::glGetTexEnviv = (PFNGLGETTEXENVIVPROC)pReset;
+    CVideo3d::glGetTexGendv = (PFNGLGETTEXGENDVPROC)pReset;
+    CVideo3d::glGetTexGenfv = (PFNGLGETTEXGENFVPROC)pReset;
+    CVideo3d::glGetTexGeniv = (PFNGLGETTEXGENIVPROC)pReset;
+    CVideo3d::glGetTexImage = (PFNGLGETTEXIMAGEPROC)pReset;
+    CVideo3d::glGetTexLevelParameterfv = (PFNGLGETTEXLEVELPARAMETERFVPROC)pReset;
+    CVideo3d::glGetTexLevelParameteriv = (PFNGLGETTEXLEVELPARAMETERIVPROC)pReset;
+    CVideo3d::glGetTexParameterfv = (PFNGLGETTEXPARAMETERFVPROC)pReset;
+    CVideo3d::glGetTexParameteriv = (PFNGLGETTEXPARAMETERIVPROC)pReset;
+    CVideo3d::glHint = (PFNGLHINTPROC)pReset;
+    CVideo3d::glIndexMask = (PFNGLINDEXMASKPROC)pReset;
+    CVideo3d::glIndexPointer = (PFNGLINDEXPOINTERPROC)pReset;
+    CVideo3d::glIndexd = (PFNGLINDEXDPROC)pReset;
+    CVideo3d::glIndexdv = (PFNGLINDEXDVPROC)pReset;
+    CVideo3d::glIndexf = (PFNGLINDEXFPROC)pReset;
+    CVideo3d::glIndexfv = (PFNGLINDEXFVPROC)pReset;
+    CVideo3d::glIndexi = (PFNGLINDEXIPROC)pReset;
+    CVideo3d::glIndexiv = (PFNGLINDEXIVPROC)pReset;
+    CVideo3d::glIndexs = (PFNGLINDEXSPROC)pReset;
+    CVideo3d::glIndexsv = (PFNGLINDEXSVPROC)pReset;
+    CVideo3d::glIndexub = (PFNGLINDEXUBPROC)pReset;
+    CVideo3d::glIndexubv = (PFNGLINDEXUBVPROC)pReset;
+    CVideo3d::glInitNames = (PFNGLINITNAMESPROC)pReset;
+    CVideo3d::glInterleavedArrays = (PFNGLINTERLEAVEDARRAYSPROC)pReset;
+    CVideo3d::glIsEnabled = (PFNGLISENABLEDPROC)pReset;
+    CVideo3d::glIsList = (PFNGLISLISTPROC)pReset;
+    CVideo3d::glIsTexture = (PFNGLISTEXTUREPROC)pReset;
+    CVideo3d::glLightModelf = (PFNGLLIGHTMODELFPROC)pReset;
+    CVideo3d::glLightModelfv = (PFNGLLIGHTMODELFVPROC)pReset;
+    CVideo3d::glLightModeli = (PFNGLLIGHTMODELIPROC)pReset;
+    CVideo3d::glLightModeliv = (PFNGLLIGHTMODELIVPROC)pReset;
+    CVideo3d::glLightf = (PFNGLLIGHTFPROC)pReset;
+    CVideo3d::glLightfv = (PFNGLLIGHTFVPROC)pReset;
+    CVideo3d::glLighti = (PFNGLLIGHTIPROC)pReset;
+    CVideo3d::glLightiv = (PFNGLLIGHTIVPROC)pReset;
+    CVideo3d::glLineStipple = (PFNGLLINESTIPPLEPROC)pReset;
+    CVideo3d::glLineWidth = (PFNGLLINEWIDTHPROC)pReset;
+    CVideo3d::glListBase = (PFNGLLISTBASEPROC)pReset;
+    CVideo3d::glLoadIdentity = (PFNGLLOADIDENTITYPROC)pReset;
+    CVideo3d::glLoadMatrixd = (PFNGLLOADMATRIXDPROC)pReset;
+    CVideo3d::glLoadMatrixf = (PFNGLLOADMATRIXFPROC)pReset;
+    CVideo3d::glLoadName = (PFNGLLOADNAMEPROC)pReset;
+    CVideo3d::glLogicOp = (PFNGLLOGICOPPROC)pReset;
+    CVideo3d::glMap1d = (PFNGLMAP1DPROC)pReset;
+    CVideo3d::glMap1f = (PFNGLMAP1FPROC)pReset;
+    CVideo3d::glMap2d = (PFNGLMAP2DPROC)pReset;
+    CVideo3d::glMap2f = (PFNGLMAP2FPROC)pReset;
+    CVideo3d::glMapGrid1d = (PFNGLMAPGRID1DPROC)pReset;
+    CVideo3d::glMapGrid1f = (PFNGLMAPGRID1FPROC)pReset;
+    CVideo3d::glMapGrid2d = (PFNGLMAPGRID2DPROC)pReset;
+    CVideo3d::glMapGrid2f = (PFNGLMAPGRID2FPROC)pReset;
+    CVideo3d::glMaterialf = (PFNGLMATERIALFPROC)pReset;
+    CVideo3d::glMaterialfv = (PFNGLMATERIALFVPROC)pReset;
+    CVideo3d::glMateriali = (PFNGLMATERIALIPROC)pReset;
+    CVideo3d::glMaterialiv = (PFNGLMATERIALIVPROC)pReset;
+    CVideo3d::glMatrixMode = (PFNGLMATRIXMODEPROC)pReset;
+    CVideo3d::glMultMatrixd = (PFNGLMULTMATRIXDPROC)pReset;
+    CVideo3d::glMultMatrixf = (PFNGLMULTMATRIXFPROC)pReset;
+    CVideo3d::glNewList = (PFNGLNEWLISTPROC)pReset;
+    CVideo3d::glNormal3b = (PFNGLNORMAL3BPROC)pReset;
+    CVideo3d::glNormal3bv = (PFNGLNORMAL3BVPROC)pReset;
+    CVideo3d::glNormal3d = (PFNGLNORMAL3DPROC)pReset;
+    CVideo3d::glNormal3dv = (PFNGLNORMAL3DVPROC)pReset;
+    CVideo3d::glNormal3f = (PFNGLNORMAL3FPROC)pReset;
+    CVideo3d::glNormal3fv = (PFNGLNORMAL3FVPROC)pReset;
+    CVideo3d::glNormal3i = (PFNGLNORMAL3IPROC)pReset;
+    CVideo3d::glNormal3iv = (PFNGLNORMAL3IVPROC)pReset;
+    CVideo3d::glNormal3s = (PFNGLNORMAL3SPROC)pReset;
+    CVideo3d::glNormal3sv = (PFNGLNORMAL3SVPROC)pReset;
+    CVideo3d::glNormalPointer = (PFNGLNORMALPOINTERPROC)pReset;
+    CVideo3d::glOrtho = (PFNGLORTHOPROC)pReset;
+    CVideo3d::glPassThrough = (PFNGLPASSTHROUGHPROC)pReset;
+    CVideo3d::glPixelMapfv = (PFNGLPIXELMAPFVPROC)pReset;
+    CVideo3d::glPixelMapuiv = (PFNGLPIXELMAPUIVPROC)pReset;
+    CVideo3d::glPixelMapusv = (PFNGLPIXELMAPUSVPROC)pReset;
+    CVideo3d::glPixelStoref = (PFNGLPIXELSTOREFPROC)pReset;
+    CVideo3d::glPixelStorei = (PFNGLPIXELSTOREIPROC)pReset;
+    CVideo3d::glPixelTransferf = (PFNGLPIXELTRANSFERFPROC)pReset;
+    CVideo3d::glPixelTransferi = (PFNGLPIXELTRANSFERIPROC)pReset;
+    CVideo3d::glPixelZoom = (PFNGLPIXELZOOMPROC)pReset;
+    CVideo3d::glPointSize = (PFNGLPOINTSIZEPROC)pReset;
+    CVideo3d::glPolygonMode = (PFNGLPOLYGONMODEPROC)pReset;
+    CVideo3d::glPolygonOffset = (PFNGLPOLYGONOFFSETPROC)pReset;
+    CVideo3d::glPolygonStipple = (PFNGLPOLYGONSTIPPLEPROC)pReset;
+    CVideo3d::glPopAttrib = (PFNGLPOPATTRIBPROC)pReset;
+    CVideo3d::glPopClientAttrib = (PFNGLPOPCLIENTATTRIBPROC)pReset;
+    CVideo3d::glPopMatrix = (PFNGLPOPMATRIXPROC)pReset;
+    CVideo3d::glPopName = (PFNGLPOPNAMEPROC)pReset;
+    CVideo3d::glPrioritizeTextures = (PFNGLPRIORITIZETEXTURESPROC)pReset;
+    CVideo3d::glPushAttrib = (PFNGLPUSHATTRIBPROC)pReset;
+    CVideo3d::glPushClientAttrib = (PFNGLPUSHCLIENTATTRIBPROC)pReset;
+    CVideo3d::glPushMatrix = (PFNGLPUSHMATRIXPROC)pReset;
+    CVideo3d::glPushName = (PFNGLPUSHNAMEPROC)pReset;
+    CVideo3d::glRasterPos2d = (PFNGLRASTERPOS2DPROC)pReset;
+    CVideo3d::glRasterPos2dv = (PFNGLRASTERPOS2DVPROC)pReset;
+    CVideo3d::glRasterPos2f = (PFNGLRASTERPOS2FPROC)pReset;
+    CVideo3d::glRasterPos2fv = (PFNGLRASTERPOS2FVPROC)pReset;
+    CVideo3d::glRasterPos2i = (PFNGLRASTERPOS2IPROC)pReset;
+    CVideo3d::glRasterPos2iv = (PFNGLRASTERPOS2IVPROC)pReset;
+    CVideo3d::glRasterPos2s = (PFNGLRASTERPOS2SPROC)pReset;
+    CVideo3d::glRasterPos2sv = (PFNGLRASTERPOS2SVPROC)pReset;
+    CVideo3d::glRasterPos3d = (PFNGLRASTERPOS3DPROC)pReset;
+    CVideo3d::glRasterPos3dv = (PFNGLRASTERPOS3DVPROC)pReset;
+    CVideo3d::glRasterPos3f = (PFNGLRASTERPOS3FPROC)pReset;
+    CVideo3d::glRasterPos3fv = (PFNGLRASTERPOS3FVPROC)pReset;
+    CVideo3d::glRasterPos3i = (PFNGLRASTERPOS3IPROC)pReset;
+    CVideo3d::glRasterPos3iv = (PFNGLRASTERPOS3IVPROC)pReset;
+    CVideo3d::glRasterPos3s = (PFNGLRASTERPOS3SPROC)pReset;
+    CVideo3d::glRasterPos3sv = (PFNGLRASTERPOS3SVPROC)pReset;
+    CVideo3d::glRasterPos4d = (PFNGLRASTERPOS4DPROC)pReset;
+    CVideo3d::glRasterPos4dv = (PFNGLRASTERPOS4DVPROC)pReset;
+    CVideo3d::glRasterPos4f = (PFNGLRASTERPOS4FPROC)pReset;
+    CVideo3d::glRasterPos4fv = (PFNGLRASTERPOS4FVPROC)pReset;
+    CVideo3d::glRasterPos4i = (PFNGLRASTERPOS4IPROC)pReset;
+    CVideo3d::glRasterPos4iv = (PFNGLRASTERPOS4IVPROC)pReset;
+    CVideo3d::glRasterPos4s = (PFNGLRASTERPOS4SPROC)pReset;
+    CVideo3d::glRasterPos4sv = (PFNGLRASTERPOS4SVPROC)pReset;
+    CVideo3d::glReadBuffer = (PFNGLREADBUFFERPROC)pReset;
+    CVideo3d::glReadPixels = (PFNGLREADPIXELSPROC)pReset;
+    CVideo3d::glRectd = (PFNGLRECTDPROC)pReset;
+    CVideo3d::glRectdv = (PFNGLRECTDVPROC)pReset;
+    CVideo3d::glRectf = (PFNGLRECTFPROC)pReset;
+    CVideo3d::glRectfv = (PFNGLRECTFVPROC)pReset;
+    CVideo3d::glRecti = (PFNGLRECTIPROC)pReset;
+    CVideo3d::glRectiv = (PFNGLRECTIVPROC)pReset;
+    CVideo3d::glRects = (PFNGLRECTSPROC)pReset;
+    CVideo3d::glRectsv = (PFNGLRECTSVPROC)pReset;
+    CVideo3d::glRenderMode = (PFNGLRENDERMODEPROC)pReset;
+    CVideo3d::glRotated = (PFNGLROTATEDPROC)pReset;
+    CVideo3d::glRotatef = (PFNGLROTATEFPROC)pReset;
+    CVideo3d::glScaled = (PFNGLSCALEDPROC)pReset;
+    CVideo3d::glScalef = (PFNGLSCALEFPROC)pReset;
+    CVideo3d::glScissor = (PFNGLSCISSORPROC)pReset;
+    CVideo3d::glSelectBuffer = (PFNGLSELECTBUFFERPROC)pReset;
+    CVideo3d::glShadeModel = (PFNGLSHADEMODELPROC)pReset;
+    CVideo3d::glStencilFunc = (PFNGLSTENCILFUNCPROC)pReset;
+    CVideo3d::glStencilMask = (PFNGLSTENCILMASKPROC)pReset;
+    CVideo3d::glStencilOp = (PFNGLSTENCILOPPROC)pReset;
+    CVideo3d::glTexCoord1d = (PFNGLTEXCOORD1DPROC)pReset;
+    CVideo3d::glTexCoord1dv = (PFNGLTEXCOORD1DVPROC)pReset;
+    CVideo3d::glTexCoord1f = (PFNGLTEXCOORD1FPROC)pReset;
+    CVideo3d::glTexCoord1fv = (PFNGLTEXCOORD1FVPROC)pReset;
+    CVideo3d::glTexCoord1i = (PFNGLTEXCOORD1IPROC)pReset;
+    CVideo3d::glTexCoord1iv = (PFNGLTEXCOORD1IVPROC)pReset;
+    CVideo3d::glTexCoord1s = (PFNGLTEXCOORD1SPROC)pReset;
+    CVideo3d::glTexCoord1sv = (PFNGLTEXCOORD1SVPROC)pReset;
+    CVideo3d::glTexCoord2d = (PFNGLTEXCOORD2DPROC)pReset;
+    CVideo3d::glTexCoord2dv = (PFNGLTEXCOORD2DVPROC)pReset;
+    CVideo3d::glTexCoord2f = (PFNGLTEXCOORD2FPROC)pReset;
+    CVideo3d::glTexCoord2fv = (PFNGLTEXCOORD2FVPROC)pReset;
+    CVideo3d::glTexCoord2i = (PFNGLTEXCOORD2IPROC)pReset;
+    CVideo3d::glTexCoord2iv = (PFNGLTEXCOORD2IVPROC)pReset;
+    CVideo3d::glTexCoord2s = (PFNGLTEXCOORD2SPROC)pReset;
+    CVideo3d::glTexCoord2sv = (PFNGLTEXCOORD2SVPROC)pReset;
+    CVideo3d::glTexCoord3d = (PFNGLTEXCOORD3DPROC)pReset;
+    CVideo3d::glTexCoord3dv = (PFNGLTEXCOORD3DVPROC)pReset;
+    CVideo3d::glTexCoord3f = (PFNGLTEXCOORD3FPROC)pReset;
+    CVideo3d::glTexCoord3fv = (PFNGLTEXCOORD3FVPROC)pReset;
+    CVideo3d::glTexCoord3i = (PFNGLTEXCOORD3IPROC)pReset;
+    CVideo3d::glTexCoord3iv = (PFNGLTEXCOORD3IVPROC)pReset;
+    CVideo3d::glTexCoord3s = (PFNGLTEXCOORD3SPROC)pReset;
+    CVideo3d::glTexCoord3sv = (PFNGLTEXCOORD3SVPROC)pReset;
+    CVideo3d::glTexCoord4d = (PFNGLTEXCOORD4DPROC)pReset;
+    CVideo3d::glTexCoord4dv = (PFNGLTEXCOORD4DVPROC)pReset;
+    CVideo3d::glTexCoord4f = (PFNGLTEXCOORD4FPROC)pReset;
+    CVideo3d::glTexCoord4fv = (PFNGLTEXCOORD4FVPROC)pReset;
+    CVideo3d::glTexCoord4i = (PFNGLTEXCOORD4IPROC)pReset;
+    CVideo3d::glTexCoord4iv = (PFNGLTEXCOORD4IVPROC)pReset;
+    CVideo3d::glTexCoord4s = (PFNGLTEXCOORD4SPROC)pReset;
+    CVideo3d::glTexCoord4sv = (PFNGLTEXCOORD4SVPROC)pReset;
+    CVideo3d::glTexCoordPointer = (PFNGLTEXCOORDPOINTERPROC)pReset;
+    CVideo3d::glTexEnvf = (PFNGLTEXENVFPROC)pReset;
+    CVideo3d::glTexEnvfv = (PFNGLTEXENVFVPROC)pReset;
+    CVideo3d::glTexEnvi = (PFNGLTEXENVIPROC)pReset;
+    CVideo3d::glTexEnviv = (PFNGLTEXENVIVPROC)pReset;
+    CVideo3d::glTexGend = (PFNGLTEXGENDPROC)pReset;
+    CVideo3d::glTexGendv = (PFNGLTEXGENDVPROC)pReset;
+    CVideo3d::glTexGenf = (PFNGLTEXGENFPROC)pReset;
+    CVideo3d::glTexGenfv = (PFNGLTEXGENFVPROC)pReset;
+    CVideo3d::glTexGeni = (PFNGLTEXGENIPROC)pReset;
+    CVideo3d::glTexGeniv = (PFNGLTEXGENIVPROC)pReset;
+    CVideo3d::glTexImage1D = (PFNGLTEXIMAGE1DPROC)pReset;
+    CVideo3d::glTexImage2D = (PFNGLTEXIMAGE2DPROC)pReset;
+    CVideo3d::glTexParameterf = (PFNGLTEXPARAMETERFPROC)pReset;
+    CVideo3d::glTexParameterfv = (PFNGLTEXPARAMETERFVPROC)pReset;
+    CVideo3d::glTexParameteri = (PFNGLTEXPARAMETERIPROC)pReset;
+    CVideo3d::glTexParameteriv = (PFNGLTEXPARAMETERIVPROC)pReset;
+    CVideo3d::glTexSubImage1D = (PFNGLTEXSUBIMAGE1DPROC)pReset;
+    CVideo3d::glTexSubImage2D = (PFNGLTEXSUBIMAGE2DPROC)pReset;
+    CVideo3d::glTranslated = (PFNGLTRANSLATEDPROC)pReset;
+    CVideo3d::glTranslatef = (PFNGLTRANSLATEFPROC)pReset;
+    CVideo3d::glVertex2d = (PFNGLVERTEX2DPROC)pReset;
+    CVideo3d::glVertex2dv = (PFNGLVERTEX2DVPROC)pReset;
+    CVideo3d::glVertex2f = (PFNGLVERTEX2FPROC)pReset;
+    CVideo3d::glVertex2fv = (PFNGLVERTEX2FVPROC)pReset;
+    CVideo3d::glVertex2i = (PFNGLVERTEX2IPROC)pReset;
+    CVideo3d::glVertex2iv = (PFNGLVERTEX2IVPROC)pReset;
+    CVideo3d::glVertex2s = (PFNGLVERTEX2SPROC)pReset;
+    CVideo3d::glVertex2sv = (PFNGLVERTEX2SVPROC)pReset;
+    CVideo3d::glVertex3d = (PFNGLVERTEX3DPROC)pReset;
+    CVideo3d::glVertex3dv = (PFNGLVERTEX3DVPROC)pReset;
+    CVideo3d::glVertex3f = (PFNGLVERTEX3FPROC)pReset;
+    CVideo3d::glVertex3fv = (PFNGLVERTEX3FVPROC)pReset;
+    CVideo3d::glVertex3i = (PFNGLVERTEX3IPROC)pReset;
+    CVideo3d::glVertex3iv = (PFNGLVERTEX3IVPROC)pReset;
+    CVideo3d::glVertex3s = (PFNGLVERTEX3SPROC)pReset;
+    CVideo3d::glVertex3sv = (PFNGLVERTEX3SVPROC)pReset;
+    CVideo3d::glVertex4d = (PFNGLVERTEX4DPROC)pReset;
+    CVideo3d::glVertex4dv = (PFNGLVERTEX4DVPROC)pReset;
+    CVideo3d::glVertex4f = (PFNGLVERTEX4FPROC)pReset;
+    CVideo3d::glVertex4fv = (PFNGLVERTEX4FVPROC)pReset;
+    CVideo3d::glVertex4i = (PFNGLVERTEX4IPROC)pReset;
+    CVideo3d::glVertex4iv = (PFNGLVERTEX4IVPROC)pReset;
+    CVideo3d::glVertex4s = (PFNGLVERTEX4SPROC)pReset;
+    CVideo3d::glVertex4sv = (PFNGLVERTEX4SVPROC)pReset;
+    CVideo3d::glVertexPointer = (PFNGLVERTEXPOINTERPROC)pReset;
+    CVideo3d::glViewport = (PFNGLVIEWPORTPROC)pReset;
+    CVideo3d::gluBeginCurve = (PFNGLUBEGINCURVEPROC)pReset;
+    CVideo3d::gluBeginPolygon = (PFNGLUBEGINPOLYGONPROC)pReset;
+    CVideo3d::gluBeginSurface = (PFNGLUBEGINSURFACEPROC)pReset;
+    CVideo3d::gluBeginTrim = (PFNGLUBEGINTRIMPROC)pReset;
+    CVideo3d::gluBuild1DMipmaps = (PFNGLUBUILD1DMIPMAPSPROC)pReset;
+    CVideo3d::gluBuild2DMipmaps = (PFNGLUBUILD2DMIPMAPSPROC)pReset;
+    CVideo3d::gluCylinder = (PFNGLUCYLINDERPROC)pReset;
+    CVideo3d::gluDeleteNurbsRenderer = (PFNGLUDELETENURBSRENDERERPROC)pReset;
+    CVideo3d::gluDeleteQuadric = (PFNGLUDELETEQUADRICPROC)pReset;
+    CVideo3d::gluDeleteTess = (PFNGLUDELETETESSPROC)pReset;
+    CVideo3d::gluDisk = (PFNGLUDISKPROC)pReset;
+    CVideo3d::gluEndCurve = (PFNGLUENDCURVEPROC)pReset;
+    CVideo3d::gluEndPolygon = (PFNGLUENDPOLYGONPROC)pReset;
+    CVideo3d::gluEndSurface = (PFNGLUENDSURFACEPROC)pReset;
+    CVideo3d::gluEndTrim = (PFNGLUENDTRIMPROC)pReset;
+    CVideo3d::gluErrorString = (PFNGLUERRORSTRINGPROC)pReset;
+    CVideo3d::gluGetNurbsProperty = (PFNGLUGETNURBSPROPERTYPROC)pReset;
+    CVideo3d::gluGetString = (PFNGLUGETSTRINGPROC)pReset;
+    CVideo3d::gluGetTessProperty = (PFNGLUGETTESSPROPERTYPROC)pReset;
+    CVideo3d::gluLoadSamplingMatrices = (PFNGLULOADSAMPLINGMATRICESPROC)pReset;
+    CVideo3d::gluLookAt = (PFNGLULOOKATPROC)pReset;
+    CVideo3d::gluNewNurbsRenderer = (PFNGLUNEWNURBSRENDERERPROC)pReset;
+    CVideo3d::gluNewQuadric = (PFNGLUNEWQUADRICPROC)pReset;
+    CVideo3d::gluNewTess = (PFNGLUNEWTESSPROC)pReset;
+    CVideo3d::gluNextContour = (PFNGLUNEXTCONTOURPROC)pReset;
+    CVideo3d::gluNurbsCallback = (PFNGLUNURBSCALLBACKPROC)pReset;
+    CVideo3d::gluNurbsCurve = (PFNGLUNURBSCURVEPROC)pReset;
+    CVideo3d::gluNurbsProperty = (PFNGLUNURBSPROPERTYPROC)pReset;
+    CVideo3d::gluNurbsSurface = (PFNGLUNURBSSURFACEPROC)pReset;
+    CVideo3d::gluOrtho2D = (PFNGLUORTHO2DPROC)pReset;
+    CVideo3d::gluPartialDisk = (PFNGLUPARTIALDISKPROC)pReset;
+    CVideo3d::gluPerspective = (PFNGLUPERSPECTIVEPROC)pReset;
+    CVideo3d::gluPickMatrix = (PFNGLUPICKMATRIXPROC)pReset;
+    CVideo3d::gluProject = (PFNGLUPROJECTPROC)pReset;
+    CVideo3d::gluPwlCurve = (PFNGLUPWLCURVEPROC)pReset;
+    CVideo3d::gluQuadricCallback = (PFNGLUQUADRICCALLBACKPROC)pReset;
+    CVideo3d::gluQuadricDrawStyle = (PFNGLUQUADRICDRAWSTYLEPROC)pReset;
+    CVideo3d::gluQuadricNormals = (PFNGLUQUADRICNORMALSPROC)pReset;
+    CVideo3d::gluQuadricOrientation = (PFNGLUQUADRICORIENTATIONPROC)pReset;
+    CVideo3d::gluQuadricTexture = (PFNGLUQUADRICTEXTUREPROC)pReset;
+    CVideo3d::gluScaleImage = (PFNGLUSCALEIMAGEPROC)pReset;
+    CVideo3d::gluSphere = (PFNGLUSPHEREPROC)pReset;
+    CVideo3d::gluTessBeginContour = (PFNGLUTESSBEGINCONTOURPROC)pReset;
+    CVideo3d::gluTessBeginPolygon = (PFNGLUTESSBEGINPOLYGONPROC)pReset;
+    CVideo3d::gluTessCallback = (PFNGLUTESSCALLBACKPROC)pReset;
+    CVideo3d::gluTessEndContour = (PFNGLUTESSENDCONTOURPROC)pReset;
+    CVideo3d::gluTessEndPolygon = (PFNGLUTESSENDPOLYGONPROC)pReset;
+    CVideo3d::gluTessNormal = (PFNGLUTESSNORMALPROC)pReset;
+    CVideo3d::gluTessProperty = (PFNGLUTESSPROPERTYPROC)pReset;
+    CVideo3d::gluTessVertex = (PFNGLUTESSVERTEXPROC)pReset;
+    CVideo3d::gluUnProject = (PFNGLUUNPROJECTPROC)pReset;
+    g_pfnGLSetupWglCopyContext            = (PFNWGLCOPYCONTEXTPROC)pReset;
+    g_pfnGLSetupWglCreateContext          = (PFNWGLCREATECONTEXTPROC)pReset;
+    g_pfnGLSetupWglCreateLayerContext     = (PFNWGLCREATELAYERCONTEXTPROC)pReset;
+    g_pfnGLSetupWglDeleteContext          = (PFNWGLDELETECONTEXTPROC)pReset;
+    g_pfnGLSetupWglDescribeLayerPlane     = (PFNWGLDESCRIBELAYERPLANEPROC)pReset;
+    g_pfnGLSetupWglGetCurrentContext      = (PFNWGLGETCURRENTCONTEXTPROC)pReset;
+    g_pfnGLSetupWglGetCurrentDC           = (PFNWGLGETCURRENTDCPROC)pReset;
+    g_pfnGLSetupWglGetLayerPaletteEntries = (PFNWGLGETLAYERPALETTEENTRIESPROC)pReset;
+    g_pfnGLSetupWglGetProcAddress         = (PFNWGLGETPROCADDRESSPROC)pReset;
+    g_pfnGLSetupWglMakeCurrent            = (PFNWGLMAKECURRENTPROC)pReset;
+    g_pfnGLSetupWglRealizeLayerPalette    = (PFNWGLREALIZELAYERPALETTEPROC)pReset;
+    g_pfnGLSetupWglSetLayerPaletteEntries = (PFNWGLSETLAYERPALETTEENTRIESPROC)pReset;
+    g_pfnGLSetupWglShareLists             = (PFNWGLSHARELISTSPROC)pReset;
+    g_pfnGLSetupWglSwapLayerBuffers       = (PFNWGLSWAPLAYERBUFFERSPROC)pReset;
+    g_pfnGLSetupWglUseFontBitmapsA        = (PFNWGLUSEFONTBITMAPSAPROC)pReset;
+    g_pfnGLSetupWglUseFontOutlinesA       = (PFNWGLUSEFONTOUTLINESAPROC)pReset;
+    g_pfnGLSetupChoosePixelFormat         = (PFNCHOOSEPIXELFORMATPROC)pReset;
+    g_pfnGLSetupDescribePixelFormat       = (PFNDESCRIBEPIXELFORMATPROC)pReset;
+    g_pfnGLSetupGetPixelFormat            = (PFNGETPIXELFORMATPROC)pReset;
+    g_pfnGLSetupSetPixelFormat            = (PFNSETPIXELFORMATPROC)pReset;
+    g_pfnGLSetupSwapBuffers               = (PFNSWAPBUFFERSPROC)pReset;
+
+    g_szGLSetupPrimaryPath[0] = '\0';
+    g_szGLSetupMiniPath[0] = '\0';
+    g_nSelectedGLSetupDriver = -1;
 }
 
 // -----------------------------------------------------------------------------
