@@ -1,0 +1,40 @@
+    Types (TPI)
+  ============================================================
+    Trimmed llvm-pdbutil-18 `dump -types` fixture for tests/test_emu.py.
+    Our (MSVC) side of the shapes in emu_shapes.h: TBar at natural
+    alignment (sizeof 8), TFoo = TBar + m_tag 8 / m_count 12 / m_bytes 16
+    (char[4]) / m_bar 20 / m_pdb_only 24 / m_kind 28 (enum, int), sizeof 32.
+    0x1002 is the forward reference that must lose to the definition.
+    0x1000 | LF_POINTER [size = 12]
+             referent = 0x1003, mode = pointer, opts = None, kind = ptr32
+    0x1001 | LF_FIELDLIST [size = 36]
+             - LF_MEMBER [name = `m_flags`, Type = 0x0074 (int), offset = 0, attrs = public]
+             - LF_MEMBER [name = `m_barShort`, Type = 0x0011 (short), offset = 4, attrs = public]
+    0x1002 | LF_CLASS [size = 60] `TBar`
+             unique name: `.?AVTBar@@`
+             vtable: <no type>, base list: <no type>, field list: <no type>
+             options: forward ref (-> 0x1003) | has unique name, sizeof 0
+    0x1003 | LF_CLASS [size = 92] `TBar`
+             unique name: `.?AVTBar@@`
+             vtable: 0x1009, base list: <no type>, field list: 0x1001
+             options: has ctor / dtor | has unique name, sizeof 8
+    0x1004 | LF_FIELDLIST [size = 64]
+             - LF_BCLASS
+               type = 0x1003, offset = 0, attrs = public
+             - LF_MEMBER [name = `m_tag`, Type = 0x0070 (char), offset = 8, attrs = public]
+             - LF_INDEX continuation = 0x1005
+    0x1005 | LF_FIELDLIST [size = 96]
+             - LF_MEMBER [name = `m_count`, Type = 0x0074 (int), offset = 12, attrs = public]
+             - LF_MEMBER [name = `m_bytes`, Type = 0x1006, offset = 16, attrs = public]
+             - LF_MEMBER [name = `m_bar`, Type = 0x1000, offset = 20, attrs = public]
+             - LF_MEMBER [name = `m_pdb_only`, Type = 0x0011 (short), offset = 24, attrs = public]
+             - LF_MEMBER [name = `m_kind`, Type = 0x1007, offset = 28, attrs = public]
+    0x1006 | LF_ARRAY [size = 16]
+             size: 4, index type: 0x0022 (unsigned long), element type: 0x0070 (char)
+    0x1007 | LF_ENUM [size = 96] `TFooKind`
+             type: 0x0074 (int), field list: 0x1009
+             underlying type: 0x0074 (int)
+    0x1008 | LF_CLASS [size = 92] `TFoo`
+             unique name: `.?AVTFoo@@`
+             vtable: 0x1009, base list: 0x1004, field list: 0x1004
+             options: has ctor / dtor | has unique name, sizeof 32

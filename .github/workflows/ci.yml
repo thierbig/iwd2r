@@ -34,6 +34,8 @@ jobs:
         run: ctest --preset linux-gcc --output-on-failure
       - name: Tool tests
         run: python3 -I tests/test_tools.py
+      - name: Emu layout tests
+        run: python3 -I tests/test_emu.py
       - name: Subsystem map
         run: python3 -I tools/gen_map.py --check
       - name: Shader blobs
