@@ -418,3 +418,104 @@ TEST_CASE("sp-host: the poll guards and the ballot run on the host", "[sp-host][
 
     ClearPartySlot(pSprite);
 }
+
+// CBaldurMessage::ObjectControlRequest (0x430980): the client's "may I control
+// this object" request. It needs an established connection; then it shares the
+// object, compares its current remote owner with the local player, and either
+// changes the control in the host's remote-object array (host) or sends
+// {DWORD oldRemotePlayerID; DWORD oldRemoteObjectID; DWORD localPlayerID;
+//  DWORD localObjectID} to the host by name (client).
+TEST_CASE("sp-host: ObjectControlRequest asks the host for a remote object", "[sp-host][msg][data]")
+{
+    if (engine_world::DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(engine_world::StartEngine(error));
+    INFO(error);
+    engine_world::FramePump pump;
+
+    std::vector<BYTE> bytes = engine_world::FinishedCharacter();
+    if (bytes.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CBaldurMessage* pMessage = g_pBaldurChitin->GetBaldurMessage();
+    CNetwork& network = g_pChitin->cNetwork;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // The object whose control is requested: not a party member, owned by
+    // remote player 2.
+    CGameSprite* pSprite = new CGameSprite(bytes.data(),
+        static_cast<LONG>(bytes.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pSprite->m_remotePlayerID = 2;
+    pSprite->m_remoteObjectID = 0x00012345;
+    const LONG nObjectID = pSprite->GetId();
+
+    const BOOLEAN bConnection = network.m_bConnectionEstablished;
+    const BOOLEAN bHost = network.m_bIsHost;
+    const INT nHostPlayer = network.m_nHostPlayer;
+    const DWORD nLocalPlayer = network.m_idLocalPlayer;
+    const INT nProvider = network.m_nServiceProvider;
+
+    // No established connection: nothing to request.
+    network.m_bConnectionEstablished = FALSE;
+    memset(pBuffer, 0xCD, 3 + 4 * sizeof(DWORD));
+    CHECK(pMessage->ObjectControlRequest(nObjectID) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // An object the array cannot share: FALSE.
+    network.m_bConnectionEstablished = TRUE;
+    CHECK(pMessage->ObjectControlRequest(99999) == FALSE);
+
+    // Already controlled by the local player: FALSE and nothing queued.
+    network.m_idLocalPlayer = 7;
+    pSprite->m_remotePlayerID = 7;
+    CHECK(pMessage->ObjectControlRequest(nObjectID) == FALSE);
+    CHECK(pGame->GetRemoteObjectArray()->m_nControlsChanged == 0);
+
+    // The host moves the control itself and answers TRUE.
+    network.m_bIsHost = TRUE;
+    pSprite->m_remotePlayerID = 2;
+    CHECK(pMessage->ObjectControlRequest(nObjectID) == TRUE);
+
+    // A client with no host name stops at the name guard.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = -1;
+    memset(pBuffer, 0xCD, 3 + 4 * sizeof(DWORD));
+    CHECK(pMessage->ObjectControlRequest(nObjectID) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client with the host named sends the four-DWORD request. A non-null
+    // provider is what makes SendSpecificMessage marshal it (the null provider
+    // returns before the buffer is touched).
+    network.m_nHostPlayer = 0;
+    network.m_psPlayerName[0] = "host";
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    memset(pBuffer, 0xCD, 3 + 4 * sizeof(DWORD));
+    CHECK(pMessage->ObjectControlRequest(nObjectID) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 0x4F);
+    CHECK(pBuffer[2] == 99);
+    CHECK(*reinterpret_cast<DWORD*>(pBuffer + 3) == 2);
+    CHECK(*reinterpret_cast<DWORD*>(pBuffer + 7) == 0x00012345);
+    CHECK(*reinterpret_cast<DWORD*>(pBuffer + 11) == 7);
+    CHECK(*reinterpret_cast<DWORD*>(pBuffer + 15) == static_cast<DWORD>(nObjectID));
+    CHECK(CBaldurMessage::MSG_TYPE_OBJECT == 0x4F);
+    CHECK(CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_REQUEST == 99);
+
+    network.m_bConnectionEstablished = bConnection;
+    network.m_bIsHost = bHost;
+    network.m_nHostPlayer = nHostPlayer;
+    network.m_idLocalPlayer = nLocalPlayer;
+    network.m_nServiceProvider = nProvider;
+}
