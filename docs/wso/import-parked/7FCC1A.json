@@ -1,0 +1,7 @@
+{
+  "address": "7FCC1A",
+  "name": "CString::~CString",
+  "file": "src/MfcCString.cpp",
+  "batch": "i077",
+  "needs": "collides with ours: compat/mfc_string.h declares our own MFC CString stand-in (class CString at compat/mfc_string.h:31 with ~CString declared at :43 and defined at compat/mfc_string.cpp:179, spelling the same refcount-and-free semantics through CString::Release at compat/mfc_string.cpp:58); a second definition in a new src/MfcCString.cpp cannot coexist with it"
+}
