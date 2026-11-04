@@ -450,5 +450,7 @@ set(IWD2R_ENGINE_SOURCES
     "src/ScreenLayout.cpp"
     "src/ScreenLayout.h"
     "src/StateDumpSources.cpp"
+    "src/TString.cpp"
+    "src/TString.h"
     "src/resource.h"
 )
