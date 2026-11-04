@@ -252,6 +252,8 @@ set(IWD2R_ENGINE_SOURCES
     "src/CResArea.h"
     "src/CResBinary.cpp"
     "src/CResBinary.h"
+    "src/CResBIO.cpp"
+    "src/CResBIO.h"
     "src/CResBitmap.cpp"
     "src/CResBitmap.h"
     "src/CResCache.cpp"
