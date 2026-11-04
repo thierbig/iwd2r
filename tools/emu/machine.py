@@ -197,7 +197,7 @@ class Machine:
             v = addr if mode == 'ref' else struct.unpack('<I', uc.mem_read(addr, 4))[0]
             esp -= 4
             uc.mem_write(esp, struct.pack('<I', v))
-            esp -= 4
+        esp -= 4
         uc.mem_write(esp, struct.pack('<I', RET_MAGIC))
         uc.reg_write(UC_X86_REG_ESP, esp)
         self.entry_esp = esp                                # ESP at entry: [ESP]=ret, [ESP+4]=arg0
