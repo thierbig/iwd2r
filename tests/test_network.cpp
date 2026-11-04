@@ -290,6 +290,60 @@ TEST_CASE("CBaldurMessage::SendReformPartyAnnounceStatus broadcasts the reform-p
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
+// CBaldurMessage::ChapterAnnounceStatus (0x434EB0): the host tells every
+// player the chapter number and the chapter's resref as CHAPTER/97 - the
+// payload is {BYTE nChapter; BYTE length; the resref chars}, with
+// SEND_ALL_PLAYERS | SEND_GUARANTEED.
+TEST_CASE("msg: the chapter announce carries the chapter and the resref", "[network][msg]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // No session: the first guard answers FALSE and the buffer is untouched.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = TRUE;
+    memset(pBuffer, 0xCD, 16);
+    CHECK(message.ChapterAnnounceStatus(9, CResRef("AR1000")) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client does not announce the chapter.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(message.ChapterAnnounceStatus(9, CResRef("AR1000")) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // The host's packet: the three-byte SPEC_MSG header, the chapter, the
+    // length byte and the resref.
+    network.m_bIsHost = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    memset(pBuffer, 0xCD, 16);
+    CHECK(message.ChapterAnnounceStatus(9, CResRef("AR1000")) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_CHAPTER);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+    CHECK(CBaldurMessage::MSG_TYPE_CHAPTER == 74);
+    CHECK(CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS == 97);
+    CHECK(pBuffer[3] == 9);
+    CHECK(pBuffer[4] == 6);
+    CHECK(memcmp(pBuffer + 5, "AR1000", 6) == 0);
+
+    // An empty resref: a zero length byte, nothing after it.
+    memset(pBuffer, 0xCD, 16);
+    CHECK(message.ChapterAnnounceStatus(3, CResRef("")) == TRUE);
+    CHECK(pBuffer[3] == 3);
+    CHECK(pBuffer[4] == 0);
+    CHECK(pBuffer[5] == 0xCD);
+
+    // Leave the embedded CNetwork closed: its destructor calls OnCloseSession,
+    // which needs g_pChitin, but the ChitinScope restores g_pChitin before the
+    // chitin's members are destroyed.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
 // CBaldurMessage::WeatherBroadcast (0x436F50): the host tells every player
 // the weather flags WORD as WEATHER/119 (SEND_ALL_PLAYERS | SEND_GUARANTEED).
 // A non-null provider makes SendSpecificMessage write the packet into
