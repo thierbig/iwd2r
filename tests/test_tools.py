@@ -15436,6 +15436,100 @@ class DriverTest(unittest.TestCase):
             'b011: frida 0x407000 not-exercised: marking its evidence failed')
             for l in self.logs), self.logs)
 
+    def test_import_outcome_imports_an_unexercised_dependency_unmeasured(self):
+        d, batch = self._import_phase_driver()
+        d._frida_ran = (['world_entry'], ['first_fight'])
+        with open(os.path.join(self.wt, 'docs', 'evidence', '404000.md'), 'w') as f:
+            f.write('---\naddress: 0x404000\nname: TString::Tidy\nkind: read-only\n'
+                    'exemption: "his body, read against the disassembly"\n---\nprose\n')
+        row = {'address': '0x404000', 'name': 'TString::Tidy', 'dependency': True}
+        self.assertIsNone(d._import_outcome('b011', self.wt, row, 'not-exercised',
+                                            'no scenario hit it: world_entry', {}, 'abc', None))
+        self.assertEqual(d._unmeasured_marked, {'0x404000': 'docs/evidence/404000.md'})
+        wave = driver._tool('wave')
+        with open(os.path.join(self.wt, 'docs', 'evidence', '404000.md')) as f:
+            text = f.read()
+        self.assertIn('exemption: %s: world_entry: not exercised; not hit per coverage: '
+                      'first_fight' % wave.UNMEASURED_WSO, text)
+        self.assertTrue(wave.unmeasured_wso(text))
+        self.assertIn('b011: frida 0x404000 not-exercised: rule 1, imports unmeasured '
+                      '(evidence marked unmeasured WSO import)', self.logs)
+
+    def test_import_outcome_imports_a_one_sided_row_ours_never_calls_unmeasured(self):
+        d, batch = self._import_phase_driver()
+        d._frida_ran = (['world_entry', 'first_fight'], [])
+        with open(os.path.join(self.wt, 'docs', 'evidence', '405000.md'), 'w') as f:
+            f.write('---\naddress: 0x405000\nname: Rules::Zed\nkind: read-only\n'
+                    'exemption: "his body, read against the disassembly"\n---\nprose\n')
+        tag = 'fn_405000'
+        ran = {'orig': [], 'ours': [], 'failed': None,
+               'final': {'orig': True, 'ours': True},
+               'hits': {'orig': {tag: 0}, 'ours': {tag: 0}}}
+        traces = {'world_entry': {**ran, 'hits': {'orig': {tag: 100}, 'ours': {tag: 0}}},
+                  'first_fight': {**ran, 'hits': {'orig': {tag: 4}, 'ours': {tag: 0}}},
+                  'crashed': {'orig': [], 'ours': [], 'failed': 'exit 1',     # no final
+                              'final': {'orig': True, 'ours': False},        # totals: skipped
+                              'hits': {'orig': {tag: 999}, 'ours': {tag: 999}}}}
+        row = {'address': '0x405000', 'name': 'Rules::Zed', 'category': 'only_theirs'}
+        self.assertIsNone(d._import_outcome(
+            'b011', self.wt, row, 'not measured',
+            'called on one side only in world_entry, first_fight', traces, 'abc', None))
+        self.assertEqual(d._unmeasured_marked, {'0x405000': 'docs/evidence/405000.md'})
+        wave = driver._tool('wave')
+        with open(os.path.join(self.wt, 'docs', 'evidence', '405000.md')) as f:
+            text = f.read()
+        self.assertIn('exemption: %s: world_entry, first_fight: not exercised in ours '
+                      '(original 104 calls, ours 0)' % wave.UNMEASURED_WSO, text)
+        self.assertTrue(wave.unmeasured_wso(text))
+        self.assertIn('b011: frida 0x405000 caller finding: original 104 calls, ours 0 '
+                      '(rule 1, imports unmeasured)', self.logs)
+
+    def test_import_outcome_parks_a_one_sided_dependency_ours_alone_calls(self):
+        d, batch = self._import_phase_driver()
+        d._frida_ran = (['world_entry'], [])
+        with open(os.path.join(self.wt, 'docs', 'evidence', '406000.md'), 'w') as f:
+            f.write('---\naddress: 0x406000\nname: TString::Grow\nkind: read-only\n'
+                    'exemption: "thin"\n---\nprose\n')
+        tag = 'fn_406000'
+        traces = {'world_entry': {'orig': [], 'ours': [], 'failed': None,
+                                  'final': {'orig': True, 'ours': True},
+                                  'hits': {'orig': {tag: 0}, 'ours': {tag: 5}}}}
+        row = {'address': '0x406000', 'name': 'TString::Grow', 'dependency': True}
+        text = d._import_outcome('b011', self.wt, row, 'not measured',
+                                 'called on one side only in world_entry', traces, 'abc', None)
+        self.assertIn('the Frida phase gave "not measured"', text)
+        self.assertIn('park it', text)
+        self.assertIn('It is a dependency you imported with the batch', text)
+        self.assertEqual(d._unmeasured_marked, {})
+        with open(os.path.join(self.wt, 'docs', 'evidence', '406000.md')) as f:
+            self.assertIn('exemption: "thin"', f.read())
+        self.assertFalse(any('caller finding: original' in l for l in self.logs), self.logs)
+
+    def test_import_outcome_rule_1_leaves_kept_and_base_rows_parked(self):
+        d, batch = self._import_phase_driver()
+        d._frida_ran = (['world_entry'], [])
+        tag = 'fn_403000'
+        traces = {'world_entry': {'orig': [], 'ours': [], 'failed': None,
+                                  'final': {'orig': True, 'ours': True},
+                                  'hits': {'orig': {tag: 104}, 'ours': {tag: 0}}}}
+        kept = {'address': '0x403000', 'name': 'Rules::Tick',
+                'category': 'only_theirs', 'kept': True}
+        base = {'address': '0x403000', 'name': 'Rules::Tick',
+                'category': 'theirs_changed_ours_base'}
+        self.assertIn('park it', d._import_outcome('b011', self.wt, kept, 'not-exercised',
+                                                   'no scenario hit it: world_entry',
+                                                   {}, 'abc', None))
+        self.assertIn('park it', d._import_outcome(
+            'b011', self.wt, kept, 'not measured',
+            'called on one side only in world_entry', traces, 'abc', None))
+        self.assertIn('park it', d._import_outcome('b011', self.wt, base, 'not-exercised',
+                                                   'no scenario hit it: world_entry',
+                                                   {}, 'abc', None))
+        self.assertEqual(d._unmeasured_marked, {})
+        with open(os.path.join(self.wt, 'docs', 'evidence', '403000.md')) as f:
+            self.assertFalse(driver._tool('wave').unmeasured_wso(f.read()))
+        self.assertFalse(any('caller finding: original' in l for l in self.logs), self.logs)
+
     def test_write_unmeasured_evidence_rewrites_only_the_exemption(self):
         self._import_phase_driver()
         p = os.path.join(self.wt, 'docs', 'evidence', '408000.md')
@@ -16891,11 +16985,16 @@ class DriverTest(unittest.TestCase):
         d.frida_run = frida_run
         findings = d._frida_phase('b011', batch, self.wt, {})
         self.assertEqual(seen, [['fn_401000', 'fn_402000', 'fn_403000']])
+        # rule 1 (2026-11-03 ruling): the dependency is a function ours lacked,
+        # so exercised by no scenario it closes unmeasured, not parked
         dep = [f for f in findings if f.startswith('0x403000:')]
-        self.assertEqual(len(dep), 1, findings)
-        self.assertIn('exercised by no scenario', dep[0])
-        self.assertIn('a dependency you imported with the batch', dep[0])
+        self.assertEqual(dep, [], findings)
+        self.assertEqual(d._unmeasured_marked, {'0x403000': 'docs/evidence/403000.md'})
+        self.assertIn('b011: frida 0x403000 not-exercised: rule 1, imports unmeasured '
+                      '(evidence marked unmeasured WSO import)', '\n'.join(self.logs))
         self.assertIn('imported with the batch; measured like a row', '\n'.join(self.logs))
+        r = self.git('log', '-1', '--format=%s', cwd=self.wt)
+        self.assertEqual(r.stdout, 'frida: unmeasured WSO import marking for 1 row(s) of b011\n')
 
     def test_driver_frida_phase_parks_failed_and_unmeasured_rows(self):
         d, batch = self._import_phase_driver()
