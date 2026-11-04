@@ -1985,6 +1985,27 @@ void GLSetupResetDriver(void)
     g_nSelectedGLSetupDriver = -1;
 }
 
+// Ensures drivers are enumerated, then probes driver nDriver; on success records
+// it as the active driver. Returns 0 on success, 4 for a bad index, else the
+// probe's error code.
+// 0x7B7D40
+int GLSetupSelectDriver(unsigned int nDriver)
+{
+    if (g_nGLSetupDrivers == 0) {
+        GLSetupEnumDrivers();
+    }
+    if (nDriver >= g_nGLSetupDrivers) {
+        return 4;
+    }
+    int nResult = GLSetupProbeDriver(g_aGLSetupDrivers[nDriver].primary.szPath,
+                                     g_aGLSetupDrivers[nDriver].mini.szPath);
+    if (nResult == 0) {
+        g_nSelectedGLSetupDriver = nDriver;
+        return 0;
+    }
+    return nResult;
+}
+
 // -----------------------------------------------------------------------------
 
 // #binary-identical
