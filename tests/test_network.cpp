@@ -12,6 +12,7 @@
 
 #include "CBaldurChitin.h"
 #include "CChitin.h"
+#include "CGameObject.h"
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CNetwork.h"
@@ -998,4 +999,97 @@ TEST_CASE("msg: MapWorld announce status writes MAPWORLD/115 for the host only",
     network.m_nServiceProvider = nProvider;
     network.m_bConnectionEstablished = bConnection;
     network.m_bIsHost = bIsHost;
+}
+
+// CBaldurMessage::ObjectControlSuggestion (0x430720): the host suggests a
+// remote object to another player by sending the object's remote ids to that
+// player (OBJECT 79/115). The object only needs its base CGameObject fields
+// (m_remotePlayerID/m_remoteObjectID), so a minimal object array is enough.
+TEST_CASE("CBaldurMessage::ObjectControlSuggestion sends the remote ids to the suggested player", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    new (&pGame->m_cObjectArray) CGameObjectArray(10, 10);
+    CGameObject* pObject = new CGameObject();
+    LONG nObjectID;
+    REQUIRE(pGame->m_cObjectArray.Add(&nObjectID, pObject, INFINITE) == CGameObjectArray::SUCCESS);
+    // Add resets the ids; the suggestion reads them from the object.
+    pObject->m_remotePlayerID = 3;
+    pObject->m_remoteObjectID = 4;
+
+    network.m_idLocalPlayer = 1;
+    network.m_psPlayerName[0] = "remote";
+    network.m_pPlayerID[0] = 2;
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    // A closed session is refused before the object lookup.
+    network.m_bConnectionEstablished = FALSE;
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(2, nObjectID) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+    network.m_bConnectionEstablished = TRUE;
+
+    // Only the host suggests.
+    network.m_bIsHost = FALSE;
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(2, nObjectID) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+    network.m_bIsHost = TRUE;
+
+    // Player id 2 is at location 0: the packet carries the object's remote
+    // ids {3, 4} as two DWORDs.
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(2, nObjectID) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST);
+    CHECK(pBuffer[3] == 3);
+    CHECK(pBuffer[4] == 0);
+    CHECK(pBuffer[5] == 0);
+    CHECK(pBuffer[6] == 0);
+    CHECK(pBuffer[7] == 4);
+    CHECK(pBuffer[8] == 0);
+    CHECK(pBuffer[9] == 0);
+    CHECK(pBuffer[10] == 0);
+    CHECK(pBuffer[11] == 0xCD);
+
+    // The object's remote owner (3) is not a useful suggestion.
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(3, nObjectID) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+
+    // A player not in the session is refused.
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(9, nObjectID) == FALSE);
+    CHECK(pBuffer[3] == 0xCD);
+
+    // A missing object is refused.
+    CHECK(message.ObjectControlSuggestion(2, nObjectID + 100) == FALSE);
+
+    // The object's owner asking for itself takes the ObjectControlRequest
+    // path (still the TODO stub here, so FALSE).
+    CHECK(message.ObjectControlSuggestion(1, nObjectID) == FALSE);
+
+    pGame->m_cObjectArray.~CGameObjectArray();
+    g_pBaldurChitin = pSavedBaldur;
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }

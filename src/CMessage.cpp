@@ -587,6 +587,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_ADD = 65;
 // 0x84CF9A
 const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL = 67;
 
+// 0x84CF9C
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST = 115;
+
 // 0x84CF9F
 const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR = 80;
 
@@ -3564,9 +3567,70 @@ BOOL CBaldurMessage::ObjectAdd(LONG localObjectID, BYTE nObjectType, BYTE* pObje
 // 0x430720
 BOOL CBaldurMessage::ObjectControlSuggestion(PLAYER_ID playerToSuggestID, LONG localObjectID)
 {
-    // TODO: Incomplete.
+    CString sPlayerName;
 
-    return FALSE;
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    CGameSprite* pSprite;
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(localObjectID,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    DWORD nRemotePlayerID = pSprite->m_remotePlayerID;
+    LONG nRemoteObjectID = pSprite->m_remoteObjectID;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(localObjectID,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // The object's owner asking for itself performs the request directly.
+    if (playerToSuggestID == g_pChitin->cNetwork.m_idLocalPlayer) {
+        return ObjectControlRequest(localObjectID);
+    }
+
+    // Suggesting the object to its remote owner is pointless.
+    if (playerToSuggestID == nRemotePlayerID) {
+        return FALSE;
+    }
+
+    INT nPlayerLocation = g_pChitin->cNetwork.FindPlayerLocationByID(playerToSuggestID, FALSE);
+    if (nPlayerLocation == -1) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nPlayerLocation, sPlayerName);
+
+    // {DWORD m_remotePlayerID; DWORD m_remoteObjectID}
+    DWORD dwSize = sizeof(DWORD) + sizeof(DWORD);
+    BYTE* pMessage = CreateBuffer(dwSize);
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<DWORD*>(pMessage) = nRemotePlayerID;
+    *reinterpret_cast<DWORD*>(pMessage + sizeof(DWORD)) = nRemoteObjectID;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_OBJECT,
+        MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
 }
 
 // 0x430980
