@@ -10,7 +10,8 @@
 #include "CMessage.h"
 #include "CProjectile.h"
 
-// 0x55A610 (vtable slot 0)
+// 0x55A610
+// Vtable slot 0.
 // The service tick. The local scan map and due list destruct implicitly
 // where the binary inlines their teardown.
 void IcewindCProjectileTargetMap::Service()
