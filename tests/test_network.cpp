@@ -1134,9 +1134,12 @@ TEST_CASE("CBaldurMessage::ObjectControlSuggestion sends the remote ids to the s
     // A missing object is refused.
     CHECK(message.ObjectControlSuggestion(2, nObjectID + 100) == FALSE);
 
-    // The object's owner asking for itself takes the ObjectControlRequest
-    // path (still the TODO stub here, so FALSE).
-    CHECK(message.ObjectControlSuggestion(1, nObjectID) == FALSE);
+    // The local player suggesting to itself takes the ObjectControlRequest
+    // path (0x430980): this session is the host, so the control moves
+    // through ChangeControl, nothing is sent, and the request answers TRUE.
+    memset(pBuffer, 0xCD, 3 + 8 + 1);
+    CHECK(message.ObjectControlSuggestion(1, nObjectID) == TRUE);
+    CHECK(pBuffer[3] == 0xCD);
 
     pGame->m_cObjectArray.~CGameObjectArray();
     g_pBaldurChitin = pSavedBaldur;
