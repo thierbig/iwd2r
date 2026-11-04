@@ -233,6 +233,13 @@ def exe_offsets(header_text, cls, headers=None):
     return {name: off for name, off, _size in _exe_flat(texts, cls, warn)}
 
 
+def exe_offsets_dir(cls, header_dir):
+    """{member: exe_offset} for cls over every header under header_dir."""
+    warn = lambda msg: print(f'exe_offsets_dir: {msg}', file=sys.stderr)
+    return {name: off
+            for name, off, _s in _exe_flat(header_index(header_dir), cls, warn)}
+
+
 # --------------------------------------------------------------- PDB parsing
 
 def _cache_path(pdb_path):
