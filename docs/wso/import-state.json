@@ -9425,7 +9425,7 @@
     "i075": {
       "assigned_at": "2026-11-03T22:22:29+00:00",
       "branch": "p3/wso-i075",
-      "closed_at": null,
+      "closed_at": "2026-11-04T02:09:16+00:00",
       "files": [
         "src/CChitin3d.cpp",
         "src/CVisualEffect.cpp",
@@ -9433,6 +9433,7 @@
         "src/IcewindCProjectileTargetMap.cpp"
       ],
       "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
       "pool": "glm",
       "rows": [
         {
@@ -9500,7 +9501,7 @@
           "their_len": 592
         }
       ],
-      "status": "assigned",
+      "status": "closed",
       "verdicts": {}
     }
   },
