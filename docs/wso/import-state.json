@@ -9503,6 +9503,88 @@
       ],
       "status": "closed",
       "verdicts": {}
+    },
+    "i076": {
+      "assigned_at": "2026-11-04T02:10:25+00:00",
+      "branch": "p3/wso-i076",
+      "closed_at": "2026-11-04T04:08:46+00:00",
+      "files": [
+        "src/CVisualEffect.cpp",
+        "src/TString.cpp",
+        "src/IcewindCProjectileTargetMap.cpp",
+        "src/CProjectile.cpp"
+      ],
+      "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
+      "gate": "full",
+      "pool": "glm",
+      "rows": [
+        {
+          "address": "0x554F00",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::Move",
+          "our_len": 0,
+          "their_len": 2591
+        },
+        {
+          "address": "0x45E870",
+          "category": "only_theirs",
+          "file": "src/TString.cpp",
+          "name": "TString::AssignString",
+          "our_len": 0,
+          "their_len": 1225
+        },
+        {
+          "address": "0x554B70",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::AIUpdate",
+          "our_len": 0,
+          "their_len": 1138
+        },
+        {
+          "address": "0x555200",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVisualEffect::SetAllDelete",
+          "our_len": 0,
+          "their_len": 520
+        },
+        {
+          "address": "0x55A890",
+          "category": "only_theirs",
+          "file": "src/IcewindCProjectileTargetMap.cpp",
+          "name": "IcewindCProjectileTargetMap::CollectDueStrikes",
+          "our_len": 0,
+          "their_len": 519
+        },
+        {
+          "address": "0x573CC0",
+          "category": "only_theirs",
+          "file": "src/CProjectile.cpp",
+          "name": "CProjectileCorrosiveFog::CProjectileCorrosiveFog",
+          "our_len": 0,
+          "their_len": 504
+        },
+        {
+          "address": "0x4C5ED0",
+          "category": "only_theirs",
+          "file": "src/TString.cpp",
+          "name": "TString::Compare",
+          "our_len": 0,
+          "their_len": 504
+        },
+        {
+          "address": "0x5513F0",
+          "category": "only_theirs",
+          "file": "src/CVisualEffect.cpp",
+          "name": "CVEFVidCell::FrameAdvance",
+          "our_len": 0,
+          "their_len": 474
+        }
+      ],
+      "status": "closed",
+      "verdicts": {}
     }
   },
   "fork_base": "7820ef224ac4d9527e1844ce0984478f63e5a4cd",
