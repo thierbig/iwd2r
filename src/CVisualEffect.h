@@ -9,6 +9,9 @@
 #include "CRes.h"
 #include "CResBinary.h"
 #include "CResRef.h"
+#include "CVidBitmap.h"
+#include "CVidCell.h"
+#include "CVidPalette.h"
 
 // IWD2 reads this 0x24-byte prefix; event offsets are from the resource start.
 struct CVEFHeader {
@@ -83,8 +86,8 @@ public:
     /* 0x0094 */ DWORD m_extra[84];
 };
 
-// Recovered prefix through m_newDirection; loading, rendering, sound and the
-// remaining tail of the IWD2 animation object have not been recovered yet.
+// Recovered prefix and the animation tail through m_newDirection; loading,
+// rendering and sound have not been recovered yet.
 class CVEFVidCell : public CGameObject, public CVEFVidCellBase {
 public:
     static const SHORT OFFSET_FROMX_X[16];
@@ -92,16 +95,28 @@ public:
     static const SHORT OFFSET_FROMY_X[16];
     static const SHORT OFFSET_FROMY_Y[16];
 
+    void FrameAdvance(LONG nCounter); // 0x5513F0
     void CalculatePos(const CPoint& pos); // 0x551490
     void SetDirection(const CPoint& pos, const CPoint& oldPos, const CPoint& targetPos, SHORT nDirection); // 0x551520
+    static SHORT GetDirection(const CPoint& pos, const CPoint& targetPos, SHORT nDirection); // 0x551670
 
-    /* 0x0252 */ SHORT m_newDirection;
+    /* 0x0252 */ CVidCell* m_cVidCell;
+    /* 0x0256 */ CVidCell* m_cShadowVidCell;
+    /* 0x025A */ CVidPalette m_palette;
+    /* 0x027E */ CVidBitmap m_newPalette;
+    /* 0x0338 */ BOOL m_done;
+    /* 0x033C */ LONG m_newDirection;
 };
 
 class CVisualEffect : public CGameObject, public CVisualEffectBase {
 public:
+    static const LONG MAX_FRAME_RATE;
+
     CVisualEffect(); // 0x554870
     ~CVisualEffect() override; // 0x5549D0
+    void AIUpdate() override; // 0x554B70
+    void SetAllDelete(); // 0x555200
+    void Move(const CPoint& targetPos); // 0x554F00
     static LONG Load(CString res, CGameArea* pArea, const CPoint& pos,
         LONG targetId, const CPoint& targetPos, LONG height); // 0x554D20
 
