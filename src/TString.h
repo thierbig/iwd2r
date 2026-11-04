@@ -51,10 +51,15 @@ public:
         ConstructCopy(this, &other);
     }
 
-    // Copy assignment is declared without a definition: the native operator routes
-    // through AssignString (0x45E870, not imported), and declaring it suppresses the
-    // implicit memberwise assignment the refcounted representation must not get.
-    TString& operator=(const TString& other);
+    // The native copy assignment is a call to AssignString over the full range.
+    TString& operator=(const TString& other)
+    {
+        return AssignString(other, 0, UINT_MAX);
+    }
+
+    TString& AssignString(const TString& source, UINT start, UINT count); // 0x45E870
+
+    int Compare(int nPos, int nCount, const char* pStr2, int nLen2) const; // 0x4C5ED0
 
 private:
     TString& Assign(const char* s, int nLen)
@@ -73,6 +78,7 @@ protected:
     BOOLEAN PrepareAssign(UINT nLen, BOOLEAN bTrim); // 0x44BC20
     void Grow(UINT nLen); // 0x44BE10
     void Tidy(BOOLEAN bDealloc); // 0x448D50
+    UINT MaxSize() const; // 0x45EA70
 
     // 0x7F9AC2: std::_String_base::_Xlen.
     static void Xlen()
