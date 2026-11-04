@@ -152,6 +152,7 @@ class Machine:
 
         self.stubs = {}                                    # hook addr -> spec
         self.watch = {}                                    # addr -> spec
+        self._retseq = {}                                  # hook addr -> next 'rets' index
         self.icount = 0
         uc.hook_add(UC_HOOK_CODE, self._on_code)
         uc.hook_add(UC_HOOK_MEM_WRITE, self._on_write)
@@ -328,6 +329,18 @@ class Machine:
                     uc.mem_write(ptr + 4 * i, struct.pack('<I', dw & 0xFFFFFFFF))
                     self._rec_write(ptr + 4 * i, 4, dw)
 
+        # spec['ret'] == 'ecx': hand back whatever ECX holds now -- for a
+        # thiscall stub that is the caller's `this`, i.e. "ctor returns this".
+        if spec.get('ret') == 'ecx':
+            retval = uc.reg_read(UC_X86_REG_ECX)
+        # spec['rets'] = [v1, v2, ...]: scripted per-call return sequence
+        # (exhausts to 0), e.g. a GetAbility(i) that must vary with i.
+        seq = spec.get('rets')
+        if seq is not None:
+            i = self._retseq.get(spec['hook_addr'], 0)
+            retval = seq[i] if i < len(seq) else 0
+            self._retseq[spec['hook_addr']] = i + 1
+
         self.calls.append([spec['name'], [self._norm(a) for a in raw], self._norm(retval),
                            spec.get('inline_ok', False)])
         uc.reg_write(UC_X86_REG_ESP, esp + 4 + spec.get('pop', 0))
@@ -376,9 +389,14 @@ def state_diff(sa, sb):
     return diffs
 
 
-def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_map=None):
+def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_map=None,
+             norm_vptr=False):
     """field_map: {orig this-offset: ours this-offset} — reconcile known class-layout
-    divergence between the VC6 original and our MSVC rebuild before comparing."""
+    divergence between the VC6 original and our MSVC rebuild before comparing.
+    norm_vptr: constructors of virtual classes store their own image's vtable
+    pointer into `this`; the two images can never agree on that value, so zero
+    any own-image pointer written into `this` — the comparison then asks "was
+    a vptr stored, and at which offset", not "is it the same address"."""
     print(f'--- {name} ---')
     mo, mu = build('orig', inp, pe_o), build('ours', inp, pe_u)
     mo.start()
@@ -397,11 +415,19 @@ def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_ma
         return True if strict else w[0] not in ('stack', 'tib')
     wo = [w for w in mo.writes if keep(w)]
     wu = [w for w in mu.writes if keep(w)]
+    if norm_vptr:
+        def zap(m, w):
+            r, o, s, v = w
+            if r == 'this' and m.pe.image_base <= v < m.pe.image_base + m.pe.span:
+                return (r, o, s, 0)
+            return w
+        wo = [zap(mo, w) for w in wo]
+        wu = [zap(mu, w) for w in wu]
     if field_map:
         wo = [(r, field_map.get(o, o) if r == 'this' else o, s, v) for r, o, s, v in wo]
     seq_eq = wo == wu
 
-    so, su = final_state(mo, wo), final_state(mu)
+    so, su = final_state(mo, wo), final_state(mu, wu)
     sd = state_diff(so, su)
     if field_map and not sd and calls_eq:
         verdict = 'EQUAL(layout)' if seq_eq else 'EQUAL(state,layout)'

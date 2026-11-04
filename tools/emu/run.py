@@ -200,7 +200,8 @@ def main(argv=None):
                 with contextlib.redirect_stdout(buf):
                     verdict = machine.run_case(f'{case["name"]} {setname}', b, inp,
                                                pe_o, pe_u, args.strict, args.verbose,
-                                               field_map=ctx['field_map'])
+                                               field_map=ctx['field_map'],
+                                               norm_vptr=case.get('vptr_norm', False))
             except Exception as e:
                 verdict, detail = 'ERROR', f'{type(e).__name__}: {e}'
             if verdict == 'ERROR' and not detail:

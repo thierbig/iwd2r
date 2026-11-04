@@ -239,6 +239,37 @@ class UnicornGatedTests(unittest.TestCase):
         uc.emu_start(base, base + 5)
         self.assertEqual(uc.reg_read(UC_X86_REG_EAX), 5)
 
+    ORIG = Path.home() / '.local' / 'share' / 'iwd2r' / 'vanilla' / 'iwd2.exe'
+
+    def test_stub_ret_ecx_and_rets_sequence(self):
+        """ret:'ecx' hands back the caller's this; 'rets' scripts a per-call
+        return sequence that exhausts to 0.  Drives _apply_stub directly."""
+        import struct
+        import machine
+        from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_ESP, UC_X86_REG_EAX
+        if not self.ORIG.exists():
+            self.skipTest('original exe not present')
+        m = machine.Machine('orig', machine.PeImage(self.ORIG), machine.STUB_PAGE,
+                            'cdecl', machine.BLK_LO, 0x40, [])
+        esp = machine.ESP0 - 0x10
+        m.uc.mem_write(esp, struct.pack('<I', machine.RET_MAGIC))
+        m.uc.reg_write(UC_X86_REG_ESP, esp)
+        m.uc.reg_write(UC_X86_REG_ECX, 0x1234)
+        m.add_stub({'name': 'ctor', 'kind': 'code', 'addr': machine.STUB_PAGE,
+                    'conv': 'thiscall', 'nargs': 0, 'pop': 0, 'ret': 'ecx'})
+        spec = m.stubs[machine.STUB_PAGE]
+        m._apply_stub(spec)
+        self.assertEqual(m.calls[-1][2], '0x00001234')       # logged ret = ECX
+        self.assertEqual(m.uc.reg_read(UC_X86_REG_EAX), 0x1234)
+        m.add_stub({'name': 'get', 'kind': 'code', 'addr': machine.STUB_PAGE + 0x10,
+                    'conv': 'cdecl', 'nargs': 1, 'pop': 0, 'rets': [7, 8]})
+        spec2 = m.stubs[machine.STUB_PAGE + 0x10]
+        rets = []
+        for _ in range(3):
+            m._apply_stub(spec2)
+            rets.append(m.calls[-1][2])
+        self.assertEqual(rets, ['0x00000007', '0x00000008', '0x00000000'])
+
 
 if __name__ == '__main__':
     unittest.main()
