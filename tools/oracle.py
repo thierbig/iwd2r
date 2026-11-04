@@ -6,6 +6,8 @@ Usage (from WSL, in the repository):
   python3 tools/oracle.py evidence IcewindMisc::Roll
   python3 tools/oracle.py evidence 0x5845D0 CRuleTables::GetXPCap [--force]
   python3 tools/oracle.py build
+  python3 tools/oracle.py emu [ADDR ...] [--list] [--ours DIR] [--json OUT]
+                             [--strict] [--verbose]
   python3 tools/oracle.py run --selftest
   python3 tools/oracle.py run [--file selftest] [--seed N] [--iterations N]
   python3 tools/oracle.py vanilla [--rebuild]
@@ -41,6 +43,17 @@ Notes by hand (docs/evidence/README.md).
 build syncs the checkout to this worktree's Windows build folder (play.py's
 route and play.win_checkout) and builds the 32-bit runner iwd2r_oracle, the replay injector and the recorder
 DLL with the windows-msvc-x86 preset.
+
+emu runs the differential-emulation cases in tools/emu/cases (one module
+per function, named by its address in the original exe) against the
+vanilla iwd2.exe and our RelWithDebInfo build: one verdict line per
+case and input set, EQUAL / EQUAL(state) / EQUAL(layout) / DIFF /
+ERROR, exit 0 when every set is equal, 1 on any DIFF and 2 on any
+ERROR. Unicorn lives only in the .venv-emu virtualenv, so this command
+relays to .venv-emu/bin/python -I running tools/emu/run.py (the same
+file runs directly under that interpreter); without ADDR every case
+runs, and a missing venv exits 2 after printing the setup command. See
+tools/emu/cases/__init__.py for the case contract.
 
 run copies the vanilla iwd2.exe (MD5 from oracle/loader/vanilla.json) to
 %USERPROFILE%/iwd2r-oracle and runs the runner on it.
@@ -3340,6 +3353,40 @@ LOAD_HELP = ('start from this save folder (NNNNNNNNN-Name, with '
 NEW_ATTEMPT_HELP = ('start a new attempt: reset the sandbox launch count and '
                     'record why')
 
+# The emu cases run our RelWithDebInfo build against the vanilla exe; the
+# same build dir tools/emu/run.py defaults to.
+EMU_OURS = ('/mnt/c/Users/thier/iwd2r-build-p3-wso-i077/build/'
+            'windows-msvc-x86/RelWithDebInfo')
+EMU_VENV_SETUP = ('python3 -m venv .venv-emu && .venv-emu/bin/pip install -r '
+                  'tools/emu/requirements.txt')
+
+
+def cmd_emu(args):
+    """Relay tools/emu/run.py into the Unicorn venv.
+
+    oracle.py itself runs under the system python3 -I, which has no
+    Unicorn; .venv-emu does.  Everything else (case discovery, verdicts,
+    exit codes) is run.py's.
+    """
+    venv_python = os.path.join(ROOT, '.venv-emu', 'bin', 'python')
+    if not os.path.isfile(venv_python):
+        print('oracle: emu needs .venv-emu (Unicorn lives only there); from '
+              'the repository root:\n  %s' % EMU_VENV_SETUP, file=sys.stderr)
+        return 2
+    cmd = [venv_python, '-I', os.path.join(HERE, 'emu', 'run.py')]
+    cmd += args.addr
+    if args.list:
+        cmd.append('--list')
+    cmd += ['--ours', args.ours]
+    if args.json:
+        cmd += ['--json', args.json]
+    if args.strict:
+        cmd.append('--strict')
+    if args.verbose:
+        cmd.append('--verbose')
+    return subprocess.run(cmd, cwd=ROOT).returncode
+
+
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
@@ -3368,6 +3415,21 @@ def main(argv=None):
     run.add_argument('--vanilla', default=VANILLA_EXE,
                      help='the vanilla iwd2.exe (default %(default)s)')
     run.set_defaults(run=cmd_run)
+    emu = sub.add_parser('emu', help='run the differential-emulation cases '
+                         '(tools/emu/cases) on the vanilla exe and our build')
+    emu.add_argument('addr', nargs='*', metavar='ADDR',
+                     help='case address to run (0x578970); default every case')
+    emu.add_argument('--list', action='store_true',
+                     help='list the cases and exit')
+    emu.add_argument('--ours', default=EMU_OURS,
+                     help='our RelWithDebInfo build directory '
+                     '(default %(default)s)')
+    emu.add_argument('--json', help='write the results as JSON to OUT')
+    emu.add_argument('--strict', action='store_true',
+                     help='keep stack/TIB writes in the diff')
+    emu.add_argument('--verbose', action='store_true',
+                     help='print the per-case report even for EQUAL')
+    emu.set_defaults(run=cmd_emu)
     van = sub.add_parser('vanilla', help='build the verified vanilla copy '
                          'of the game')
     van.add_argument('--rebuild', action='store_true',
