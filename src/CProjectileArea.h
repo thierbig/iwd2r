@@ -268,6 +268,16 @@ public:
     CProjectileInsectPlague();
 };
 
+// Corrosive Fog (vtable 0x84FCD0): the DFogX burst on RNG_M01, the DFogR
+// ring and the persistent DFogA cloud (ARE_M02), all copy-from-back;
+// strikes every 10 for 2000 ticks, 250 around, with the +0x574/+0x575
+// flips and a 500 linger (+0x578) on the third explosion. It adds no
+// members of its own.
+class CProjectileCorrosiveFog : public CProjectileArea {
+public:
+    CProjectileCorrosiveFog();
+};
+
 // Power Word Kill (vtable 0x84FD6C): the PWKillX burst on EFF_M39, both
 // copy-from-back; one burst with hit modulus 10, for 45 ticks, 150 around.
 // It adds no members of its own.

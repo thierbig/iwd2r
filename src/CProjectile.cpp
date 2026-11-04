@@ -1401,6 +1401,31 @@ CProjectileInsectPlague::CProjectileInsectPlague()
     m_nRadius = 250;
 }
 
+// 0x573CC0
+CProjectileCorrosiveFog::CProjectileCorrosiveFog()
+    : CProjectileArea(0x100)
+{
+    m_explosion1.m_animation = "DFogX";
+    m_explosion1.m_sound = "RNG_M01";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_animation = "DFogR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 26;
+    m_explosion3.m_animation = "DFogA";
+    m_explosion3.m_sound = "ARE_M02";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_nTriggerInterval = 10;
+    m_nHitModulus = 10;
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_38 = 500;
+    m_nTriggerCountdown = 0;
+    m_nDuration = 2000;
+    field_1D8 = 1;
+    m_nRadius = 250;
+}
+
 // 0x573E90
 CProjectilePowerWordKill::CProjectilePowerWordKill()
     : CProjectileArea(0x100)
