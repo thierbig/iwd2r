@@ -184,7 +184,7 @@ static const GLSETUP_CANDIDATE g_aGLSetupCandidates[4] = {
 // "Company - Description" identification string from the version resource.
 // Returns TRUE when a VS_FIXEDFILEINFO block was found.
 // 0x7BB5D0
-int GLSetupGetDriverVersion(LPCSTR pszFilePath, void* pDriverInfo, char* pszIdOut, unsigned int cbIdOut)
+int GLSetupGetDriverVersion(const char* pszFilePath, void* pDriverInfo, char* pszIdOut, unsigned int cbIdOut)
 {
     int bFound = 0;
     DWORD dwHandle;
@@ -278,7 +278,7 @@ int GLSetupGetDriverVersion(LPCSTR pszFilePath, void* pDriverInfo, char* pszIdOu
 // opengl32.dll, ...) via canonical-path comparisons, and rejects a mini-driver
 // that is not co-located with the primary. Returns 0 on success, 4 on failure.
 // 0x7B7940
-int GLSetupValidateDriver(LPCSTR pszPrimaryPath, LPCSTR pszMiniPath, GLSETUP_DRIVER* pDriver)
+int GLSetupValidateDriver(const char* pszPrimaryPath, const char* pszMiniPath, GLSETUP_DRIVER* pDriver)
 {
     if (pszPrimaryPath == NULL) {
         return 4;
