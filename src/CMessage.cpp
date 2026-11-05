@@ -21315,14 +21315,17 @@ BOOL CMessageSetVariable::UnmarshalMessage(BYTE* pData, DWORD dwSize)
         m_targetId = CGameObjectArray::INVALID_INDEX;
     }
 
+    // The name comes first on the wire, then the scope (0x50A75F stores the
+    // first string to +0x10, 0x50A79B the second to +0xC), the order
+    // MarshalMessage writes them in.
     SHORT length = *reinterpret_cast<SHORT*>(pData + cnt);
     cnt += sizeof(SHORT);
-    m_sScope = CString(reinterpret_cast<const char*>(pData + cnt), length);
+    m_sName = CString(reinterpret_cast<const char*>(pData + cnt), length);
     cnt += length;
 
     length = *reinterpret_cast<SHORT*>(pData + cnt);
     cnt += sizeof(SHORT);
-    m_sName = CString(reinterpret_cast<const char*>(pData + cnt), length);
+    m_sScope = CString(reinterpret_cast<const char*>(pData + cnt), length);
     cnt += length;
 
     m_nValue = *reinterpret_cast<LONG*>(pData + cnt);

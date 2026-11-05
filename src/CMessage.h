@@ -1150,8 +1150,8 @@ public:
 
 // NOTE: The original's message that sets (or increments) a script variable
 // on every machine (vtable 0x84882C, 0x1E bytes). Its comm type is
-// BROADCAST_FORCED, so the local player runs it too. Marshal (0x50A4D0) is
-// omitted (single player only, docs/adr/0002-single-player-only.md).
+// BROADCAST_FORCED, so the local player runs it too. On the wire the name
+// comes before the scope (MarshalMessage 0x50A4D0, UnmarshalMessage 0x50A6C0).
 class CMessageSetVariable : public CMessage {
 public:
     CMessageSetVariable(const CString& sScope, const CString& sName, LONG nValue, LONG caller, LONG target)

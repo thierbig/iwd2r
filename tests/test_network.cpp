@@ -1150,3 +1150,55 @@ TEST_CASE("CBaldurMessage::ObjectControlSuggestion sends the remote ids to the s
     network.m_bIsHost = FALSE;
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
+
+// CMessageSetVariable::UnmarshalMessage (0x50A6C0) reads the wire in the
+// order MarshalMessage (0x50A4D0) writes it: the name first (stored to +0x10
+// at 0x50A75F), then the scope (+0xC at 0x50A79B). The fork import read the
+// first string into the scope, so every received SetVariable swapped the two.
+TEST_CASE("msg: CMessageSetVariable::UnmarshalMessage reads the name before the scope", "[network][msg]")
+{
+    // A zeroed CBaldurChitin/CInfGame: GetRemoteObjectArray()->Find misses.
+    CBaldurChitin* pSavedBaldur = g_pBaldurChitin;
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    // {header[3]; PLAYER_ID 1; LONG remote 0; SHORT 5 "KAPUT"; SHORT 6 "GLOBAL";
+    //  LONG value 7; BYTE increment 1; DWORD flags 0x0F}
+    BYTE packet[3 + 4 + 4 + 2 + 5 + 2 + 6 + 4 + 1 + 4];
+    memset(packet, 0, sizeof(packet));
+    DWORD cnt = 3;
+    PLAYER_ID nPlayer = 1;
+    memcpy(packet + cnt, &nPlayer, sizeof(nPlayer));
+    cnt += sizeof(nPlayer) + sizeof(LONG);
+    SHORT nLength = 5;
+    memcpy(packet + cnt, &nLength, sizeof(nLength));
+    cnt += sizeof(nLength);
+    memcpy(packet + cnt, "KAPUT", 5);
+    cnt += 5;
+    nLength = 6;
+    memcpy(packet + cnt, &nLength, sizeof(nLength));
+    cnt += sizeof(nLength);
+    memcpy(packet + cnt, "GLOBAL", 6);
+    cnt += 6;
+    LONG nValue = 7;
+    memcpy(packet + cnt, &nValue, sizeof(nValue));
+    cnt += sizeof(nValue);
+    packet[cnt++] = 1;
+    DWORD dwFlags = 0x0F;
+    memcpy(packet + cnt, &dwFlags, sizeof(dwFlags));
+    cnt += sizeof(dwFlags);
+    REQUIRE(cnt == sizeof(packet));
+
+    CMessageSetVariable message(CString(""), CString(""), 0, 0, 0);
+    CHECK(message.UnmarshalMessage(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_targetId == CGameObjectArray::INVALID_INDEX);
+    CHECK(message.m_sName == "KAPUT");
+    CHECK(message.m_sScope == "GLOBAL");
+    CHECK(message.m_nValue == 7);
+    CHECK(message.m_bIncrement == 1);
+    CHECK(message.m_dwFlags == 0x0F);
+
+    g_pBaldurChitin = pSavedBaldur;
+}
