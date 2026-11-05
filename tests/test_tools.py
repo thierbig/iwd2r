@@ -2623,8 +2623,250 @@ class RulesMathSetTest(unittest.TestCase):
             self.assertIn(f'0x{address:X}', text, f'unlisted 0x{address:X}')
 
 
+EMU_EVIDENCE = ('---\n'
+                'address: 0x4029F0\n'
+                'name: CResBIO::Demand\n'
+                'exemption: unmeasured WSO import: world_entry, first_fight: '
+                'not exercised\n'
+                'kind: read-only\n'
+                'ghidra_version: 12.1.4\n'
+                '---\n'
+                '\n'
+                '# 0x4029F0 CResBIO::Demand\n'
+                '\n'
+                'Imported from the WSO fork body.\n')
+
+# The same file with an exemption that is NOT an unmeasured import (a kept
+# row's reason): the front matter must survive untouched.
+EMU_KEPT = EMU_EVIDENCE.replace(
+    'exemption: unmeasured WSO import: world_entry, first_fight: '
+    'not exercised\n',
+    'exemption: kept row, measured elsewhere\n')
+
+EMU_SETS = [{'set': 'flag=0', 'verdict': 'EQUAL', 'detail': ''},
+            {'set': 'flag=1', 'verdict': 'EQUAL(state)', 'detail': ''}]
+
+
+class EmuEvidenceTest(unittest.TestCase):
+    """tools/emu/evidence.py: turn all-EQUAL emu runs into evidence files."""
+
+    def emu_repo(self, files=None):
+        """A throwaway git repo with the given {rel: text} committed."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        self.g = lambda *a: subprocess.run(['git', '-C', d, *a], check=True,
+                                           capture_output=True, text=True)
+        self.g('init', '-q')
+        self.g('config', 'user.name', 'T')
+        self.g('config', 'user.email', 't@example.com')
+        self.g('config', 'commit.gpgsign', 'false')
+        for rel, text in (files or {}).items():
+            path = os.path.join(d, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                f.write(text)
+        self.g('add', '-A')
+        self.g('commit', '-q', '--allow-empty', '-m', 'base')
+        return d
+
+    def fake_exe(self, d, name, payload):
+        path = os.path.join(d, name)
+        with open(path, 'wb') as f:
+            f.write(payload)
+        return path
+
+    def sha(self, path):
+        with open(path, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    def results(self, sets=None):
+        return {'0x4029F0': {'name': 'CResBIO::Demand',
+                             'build': 'b',
+                             'sets': EMU_SETS if sets is None else sets}}
+
+    def source(self, sets=2, equal=2):
+        return emu_evidence.trace_source(0x4029F0, 'a' * 64, 'b' * 64,
+                                         '0f1e2d3c4b5a', sets, equal)
+
+    def test_trace_source_shape(self):
+        self.assertEqual(self.source(),
+                         'emu c4029f0 orig:%s ours:%s at:0f1e2d3c4b5a '
+                         'sets=2 equal=2' % ('a' * 64, 'b' * 64))
+        m = check_evidence.TRACE_SOURCES[2].match(self.source())
+        self.assertTrue(m)
+        self.assertTrue(check_evidence.emu_counts_ok(m))
+        # the builder refuses a source that is not a measurement
+        for sets, equal in ((3, 2), (0, 0), (2, 3)):
+            with self.assertRaises(AssertionError):
+                emu_evidence.trace_source(0x4029F0, 'a' * 64, 'b' * 64,
+                                          '0f1e2d3c4b5a', sets, equal)
+
+    def test_convert_rewrites_unmeasured_front_matter(self):
+        source = self.source()
+        new, converted = emu_evidence.convert(EMU_EVIDENCE, source)
+        self.assertTrue(converted)
+        self.assertTrue(new.startswith('---\n'))
+        fields = check_evidence.front_matter(new)
+        self.assertEqual(fields['kind'], 'trace')
+        self.assertEqual(fields['trace_source'], source)
+        self.assertNotIn('exemption', fields)
+        self.assertEqual(fields['address'], '0x4029F0')
+        self.assertEqual(fields['name'], 'CResBIO::Demand')
+        self.assertEqual(fields['ghidra_version'], '12.1.4')
+        self.assertIn('# 0x4029F0 CResBIO::Demand', new)
+        self.assertIn('Imported from the WSO fork body.', new)
+
+    def test_convert_leaves_other_exemptions_alone(self):
+        new, converted = emu_evidence.convert(EMU_KEPT, self.source())
+        self.assertFalse(converted)
+        self.assertEqual(new, EMU_KEPT)
+        # a live frida trace_source is never replaced by the emu one either
+        frida = EMU_EVIDENCE.replace(
+            'exemption: unmeasured WSO import: world_entry, first_fight: '
+            'not exercised\n',
+            'kind: trace\ntrace_source: frida probe orig:%s ours:%s '
+            'compare=0\n' % ('a' * 64, 'b' * 64)).replace('kind: read-only\n',
+                                                         '')
+        new, converted = emu_evidence.convert(frida, self.source())
+        self.assertFalse(converted)
+        self.assertEqual(new, frida)
+
+    def test_convert_replaces_an_existing_trace_source(self):
+        done, _ = emu_evidence.convert(EMU_EVIDENCE, self.source(2, 2))
+        newer, converted = emu_evidence.convert(done, self.source(4, 4))
+        self.assertTrue(converted)
+        self.assertEqual(newer.count('trace_source:'), 1)
+        self.assertEqual(check_evidence.front_matter(newer)['trace_source'],
+                         self.source(4, 4))
+
+    def test_section_appended_and_replaced(self):
+        out = emu_evidence.section(EMU_EVIDENCE, EMU_SETS,
+                                   'tools/emu/cases/c4029f0.py')
+        self.assertEqual(out.count('## Emulation'), 1)
+        self.assertIn('\n## Emulation\n\n'
+                      '- `flag=0`: EQUAL\n'
+                      '- `flag=1`: EQUAL(state)\n'
+                      '\nCase module: tools/emu/cases/c4029f0.py\n', out)
+        self.assertIn('Imported from the WSO fork body.', out)
+        # a second call replaces the section it wrote, in full
+        again = emu_evidence.section(out, [{'set': 'x', 'verdict': 'EQUAL',
+                                            'detail': ''}],
+                                     'tools/emu/cases/c4029f0.py')
+        self.assertEqual(again.count('## Emulation'), 1)
+        self.assertNotIn('flag=0', again)
+        self.assertIn('- `x`: EQUAL', again)
+        # and stops at the next heading, which survives
+        headed = emu_evidence.section(out + '\n## Notes\n\nlater\n',
+                                      [{'set': 'x', 'verdict': 'EQUAL',
+                                        'detail': ''}],
+                                      'tools/emu/cases/c4029f0.py')
+        self.assertIn('## Notes', headed)
+        self.assertIn('later', headed)
+        self.assertNotIn('flag=0', headed)
+
+    def test_write_all_converts_and_the_gate_accepts(self):
+        d = self.emu_repo({'docs/evidence/4029F0.md': EMU_EVIDENCE})
+        orig = self.fake_exe(d, 'orig.exe', b'vanilla bytes')
+        ours = self.fake_exe(d, 'ours.exe', b'our bytes')
+        lines = []
+        rc = emu_evidence.write_all(self.results(), repo=d, orig_exe=orig,
+                                    ours_exe=ours, echo=lines.append,
+                                    check=check_evidence)
+        self.assertEqual(rc, 0, lines)
+        head = self.g('rev-parse', '--short=12', 'HEAD').stdout.strip()
+        with open(os.path.join(d, 'docs/evidence/4029F0.md')) as f:
+            text = f.read()
+        fields = check_evidence.front_matter(text)
+        self.assertEqual(fields['kind'], 'trace')
+        self.assertNotIn('exemption', fields)
+        self.assertEqual(fields['trace_source'],
+                         'emu c4029f0 orig:%s ours:%s at:%s sets=2 equal=2'
+                         % (self.sha(orig), self.sha(ours), head))
+        self.assertIn('## Emulation', text)
+        self.assertTrue(any('docs/evidence/4029F0.md' in l for l in lines),
+                        lines)
+        # check_evidence.problem() reads HEAD: commit, then it must accept
+        self.g('add', '-A')
+        self.g('commit', '-q', '-m', 'emu')
+        p, _ = check_evidence.problem(d, 0x4029F0, 'CResBIO::Demand',
+                                      run=lambda argv, **kw: subprocess.run(
+                                          argv, cwd=d, **kw))
+        self.assertIsNone(p, p)
+
+    def test_write_all_section_only_for_a_kept_front_matter(self):
+        d = self.emu_repo({'docs/evidence/4029F0.md': EMU_KEPT})
+        orig = self.fake_exe(d, 'orig.exe', b'vanilla bytes')
+        ours = self.fake_exe(d, 'ours.exe', b'our bytes')
+        lines = []
+        rc = emu_evidence.write_all(self.results(), repo=d, orig_exe=orig,
+                                    ours_exe=ours, echo=lines.append,
+                                    check=check_evidence)
+        self.assertEqual(rc, 0, lines)
+        with open(os.path.join(d, 'docs/evidence/4029F0.md')) as f:
+            text = f.read()
+        self.assertEqual(check_evidence.front_matter(text),
+                         check_evidence.front_matter(EMU_KEPT))
+        self.assertIn('## Emulation', text)
+        self.assertIn('front matter kept', ' '.join(lines))
+
+    def test_write_all_reports_findings_and_errors(self):
+        d = self.emu_repo({
+            'docs/evidence/448D50.md': EMU_EVIDENCE.replace(
+                '0x4029F0', '0x448D50').replace('CResBIO::Demand',
+                                                'TString::Tidy'),
+            'docs/evidence/44BD40.md': EMU_EVIDENCE.replace(
+                '0x4029F0', '0x44BD40').replace('CResBIO::Demand',
+                                                'TString::Detach'),
+        })
+        orig = self.fake_exe(d, 'orig.exe', b'vanilla bytes')
+        ours = self.fake_exe(d, 'ours.exe', b'our bytes')
+        results = {
+            '0x448D50': {'name': 'TString::Tidy', 'build': 'b',
+                         'sets': [{'set': 'flag=0', 'verdict': 'EQUAL',
+                                   'detail': ''},
+                                  {'set': 'flag=1', 'verdict': 'DIFF',
+                                   'detail': 'eax: 1 != 2'}]},
+            '0x44BD40': {'name': 'TString::Detach', 'build': 'b',
+                         'sets': [{'set': 'flag=0', 'verdict': 'ERROR',
+                                   'detail': 'unmapped fetch at 0x77E000'}]},
+            '0x45EA70': {'name': 'TString::MaxSize', 'build': 'b',
+                         'sets': [{'set': 'flag=0', 'verdict': 'EQUAL',
+                                   'detail': ''}]},
+        }
+        lines = []
+        rc = emu_evidence.write_all(results, repo=d, orig_exe=orig,
+                                    ours_exe=ours, echo=lines.append,
+                                    check=check_evidence)
+        self.assertEqual(rc, 1)
+        self.assertIn('finding: 0x448D50 TString::Tidy flag=1: eax: 1 != 2',
+                      lines)
+        self.assertIn('error: 0x44BD40 TString::Detach flag=0: '
+                      'unmapped fetch at 0x77E000', lines)
+        self.assertIn('error: docs/evidence/45EA70.md not found',
+                      ' '.join(lines))
+        # nothing was written: every file on disk keeps its exemption
+        for rel in ('docs/evidence/448D50.md', 'docs/evidence/44BD40.md'):
+            with open(os.path.join(d, rel)) as f:
+                self.assertIn('exemption:', f.read())
+
+    def test_emu_build_refusal(self):
+        clean = self.emu_repo({'src/a.cpp': 'int f() { return 1; }\n'})
+        self.assertIsNone(oracle.emu_build_refusal(clean))
+        with open(os.path.join(clean, 'src/a.cpp'), 'a') as f:
+            f.write('int g() { return 2; }\n')
+        msg = oracle.emu_build_refusal(clean)
+        self.assertIn('uncommitted changes under src/', msg)
+        self.assertIn('src/a.cpp', msg)
+        # untracked files under src/ refuse too: sync would ship them
+        with open(os.path.join(clean, 'src/new.cpp'), 'w') as f:
+            f.write('int h() { return 3; }\n')
+        self.assertIn('uncommitted changes under src/',
+                      oracle.emu_build_refusal(clean))
+
+
 check_evidence = load_tool('check_evidence')
 oracle = load_tool('oracle')
+emu_evidence = load_tool(os.path.join('emu', 'evidence'))
 
 SCRIPT_OUTPUT = ('function\t0x5845D0\tIcewindMisc::Roll\n'
                  'caller\t0x45A000\tCGameSprite::Foo\t0x45A123\n'

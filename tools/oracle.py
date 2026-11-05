@@ -7,7 +7,8 @@ Usage (from WSL, in the repository):
   python3 tools/oracle.py evidence 0x5845D0 CRuleTables::GetXPCap [--force]
   python3 tools/oracle.py build
   python3 tools/oracle.py emu [ADDR ...] [--list] [--ours DIR] [--json OUT]
-                             [--strict] [--verbose]
+                             [--build] [--write-evidence] [--strict]
+                             [--verbose]
   python3 tools/oracle.py run --selftest
   python3 tools/oracle.py run [--file selftest] [--seed N] [--iterations N]
   python3 tools/oracle.py vanilla [--rebuild]
@@ -53,7 +54,16 @@ ERROR. Unicorn lives only in the .venv-emu virtualenv, so this command
 relays to .venv-emu/bin/python -I running tools/emu/run.py (the same
 file runs directly under that interpreter); without ADDR every case
 runs, and a missing venv exits 2 after printing the setup command. See
-tools/emu/cases/__init__.py for the case contract.
+tools/emu/cases/__init__.py for the case contract. --build first builds
+our x86 exe of THIS worktree headless (the driver's Frida route: play's
+win_checkout + sync_windows + build_windows_x86, target iwd2r only) and
+runs the cases against that build; it refuses (exit 2) while src/ has
+uncommitted changes, tracked or untracked, so the build stays HEAD.
+--write-evidence (needs --build) then turns every all-EQUAL case into a
+measurement: docs/evidence/<ADDR>.md gets kind: trace, the emu
+trace_source and an ## Emulation section (tools/emu/evidence.py), an
+`unmeasured WSO import` exemption is dropped, and any DIFF or ERROR is
+printed as a finding and never written (exit 1).
 
 run copies the vanilla iwd2.exe (MD5 from oracle/loader/vanilla.json) to
 %USERPROFILE%/iwd2r-oracle and runs the runner on it.
@@ -235,6 +245,7 @@ import contextlib
 import datetime
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -3361,30 +3372,104 @@ EMU_VENV_SETUP = ('python3 -m venv .venv-emu && .venv-emu/bin/pip install -r '
                   'tools/emu/requirements.txt')
 
 
+def emu_build_refusal(repo):
+    """Why `emu --build` refuses this repo, or None when src/ is clean.
+
+    The build must be HEAD, so any uncommitted change under src/ (tracked
+    or untracked: sync_windows ships both) stops it before the Windows
+    round-trip.
+    """
+    r = subprocess.run(['git', 'status', '--porcelain', '--', 'src'],
+                       cwd=repo, capture_output=True, text=True)
+    if r.returncode != 0:
+        return 'oracle: emu --build needs a git repository at %s' % repo
+    if r.stdout.strip():
+        return ('oracle: emu --build refuses: uncommitted changes under '
+                'src/ (the build must be HEAD):\n' + r.stdout.rstrip())
+    return None
+
+
+def emu_build_ours(repo):
+    """Build our x86 exe of this worktree; returns the ours directory.
+
+    The same route the driver's Frida phase takes (driver.frida_build):
+    win_checkout + sync_windows + build_windows_x86, headless, target
+    `iwd2r` only.  play is imported here (not at module level) because
+    play.py imports oracle.
+    """
+    import play
+    checkout = play.win_checkout(repo, {})
+    play.sync_windows(root=repo, checkout=checkout)
+    exe = play.build_windows_x86(checkout=checkout, target='iwd2r')
+    return os.path.dirname(exe)
+
+
 def cmd_emu(args):
     """Relay tools/emu/run.py into the Unicorn venv.
 
     oracle.py itself runs under the system python3 -I, which has no
     Unicorn; .venv-emu does.  Everything else (case discovery, verdicts,
-    exit codes) is run.py's.
+    exit codes) is run.py's.  --build first builds our x86 exe of THIS
+    worktree and runs the cases against it (the build must be HEAD);
+    --write-evidence then turns every all-EQUAL case into a measurement
+    (tools/emu/evidence.py).
     """
     venv_python = os.path.join(ROOT, '.venv-emu', 'bin', 'python')
     if not os.path.isfile(venv_python):
         print('oracle: emu needs .venv-emu (Unicorn lives only there); from '
               'the repository root:\n  %s' % EMU_VENV_SETUP, file=sys.stderr)
         return 2
+    if args.write_evidence and not args.build:
+        print('oracle: emu --write-evidence needs --build: the trace_source '
+              'cites the exe it measured, so the build must be this '
+              'worktree\'s HEAD', file=sys.stderr)
+        return 2
+    ours = args.ours
+    if args.build:
+        refusal = emu_build_refusal(ROOT)
+        if refusal:
+            print(refusal, file=sys.stderr)
+            return 2
+        ours = emu_build_ours(ROOT)
+        print('oracle: emu --build: ours is %s' % ours)
     cmd = [venv_python, '-I', os.path.join(HERE, 'emu', 'run.py')]
     cmd += args.addr
     if args.list:
         cmd.append('--list')
-    cmd += ['--ours', args.ours]
-    if args.json:
-        cmd += ['--json', args.json]
+    cmd += ['--ours', ours]
+    json_path = args.json
+    wrote = None
+    if args.write_evidence:
+        wrote = tempfile.NamedTemporaryFile(
+            prefix='emu-evidence-', suffix='.json', delete=False)
+        wrote.close()
+        json_path = wrote.name
+    if json_path:
+        cmd += ['--json', json_path]
     if args.strict:
         cmd.append('--strict')
     if args.verbose:
         cmd.append('--verbose')
-    return subprocess.run(cmd, cwd=ROOT).returncode
+    rc = subprocess.run(cmd, cwd=ROOT).returncode
+    if wrote is None:
+        return rc
+    try:
+        with open(wrote.name) as f:
+            results = json.load(f)
+        spec = importlib.util.spec_from_file_location(
+            'emu_evidence', os.path.join(HERE, 'emu', 'evidence.py'))
+        evidence = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(evidence)
+        run_py = os.path.join(HERE, 'emu', 'run.py')
+        spec = importlib.util.spec_from_file_location('emu_run', run_py)
+        run_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(run_mod)
+        return evidence.write_all(results, repo=ROOT,
+                                  orig_exe=run_mod.DEFAULT_ORIG,
+                                  ours_exe=os.path.join(ours, 'iwd2r.exe'),
+                                  echo=print, check=check_evidence)
+    finally:
+        os.unlink(wrote.name)
 
 
 
@@ -3425,6 +3510,15 @@ def main(argv=None):
                      help='our RelWithDebInfo build directory '
                      '(default %(default)s)')
     emu.add_argument('--json', help='write the results as JSON to OUT')
+    emu.add_argument('--build', action='store_true',
+                     help='first build our x86 exe of THIS worktree (HEAD '
+                     'only; refuses uncommitted changes under src/) and run '
+                     'the cases against it')
+    emu.add_argument('--write-evidence', action='store_true',
+                     help='with --build: rewrite docs/evidence/<ADDR>.md for '
+                     'every all-EQUAL case (kind: trace + the emu '
+                     'trace_source); a DIFF or ERROR is printed, never '
+                     'written')
     emu.add_argument('--strict', action='store_true',
                      help='keep stack/TIB writes in the diff')
     emu.add_argument('--verbose', action='store_true',
