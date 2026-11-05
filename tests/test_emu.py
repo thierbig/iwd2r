@@ -192,7 +192,7 @@ class CaseContractTests(unittest.TestCase):
 
     REQUIRED = ('name', 'short', 'exe', 'ours', 'expect_rva', 'convention',
                 'this_class', 'this_size', 'members', 'field_mapped',
-                'extra', 'resolve')
+                'extra', 'resolve', 'returns')
 
     def test_case_modules(self):
         import run                                                   # tools/emu
@@ -203,6 +203,8 @@ class CaseContractTests(unittest.TestCase):
             for key in self.REQUIRED:
                 self.assertIn(key, mod.CASE, f'{name}: CASE[{key!r}]')
             self.assertIsInstance(mod.CASE['exe'], int)
+            self.assertIn(mod.CASE['returns'], ('void', 'u8', 'u16', 'u32', 'ptr'),
+                          f"{name}: CASE['returns'] must declare the EAX contract")
             self.assertIn(mod.CASE['convention'], ('thiscall', 'cdecl'))
             self.assertIsInstance(mod.CASE['this_size'], int)
             self.assertGreater(mod.CASE['this_size'], 0)

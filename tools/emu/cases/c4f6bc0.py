@@ -14,6 +14,11 @@ own-image vptr values into this+0.  m_targetId/m_sourceId/m_summonedId
 are at identical offsets 0x4/0x8/0xC on both sides (identity field map);
 arg order is the declaration order: (summonedId, caller, target) so that
 [esp+4]=summonedId as vanilla expects.
+
+Returns 'ptr' — a ctor has no declared return, but both images hand `this`
+back in EAX (orig `mov eax,ecx` at 0x4F6BC4, ours `mov eax,esi` at
+0x64327B), so the case declares 'ptr': both sides must return the same
+normalized `this`.
 """
 
 import struct
@@ -28,6 +33,7 @@ CASE = {
     'members': ('m_targetId', 'm_sourceId', 'm_summonedId'),
     'field_mapped': True, 'vptr_norm': True,
     'extra': {}, 'resolve': {},
+    'returns': 'ptr',
 }
 
 

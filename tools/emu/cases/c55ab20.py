@@ -17,6 +17,9 @@ itself at that per-side offset, and node links chain through [node+0]
 with the value at [node+8] on both.  DeliverStrike is stubbed thiscall
 (pop 4) with the list VALUE as its argument -- an int that must match on
 both sides -- so it is NOT inline_ok.
+
+Returns 'void' — `void Strike(std::list<LONG>&)` (src/IcewindCProjectileTargetMap.h:31);
+EAX ignored (orig `ret 4` at 0x55AB68, ours at 0x8136F4, both leave loop scratch).
 """
 
 import struct
@@ -32,6 +35,7 @@ CASE = {
     'field_mapped': True,
     'extra': {'strike_orig': 0x55AB80, 'strike_ours': 0x419380},
     'resolve': {},
+    'returns': 'void',
 }
 
 

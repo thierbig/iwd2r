@@ -10,6 +10,9 @@ so no field_map is needed for the diff.  GetCurrentCenterPoint /
 GetCurrentFrameSize are stubbed with ret_by_ecx response tables keyed by
 ECX (the animation / shadow / vidcell sentinel); the original calls
 User32.SetRect through its IAT while ours inlines it (compat/win_types.h).
+
+Returns 'void' — `void CalculateFxRect(CRect& rFx, CPoint& ptReference,
+CVidCell* pVidCell)` (src/CProjectileSingleTarget.h:29); EAX ignored.
 """
 
 import struct
@@ -34,6 +37,7 @@ CASE = {
         'center_ours': [0x416F0E, 0x7C8A90], 'fsize_ours': [0x403107, 0x7C8C70],
     },
     'resolve': {},                   # extra map-resolved ours symbols: key -> (name, rva)
+    'returns': 'void',
 }
 
 

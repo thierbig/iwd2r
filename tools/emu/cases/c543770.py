@@ -25,6 +25,9 @@ atoi is stubbed with a per-set return (NOT inline_ok): its argument is
 the string pointer, the same block address on both sides, so the shapes
 match -- vanilla calls it as a plain cdecl function, ours through the
 IAT slot at 0xFC5B04 (kind 'iat').
+
+Returns 'u32' — `INT GetMaxDruidShapeshifts(...) const` (src/CRuleTables.h:397);
+EAX is the atoi-derived count (n, n+bonus, or 0), compared masked to 32 bits.
 """
 
 import struct
@@ -39,6 +42,7 @@ CASE = {
     'extra': {'atoi_orig': 0x7E7B03, 'atoi_ours': 0xFC5B04,
               'getat_ours': 0x420068},
     'resolve': {},
+    'returns': 'u32',
 }
 
 

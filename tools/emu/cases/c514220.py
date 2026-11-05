@@ -13,6 +13,9 @@ operator= is stubbed ret 0 and NOT inline_ok: the argument shapes match
 exactly, and keeping the call visible pins that both sides copy rather
 than fuse the assignment.  No kept writes at all, so the verdict should be
 a plain EQUAL.
+
+Returns 'void' — `void SetResRef(CResRef cNewResRef)` (src/CAIScript.h:37);
+EAX ignored (ours leaves the security-cookie epilogue's result in it).
 """
 
 import struct
@@ -24,6 +27,7 @@ CASE = {
     'members': (), 'field_mapped': False,
     'extra': {'opeq_orig': 0x78AC30, 'opeq_ours': 0x409CCD},
     'resolve': {},
+    'returns': 'void',
 }
 
 

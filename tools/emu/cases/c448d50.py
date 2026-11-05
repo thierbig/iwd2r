@@ -13,6 +13,9 @@ delete[] is stubbed 'free' and NOT inline_ok: its argument is the preseeded
 heap pointer, which normalizes to the same heap offset on both sides.  The
 rc dec is a real heap write at the same offset both sides (preseed_heap is
 deterministic and called in the same order).
+
+Returns 'void' — `void Tidy(BOOLEAN bDealloc)` (src/TString.h:80); EAX is
+ignored (both bodies leave free-path scratch in it).
 """
 
 import struct
@@ -25,6 +28,7 @@ CASE = {
     'extra': {'new_orig': 0x7FC95B, 'delete_orig': 0x7FC984,
               'new_ours': 0x40C30B, 'delete_ours': 0x413E99},
     'resolve': {},
+    'returns': 'void',
 }
 
 

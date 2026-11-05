@@ -14,6 +14,8 @@ Preseed shapes exercise the three Grow paths: empty string (nLen 0, no
 buffer), exclusive buffer (refcount 0 -> freed, copied into a fresh
 allocation), shared buffer (refcount 2 -> detached without freeing), and
 an nLen near UINT_MAX edge.
+
+Returns 'void' — `void Grow(UINT nLen)` (src/TString.h:79); EAX is ignored.
 """
 
 import struct
@@ -36,6 +38,7 @@ CASE = {
         'memcpy_ours': 0xB6DCA5,
     },
     'resolve': {'tidy_ours': ('TString::Tidy', 0x42C3D0)},
+    'returns': 'void',
 }
 
 

@@ -17,6 +17,10 @@ keeping an eye on; if the zeroed regions or the copied bytes diverge in a
 way that survives, it is a reportable finding, not a stub problem.
 
 Sets keep len far below 0xFFFFFFFD to stay off the vanilla throw path.
+
+Returns 'void' — `void Detach()` (src/TString.h:76); EAX is not part of the
+contract (vanilla zeroes it on the null path and leaves allocator scratch
+otherwise; ours leaves Tidy's result — codegen drift, not a return).
 """
 
 import struct
@@ -30,6 +34,7 @@ CASE = {
               'new_ours': 0x4084E0, 'delete_ours': 0x413E99,
               'memcpy_ours': 0xB6DCA5},
     'resolve': {'tidy_ours': ('TString::Tidy', 0x42C3D0)},
+    'returns': 'void',
 }
 
 

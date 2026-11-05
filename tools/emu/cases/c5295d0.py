@@ -20,6 +20,9 @@ All four callees are stubbed (they touch real vidcell internals):
   - CVidCell::CVidCell: ret 'ecx' (returns the new pointer), NOT
     inline_ok -- its ECX/ret is the heap address that lands in
     m_animation at the per-side offset via ctx.
+
+Returns 'void' — `void SetVidCell(CResRef resRef)` (src/CProjectileBAM.h:27);
+EAX ignored (both bodies leave the stored pointer in it before `ret`).
 """
 
 import struct
@@ -34,6 +37,7 @@ CASE = {
               'dtor_ours': 0x40356C, 'delete_ours': 0x404ABB,
               'new_ours': 0x4084E0, 'ctor_ours': 0x408544},
     'resolve': {},
+    'returns': 'void',
 }
 
 

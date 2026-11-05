@@ -169,6 +169,9 @@ def main(argv=None):
             addrs['ours'] = resolve_ours(machine, truth, publics, case['ours'], case['expect_rva'])
             for key, (cname, rva) in case['resolve'].items():
                 addrs[key] = resolve_ours(machine, truth, publics, cname, rva)
+            if case.get('returns') not in ('void', 'u8', 'u16', 'u32', 'ptr'):
+                raise CaseError('CASE["returns"] missing or invalid: declare '
+                                "'void'|'u8'|'u16'|'u32'|'ptr' (fix 1)")
             ctx = {'sent': machine.SENT, 'off': None, 'field_map': None}
             if case['this_class']:
                 off_o, off_u, fmap = class_layout(case['this_class'], case['field_mapped'],
@@ -201,7 +204,8 @@ def main(argv=None):
                     verdict = machine.run_case(f'{case["name"]} {setname}', b, inp,
                                                pe_o, pe_u, args.strict, args.verbose,
                                                field_map=ctx['field_map'],
-                                               norm_vptr=case.get('vptr_norm', False))
+                                               norm_vptr=case.get('vptr_norm', False),
+                                               returns=case['returns'])
             except Exception as e:
                 verdict, detail = 'ERROR', f'{type(e).__name__}: {e}'
             if verdict == 'ERROR' and not detail:

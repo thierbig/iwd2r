@@ -13,6 +13,11 @@ ctx['off'][side].  Both callees are thiscall leaf getters; they are NOT
 inline_ok because their logged shapes ('this' ECX, int ret) are identical
 on both sides -- the interesting thing this case pins is the branch logic
 around them.
+
+Returns 'ptr' — `void* Demand()` (src/CResBIO.h:13); EAX is the stubbed
+demand pointer or 0, compared through the region normalization so the raw
+0x11223344-style values must match exactly while still being declared a
+pointer result.
 """
 
 CASE = {
@@ -23,6 +28,7 @@ CASE = {
     'extra': {'demand_orig': 0x77E390, 'getdemands_orig': 0x77E550,
               'demand_ours': 0x40B744, 'getdemands_ours': 0x4119C8},
     'resolve': {},
+    'returns': 'ptr',
 }
 
 

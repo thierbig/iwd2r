@@ -25,6 +25,9 @@ Codegen drift handled:
 Finding (reported, not worked around): when GetDemands() <= 0, vanilla
 calls the report stub at 0x780C00 and continues, ours int3s at 0x406901.
 All sets keep GetDemands at 2 to stay off that path.
+
+Returns 'u32' — `INT GetMaxEffectSpellLevel()` (src/CItem.h:43); EAX is the
+best level or 0, compared masked to 32 bits.
 """
 
 import struct
@@ -40,6 +43,7 @@ CASE = {
               'opneq_ours': 0x40A268, 'getdemands_ours': 0x4119C8,
               'getability_ours': 0x40B0E6, 'geteffect_ours': 0x404CAF},
     'resolve': {},
+    'returns': 'u32',
 }
 
 OFF = {'orig': {'res': 0x8, 'resref': 0xC, 'count': 0x14},

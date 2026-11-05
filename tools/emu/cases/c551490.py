@@ -10,6 +10,9 @@ CGameObject base (m_pos, exe 0x06 vs ours 0x08), so the diff runs with the
 full derived CVEFVidCell byte map -- a superset of the spike's hand map
 {0x6: 0x8, 0xA: 0xC}, which the layout acceptance test reproduces exactly.
 No callees to stub.  m_offset is a CPoint: offx at +0, offy at +4.
+
+Returns 'void' — `void CalculatePos(const CPoint& pos)` (src/CVisualEffect.h:99);
+EAX ignored.
 """
 
 import struct
@@ -27,6 +30,7 @@ CASE = {
     'field_mapped': True,
     'extra': {},
     'resolve': {},
+    'returns': 'void',
 }
 
 

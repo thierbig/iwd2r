@@ -390,13 +390,19 @@ def state_diff(sa, sb):
 
 
 def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_map=None,
-             norm_vptr=False):
+             norm_vptr=False, returns=None):
     """field_map: {orig this-offset: ours this-offset} — reconcile known class-layout
     divergence between the VC6 original and our MSVC rebuild before comparing.
     norm_vptr: constructors of virtual classes store their own image's vtable
     pointer into `this`; the two images can never agree on that value, so zero
     any own-image pointer written into `this` — the comparison then asks "was
-    a vptr stored, and at which offset", not "is it the same address"."""
+    a vptr stored, and at which offset", not "is it the same address".
+    returns — the return value is part of the verdict (fix 1): 'void' ignores
+    EAX; 'u8'/'u16'/'u32' compare EAX masked to that width (BOOLEAN/BYTE
+    returns leave garbage in the upper bytes); 'ptr' compares through the same
+    region normalization the writes use, so equal heap/this-relative pointers
+    are equal.  Each case takes its spec from the original's disassembly and
+    our header's signature and cites both in its docstring."""
     print(f'--- {name} ---')
     mo, mu = build('orig', inp, pe_o), build('ours', inp, pe_u)
     mo.start()
@@ -405,6 +411,20 @@ def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_ma
         if m.error:
             print(f'  {tag}: ERROR {m.error} writes={len(m.writes)} calls={len(m.calls)}')
             return 'ERROR'
+
+    if returns == 'ptr':
+        ro, ru = mo._norm(mo.ret), mu._norm(mu.ret)
+        ret_eq = ro == ru
+    elif returns in ('u8', 'u16', 'u32'):
+        mask = {'u8': 0xFF, 'u16': 0xFFFF, 'u32': 0xFFFFFFFF}[returns]
+        ro, ru = mo.ret & mask, mu.ret & mask
+        ret_eq = ro == ru
+    elif returns == 'void':
+        ro, ru = mo.ret, mu.ret
+        ret_eq = True                              # EAX is not part of the contract
+    else:
+        raise ValueError(f"run_case: returns must be 'void'|'u8'|'u16'|'u32'|'ptr', "
+                         f'got {returns!r}')
 
     co_f = [c for c in mo.calls if not c[3]]
     cu_f = [c for c in mu.calls if not c[3]]
@@ -429,15 +449,17 @@ def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_ma
 
     so, su = final_state(mo, wo), final_state(mu, wu)
     sd = state_diff(so, su)
-    if field_map and not sd and calls_eq:
+    if field_map and not sd and calls_eq and ret_eq:
         verdict = 'EQUAL(layout)' if seq_eq else 'EQUAL(state,layout)'
     else:
-        verdict = ('EQUAL' if seq_eq else 'EQUAL(state)') if (not sd and calls_eq) else 'DIFF'
+        verdict = ('EQUAL' if seq_eq else 'EQUAL(state)') if (not sd and calls_eq and ret_eq) else 'DIFF'
 
     print(f'  verdict: {verdict}   writes orig={len(mo.writes)} ours={len(mu.writes)} '
           f'(kept {len(wo)}/{len(wu)}{" strict" if strict else ""})   '
           f'calls {len(co_f)}/{len(cu_f)}   icount {mo.icount}/{mu.icount}')
-    print(f'  ret: orig=0x{mo.ret:08x} ours=0x{mu.ret:08x}')
+    if not ret_eq:
+        print(f'  ret orig={ro} ours={ru} (ptr)' if returns == 'ptr'
+              else f'  ret orig=0x{ro:08x} ours=0x{ru:08x} ({returns})')
     if inline_notes:
         print(f'  inline-ok one-sided (ignored): {inline_notes}')
     if not calls_eq:
@@ -456,6 +478,8 @@ def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_ma
             print(f'    {k}: differing bytes at {["0x%x" % o for o in offs]}')
             print(f'      orig writes({k}): {[w for w in mo.writes if w[0] == k][:12]}')
             print(f'      ours writes({k}): {[w for w in mu.writes if w[0] == k][:12]}')
+    print(f'  ret: orig=0x{mo.ret:08x} ours=0x{mu.ret:08x} ({returns}'
+          f'{"" if ret_eq else ", mismatch"})')
     if verbose:
         print('  orig calls:')
         for c in mo.calls:
