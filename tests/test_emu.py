@@ -301,6 +301,38 @@ class UnicornGatedTests(unittest.TestCase):
             rets.append(m.calls[-1][2])
         self.assertEqual(rets, ['0x00000007', '0x00000008', '0x00000000'])
 
+    def test_stub_arg_masks(self):
+        """arg_masks compares a recorded call argument at its declared
+        parameter width: a BYTE parameter pushed with garbage upper bits
+        (the x86 ABI leaves them unspecified -- ours' `mov cl, [flag]` into
+        an ECX that still holds a pointer, then `push ecx`) records as the
+        byte.  Drives _apply_stub directly, like the ret:'ecx' test."""
+        import struct
+        import machine
+        from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_ESP
+        if not self.ORIG.exists():
+            self.skipTest('original exe not present')
+        m = machine.Machine('orig', machine.PeImage(self.ORIG), machine.STUB_PAGE,
+                            'cdecl', machine.BLK_LO, 0x40, [])
+        esp = machine.ESP0 - 0x10
+        m.uc.mem_write(esp, struct.pack('<III', machine.RET_MAGIC,
+                                        0xDEADBEEF, 0x12001D00))
+        m.uc.reg_write(UC_X86_REG_ESP, esp)
+        m.uc.reg_write(UC_X86_REG_ECX, 0x1234)
+        m.add_stub({'name': 'GetShare', 'kind': 'code', 'addr': machine.STUB_PAGE,
+                    'conv': 'thiscall', 'nargs': 2, 'pop': 8,
+                    'arg_masks': [None, None, 0xFF], 'default': {'ret': 0}})
+        m._apply_stub(m.stubs[machine.STUB_PAGE])
+        self.assertEqual(m.calls[-1][1],
+                         ['0x00001234', '0xdeadbeef', '0x00000000'])
+        m.add_stub({'name': 'Assert', 'kind': 'code',
+                    'addr': machine.STUB_PAGE + 0x10,
+                    'conv': 'cdecl', 'nargs': 1, 'pop': 0, 'noreturn': True,
+                    'arg_masks': [0xFF]})
+        m.uc.mem_write(esp, struct.pack('<II', machine.RET_MAGIC, 0x12001D00))
+        m._apply_stub(m.stubs[machine.STUB_PAGE + 0x10])
+        self.assertEqual(m.terminated, ('Assert', ['0x00000000']))
+
     # ---- negative controls (task-73 fix 4) -----------------------------
     # Each control copies the i077 build's iwd2r.exe/iwd2r.map into a temp
     # dir (pdb symlinked), flips ONE byte inside a map-resolved function

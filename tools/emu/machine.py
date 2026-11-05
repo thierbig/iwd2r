@@ -323,6 +323,25 @@ class Machine:
     def _stack_args(self, esp, n):
         return [struct.unpack('<I', self.uc.mem_read(esp + 4 + 4 * i, 4))[0] for i in range(n)]
 
+    def _rec_args(self, spec, raw):
+        # Recorded call arguments, normalized.  An optional spec['arg_masks']
+        # (aligned to raw, so index 0 is `this` for thiscall) masks an
+        # argument to its declared parameter width before normalizing: the
+        # x86 ABI leaves a sub-dword argument's upper bits unspecified, and
+        # ours' codegen does push them (mov cl, [flag] into an ECX that
+        # still holds a pointer, then push ecx), so a BYTE parameter is
+        # compared at the byte.  None (or a short list) leaves the argument
+        # at full width.
+        masks = spec.get('arg_masks')
+        if not masks:
+            return [self._norm(a) for a in raw]
+        out = []
+        for i, a in enumerate(raw):
+            if i < len(masks) and masks[i] is not None:
+                a &= masks[i]
+            out.append(self._norm(a))
+        return out
+
     def _on_code(self, uc, addr, size, ud):
         self.icount += 1
         if addr == RET_MAGIC:
@@ -337,7 +356,7 @@ class Machine:
             esp = uc.reg_read(UC_X86_REG_ESP)
             raw = ([uc.reg_read(UC_X86_REG_ECX)] if w['conv'] == 'thiscall' else []) \
                 + self._stack_args(esp, w['nargs'])
-            self.calls.append([w['name'], [self._norm(a) for a in raw], None,
+            self.calls.append([w['name'], self._rec_args(w, raw), None,
                                w.get('inline_ok', False)])
 
     def _apply_stub(self, spec):
@@ -353,8 +372,8 @@ class Machine:
             # fix 3: the callee never returns (assert/abort).  End this
             # side's run AT the call and record it; run_case compares the
             # two terminations instead of ret/state.
-            self.terminated = (spec['name'], [self._norm(a) for a in raw])
-            self.calls.append([spec['name'], [self._norm(a) for a in raw], None,
+            self.terminated = (spec['name'], self._rec_args(spec, raw))
+            self.calls.append([spec['name'], self._rec_args(spec, raw), None,
                                spec.get('inline_ok', False)])
             uc.emu_stop()
             return
@@ -407,7 +426,7 @@ class Machine:
             retval = seq[i] if i < len(seq) else 0
             self._retseq[spec['hook_addr']] = i + 1
 
-        self.calls.append([spec['name'], [self._norm(a) for a in raw], self._norm(retval),
+        self.calls.append([spec['name'], self._rec_args(spec, raw), self._norm(retval),
                            spec.get('inline_ok', False)])
         uc.reg_write(UC_X86_REG_ESP, esp + 4 + spec.get('pop', 0))
         uc.reg_write(UC_X86_REG_EAX, retval & 0xFFFFFFFF)
