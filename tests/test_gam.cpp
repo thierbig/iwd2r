@@ -486,7 +486,13 @@ Run RunScenario(const std::string& view, const fs::path& script)
     const fs::path shots = fs::path(view).parent_path() / "shots";
     fs::create_directories(shots);
     const fs::path out = fs::path(view).parent_path() / "log.txt";
-    const std::string full = "SDL_VIDEO_DRIVER=dummy SDL_AUDIO_DRIVER=dummy IWD2R_AUDIO=null IWD2R_SCRIPT=\"" + script.string()
+    // IWD2R_RS=null: without the resource-server thread, LoadArea's wait
+    // loop (0x5A24D0) cannot grant m_nActionProgress by the thread's
+    // completion timing, so the progress arithmetic in this scenario is the
+    // same every run (docs/followups.md, "Intermittent
+    // CProgressBar::AddActionTarget"; the race is the original's too).
+    const std::string full = "SDL_VIDEO_DRIVER=dummy SDL_AUDIO_DRIVER=dummy IWD2R_AUDIO=null IWD2R_RS=null IWD2R_SCRIPT=\""
+        + script.string()
         + "\" IWD2R_SHOT_DIR=\"" + shots.string() + "\" IWD2_DATA=\"" + view + "\" timeout 150 \"" IWD2R_EXE "\" > \""
         + out.string() + "\" 2>&1";
     const int raw = std::system(full.c_str());

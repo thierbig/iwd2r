@@ -55,7 +55,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/text_faces.cpp.in"
     "const Face kFaces[] = {\n${face_table}};\n\n}\n\n"
     "const Face* EmbeddedFaces(int* count)\n{\n    *count = ${face_count};\n    return kFaces;\n}\n\n}\n")
 configure_file("${CMAKE_CURRENT_BINARY_DIR}/text_faces.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/text_faces.cpp" COPYONLY)
-add_library(iwd2r_platform STATIC platform_version.cpp threads.cpp clock.cpp fs.cpp data_dir.cpp ddraw_shim.cpp dsound_shim.cpp compose.cpp gpu_probe.cpp present.cpp present_classic.cpp present_gpu.cpp present_nis.cpp "${CMAKE_CURRENT_BINARY_DIR}/present_shaders.cpp" text_layer.cpp text_fonts.cpp text_atlas.cpp text_overlay.cpp "${CMAKE_CURRENT_BINARY_DIR}/text_faces.cpp" window.cpp window_keys.cpp win32_stubs.cpp gl_compat.cpp affinity.cpp png.cpp script_core.cpp script.cpp state_dump.cpp replay.cpp crash.cpp)
+add_library(iwd2r_platform STATIC platform_version.cpp threads.cpp clock.cpp fs.cpp data_dir.cpp test_knobs.cpp ddraw_shim.cpp dsound_shim.cpp compose.cpp gpu_probe.cpp present.cpp present_classic.cpp present_gpu.cpp present_nis.cpp "${CMAKE_CURRENT_BINARY_DIR}/present_shaders.cpp" text_layer.cpp text_fonts.cpp text_atlas.cpp text_overlay.cpp "${CMAKE_CURRENT_BINARY_DIR}/text_faces.cpp" window.cpp window_keys.cpp win32_stubs.cpp gl_compat.cpp affinity.cpp png.cpp script_core.cpp script.cpp state_dump.cpp replay.cpp crash.cpp)
 target_include_directories(iwd2r_platform PUBLIC "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(iwd2r_platform PUBLIC Threads::Threads iwd2r_compat SDL3::SDL3-static miniaudio iwd2r_miniaudio ${ZLIB_LIBRARIES})
 # The screenshot writer (png.cpp) uses the vendored zlib.

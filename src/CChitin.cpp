@@ -14,6 +14,7 @@
 #include "CVidFont.h"
 #include "CWarp.h"
 #include "msvc_atol.h"
+#include "platform/test_knobs.h"
 
 #include <atomic>
 
@@ -413,8 +414,15 @@ BOOL CChitin::InitInstance()
         ShutDown(-1, NULL, NULL);
     }
 
-    m_hRSThread = reinterpret_cast<HANDLE>(_beginthread(::RSThreadMain, 0, NULL));
-    field_4C = 1;
+    // NOTE: test-only knob (IWD2R_RS=null, read in platform/test_knobs.cpp
+    // like IWD2R_AUDIO): no resource-server thread, so field_4C keeps its
+    // constructor 0 and CInfGame::LoadArea's wait loop (0x5A24D0) cannot
+    // grant m_nActionProgress by that thread's timing (docs/followups.md,
+    // "Intermittent CProgressBar::AddActionTarget").
+    if (!platform::ResourceServerDisabled()) {
+        m_hRSThread = reinterpret_cast<HANDLE>(_beginthread(::RSThreadMain, 0, NULL));
+        field_4C = 1;
+    }
     m_hMessageThread = reinterpret_cast<HANDLE>(_beginthread(::MessageThreadMain, 0, NULL));
     m_hMusicThread = reinterpret_cast<HANDLE>(_beginthread(::MusicThreadMain, 0, NULL));
 
