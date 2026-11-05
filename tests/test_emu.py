@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -300,6 +300,96 @@ class UnicornGatedTests(unittest.TestCase):
             m._apply_stub(spec2)
             rets.append(m.calls[-1][2])
         self.assertEqual(rets, ['0x00000007', '0x00000008', '0x00000000'])
+
+    # ---- negative controls (task-73 fix 4) -----------------------------
+    # Each control copies the i077 build's iwd2r.exe/iwd2r.map into a temp
+    # dir (pdb symlinked), flips ONE byte inside a map-resolved function
+    # body -- located by byte pattern, never by build-pinned offset -- and
+    # expects the comparison component that byte feeds to go DIFF.  The
+    # vanilla side always runs unpatched, so a control failing to DIFF
+    # means the harness would miss real code drift.
+
+    I077 = Path('/mnt/c/Users/thier/iwd2r-build-p3-wso-i077/'
+                'build/windows-msvc-x86/RelWithDebInfo')
+
+    def patched_ours(self, symbol, pattern, patch_off, new_byte, window):
+        """Copy i077's iwd2r.exe/.map to a temp dir (pdb symlinked), find
+        `pattern` in the map-resolved `symbol` body (exactly one hit within
+        `window` bytes required) and overwrite byte `patch_off` of the hit."""
+        import os
+        import shutil
+        import tempfile
+        import machine
+        if str(ROOT / 'tools') not in sys.path:
+            sys.path.insert(0, str(ROOT / 'tools'))
+        import truth
+        if not (self.I077 / 'iwd2r.exe').is_file():
+            self.skipTest(f'i077 build dir absent: {self.I077}')
+        tmp = Path(tempfile.mkdtemp(prefix='emu-negctl-'))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        shutil.copy2(self.I077 / 'iwd2r.exe', tmp / 'iwd2r.exe')
+        shutil.copy2(self.I077 / 'iwd2r.map', tmp / 'iwd2r.map')
+        os.symlink(self.I077 / 'iwd2r.pdb', tmp / 'iwd2r.pdb')
+        exe = tmp / 'iwd2r.exe'
+        pe = machine.PeImage(exe)
+        publics = truth.parse_map((tmp / 'iwd2r.map').read_text(errors='replace'))
+        body_off = pe.foff(sorted(truth._map_matches(symbol, publics))[0])
+        body = pe.data[body_off:body_off + window]
+        hits, i = [], body.find(pattern)
+        while i != -1:
+            hits.append(i)
+            i = body.find(pattern, i + 1)
+        self.assertEqual(len(hits), 1,
+                         f'{symbol}: expected one {pattern.hex()!r} hit in the '
+                         f'body, got {[hex(body_off + h) for h in hits]}')
+        data = bytearray(exe.read_bytes())
+        data[body_off + hits[0] + patch_off] = new_byte
+        exe.write_bytes(bytes(data))
+        return tmp
+
+    def run_patched(self, addr, tmp):
+        """Run one case against the temp ours-dir; returns (exit, stdout)."""
+        import run
+        if not self.ORIG.exists():
+            self.skipTest('original exe not present')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = run.main([addr, '--ours', str(tmp)])
+        return rc, buf.getvalue()
+
+    def test_negctl_ret_immediate(self):
+        """(a) a return immediate feeds the ret component: ours' MaxSize is
+        `mov eax, -3; ret` -- patch the immediate to -4 and the u32 return
+        comparison must go DIFF."""
+        tmp = self.patched_ours('?MaxSize@TString@@IBEIXZ',
+                                b'\xb8\xfd\xff\xff\xff', 1, 0xFC, 0x10)
+        rc, out = self.run_patched('45ea70', tmp)
+        self.assertEqual(rc, 1, out)
+        self.assertIn('ret orig=0xfffffffd ours=0xfffffffc (u32)', out)
+
+    def test_negctl_this_store_offset(self):
+        """(b) a this-store's displacement in a void function feeds the state
+        component: retarget ours' Grow m_nRes store (mov [esi+0xC], edi)
+        at +8 (m_nLen; the later m_nLen store wins there) so m_nRes is never
+        written on ours.  The write-seq component fires too -- moving a
+        store changes the sequence -- but the state comparison is the one
+        under test."""
+        tmp = self.patched_ours('?Grow@TString@@IAEXI@Z',
+                                b'\x89\x7e\x0c', 2, 0x08, 0x100)
+        rc, out = self.run_patched('44be10', tmp)
+        self.assertEqual(rc, 1, out)
+        self.assertIn('final-state diff', out)
+
+    def test_negctl_pushed_call_arg(self):
+        """(c) a pushed call argument feeds the calls component: ours'
+        SetVidCell pushes 0 as CVidCell::CVidCell's third argument; patch
+        the push immediate to 1.  The ctor stub is ret:'ecx' with no
+        action, so the recorded argument is the ONLY thing that changes."""
+        tmp = self.patched_ours('?SetVidCell@CProjectileBAM@@QAEXVCResRef@@@Z',
+                                b'\x6a\x00', 1, 0x01, 0xD0)
+        rc, out = self.run_patched('5295d0', tmp)
+        self.assertEqual(rc, 1, out)
+        self.assertIn('call diff', out)
 
 
 if __name__ == '__main__':
