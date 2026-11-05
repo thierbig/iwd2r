@@ -27,8 +27,13 @@ kind the WSO fork's imports carry — must say where the trace came from in
 `trace_source`: a citation of the fork's recovery note
 (`WillScarlettOhara/iwd2-re@<sha> docs/<name>-recovery.md`, which must name
 the function: its address, or its name as a whole word together with its
-class's name) or of a frida capture of our own
-binary (`frida <probe> orig:<sha256> ours:<sha256> compare=0`); anything
+class's name), of a frida capture of our own
+binary (`frida <probe> orig:<sha256> ours:<sha256> compare=0`), or of a
+differential-emulator case (`emu c<addr> orig:<sha256> ours:<sha256>
+at:<commit> sets=<n> equal=<n>`: the case module's address lower-case hex
+without 0x, both exes' sha256, the commit our exe was built at, and the set
+counts, which need `n >= 1` and `sets == equal` — an all-EQUAL run measured
+the function, a DIFF or ERROR is a finding, not evidence); anything
 else fails like a missing citation.
 Functions in RULES_MATH below — the rules-math set, whose correctness is the
 D&D 3e rules themselves (attack rolls, AC, saving throws, damage
@@ -61,7 +66,25 @@ TRACE_SOURCES = (
     # compare harness prints (plan @8ce297d7, Task 5b).
     re.compile(r'frida\s+\S+\s+orig:[0-9A-Fa-f]{64}\s+'
                r'ours:[0-9A-Fa-f]{64}\s+compare=0$'),
+    # A differential-emulator case (Task 74): the case module's address in
+    # lower-case hex without 0x (tools/emu/cases/c<addr>.py), both exes'
+    # sha256, the commit our exe was built at, and the set counts -- which
+    # must all be equal, checked after the match by emu_counts_ok below
+    # (a regex cannot compare two numbers).
+    re.compile(r'emu\s+c(?P<addr>[0-9a-f]+)\s+'
+               r'orig:(?P<orig>[0-9A-Fa-f]{64})\s+'
+               r'ours:(?P<ours>[0-9A-Fa-f]{64})\s+'
+               r'at:(?P<at>[0-9A-Fa-f]{7,40})\s+'
+               r'sets=(?P<sets>\d+)\s+equal=(?P<equal>\d+)$'),
 )
+
+
+def emu_counts_ok(match):
+    """Whether an emu trace_source's counts make it a measurement: at least
+    one input set, and every set equal (a DIFF or ERROR is a finding, not
+    evidence)."""
+    return int(match.group('sets')) >= 1 and \
+        int(match.group('sets')) == int(match.group('equal'))
 
 # The rules-math set: functions whose correctness IS a D&D 3e rule — the
 # to-hit and AC math, saving throws, damage resolution, and the
@@ -356,8 +379,8 @@ def problem(repo, address, name='', run=None):
         matches = [p.fullmatch(source) for p in TRACE_SOURCES]
         if not any(matches):
             return (f'{rel} has kind: trace without a trace_source citing a '
-                    "fork recovery note (docs/<name>-recovery.md) or a frida "
-                    'capture'), fields
+                    "fork recovery note (docs/<name>-recovery.md), a frida "
+                    'capture or an emulator case'), fields
         if matches[0]:
             sha, note = matches[0].groups()
             ok, why = fork_note_mentions(
@@ -366,6 +389,12 @@ def problem(repo, address, name='', run=None):
                     argv, cwd=repo, **kw)))
             if not ok:
                 return f'{rel}: {why}', fields
+        if matches[2] and not emu_counts_ok(matches[2]):
+            return (f'{rel}: trace_source emu counts must all be equal: '
+                    f'sets={matches[2].group("sets")} '
+                    f'equal={matches[2].group("equal")} '
+                    '(a DIFF or ERROR is a finding, not a measurement)',
+                    fields)
         return None, fields
     if not fields.get('oracle_case') and not fields.get('exemption'):
         return f'{rel} has neither oracle_case nor exemption', fields

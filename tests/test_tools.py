@@ -2379,6 +2379,67 @@ class CheckEvidenceTest(unittest.TestCase):
                 self.assertIn('trace 1 (1 of 1 touched function(s))',
                               r.stdout)
 
+    def emu_source(self, addr='c401000', at='1a2b3c4d5e6f7', sets=3, equal=3):
+        """A trace_source of the emulator form (Task 74): the case module's
+        address lower-case without 0x, both exes' sha256, the commit our exe
+        was built at, and the set counts, which must all be equal."""
+        return ('emu %s orig:%s ours:%s at:%s sets=%d equal=%d'
+                % (addr, 'a' * 64, 'b' * 64, at, sets, equal))
+
+    def test_trace_source_emu_form_accepted(self):
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.evidence('401000', 'kind: trace\ntrace_source: "%s"'
+                                % self.emu_source())
+        self.commit()
+        r = self.check()
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn('trace 1 (1 of 1 touched function(s))', r.stdout)
+
+    def test_trace_source_emu_form_shape(self):
+        # The third TRACE_SOURCES pattern: lower-case c-addr (the case module
+        # name), two sha256s, a 7-40 hex commit, two counts.
+        ok = check_evidence.TRACE_SOURCES[2]
+        self.assertTrue(ok.fullmatch(self.emu_source()))
+        self.assertTrue(ok.fullmatch(self.emu_source(at='1a2b3c4d5e6f78')))
+        self.assertTrue(ok.fullmatch(self.emu_source(at='e' * 40)))
+        for bad in (self.emu_source(addr='C401000'),      # upper-case addr
+                    self.emu_source(addr='0x401000'),     # 0x prefix
+                    self.emu_source(addr='f401000'),      # not a c-module
+                    self.emu_source(at=None),             # missing at:
+                    self.emu_source(at='1a2b3c'),         # 6-hex commit
+                    'emu c401000 orig:%s ours:%s at:%s sets=3 equal=3 extra'
+                    % ('a' * 64, 'b' * 64, '1a2b3c4d5e6f7'),
+                    ):
+            self.assertIsNone(ok.fullmatch(bad), bad)
+
+    def test_trace_source_emu_form_counts_must_all_be_equal(self):
+        # A regex cannot compare two numbers, so the counts are checked
+        # after the match: sets >= 1 and sets == equal, else the citation
+        # fails like a missing one.
+        ok = check_evidence.TRACE_SOURCES[2]
+        self.assertTrue(check_evidence.emu_counts_ok(
+            ok.fullmatch(self.emu_source(sets=3, equal=3))))
+        self.assertFalse(check_evidence.emu_counts_ok(
+            ok.fullmatch(self.emu_source(sets=3, equal=2))))
+        self.assertFalse(check_evidence.emu_counts_ok(
+            ok.fullmatch(self.emu_source(sets=0, equal=0))))
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.evidence('401000', 'kind: trace\ntrace_source: "%s"'
+                                % self.emu_source(sets=3, equal=2))
+        self.commit()
+        r = self.check()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn('docs/evidence/401000.md', r.stdout)
+        self.assertIn('sets', r.stdout)
+        self.evidence('401000', 'kind: trace\ntrace_source: "%s"'
+                                % self.emu_source(sets=0, equal=0))
+        self.commit()
+        r = self.check()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn('sets', r.stdout)
+
     def test_trace_kind_without_source_fails(self):
         self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
                                                       'return x * 2;'))

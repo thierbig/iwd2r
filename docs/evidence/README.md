@@ -47,10 +47,11 @@ The file name is the address in upper-case hex without `0x`:
   `read-only` (nothing runs it; the exemption stands on its own) or `trace`
   (a run trace covers it; the kind the WSO fork's imports carry). A
   `trace` document's `trace_source` cites where the trace came from, in one
-  of exactly two forms, and the gate rejects a `trace` without one:
+  of exactly three forms, and the gate rejects a `trace` without one:
 
       WillScarlettOhara/iwd2-re@<sha> docs/<name>-recovery.md
       frida <probe> orig:<sha256> ours:<sha256> compare=0
+      emu c<addr> orig:<sha256> ours:<sha256> at:<commit> sets=<n> equal=<n>
 
   The first is the fork's recovery note, never one of his source files: the
   gate reads it at that sha with `git show` (the fork must be fetched; an
@@ -59,7 +60,14 @@ The file name is the address in upper-case hex without `0x`:
   its class's name. The second is a Frida differential capture of our own
   binary against the original, with the sha256 of the two trace files; only
   the wave driver's Frida phase writes it (in an import batch, a frida line
-  the driver did not write is a check problem). A `trace` whose source
+  the driver did not write is a check problem). The third is a
+  differential-emulator case (`tools/emu/run.py`): the case module's
+  address in lower-case hex without `0x` (`c5845d0` names
+  `tools/emu/cases/c5845d0.py`), the sha256 of the original and of our
+  rebuilt exe, the commit our exe was built at, and the set counts — an
+  all-EQUAL run over every input set is a measurement, so the gate requires
+  `n >= 1` and `sets == equal`; `oracle.py emu --write-evidence` writes it.
+  A `trace` whose source
   checks out needs neither `oracle_case` nor `exemption`.
   The checker reports counts per kind but does not require one — except for
   the rules-math set (`RULES_MATH` in `tools/check_evidence.py`: attack rolls,
