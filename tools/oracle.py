@@ -50,10 +50,11 @@ per function, named by its address in the original exe) against the
 vanilla iwd2.exe and our RelWithDebInfo build: one verdict line per
 case and input set, EQUAL / EQUAL(state) / EQUAL(layout) / DIFF /
 ERROR, exit 0 when every set is equal, 1 on any DIFF and 2 on any
-ERROR. Unicorn lives only in the .venv-emu virtualenv, so this command
-relays to .venv-emu/bin/python -I running tools/emu/run.py (the same
-file runs directly under that interpreter); without ADDR every case
-runs, and a missing venv exits 2 after printing the setup command. See
+ERROR. Unicorn lives only in the emulation venv ($IWD2R_HOME/emu-venv,
+made by tools/emu/setup.sh), so this command relays to its python -I
+running tools/emu/run.py (the same file runs directly under that
+interpreter); without ADDR every case runs, and a missing venv exits 2
+after printing the setup command. See
 tools/emu/cases/__init__.py for the case contract. --build first builds
 our x86 exe of THIS worktree headless (the driver's Frida route: play's
 win_checkout + sync_windows + build_windows_x86, target iwd2r only) and
@@ -3364,12 +3365,9 @@ LOAD_HELP = ('start from this save folder (NNNNNNNNN-Name, with '
 NEW_ATTEMPT_HELP = ('start a new attempt: reset the sandbox launch count and '
                     'record why')
 
-# The emu cases run our RelWithDebInfo build against the vanilla exe; the
-# same build dir tools/emu/run.py defaults to.
-EMU_OURS = ('/mnt/c/Users/thier/iwd2r-build-p3-wso-i077/build/'
-            'windows-msvc-x86/RelWithDebInfo')
-EMU_VENV_SETUP = ('python3 -m venv .venv-emu && .venv-emu/bin/pip install -r '
-                  'tools/emu/requirements.txt')
+# The emulation venv, shared by every worktree (tools/emu/setup.sh makes it).
+EMU_VENV = os.path.join(IWD2R_HOME, 'emu-venv')
+EMU_VENV_SETUP = 'tools/emu/setup.sh'
 
 
 def emu_build_refusal(repo):
@@ -3387,6 +3385,15 @@ def emu_build_refusal(repo):
         return ('oracle: emu --build refuses: uncommitted changes under '
                 'src/ (the build must be HEAD):\n' + r.stdout.rstrip())
     return None
+
+
+def emu_default_ours(repo):
+    """This worktree's x86 RelWithDebInfo build folder, the one --build
+    makes and tools/emu/run.py defaults to.  play is imported here for the
+    reason emu_build_ours gives."""
+    import play
+    return os.path.join(play.win_checkout(repo, os.environ), 'build',
+                        'windows-msvc-x86', 'RelWithDebInfo')
 
 
 def emu_build_ours(repo):
@@ -3408,23 +3415,24 @@ def cmd_emu(args):
     """Relay tools/emu/run.py into the Unicorn venv.
 
     oracle.py itself runs under the system python3 -I, which has no
-    Unicorn; .venv-emu does.  Everything else (case discovery, verdicts,
+    Unicorn; EMU_VENV does.  Everything else (case discovery, verdicts,
     exit codes) is run.py's.  --build first builds our x86 exe of THIS
     worktree and runs the cases against it (the build must be HEAD);
     --write-evidence then turns every all-EQUAL case into a measurement
     (tools/emu/evidence.py).
     """
-    venv_python = os.path.join(ROOT, '.venv-emu', 'bin', 'python')
+    venv_python = os.path.join(EMU_VENV, 'bin', 'python')
     if not os.path.isfile(venv_python):
-        print('oracle: emu needs .venv-emu (Unicorn lives only there); from '
-              'the repository root:\n  %s' % EMU_VENV_SETUP, file=sys.stderr)
+        print('oracle: emu needs the emulation venv %s (Unicorn lives only '
+              'there); from the repository root:\n  %s'
+              % (EMU_VENV, EMU_VENV_SETUP), file=sys.stderr)
         return 2
     if args.write_evidence and not args.build:
         print('oracle: emu --write-evidence needs --build: the trace_source '
               'cites the exe it measured, so the build must be this '
               'worktree\'s HEAD', file=sys.stderr)
         return 2
-    ours = args.ours
+    ours = args.ours or emu_default_ours(ROOT)
     if args.build:
         refusal = emu_build_refusal(ROOT)
         if refusal:
@@ -3506,9 +3514,9 @@ def main(argv=None):
                      help='case address to run (0x578970); default every case')
     emu.add_argument('--list', action='store_true',
                      help='list the cases and exit')
-    emu.add_argument('--ours', default=EMU_OURS,
-                     help='our RelWithDebInfo build directory '
-                     '(default %(default)s)')
+    emu.add_argument('--ours', default=None,
+                     help='our RelWithDebInfo build directory (default this '
+                     'worktree\'s x86 build, the folder --build fills)')
     emu.add_argument('--json', help='write the results as JSON to OUT')
     emu.add_argument('--build', action='store_true',
                      help='first build our x86 exe of THIS worktree (HEAD '

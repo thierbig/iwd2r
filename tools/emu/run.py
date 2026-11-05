@@ -1,13 +1,14 @@
-#!/usr/bin/env .venv-emu/bin/python
+#!/usr/bin/env python3
 """Differential emulation runner -- executes tools/emu/cases/* against the
 original VC6 iwd2.exe and our MSVC rebuild and prints one verdict line per
 case and input set:
 
     0xADDR Name set-N: EQUAL(state)|EQUAL(layout)|DIFF|ERROR <detail>
 
-Must run under the emulation venv (Unicorn lives only in .venv-emu):
-tools/oracle.py's `emu` subcommand relays here through
-.venv-emu/bin/python -I; running it directly is fine too.
+Must run under the emulation venv (Unicorn lives only in
+$IWD2R_HOME/emu-venv, made by tools/emu/setup.sh): tools/oracle.py's `emu`
+subcommand relays here through its python -I; running it directly under
+that interpreter is fine too.
 
 Exit status: 0 all sets equal, 1 any DIFF, 2 any ERROR or setup failure.
 """
@@ -18,6 +19,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,9 +27,18 @@ HERE = Path(__file__).resolve().parent          # tools/emu
 sys.path.insert(0, str(HERE))                   # machine, layout, cases
 sys.path.insert(0, str(HERE.parent))            # tools/ for truth.py
 
-DEFAULT_ORIG = Path('/home/thier/.local/share/iwd2r/vanilla/iwd2.exe')
-DEFAULT_OURS = Path('/mnt/c/Users/thier/iwd2r-build-p3-wso-i077/build/windows-msvc-x86/RelWithDebInfo')
-VENV_SETUP = ('python3 -m venv .venv-emu && .venv-emu/bin/pip install -r tools/emu/requirements.txt')
+# The vanilla exe the oracle measures (oracle.VANILLA_EXE; IWD2R_HOME moves it).
+DEFAULT_ORIG = Path(os.environ.get('IWD2R_HOME')
+                    or os.path.expanduser('~/.local/share/iwd2r')) / 'vanilla' / 'iwd2.exe'
+VENV_SETUP = 'tools/emu/setup.sh'
+
+
+def default_ours():
+    """This worktree's x86 RelWithDebInfo build folder, the one
+    `oracle.py emu --build` makes (play.win_checkout names the folder)."""
+    import play
+    checkout = play.win_checkout(str(HERE.parent.parent), os.environ)
+    return Path(checkout) / 'build' / 'windows-msvc-x86' / 'RelWithDebInfo'
 
 
 # ---------------------------------------------------------------- cases
@@ -139,8 +150,9 @@ def main(argv=None):
                     help='case addresses to run (hex, e.g. 0x578970); default all')
     ap.add_argument('--list', action='store_true', help='list cases and exit')
     ap.add_argument('--orig', type=Path, default=DEFAULT_ORIG, help='original iwd2.exe')
-    ap.add_argument('--ours', type=Path, default=DEFAULT_OURS,
-                    help='our RelWithDebInfo build directory (iwd2r.exe/.map/.pdb)')
+    ap.add_argument('--ours', type=Path, default=None,
+                    help='our RelWithDebInfo build directory (iwd2r.exe/.map/.pdb); '
+                    "default this worktree's x86 build")
     ap.add_argument('--src', type=Path, default=HERE.parent.parent / 'src',
                     help='src/ with /* XXXX */ offset comments')
     ap.add_argument('--pdb', type=Path, default=None,
@@ -149,6 +161,8 @@ def main(argv=None):
     ap.add_argument('--strict', action='store_true', help='keep stack/TIB writes in the diff')
     ap.add_argument('--verbose', action='store_true')
     args = ap.parse_args(argv)
+    if args.ours is None:
+        args.ours = default_ours()
 
     cases = discover(HERE / 'cases')
     if args.list:
@@ -176,7 +190,7 @@ def main(argv=None):
         import truth
         import layout                                    # noqa: F401 (sanity)
     except ImportError as e:
-        print(f'emu: {e}\nUnicorn lives only in .venv-emu; set it up with:\n  {VENV_SETUP}',
+        print(f'emu: {e}\nUnicorn lives only in the emulation venv; set it up with:\n  {VENV_SETUP}',
               file=sys.stderr)
         return 2
 
@@ -187,7 +201,8 @@ def main(argv=None):
         publics = truth.parse_map((args.ours / 'iwd2r.map').read_text(errors='replace'))
         build_id = 'iwd2r.exe sha256:' + hashlib.sha256(ours_exe.read_bytes()).hexdigest()[:12]
     except (OSError, AssertionError) as e:
-        print(f'emu: setup failure: {e}', file=sys.stderr)
+        print(f'emu: setup failure: {e}\n(our build is {args.ours}: make it with '
+              'tools/oracle.py emu --build, or pass --ours DIR)', file=sys.stderr)
         return 2
     pdb_path = args.pdb or (args.ours / 'iwd2r.pdb')
 

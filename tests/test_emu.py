@@ -6,7 +6,8 @@ Everything here runs on the stdlib alone: header and PDB parsing go against
 the small text fixtures under tests/fixtures/emu/, the PDB cache is exercised
 with a stubbed llvm-pdbutil, and case modules are only imported (they import
 machine.py, which needs Unicorn, inside build()).  The one Unicorn-needing
-test skips cleanly unless run with .venv-emu/bin/python.
+test skips cleanly unless run with the emulation venv's python
+($IWD2R_HOME/emu-venv/bin/python, made by tools/emu/setup.sh).
 """
 
 import io
@@ -22,8 +23,10 @@ ROOT = Path(__file__).resolve().parent.parent
 EMU = ROOT / 'tools' / 'emu'
 FIX = Path(__file__).resolve().parent / 'fixtures' / 'emu'
 sys.path.insert(0, str(EMU))
+sys.path.insert(1, str(ROOT / 'tools'))
 
 import layout                                               # noqa: E402
+import winhome                                              # noqa: E402
 
 
 HEADER = (FIX / 'emu_shapes.h').read_text()
@@ -247,14 +250,15 @@ class CaseContractTests(unittest.TestCase):
 
 
 class UnicornGatedTests(unittest.TestCase):
-    """machine.py needs Unicorn, which lives only in .venv-emu: run with
-    .venv-emu/bin/python -I tests/test_emu.py.  Skips cleanly otherwise."""
+    """machine.py needs Unicorn, which lives only in the emulation venv: run
+    with ~/.local/share/iwd2r/emu-venv/bin/python -I tests/test_emu.py.
+    Skips cleanly otherwise."""
 
     def setUp(self):
         try:
             import unicorn                                        # noqa: F401
         except ImportError:
-            self.skipTest('unicorn only in .venv-emu')
+            self.skipTest('unicorn only in the emulation venv')
 
     def test_machine_imports_and_unicorn_runs(self):
         import machine
@@ -341,8 +345,7 @@ class UnicornGatedTests(unittest.TestCase):
     # vanilla side always runs unpatched, so a control failing to DIFF
     # means the harness would miss real code drift.
 
-    I077 = Path('/mnt/c/Users/thier/iwd2r-build-p3-wso-i077/'
-                'build/windows-msvc-x86/RelWithDebInfo')
+    I077 = Path(winhome.WIN_HOME) / 'iwd2r-build-p3-wso-i077/build/windows-msvc-x86/RelWithDebInfo'
 
     def patched_ours(self, symbol, pattern, patch_off, new_byte, window):
         """Copy i077's iwd2r.exe/.map to a temp dir (pdb symlinked), find
