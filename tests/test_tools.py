@@ -2715,6 +2715,10 @@ class EmuEvidenceTest(unittest.TestCase):
         self.assertEqual(fields['ghidra_version'], '12.1.4')
         self.assertIn('# 0x4029F0 CResBIO::Demand', new)
         self.assertIn('Imported from the WSO fork body.', new)
+        # the body comes through byte for byte: one closing delimiter, no
+        # second '---' line repeated after it
+        self.assertEqual(new.split('\n---\n', 1)[1],
+                         EMU_EVIDENCE.split('\n---\n', 1)[1])
 
     def test_convert_when_kind_precedes_the_exemption(self):
         # the 0x4EA3F0 shape: kind (and a waiver) before exemption, so the
@@ -2733,6 +2737,8 @@ class EmuEvidenceTest(unittest.TestCase):
         self.assertIn('parity_waiver: "asm i049: helper"', new)
         self.assertEqual(fields['name'], 'CResBIO::Demand')
         self.assertIn('# 0x4029F0 CResBIO::Demand', new)
+        self.assertEqual(new.split('\n---\n', 1)[1],
+                         '\n# 0x4029F0 CResBIO::Demand\n\nBody.\n')
 
     def test_convert_leaves_other_exemptions_alone(self):
         new, converted = emu_evidence.convert(EMU_KEPT, self.source())

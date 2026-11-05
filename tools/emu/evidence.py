@@ -66,6 +66,9 @@ def convert(text, source):
     except ValueError:
         return text, False
     head = lines[:end + 1]
+    # the body after the closing delimiter, taken before `end` moves with
+    # the edits below (slicing with the moved `end` repeated the delimiter)
+    rest = lines[end + 1:]
     exemption_at = kind_at = trace_at = None
     for i, line in enumerate(head[1:end], start=1):
         name = line.split(':', 1)[0].strip()
@@ -103,7 +106,7 @@ def convert(text, source):
     else:
         head.insert(end, 'trace_source: %s' % source)
         head.insert(end, 'kind: trace')
-    return '\n'.join(head + lines[end + 1:]), True
+    return '\n'.join(head + rest), True
 
 
 def section(text, sets, module_rel):
