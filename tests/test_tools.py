@@ -2716,6 +2716,24 @@ class EmuEvidenceTest(unittest.TestCase):
         self.assertIn('# 0x4029F0 CResBIO::Demand', new)
         self.assertIn('Imported from the WSO fork body.', new)
 
+    def test_convert_when_kind_precedes_the_exemption(self):
+        # the 0x4EA3F0 shape: kind (and a waiver) before exemption, so the
+        # exemption's index moves when the trace_source line is inserted
+        text = ('---\naddress: 0x4029F0\nname: CResBIO::Demand\n'
+                'kind: read-only\n'
+                'exemption: unmeasured WSO import: world_entry: not exercised\n'
+                'parity_waiver: "asm i049: helper"\n---\n\n'
+                '# 0x4029F0 CResBIO::Demand\n\nBody.\n')
+        new, converted = emu_evidence.convert(text, self.source())
+        self.assertTrue(converted)
+        fields = check_evidence.front_matter(new)
+        self.assertEqual(fields['kind'], 'trace')
+        self.assertEqual(fields['trace_source'], self.source())
+        self.assertNotIn('exemption', fields)
+        self.assertIn('parity_waiver: "asm i049: helper"', new)
+        self.assertEqual(fields['name'], 'CResBIO::Demand')
+        self.assertIn('# 0x4029F0 CResBIO::Demand', new)
+
     def test_convert_leaves_other_exemptions_alone(self):
         new, converted = emu_evidence.convert(EMU_KEPT, self.source())
         self.assertFalse(converted)

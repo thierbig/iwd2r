@@ -84,6 +84,16 @@ def convert(text, source):
         pass  # already measured by an emu case: refresh the trace_source
     else:
         return text, False
+    if exemption_at is not None:
+        # delete before any insert: an insert above the exemption line would
+        # shift it and the wrong line would go (the 0x4EA3F0 shape, where
+        # kind: precedes exemption:)
+        del head[exemption_at]
+        end -= 1
+        if kind_at is not None and exemption_at < kind_at:
+            kind_at -= 1
+        if trace_at is not None and exemption_at < trace_at:
+            trace_at -= 1
     if trace_at is not None:
         head[trace_at] = 'trace_source: %s' % source
     if kind_at is not None:
@@ -93,8 +103,6 @@ def convert(text, source):
     else:
         head.insert(end, 'trace_source: %s' % source)
         head.insert(end, 'kind: trace')
-    if exemption_at is not None:
-        del head[exemption_at]
     return '\n'.join(head + lines[end + 1:]), True
 
 
