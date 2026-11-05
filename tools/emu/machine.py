@@ -207,6 +207,7 @@ class Machine:
         self.watch = {}                                    # addr -> spec
         self._retseq = {}                                  # hook addr -> next 'rets' index
         self.icount = 0
+        self.terminated = None        # noreturn stub: (name, [args]) at stop (fix 3)
         uc.hook_add(UC_HOOK_CODE, self._on_code)
         uc.hook_add(UC_HOOK_MEM_WRITE, self._on_write)
 
@@ -262,6 +263,8 @@ class Machine:
             uc.emu_start(self.entry, RET_MAGIC, count=2_000_000)
         except UcError as e:
             self.error = f'{e} at eip=0x{uc.reg_read(UC_X86_REG_EIP):08x} (icount={self.icount})'
+            return
+        if self.terminated:            # stopped at a noreturn callee (fix 3)
             return
         if uc.reg_read(UC_X86_REG_EIP) != RET_MAGIC:
             self.error = f'instruction budget exhausted (icount={self.icount})'
@@ -345,6 +348,16 @@ class Machine:
         raw = ([uc.reg_read(UC_X86_REG_ECX)] if spec['conv'] == 'thiscall' else []) + stack_args
         action = spec.get('action', 'plain')
         retval = spec.get('ret', 0)
+
+        if spec.get('noreturn'):
+            # fix 3: the callee never returns (assert/abort).  End this
+            # side's run AT the call and record it; run_case compares the
+            # two terminations instead of ret/state.
+            self.terminated = (spec['name'], [self._norm(a) for a in raw])
+            self.calls.append([spec['name'], [self._norm(a) for a in raw], None,
+                               spec.get('inline_ok', False)])
+            uc.emu_stop()
+            return
 
         if action == 'bump_new':
             size = stack_args[0]
@@ -464,6 +477,21 @@ def run_case(name, build, inp, pe_o, pe_u, strict=False, verbose=False, field_ma
         if m.error:
             print(f'  {tag}: ERROR {m.error} writes={len(m.writes)} calls={len(m.calls)}')
             return 'ERROR'
+
+    if mo.terminated or mu.terminated:
+        # noreturn callee (fix 3): the run ends at the call, so ret /
+        # write-seq / final-state are past the endpoint.  Both sides
+        # stopping at the same callee with equal args is EQUAL; one side
+        # terminating and the other returning is DIFF.
+        to, tu = mo.terminated, mu.terminated
+        term_eq = (to is not None and tu is not None
+                   and to[0] == tu[0] and to[1] == tu[1])
+        fmt = lambda t: f'{t[0]}({", ".join(t[1])})' if t else '(returned)'
+        print(f'  terminated: orig {fmt(to)}   ours {fmt(tu)}')
+        print(f'  verdict: {"EQUAL" if term_eq else "DIFF"}   '
+              f'writes orig={len(mo.writes)} ours={len(mu.writes)}   '
+              f'calls {len(mo.calls)}/{len(mu.calls)}   icount {mo.icount}/{mu.icount}')
+        return 'EQUAL' if term_eq else 'DIFF'
 
     if returns == 'ptr':
         ro, ru = mo._norm(mo.ret), mu._norm(mu.ret)

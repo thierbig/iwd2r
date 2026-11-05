@@ -25,9 +25,14 @@ Codegen drift handled:
     their shapes are comparable -- ECX is the same preseeded block and the
     scripted returns are the same block addresses.
 
-Finding (reported, not worked around): when GetDemands() <= 0, vanilla
-calls the report stub at 0x780C00 and continues, ours int3s at 0x406901.
-All sets keep GetDemands at 2 to stay off that path.
+Noreturn (fix 3): when GetDemands() <= 0 both images call the assertion
+reporter -- vanilla 0x780C00 (AssertionFailed: suspends threads, calls
+ShutDown via the vtable, jumps to abort), ours CUtil::UtilAssert
+(src/CUtil.cpp) -- and neither returns; MSVC even pads after the call
+with int3 (0x63C315), VC6 with a dead `add esp,0x10` (0x4EA43C).  The
+stub is noreturn with nargs 0: all four pushed words (file/line/message
+image constants) are addresses inside each image and so incomparable.
+Both sides terminating at the assert is EQUAL (set5).
 
 Returns 'u32' — `INT GetMaxEffectSpellLevel()` (src/CItem.h:43); EAX is the
 best level or 0, compared masked to 32 bits.
@@ -42,10 +47,12 @@ CASE = {
     'members': ('m_nAbilities',), 'field_mapped': False,
     'extra': {'opneq_orig': 0x78ABB0, 'getdemands_orig': 0x77E550,
               'getability_orig': 0x4015F0, 'geteffect_orig': 0x4E9680,
+              'assert_orig': 0x780C00,
               'opneq_ours': ('map', '??9CResRef@@QBEHPBD@Z'),
               'getdemands_ours': ('map', '?GetDemands@CRes@@QAEHXZ'),
               'getability_ours': ('map', '?GetAbility@CResItem@@QAEPAUItem_ability_st@@H@Z'),
-              'geteffect_ours': ('map', '?GetAbilityEffect@CItem@@QAEPAVCGameEffect@@HHPAVCGameObject@@@Z')},
+              'geteffect_ours': ('map', '?GetAbilityEffect@CItem@@QAEPAVCGameEffect@@HHPAVCGameObject@@@Z'),
+              'assert_ours': ('map', '?UtilAssert@CUtil@@SAXHPBD00@Z')},
     'returns': 'u32',
 }
 
@@ -74,7 +81,11 @@ def build(side, inp, pe, addrs, ctx):
                 'default': {'ret': 0 if side == 'orig' else 1}})
     m.add_stub({'name': 'CRes::GetDemands', 'kind': 'code',
                 'addr': addrs['getdemands_' + side], 'conv': 'thiscall',
-                'nargs': 0, 'pop': 0, 'default': {'ret': 2}})
+                'nargs': 0, 'pop': 0,
+                'default': {'ret': inp.get('demands', 2)}})
+    m.add_stub({'name': 'CUtil::UtilAssert', 'kind': 'code',
+                'addr': addrs['assert_' + side], 'conv': 'cdecl',
+                'nargs': 0, 'pop': 0, 'noreturn': True})
     m.add_stub({'name': 'CResItem::GetAbility', 'kind': 'code',
                 'addr': addrs['getability_' + side], 'conv': 'thiscall',
                 'nargs': 1, 'pop': 4,
@@ -95,4 +106,7 @@ SETS = {
                                  geteffect_rets=[0]),
     'set4-ability-null': dict(count=1, effect_level=3, getability_rets=[0],
                               geteffect_rets=[0]),
+    # fix 3: demands <= 0 -> both images call the assert and never return
+    'set5-demands-zero': dict(count=1, effect_level=3, getability_rets=[0],
+                              geteffect_rets=[0], demands=0),
 }
