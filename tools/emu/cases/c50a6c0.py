@@ -18,21 +18,14 @@
     UTIL_ASSERT(cnt + 4 == dwSize);                (dwSize == 24 + len1 + len2)
     return TRUE;                                   (EAX=1, hit AND miss)
 
-FINDING (expected DIFF, not a measurement): the two wire strings land in
+Found by this case, fixed in 6c1958ad: the two wire strings landed in
 SWAPPED members.  Vanilla assigns the first string to m_sName (lea ecx,
 [ebx+0x10] at 0x50A75F) and the second to m_sScope ([ebx+0xC] at
-0x50A79B); our rebuild assigns the first to m_sScope (lea ecx,[ecx+0xC]
-at 0x668AB8) and the second to m_sName ([ecx+0x10] at 0x668AF3).  Our
-own source confirms it: UnmarshalMessage (src/CMessage.cpp:21297) assigns
-m_sScope first, while our MarshalMessage (src/CMessage.cpp:21254) writes
-m_sName first -- matching vanilla's order -- so our Marshal->Unmarshal
-round trip swaps the two strings and our Unmarshal cannot correctly
-receive a vanilla-marshaled SetVariable message.  Reported, not fixed
-(worker rule); the case documents the divergence mechanically: the
-operator= stubs' this-args record this+0x10/this+0xC in one order on
-vanilla and the other on ours, and calls_eq carries the DIFF (call args
-are never field-mapped, deliberately: both offsets exist on both sides,
-so a field map would hide a real bug rather than reconcile drift).
+0x50A79B), the order MarshalMessage (0x50A4D0) writes them in; the import
+assigned the first to m_sScope, so 3 of 3 sets were DIFF on the operator=
+stubs' this-args.  Call args are never field-mapped, deliberately: both
+offsets exist on both sides, so a field map would hide a real bug rather
+than reconcile drift.
 
 Secondary drift, field-mapped away: m_dwFlags sits at +0x1A packed in
 vanilla but +0x1C (natural alignment after the BOOLEAN at +0x18) in our
