@@ -12,12 +12,12 @@ public:
 class TFoo : public TBar {
 public:
     /* 0008 */ char m_tag;
-    /* 000A */ int m_count;                 // pack(2): int at an even offset
+    /* 000A */ int m_count; // pack(2): int at an even offset
     /* 000E */ char m_bytes[4];
     /* 0012 */ TBar* m_bar;
-    /* 0016 */ RESID m_exeOnly;             // exe-only member, unknown type
-    /* 001A */ TFooKind m_kind;             // enum-typed, no 'enum ' prefix
-    static int s_classData;                 // static: never a data member
-    int helper();                           // method: no offset comment
-    /* 001E */ virtual void* hook(int a);   // commented method: skipped
+    /* 0016 */ RESID m_exeOnly; // exe-only member, unknown type
+    /* 001A */ TFooKind m_kind; // enum-typed, no 'enum ' prefix
+    static int s_classData; // static: never a data member
+    int helper(); // method: no offset comment
+    /* 001E */ virtual void* hook(int a); // commented method: skipped
 };
