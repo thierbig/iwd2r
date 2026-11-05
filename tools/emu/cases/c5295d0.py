@@ -29,14 +29,15 @@ import struct
 
 CASE = {
     'name': 'CProjectileBAM::SetVidCell', 'short': 'CProjectileBAM::SetVidCell',
-    'exe': 0x5295D0, 'ours': 'CProjectileBAM::SetVidCell', 'expect_rva': 0x27EB20,
+    'exe': 0x5295D0, 'ours': 'CProjectileBAM::SetVidCell',
     'convention': 'thiscall', 'this_class': 'CProjectileBAM', 'this_size': 0x2B0,
     'members': ('m_animation',), 'field_mapped': True,
     'extra': {'dtor_orig': 0x7AD0F0, 'delete_orig': 0x7FC984,
               'new_orig': 0x7FC95B, 'ctor_orig': 0x7ACE50,
-              'dtor_ours': 0x40356C, 'delete_ours': 0x404ABB,
-              'new_ours': 0x4084E0, 'ctor_ours': 0x408544},
-    'resolve': {},
+              'dtor_ours': ('map', '??1CVidCell@@QAE@XZ'),
+              'delete_ours': ('map', '??3@YAXPAXI@Z'),
+              'new_ours': ('map', '??2@YAPAXI@Z'),
+              'ctor_ours': ('map', '??0CVidCell@@QAE@VCResRef@@H@Z')},
     'returns': 'void',
 }
 

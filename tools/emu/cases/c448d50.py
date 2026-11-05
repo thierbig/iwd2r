@@ -22,12 +22,12 @@ import struct
 
 CASE = {
     'name': 'TString::Tidy', 'short': 'TString::Tidy',
-    'exe': 0x448D50, 'ours': 'TString::Tidy', 'expect_rva': 0x42C3D0,
+    'exe': 0x448D50, 'ours': 'TString::Tidy',
     'convention': 'thiscall', 'this_class': None, 'this_size': 16,
     'members': (), 'field_mapped': False,
     'extra': {'new_orig': 0x7FC95B, 'delete_orig': 0x7FC984,
-              'new_ours': 0x40C30B, 'delete_ours': 0x413E99},
-    'resolve': {},
+              'new_ours': ('map', '??_U@YAPAXI@Z'),
+              'delete_ours': ('map', '??_V@YAXPAX@Z')},
     'returns': 'void',
 }
 

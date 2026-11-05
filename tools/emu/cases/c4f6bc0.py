@@ -27,12 +27,11 @@ CASE = {
     'name': 'CMessageRemoveSummonLink::CMessageRemoveSummonLink',
     'short': 'CMSL::ctor',
     'exe': 0x4F6BC0, 'ours': 'CMessageRemoveSummonLink::CMessageRemoveSummonLink',
-    'expect_rva': 0x243260,
     'convention': 'thiscall', 'this_class': 'CMessageRemoveSummonLink',
     'this_size': 0x10,
     'members': ('m_targetId', 'm_sourceId', 'm_summonedId'),
     'field_mapped': True, 'vptr_norm': True,
-    'extra': {}, 'resolve': {},
+    'extra': {},
     'returns': 'ptr',
 }
 

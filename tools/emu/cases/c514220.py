@@ -22,11 +22,11 @@ import struct
 
 CASE = {
     'name': 'CAIScript::SetResRef', 'short': 'CAIScript::SetResRef',
-    'exe': 0x514220, 'ours': 'CAIScript::SetResRef', 'expect_rva': 0x76670,
+    'exe': 0x514220, 'ours': 'CAIScript::SetResRef',
     'convention': 'thiscall', 'this_class': None, 'this_size': 4,
     'members': (), 'field_mapped': False,
-    'extra': {'opeq_orig': 0x78AC30, 'opeq_ours': 0x409CCD},
-    'resolve': {},
+    'extra': {'opeq_orig': 0x78AC30,
+              'opeq_ours': ('map', '??4CResRef@@QAE?AV0@ABV0@@Z')},
     'returns': 'void',
 }
 

@@ -80,6 +80,59 @@ class PeImage:
                 return name
         return None
 
+    def foff(self, rva):
+        """file offset of an RVA."""
+        for _name, sva, vsize, rsize, roff in self.sections:
+            if sva <= rva < sva + max(vsize, rsize):
+                return roff + (rva - sva)
+        raise ValueError(f'{self.path}: rva {rva:#x} outside every section')
+
+    def import_slots(self):
+        """IAT slot addresses from the import table, for ours-side addresses
+        that must not be pinned to one build (fix 2):
+
+            {'kernel32.dll!copyfilea': slot VA, ..., 'copyfilea': VA}
+
+        Keys are 'dll!name' (dll lowercased; ordinals as 'dll!#N'), plus a
+        bare-name key when exactly one DLL imports that name.  Values are
+        absolute VAs (image_base + FirstThunk + 4*i).
+        """
+        if getattr(self, '_import_slots', None):
+            return self._import_slots
+        d = self.data
+        pe = struct.unpack_from('<I', d, 0x3C)[0]
+        opt = pe + 24
+        imp_rva = struct.unpack_from('<I', d, opt + 96 + 8)[0]      # dir 1
+        slots, plain = {}, {}
+        desc = self.foff(imp_rva)
+        while True:
+            oft, _ts, _fwd, name_rva, ft = struct.unpack_from('<IIIII', d, desc)
+            if not oft and not ft:
+                break
+            n_off = self.foff(name_rva)
+            dll = d[n_off:d.index(b'\0', n_off)].decode(errors='replace').lower()
+            ent_off = self.foff(oft or ft)
+            i = 0
+            while True:
+                ent = struct.unpack_from('<I', d, ent_off + 4 * i)[0]
+                if not ent:
+                    break
+                if ent & 0x80000000:
+                    bare = f'#{ent & 0xFFFF}'
+                else:
+                    h = self.foff(ent)
+                    bare = d[h + 2:d.index(b'\0', h + 2)].decode(errors='replace')
+                key = f'{dll}!{bare}'
+                slots[key] = self.image_base + ft + 4 * i
+                plain.setdefault(bare.lower(), set()).add(key)
+                i += 1
+            desc += 20
+        for bare, keys in plain.items():
+            if len(keys) == 1:
+                slots.setdefault(bare, slots[next(iter(keys))])
+        self._import_slots = slots
+        return slots
+
 
 # ---------------------------------------------------------------- one machine
 

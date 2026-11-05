@@ -24,19 +24,19 @@ CASE = {
     'short': 'CalculateFxRect',
     'exe': 0x578970,
     'ours': 'CProjectileSingleTarget::CalculateFxRect',
-    'expect_rva': 0x28DE90,          # cross-check; resolution is by name
     'convention': 'thiscall',
     'this_class': 'CProjectileSingleTarget',
     'this_size': 0x1F0,
     'members': ('m_animation', 'm_shadow', 'field_1D4', 'm_posZ'),
     'field_mapped': False,
-    # ILT thunk + body on our side, single body on the original; found by
-    # disassembly, the map has no symbols for these.
+    # ours-side sites resolve from the map at run time (fix 2): the call
+    # goes through an early-.text ILT thunk, and hooking the map-named
+    # body catches it either way.  Vanilla bodies stay literal.
     'extra': {
         'center_orig': [0x7AD520], 'fsize_orig': [0x7AD800],
-        'center_ours': [0x416F0E, 0x7C8A90], 'fsize_ours': [0x403107, 0x7C8C70],
+        'center_ours': [('map', '?GetCurrentCenterPoint@CVidCell@@QAEHAAVCPoint@@E@Z')],
+        'fsize_ours': [('map', '?GetCurrentFrameSize@CVidCell@@QAEHAAVCSize@@E@Z')],
     },
-    'resolve': {},                   # extra map-resolved ours symbols: key -> (name, rva)
     'returns': 'void',
 }
 

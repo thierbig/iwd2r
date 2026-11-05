@@ -2,13 +2,17 @@
 address in the original iwd2.exe (c578970.py -> 0x578970).
 
 Contract (see run.py):
-  CASE    declarative table: exe address, our map-resolved name + expected
-          rva (cross-check only, resolution goes through truth._map_matches),
-          calling convention, `this` class + size for layout.py, required
-          member names, per-side extra addresses the map cannot name
-          (ILT thunks, import bodies), extra map-resolved names.
+  CASE    declarative table: exe address, our function's map name, calling
+          convention, `this` class + size for layout.py, required member
+          names, and per-site address specs.  Nothing on our side may be a
+          build-specific constant (fix 2): a spec is int (vanilla literal /
+          shared constant), str or ('map', name) (resolved through
+          truth._map_matches; ILT-thunked calls are caught by hooking the
+          map-named body), ('import', 'dll!symbol') (IAT slot from our PE
+          import table), or [spec, ...] for multi-site hooks.  Absence or
+          ambiguity is a clean per-case ERROR 'not in this build: <name>'.
   build(side, inp, pe, addrs, ctx) -> machine.Machine
-          addrs: {'orig': VA, 'ours': VA, **CASE['extra'], **resolved extras}
+          addrs: {'orig': VA, 'ours': VA, **CASE['extra'] resolved}
           ctx:   {'off': {side: {member: offset}}, 'sent': machine.SENT,
                   'field_map': {exe_off: ours_off} | None}
   SETS    {name: input dict} in run order; include edge values.

@@ -58,13 +58,47 @@ class CaseError(Exception):
     pass
 
 
-def resolve_ours(machine, truth, publics, name, expect_rva):
-    """Map-symbol address for `name`, cross-checked against expect_rva."""
+def map_addr(machine, truth, publics, name):
+    """Map-symbol VA for `name`.  Fix 2: nothing on our side may be a
+    build-specific constant -- the lookup IS the resolution, so absence or
+    ambiguity is a clean per-case ERROR, not an assert."""
     found = truth._map_matches(name, publics)
-    assert len(found) == 1, (name, {hex(k): v for k, v in found.items()})
+    if not found:
+        raise CaseError(f'not in this build: {name}')
+    if len(found) > 1:
+        cands = ', '.join(f'{rva:#x} {dec}' for rva, dec in sorted(found.items()))
+        raise CaseError(f'not in this build: {name} (ambiguous: {cands})')
     (rva, _dec), = found.items()
-    assert rva == expect_rva, (name, hex(rva), hex(expect_rva))
     return machine.IMAGE_BASE + rva
+
+
+def import_addr(pe_u, name):
+    """IAT-slot VA for 'dll!symbol' (dll lowercased) or a bare 'symbol'
+    that exactly one DLL imports."""
+    slots = pe_u.import_slots()
+    for key in (name, name.lower()):
+        if key in slots:
+            return slots[key]
+    raise CaseError(f'not in this build: {name} (import)')
+
+
+def resolve(spec, machine, truth, publics, pe_u):
+    """Case address spec (fix 2): int stays (vanilla literal / shared
+    constant), str is a map name, ('map', name) / ('import', 'dll!sym')
+    resolve at run time, [spec, ...] is a multi-site hook list."""
+    if isinstance(spec, int):
+        return spec
+    if isinstance(spec, str):
+        return map_addr(machine, truth, publics, spec)
+    if isinstance(spec, list):
+        return [resolve(s, machine, truth, publics, pe_u) for s in spec]
+    if (isinstance(spec, tuple) and len(spec) == 2
+            and spec[0] in ('map', 'import') and isinstance(spec[1], str)):
+        if spec[0] == 'map':
+            return map_addr(machine, truth, publics, spec[1])
+        return import_addr(pe_u, spec[1])
+    raise CaseError(f'bad address spec {spec!r}: int | str | '
+                    '("map"|"import", name) | [spec, ...]')
 
 
 _LAYOUTS = {}
@@ -164,11 +198,14 @@ def main(argv=None):
         mod = load_case(name, path)
         case = mod.CASE
         try:
-            addrs = dict(case['extra'])
+            for key, spec in case['extra'].items():
+                if key.endswith('_ours') and isinstance(spec, int):
+                    raise CaseError(f'extra[{key!r}]: ours-side addresses must be '
+                                    '("map"|"import", name) specs, not literals (fix 2)')
+            addrs = {k: resolve(v, machine, truth, publics, pe_u)
+                     for k, v in case['extra'].items()}
             addrs['orig'] = case['exe']
-            addrs['ours'] = resolve_ours(machine, truth, publics, case['ours'], case['expect_rva'])
-            for key, (cname, rva) in case['resolve'].items():
-                addrs[key] = resolve_ours(machine, truth, publics, cname, rva)
+            addrs['ours'] = resolve(case['ours'], machine, truth, publics, pe_u)
             if case.get('returns') not in ('void', 'u8', 'u16', 'u32', 'ptr'):
                 raise CaseError('CASE["returns"] missing or invalid: declare '
                                 "'void'|'u8'|'u16'|'u32'|'ptr' (fix 1)")

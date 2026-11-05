@@ -12,10 +12,10 @@ ours to `mov eax,0xfffffffc` must now read DIFF.
 
 CASE = {
     'name': 'TString::MaxSize', 'short': 'TString::MaxSize',
-    'exe': 0x45EA70, 'ours': 'TString::MaxSize', 'expect_rva': 0x42C2B0,
+    'exe': 0x45EA70, 'ours': 'TString::MaxSize',
     'convention': 'thiscall', 'this_class': None, 'this_size': 16,
     'members': (), 'field_mapped': False,
-    'extra': {}, 'resolve': {},
+    'extra': {},
     'returns': 'u32',
 }
 

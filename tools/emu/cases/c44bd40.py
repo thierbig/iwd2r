@@ -27,13 +27,14 @@ import struct
 
 CASE = {
     'name': 'TString::Detach', 'short': 'TString::Detach',
-    'exe': 0x44BD40, 'ours': 'TString::Detach', 'expect_rva': 0x42C110,
+    'exe': 0x44BD40, 'ours': 'TString::Detach',
     'convention': 'thiscall', 'this_class': None, 'this_size': 16,
     'members': (), 'field_mapped': False,
     'extra': {'new_orig': 0x7FC95B, 'delete_orig': 0x7FC984,
-              'new_ours': 0x4084E0, 'delete_ours': 0x413E99,
-              'memcpy_ours': 0xB6DCA5},
-    'resolve': {'tidy_ours': ('TString::Tidy', 0x42C3D0)},
+              'new_ours': ('map', '??2@YAPAXI@Z'),
+              'delete_ours': ('map', '??_V@YAXPAX@Z'),
+              'memcpy_ours': ('import', 'memcpy'),
+              'tidy_ours': ('map', 'TString::Tidy')},
     'returns': 'void',
 }
 
@@ -56,8 +57,8 @@ def build(side, inp, pe, addrs, ctx):
     m.add_stub({'name': 'operator delete[]', 'kind': 'code',
                 'addr': addrs['delete_' + side], 'conv': 'cdecl',
                 'nargs': 1, 'pop': 0, 'action': 'free'})
-    if side == 'ours':
-        m.add_stub({'name': 'memcpy', 'kind': 'code',
+    if side == 'ours':      # kind 'iat': the call goes through the IAT slot
+        m.add_stub({'name': 'memcpy', 'kind': 'iat',
                     'addr': addrs['memcpy_ours'], 'conv': 'cdecl',
                     'nargs': 3, 'pop': 0, 'action': 'copy',
                     'inline_ok': True})

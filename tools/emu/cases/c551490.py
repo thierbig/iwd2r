@@ -22,14 +22,12 @@ CASE = {
     'short': 'CalculatePos',
     'exe': 0x551490,
     'ours': 'CVEFVidCell::CalculatePos',
-    'expect_rva': 0x3F4100,          # cross-check; resolution is by name
     'convention': 'thiscall',
     'this_class': 'CVEFVidCell',
     'this_size': 0x348,
     'members': ('m_offset', 'm_offsetFlags', 'm_newDirection'),
     'field_mapped': True,
     'extra': {},
-    'resolve': {},
     'returns': 'void',
 }
 

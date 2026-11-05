@@ -22,12 +22,12 @@ pointer result.
 
 CASE = {
     'name': 'CResBIO::Demand', 'short': 'CResBIO::Demand',
-    'exe': 0x4029F0, 'ours': 'CResBIO::Demand', 'expect_rva': 0x295070,
+    'exe': 0x4029F0, 'ours': 'CResBIO::Demand',
     'convention': 'thiscall', 'this_class': 'CResBIO', 'this_size': 0x68,
     'members': ('m_bParsed',), 'field_mapped': True,
     'extra': {'demand_orig': 0x77E390, 'getdemands_orig': 0x77E550,
-              'demand_ours': 0x40B744, 'getdemands_ours': 0x4119C8},
-    'resolve': {},
+              'demand_ours': ('map', '?Demand@CRes@@QAEPAXXZ'),
+              'getdemands_ours': ('map', '?GetDemands@CRes@@QAEHXZ')},
     'returns': 'ptr',
 }
 

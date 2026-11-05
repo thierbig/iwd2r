@@ -10,9 +10,12 @@
         best = max(best, E1->level);                    [+0x14 dword]
     }
 
-CItem's own layout drifts (vanilla m_res/m_resref/m_abCount at
-+8/+0xC/+0x14 vs ours +4/+0x8/+0x10); the class is not one of the mapped
-headers, so the offsets are hardcoded per side rather than field_mapped.
+CItem's layout drifts (vanilla m_res/m_resref/m_nAbilities at +8/+0xC/+0x14
+vs ours +4/+0x8/+0x10).  m_nAbilities comes from layout.py (this_class
+'CItem').  The exe side cannot map m_res/m_resref: they live in the
+CResHelper<CResItem...> base template, whose header has no /* XXXX */
+comments, so those two stay literal on the vanilla side (+8/+0xC -- that
+exe never changes); ours reads the PDB-named pRes/cResRef via layout.py.
 
 Codegen drift handled:
   - CResRef::operator!= compares against an IMAGE constant; vanilla and
@@ -35,35 +38,34 @@ import struct
 CASE = {
     'name': 'CItem::GetMaxEffectSpellLevel', 'short': 'CItem::GMESL',
     'exe': 0x4EA3F0, 'ours': 'CItem::GetMaxEffectSpellLevel',
-    'expect_rva': 0x23C270,
-    'convention': 'thiscall', 'this_class': None, 'this_size': 0x18,
-    'members': (), 'field_mapped': False,
+    'convention': 'thiscall', 'this_class': 'CItem', 'this_size': 0x18,
+    'members': ('m_nAbilities',), 'field_mapped': False,
     'extra': {'opneq_orig': 0x78ABB0, 'getdemands_orig': 0x77E550,
               'getability_orig': 0x4015F0, 'geteffect_orig': 0x4E9680,
-              'opneq_ours': 0x40A268, 'getdemands_ours': 0x4119C8,
-              'getability_ours': 0x40B0E6, 'geteffect_ours': 0x404CAF},
-    'resolve': {},
+              'opneq_ours': ('map', '??9CResRef@@QBEHPBD@Z'),
+              'getdemands_ours': ('map', '?GetDemands@CRes@@QAEHXZ'),
+              'getability_ours': ('map', '?GetAbility@CResItem@@QAEPAUItem_ability_st@@H@Z'),
+              'geteffect_ours': ('map', '?GetAbilityEffect@CItem@@QAEPAVCGameEffect@@HHPAVCGameObject@@@Z')},
     'returns': 'u32',
 }
-
-OFF = {'orig': {'res': 0x8, 'resref': 0xC, 'count': 0x14},
-       'ours': {'res': 0x4, 'resref': 0x8, 'count': 0x10}}
 
 
 def build(side, inp, pe, addrs, ctx):
     from machine import BLK_LO, BLK_PTR, Machine, blk_alloc
     BLK_PTR[0] = BLK_LO
     this = blk_alloc(CASE['this_size'])
-    off = OFF[side]
+    off = ctx['off'][side]
+    res_off = 0x8 if side == 'orig' else off['pRes']
+    resref_off = 0xC if side == 'orig' else off['cResRef']
     m = Machine(side, pe, addrs[side], 'thiscall', this, CASE['this_size'], [])
     pres = blk_alloc(0x40)
     p = blk_alloc(8)                       # CResItemFeat* shape
     m.uc.mem_write(p, b'\x01' + b'\x00' * 7)         # *P != 0
     e1 = blk_alloc(0x18)                   # CEffectStruct* shape
     m.uc.mem_write(e1 + 0x14, struct.pack('<I', inp['effect_level']))
-    m.set_this(off['res'], struct.pack('<I', pres))
-    m.set_this(off['resref'], b'ITMRINGS')
-    m.set_this(off['count'], struct.pack('<I', inp['count']))
+    m.set_this(res_off, struct.pack('<I', pres))
+    m.set_this(resref_off, b'ITMRINGS')
+    m.set_this(off['m_nAbilities'], struct.pack('<I', inp['count']))
     tok = {'P': p, 'E1': e1}              # SETS name blocks; rets need ints
 
     m.add_stub({'name': 'CResRef::operator!=', 'kind': 'code',

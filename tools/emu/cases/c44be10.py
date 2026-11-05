@@ -25,19 +25,19 @@ CASE = {
     'short': 'TString::Grow',
     'exe': 0x44BE10,
     'ours': 'TString::Grow',
-    'expect_rva': 0x42C180,          # cross-check; resolution is by name
     'convention': 'thiscall',
     'this_class': None,              # layout identical both sides; see module docstring
     'this_size': 16,
     'members': (),
     'field_mapped': False,
     'extra': {
-        # ILT thunks / import bodies found by disassembly; no map symbols.
+        # ours-side sites resolve from the map / import table at run time.
         'new_orig': 0x7FC95B, 'delete_orig': 0x7FC984,
-        'new_ours': 0x40C30B, 'delete_ours': 0x413E99,
-        'memcpy_ours': 0xB6DCA5,
+        'new_ours': ('map', '??_U@YAPAXI@Z'),
+        'delete_ours': ('map', '??_V@YAXPAX@Z'),
+        'memcpy_ours': ('import', 'memcpy'),
+        'tidy_ours': ('map', 'TString::Tidy'),
     },
-    'resolve': {'tidy_ours': ('TString::Tidy', 0x42C3D0)},
     'returns': 'void',
 }
 
@@ -58,8 +58,9 @@ def build(side, inp, pe, addrs, ctx):
                 'conv': 'cdecl', 'nargs': 1, 'pop': 0, 'action': 'bump_new'})
     m.add_stub({'name': 'operator delete[]', 'kind': 'code', 'addr': addrs['delete_' + side],
                 'conv': 'cdecl', 'nargs': 1, 'pop': 0, 'action': 'free'})
-    if side == 'ours':      # original inlines memcpy as rep movs
-        m.add_stub({'name': 'memcpy', 'kind': 'code', 'addr': addrs['memcpy_ours'],
+    if side == 'ours':      # original inlines memcpy as rep movs; ours
+        # calls it through the IAT slot (import-lib thunk jmp [slot])
+        m.add_stub({'name': 'memcpy', 'kind': 'iat', 'addr': addrs['memcpy_ours'],
                     'conv': 'cdecl', 'nargs': 3, 'pop': 0, 'action': 'copy',
                     'inline_ok': True})
     if side == 'ours':      # original inlines Tidy into Grow; ours calls it

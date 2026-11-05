@@ -190,9 +190,25 @@ class CaseContractTests(unittest.TestCase):
     """every tools/emu/cases/c*.py honors the runner's module contract.
     Needs no Unicorn: case modules import machine only inside build()."""
 
-    REQUIRED = ('name', 'short', 'exe', 'ours', 'expect_rva', 'convention',
+    REQUIRED = ('name', 'short', 'exe', 'ours', 'convention',
                 'this_class', 'this_size', 'members', 'field_mapped',
-                'extra', 'resolve', 'returns')
+                'extra', 'returns')
+    BANNED = ('expect_rva', 'resolve')   # fix 2: resolution is by name, never pinned
+
+    def _valid_spec(self, spec, name, key):
+        """Address-spec shape (fix 2): int (vanilla literal / shared constant)
+        | str (map name) | ('map'|'import', name) | non-empty list of specs."""
+        if isinstance(spec, (int, str)):
+            return
+        if (isinstance(spec, tuple) and len(spec) == 2
+                and spec[0] in ('map', 'import') and isinstance(spec[1], str)):
+            return
+        if isinstance(spec, list) and spec:
+            for s in spec:
+                self._valid_spec(s, name, key)
+            return
+        self.fail(f"{name}: {key}: bad address spec {spec!r}: int | str | "
+                  '("map"|"import", name) | [spec, ...]')
 
     def test_case_modules(self):
         import run                                                   # tools/emu
@@ -202,7 +218,15 @@ class CaseContractTests(unittest.TestCase):
             mod = run.load_case(name, path)
             for key in self.REQUIRED:
                 self.assertIn(key, mod.CASE, f'{name}: CASE[{key!r}]')
+            for key in self.BANNED:
+                self.assertNotIn(key, mod.CASE,
+                                 f'{name}: CASE[{key!r}] dropped by fix 2')
             self.assertIsInstance(mod.CASE['exe'], int)
+            self._valid_spec(mod.CASE['ours'], name, "CASE['ours']")
+            self.assertNotIsInstance(
+                mod.CASE['ours'], int,
+                f"{name}: CASE['ours'] must be a map name, not a build-pinned "
+                'RVA (fix 2)')
             self.assertIn(mod.CASE['returns'], ('void', 'u8', 'u16', 'u32', 'ptr'),
                           f"{name}: CASE['returns'] must declare the EAX contract")
             self.assertIn(mod.CASE['convention'], ('thiscall', 'cdecl'))
@@ -210,9 +234,14 @@ class CaseContractTests(unittest.TestCase):
             self.assertGreater(mod.CASE['this_size'], 0)
             self.assertIsInstance(mod.CASE['members'], tuple)
             self.assertTrue(all(isinstance(m, str) for m in mod.CASE['members']))
-            for key, (cname, rva) in mod.CASE['resolve'].items():
-                self.assertIsInstance(cname, str, f'{name}: resolve[{key!r}]')
-                self.assertIsInstance(rva, int, f'{name}: resolve[{key!r}]')
+            for key, spec in mod.CASE['extra'].items():
+                self._valid_spec(spec, name, f'extra[{key!r}]')
+                if key.endswith('_ours'):
+                    self.assertNotIsInstance(
+                        spec, int,
+                        f"{name}: extra[{key!r}]: ours-side addresses must be "
+                        '("map"|"import", name) specs, not build-pinned literals '
+                        '(fix 2)')
             self.assertTrue(mod.SETS, f'{name}: SETS empty')
             self.assertTrue(callable(mod.build), f'{name}: build')
 

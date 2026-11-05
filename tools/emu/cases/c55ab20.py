@@ -28,13 +28,12 @@ CASE = {
     'name': 'IcewindCProjectileTargetMap::Strike',
     'short': 'ProjTargetMap::Strike',
     'exe': 0x55AB20, 'ours': 'IcewindCProjectileTargetMap::Strike',
-    'expect_rva': 0x4136A0,
     'convention': 'thiscall', 'this_class': 'IcewindCProjectileTargetMap',
     'this_size': 0x38,
     'members': ('m_maxStrikesTotal', 'm_nStrikes', 'm_bDone', 'm_bSkipSource'),
     'field_mapped': True,
-    'extra': {'strike_orig': 0x55AB80, 'strike_ours': 0x419380},
-    'resolve': {},
+    'extra': {'strike_orig': 0x55AB80,
+              'strike_ours': ('map', '?DeliverStrike@IcewindCProjectileTargetMap@@AAEXH@Z')},
     'returns': 'void',
 }
 
