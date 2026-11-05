@@ -14,7 +14,7 @@ the arguments per calling convention, runs until return, and records
 run_case() runs the same case on both images and prints the verdict.  The
 paths (original exe, our build) are parameters here; cases live in
 tools/emu/cases/, and tools/oracle.py's `emu` subcommand drives this module
-through the .venv-emu interpreter.
+through the emulation venv's interpreter ($IWD2R_HOME/emu-venv).
 """
 
 import struct

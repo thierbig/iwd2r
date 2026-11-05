@@ -410,5 +410,6 @@ docs/wso/claims.json.lock
 Testing/
 .report.md
 
-# Task 72 emu-diff spike: Unicorn venv (tools/emu/emu_diff.py)
+# The per-worktree Unicorn venv of Tasks 72-74; tools/emu/setup.sh now makes
+# one user-local venv under $IWD2R_HOME/emu-venv instead.
 .venv-emu/

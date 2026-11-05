@@ -24,6 +24,6 @@ so tests/test_emu.py can validate the declarative tables on any interpreter.
 # Sentinel object addresses (inputs; never dereferenced by stubs).  They
 # mirror machine.SENT (BLK_LO = 0x12000000 + 0x8000/0x9000/0xA000); restated
 # here so case modules and their SETS stay importable without Unicorn.
-# tests/test_emu.py cross-checks the two when .venv-emu is present.
+# tests/test_emu.py cross-checks the two under the emulation venv.
 BLK_LO = 0x12000000
 SENT = {'anim': BLK_LO + 0x8000, 'shadow': BLK_LO + 0x9000, 'vidcell': BLK_LO + 0xA000}
