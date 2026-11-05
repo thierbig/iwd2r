@@ -42,7 +42,7 @@ TEST_CASE("progress: AddActionTarget aborts when progress rounds onto the target
     const std::string out = (std::filesystem::temp_directory_path()
         / ("iwd2r-aat-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())
             + "-" + std::to_string(::getpid()) + ".txt"))
-                                 .string();
+                                .string();
     std::remove(out.c_str());
 
     fflush(NULL);
@@ -87,7 +87,7 @@ TEST_CASE("progress: AddActionTarget aborts when progress rounds onto the target
     std::remove(out.c_str());
     const std::string text = ss.str();
     INFO("child stderr:\n"
-         << text);
+        << text);
     CHECK(text.find("An Assertion failed in CProgressBar.cpp at line number 52") != std::string::npos);
 }
 #endif
