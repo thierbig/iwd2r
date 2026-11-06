@@ -177,6 +177,27 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 17:
+    case 20:
+    case 21:
+        // The sling stone: height flag and empty sound tails.
+        pProjectile = new CProjectileSlingStone();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 41:
+        // The sling stone with the base palette range recoloured. The
+        // original points the cell's palette back at the projectile's own
+        // before recolouring range 0.
+        pBam = new CProjectileSlingStone();
+        pBam->m_animation->SetPalette(pBam->m_palette);
+        pBam->m_palette.SetRange(0, 0x1C, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
     case 68:
     case 69:
     case 70:

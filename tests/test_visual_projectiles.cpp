@@ -2350,6 +2350,37 @@ TEST_CASE("visual projectiles: the bolts decode to their flights", "[visualproje
     }
 }
 
+// The sling stones (DecodeProjectile 0x51EAF0, ctor 0x5319A0
+// CProjectileSlingStone): the MAGICSTN BAM with palette range 0 recoloured
+// to 27 by the ctor, then the height flag and the empty sound tails from
+// the case body. Type 41 alone points the cell's palette back at the
+// projectile's own and recolours range 0 from the ctor's 27 to 0x1C after
+// that. Decoding draws nothing.
+TEST_CASE("visual projectiles: the sling stones decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        BYTE nRange0;
+    };
+    const Spec kStones[] = { { 17, 27 }, { 20, 27 }, { 21, 27 }, { 41, 0x1C } };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kStones) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSlingStone* pStone = dynamic_cast<CProjectileSlingStone*>(pProjectile);
+        REQUIRE(pStone != nullptr);
+        CHECK(pStone->m_projectileType == spec.nType - 1);
+        CHECK(pStone->m_animation->GetResRef() == CResRef("MAGICSTN"));
+        CHECK(pStone->m_bHasHeight == TRUE);
+        CHECK(pStone->m_fireSoundRef == "");
+        CHECK(pStone->m_arrivalSoundRef == "");
+        CHECK(pStone->m_palette.m_rangeColors[0] == spec.nRange0);
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike
