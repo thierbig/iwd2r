@@ -4017,3 +4017,28 @@ TEST_CASE("visual projectiles: the searing-light shots decode to their flights",
     CHECK(direct.m_nBounces == CGameObjectArray::INVALID_INDEX);
     CHECK(direct.m_animation->GetResRef() == "");
 }
+
+TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(189, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectile84DA4C* pCow = dynamic_cast<CProjectile84DA4C*>(pProjectile);
+    REQUIRE(pCow != nullptr);
+    CHECK(pCow->m_projectileType == 188);
+    // Unlike SPLightB, ACOWG1 IS in this install's CHITIN.KEY (uppercase,
+    // offset 117972), so the cell binds for real.
+    CHECK(pCow->m_animation->GetResRef() == CResRef("ACOWG1"));
+    CHECK(pCow->m_bHasHeight == TRUE);
+    CHECK(pCow->m_fireSoundRef == "AMB_E42A");
+    CHECK(pCow->m_arrivalSoundRef == "AMB_E42A");
+    // The decoder's WORD stamp at +0x1D8 (interleaved with the fire-sound
+    // pushes in the exe's store order).
+    CHECK(pCow->field_1D8 == 1);
+    // The decoder doubles the base ctor's speed (shl ax,1) — assert against
+    // a directly built shot rather than pinning the base's default.
+    CProjectile84DA4C cowDirect(CResRef("ACOWG1"));
+    CHECK(pCow->m_speed == static_cast<SHORT>(cowDirect.m_speed * 2));
+    delete pProjectile;
+}

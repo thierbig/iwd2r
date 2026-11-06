@@ -196,6 +196,21 @@ public:
     /* 04B4 */ CString m_explodeSound;
 };
 
+// The ACOWG1 cow shot (vtable 0x84DA4C): DecodeProjectile's type 189. The
+// ctor is a pure pass-through — the decoder hands it the cell's resref by
+// value (ret 0x8) straight to the base, and the class adds no members
+// (op-new 0x2A0, the CProjectileBAM base exactly). Against the
+// CProjectileBAM vtable (0x84D9C4) the class overrides only the deleting
+// dtor (0x529AB0 over the base's 0x52B010 — ours is implicit), AIUpdate
+// 0x536D40 and Fire 0x5369A0; neither body is in-tree, so both stay
+// undeclared (IcewindCProjectileScorcher precedent) and ours inherits the
+// base virtuals.
+class CProjectile84DA4C : public CProjectileBAM {
+public:
+    // 0x529A90
+    CProjectile84DA4C(CResRef resRef);
+};
+
 // The plain SPFIREBL flame jet (vtable 0x84DE0C): DecodeProjectile's types
 // 80 and 105 — the jet as cast, and the same jet with its palette range
 // widened one entry (0x44 over the ctor's 0x43). It adds no members of its

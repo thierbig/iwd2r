@@ -128,6 +128,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSkullTrap* pSkull;
     CProjectile84DE0C* pJet;
     CProjectile84DE94* pLight;
+    CProjectile84DA4C* pCow;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -1918,6 +1919,19 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Cloudkill.
         pProjectile = new CProjectileArea84F310();
         break;
+    case 189:
+        // The ACOWG1 cow shot. The exe's store order interleaves the
+        // WORD at +0x1D8 with the fire-sound pushes; everything else is a
+        // plain tail — the same ambient loop on both sound refs, the speed
+        // doubled (shl ax,1), and the raised-shot height byte.
+        pCow = new CProjectile84DA4C(CResRef("ACOWG1"));
+        pCow->field_1D8 = 1;
+        pCow->m_fireSoundRef = CResRef("AMB_E42A");
+        pCow->m_arrivalSoundRef = CResRef("AMB_E42A");
+        pCow->m_speed = static_cast<SHORT>(pCow->m_speed * 2);
+        pCow->m_bHasHeight = TRUE;
+        pProjectile = pCow;
+        break;
     case 190:
         // Hold Person.
         pArea = new CProjectileArea84F9C4();
@@ -2698,7 +2712,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
         //   TODO: type 210: ctor 0x537010 not ported
@@ -3347,6 +3360,12 @@ void CProjectileSkullTrap::Explode()
             CHUNK_DURATION + 1);
         nChunks--;
     }
+}
+
+// 0x529A90
+CProjectile84DA4C::CProjectile84DA4C(CResRef resRef)
+    : CProjectileBAM(resRef)
+{
 }
 
 // 0x52FC20
