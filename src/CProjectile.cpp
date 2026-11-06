@@ -13,6 +13,7 @@
 #include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
+#include "CProjectileShaft.h"
 #include "CProjectileSingleTarget.h"
 #include "CProjectileSpellHit.h"
 #include "CTimerWorld.h"
@@ -119,6 +120,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileExploding* pPick;
     CProjectileBAM* pBam;
     CProjectileSPFLMARR* pFlame;
+    CProjectileShaft* pShaft;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -353,6 +355,46 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_fireSoundRef = "";
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
+        break;
+    case 23:
+        // Call Lightning's standing bolt, the only shaft with a fixed
+        // 20-frame duration instead of the timescale-scaled one.
+        pShaft = new CProjectileShaft("CallLiH", "", 0xFF, TRUE, FALSE, 20);
+        pShaft->m_fireSoundRef = "EFF_P19";
+        pShaft->m_arrivalSoundRef = "";
+        pProjectile = pShaft;
+        break;
+    case 66:
+        pShaft = new CProjectileShaft("HMightH", "", 0xFF, TRUE, FALSE,
+            CTimerWorld::TIMESCALE_MSEC_PER_SEC * 2);
+        pShaft->m_fireSoundRef = "";
+        pShaft->m_arrivalSoundRef = "";
+        pProjectile = pShaft;
+        break;
+    case 146:
+        // Flame Strike's shaft: the one opaque, non-random shaft.
+        pShaft = new CProjectileShaft("FlmStrk", "", 0xFF, FALSE, FALSE,
+            CTimerWorld::TIMESCALE_MSEC_PER_SEC * 2);
+        pShaft->m_fireSoundRef = "";
+        pShaft->m_arrivalSoundRef = "";
+        pProjectile = pShaft;
+        break;
+    case 147:
+        pShaft = new CProjectileShaft("HLYMITE", "", 0xFF, TRUE, FALSE,
+            CTimerWorld::TIMESCALE_MSEC_PER_SEC * 2);
+        pShaft->m_fireSoundRef = "";
+        pShaft->m_arrivalSoundRef = "";
+        pProjectile = pShaft;
+        break;
+    case 195:
+        // The tinted holy-mite shaft: same construction as 147 with the
+        // animation fully tinted before the sound tails are set.
+        pShaft = new CProjectileShaft("HLYMITE", "", 0xFF, TRUE, FALSE,
+            CTimerWorld::TIMESCALE_MSEC_PER_SEC * 2);
+        pShaft->m_animation.SetTintColor(0xFF);
+        pShaft->m_fireSoundRef = "EFF_M10";
+        pShaft->m_arrivalSoundRef = "";
+        pProjectile = pShaft;
         break;
     case 68:
     case 69:

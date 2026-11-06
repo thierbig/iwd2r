@@ -20,6 +20,7 @@
 #include "CProjectileSpellHit.h"
 #include "CProjectileSunray.h"
 #include "CSpell.h"
+#include "CTimerWorld.h"
 #include "CVidPalette.h"
 #include "IcewindCGameEffects.h"
 #include "engine_world.h"
@@ -2550,6 +2551,60 @@ TEST_CASE("visual projectiles: the acid blobs decode to their flights", "[visual
         CHECK(pBlob->m_fireSoundRef == "");
         CHECK(pBlob->m_arrivalSoundRef == "");
         CHECK(pBlob->m_palette.m_rangeColors[0] == spec.nRange0);
+        delete pProjectile;
+    }
+}
+
+// The standing shafts (DecodeProjectile 0x51EAF0, ctor 0x5348C0
+// CProjectileShaft): columns of light stacked from the ground up. The decoder
+// picks the animation, transparency, frame mode, duration and the two sound
+// tails (and one tint); the palette arm of the ctor stays dormant because
+// every shaft decodes with nColor = 0xFF.
+TEST_CASE("the shafts decode to their columns", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+
+    struct Spec {
+        WORD nType;
+        const char* sAnimation;
+        const char* sFireSound;
+        BOOL bTransparent;
+        WORD nDuration;
+        BOOL bTinted;
+    };
+
+    // Four of the shafts run for twice the engine's milliseconds-per-second
+    // timescale constant; Call Lightning's bolt is a fixed 20 frames.
+    const WORD nScaled = CTimerWorld::TIMESCALE_MSEC_PER_SEC * 2;
+
+    const Spec kSpecs[] = {
+        { 23, "CallLiH", "EFF_P19", TRUE, 20, FALSE },
+        { 66, "HMightH", "", TRUE, nScaled, FALSE },
+        { 146, "FlmStrk", "", FALSE, nScaled, FALSE },
+        { 147, "HLYMITE", "", TRUE, nScaled, FALSE },
+        { 195, "HLYMITE", "EFF_M10", TRUE, nScaled, TRUE },
+    };
+
+    for (const auto& spec : kSpecs) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+
+        CProjectileShaft* pShaft = dynamic_cast<CProjectileShaft*>(pProjectile);
+        REQUIRE(pShaft != nullptr);
+        CHECK(pShaft->m_projectileType == spec.nType - 1);
+        CHECK(pShaft->m_animation.GetResRef() == CResRef(spec.sAnimation));
+        CHECK(pShaft->m_bTransparent == spec.bTransparent);
+        CHECK(pShaft->m_bRandomFrame == FALSE);
+        CHECK(pShaft->m_nDuration == spec.nDuration);
+        // The shaft flows store no height flag, unlike the BAM families.
+        CHECK(pShaft->m_bHasHeight == FALSE);
+        CHECK(pShaft->m_fireSoundRef == spec.sFireSound);
+        CHECK(pShaft->m_arrivalSoundRef == "");
+        if (spec.bTinted) {
+            CHECK(pShaft->m_animation.GetTintColor() == 0xFF);
+        }
         delete pProjectile;
     }
 }
