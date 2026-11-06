@@ -2267,6 +2267,43 @@ TEST_CASE("visual projectiles: the sparkle-stream bolts decode to their flights"
     }
 }
 
+// The arrows (DecodeProjectile 0x51EAF0, ctor 0x5324A0 CProjectileArrow):
+// the ARARROW BAM with the palette ranges 5, 4 and 2 recoloured by the
+// ctor, then the height flag and the empty sound tails from the case body.
+// Type 5 alone points the cell's palette back at the projectile's own and
+// recolours range 2 from the ctor's 0x2E to 0x39 after that. Decoding
+// draws nothing.
+TEST_CASE("visual projectiles: the arrows decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        BYTE nRange2;
+    };
+    const Spec kArrows[] = {
+        { 2, 0x2E },
+        { 5, 0x39 },
+        { 6, 0x2E },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kArrows) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileArrow* pArrow = dynamic_cast<CProjectileArrow*>(pProjectile);
+        REQUIRE(pArrow != nullptr);
+        CHECK(pArrow->m_projectileType == spec.nType - 1);
+        CHECK(pArrow->m_animation->GetResRef() == CResRef("ARARROW"));
+        CHECK(pArrow->m_bHasHeight == TRUE);
+        CHECK(pArrow->m_fireSoundRef == "");
+        CHECK(pArrow->m_arrivalSoundRef == "");
+        CHECK(pArrow->m_palette.m_rangeColors[2] == spec.nRange2);
+        CHECK(pArrow->m_palette.m_rangeColors[4] == 0x17);
+        CHECK(pArrow->m_palette.m_rangeColors[5] == 0x1B);
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

@@ -117,6 +117,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSparkleExplosion* pSparkleExplosion;
     CProjectileExploding* pExploding;
     CProjectileExploding* pPick;
+    CProjectileBAM* pBam;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -137,6 +138,26 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     switch (nProjectileType) {
     case 1:
         pProjectile = new CProjectile84D8B8();
+        break;
+    case 2:
+    case 6:
+        // The plain arrow: height flag and empty sound tails.
+        pProjectile = new CProjectileArrow();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 5:
+        // The arrow with the third palette range recoloured. The original
+        // calls SetPalette before SetRange (the palette pointer is shared,
+        // so the later SetRange lands in the cell's copy too).
+        pBam = new CProjectileArrow();
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_animation->SetPalette(pBam->m_palette);
+        pBam->m_palette.SetRange(2, 0x39, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        pBam->m_fireSoundRef = "";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
         break;
     case 68:
     case 69:
@@ -1972,6 +1993,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
         //   TODO: types 40, 302, 313, 378: ctor 0x5806C0 not ported
+        //   TODO: type 314: ctor 0x580C00 not ported
         //   TODO: type 346: ctor 0x581060 not ported
         //   TODO: type 370: ctor 0x581CA0 not ported
         // DEVIATION (temporary): unported type -> instant projectile. The
