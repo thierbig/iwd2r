@@ -109,6 +109,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectile* pProjectile = NULL;
     CProjectileArea* pArea;
     CProjectileMAGMISS* pMAGMISS;
+    CProjectile850DDC* pPuff;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -208,6 +209,205 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 92:
         // Fire Storm, Lightning Bolt.
         pProjectile = new CProjectileArea84F6B8();
+        break;
+    // The wave-puff cones (0x579B40, CProjectile850DDC), one entry per type:
+    // each builds its cone on the invisible MMissiT cell (the empty
+    // animation argument) with its own puff animation in m_sPuff, arms the
+    // visual effect, and sets a fire sound - except the two silent types.
+    // The ctor leaves the speed word at 20; some types triple it, double it,
+    // or multiply it by 3/2.
+    case 22:
+        // Burning Hands.
+        pPuff = new CProjectile850DDC("", "BHandsT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 80;
+        pPuff->field_317 = 0;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->field_2EE = 16;
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_15";
+        pProjectile = pPuff;
+        break;
+    case 25:
+        // Cone of Cold.
+        pPuff = new CProjectile850DDC("", "CoColdT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 350;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3);
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_nFrames = 8;
+        pPuff->m_nWaveInterval = 4;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 97:
+        // Color Spray.
+        pPuff = new CProjectile850DDC("", "CSprayT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 200;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_nPuffSpacing = 30;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_16";
+        pProjectile = pPuff;
+        break;
+    case 272:
+        // Prismatic Spray.
+        pPuff = new CProjectile850DDC("", "PSprayT");
+        pPuff->m_nWidth = 175;
+        pPuff->m_nLength = 400;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_nPuffSpacing = 30;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_21";
+        pProjectile = pPuff;
+        break;
+    case 296:
+        // Cone of Cold (the short cone).
+        pPuff = new CProjectile850DDC("", "CoColdT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 120;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 2);
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_nFrames = 8;
+        pPuff->m_nWaveInterval = 4;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 303:
+        // The TSprayT cone; no fire sound.
+        pPuff = new CProjectile850DDC("", "TSprayT");
+        pPuff->m_nWidth = 600;
+        pPuff->m_nLength = 300;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->field_317 = 0;
+        pPuff->field_2EE = 16;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3);
+        pPuff->m_nPuffSpacing = 35;
+        pPuff->m_nFrames = 8;
+        pPuff->m_nWaveInterval = 4;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pProjectile = pPuff;
+        break;
+    case 315:
+        // Shout.
+        pPuff = new CProjectile850DDC("", "ShoutT");
+        pPuff->m_nWidth = 100;
+        pPuff->m_nLength = 300;
+        pPuff->field_2EE = 16;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3 / 2);
+        pPuff->m_nPuffSpacing = 1000;
+        pPuff->m_nPuffSpeed = 75;
+        pPuff->m_nPuffSpeedRandom = 0;
+        pPuff->m_nFrames = 12;
+        pPuff->m_nWaveInterval = 2;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 319:
+        // The GShoutT cone.
+        pPuff = new CProjectile850DDC("", "GShoutT");
+        pPuff->m_nWidth = 100;
+        pPuff->m_nLength = 300;
+        pPuff->field_2EE = 16;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3 / 2);
+        pPuff->m_nPuffSpacing = 1000;
+        pPuff->m_nPuffSpeed = 75;
+        pPuff->m_nPuffSpeedRandom = 0;
+        pPuff->m_nFrames = 12;
+        pPuff->m_nWaveInterval = 2;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 343:
+        // The WOWispT cone; no fire sound.
+        pPuff = new CProjectile850DDC("", "WOWispT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 200;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_nPuffSpacing = 30;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pProjectile = pPuff;
+        break;
+    case 368:
+        // The FFingeT cone.
+        pPuff = new CProjectile850DDC("", "FFingeT");
+        pPuff->m_nWidth = 200;
+        pPuff->m_nLength = 80;
+        pPuff->field_317 = 0;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->field_2EE = 16;
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_15";
+        pProjectile = pPuff;
+        break;
+    case 374:
+        // Shout (the narrow cone).
+        pPuff = new CProjectile850DDC("", "ShoutT");
+        pPuff->m_nWidth = 120;
+        pPuff->m_nLength = 300;
+        pPuff->field_2EE = 16;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3 / 2);
+        pPuff->m_nPuffSpacing = 1000;
+        pPuff->m_nPuffSpeed = 75;
+        pPuff->m_nPuffSpeedRandom = 0;
+        pPuff->m_nFrames = 12;
+        pPuff->m_nWaveInterval = 2;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 379:
+        // The HDFBreT cone.
+        pPuff = new CProjectile850DDC("", "HDFBreT");
+        pPuff->m_nWidth = 300;
+        pPuff->m_nLength = 300;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3);
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_nFrames = 8;
+        pPuff->m_nWaveInterval = 4;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 382:
+        // The GShoutT cone (the narrow cone).
+        pPuff = new CProjectile850DDC("", "GShoutT");
+        pPuff->m_nWidth = 120;
+        pPuff->m_nLength = 300;
+        pPuff->field_2EE = 16;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3 / 2);
+        pPuff->m_nPuffSpacing = 1000;
+        pPuff->m_nPuffSpeed = 75;
+        pPuff->m_nPuffSpeedRandom = 0;
+        pPuff->m_nFrames = 12;
+        pPuff->m_nWaveInterval = 2;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
+        break;
+    case 386:
+        // The HDFBreT cone (the short cone).
+        pPuff = new CProjectile850DDC("", "HDFBreT");
+        pPuff->m_nWidth = 150;
+        pPuff->m_nLength = 150;
+        pPuff->m_bRandomPuffFrame = 1;
+        pPuff->m_speed = static_cast<SHORT>(pPuff->m_speed * 3);
+        pPuff->m_nPuffSpacing = 50;
+        pPuff->m_nFrames = 8;
+        pPuff->m_nWaveInterval = 4;
+        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_fireSoundRef = "TRA_08";
+        pProjectile = pPuff;
         break;
     case 95:
         // Stinking Cloud.

@@ -1982,6 +1982,74 @@ TEST_CASE("visual projectiles: the follow-up magic missile barrages decode to th
     }
 }
 
+// The wave-puff cones (DecodeProjectile 0x51EAF0, ctor 0x579B40
+// CProjectile850DDC, one entry per type): each builds its cone on the
+// invisible MMissiT cell (0x1DE FALSE) with its puff animation in m_sPuff,
+// arms the visual effect, and tunes the fields below; the two silent types
+// keep the empty fire sound. Decoding draws nothing.
+TEST_CASE("visual projectiles: the cone types decode to their wave-puff cones", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* sPuff;
+        LONG nWidth;
+        LONG nLength;
+        SHORT nSpeed;
+        LONG nSpacing;
+        LONG nPuffSpeed;
+        LONG nPuffSpeedRandom;
+        LONG nFrames;
+        LONG nInterval;
+        BYTE bRandomPuffFrame;
+        BYTE b317;
+        LONG l2EE;
+        const char* sFireSound;
+    };
+    const Spec kCones[] = {
+        {22, "BHandsT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15"},
+        {25, "CoColdT", 200, 350, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
+        {97, "CSprayT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_16"},
+        {272, "PSprayT", 175, 400, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_21"},
+        {296, "CoColdT", 200, 120, 40, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
+        {303, "TSprayT", 600, 300, 60, 35, 35, 45, 8, 4, 1, 0, 16, ""},
+        {315, "ShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
+        {319, "GShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
+        {343, "WOWispT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, ""},
+        {368, "FFingeT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15"},
+        {374, "ShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
+        {379, "HDFBreT", 300, 300, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
+        {382, "GShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
+        {386, "HDFBreT", 150, 150, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kCones) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile850DDC* pCone = dynamic_cast<CProjectile850DDC*>(pProjectile);
+        REQUIRE(pCone != nullptr);
+        CHECK(pCone->m_projectileType == spec.nType - 1);
+        CHECK(pCone->m_sPuff == spec.sPuff);
+        CHECK(pCone->m_animation->GetResRef() == CResRef("MMissiT"));
+        CHECK(pCone->field_1DE == FALSE);
+        CHECK(pCone->m_nWidth == spec.nWidth);
+        CHECK(pCone->m_nLength == spec.nLength);
+        CHECK(pCone->m_nHalfWidth == 25);
+        CHECK(pCone->m_speed == spec.nSpeed);
+        CHECK(pCone->m_nPuffSpacing == spec.nSpacing);
+        CHECK(pCone->m_nPuffSpeed == spec.nPuffSpeed);
+        CHECK(pCone->m_nPuffSpeedRandom == spec.nPuffSpeedRandom);
+        CHECK(pCone->m_nFrames == spec.nFrames);
+        CHECK(pCone->m_nWaveInterval == spec.nInterval);
+        CHECK(pCone->m_bRandomPuffFrame == spec.bRandomPuffFrame);
+        CHECK(pCone->field_317 == spec.b317);
+        CHECK(pCone->field_2EE == spec.l2EE);
+        CHECK(pCone->m_fireSoundRef == spec.sFireSound);
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary
