@@ -115,6 +115,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSingleTarget* pSingle;
     CProjectileSparkle* pSparkle;
     CProjectileSparkleExplosion* pSparkleExplosion;
+    CProjectileExploding* pExploding;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -898,6 +899,67 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pSparkleExplosion->m_fireSoundRef = "TRA_03";
         pSparkleExplosion->m_arrivalSoundRef = "EFF_M04";
         pProjectile = pSparkleExplosion;
+        break;
+    // The bare exploding missiles (0x52CCE0, CProjectileExploding, one
+    // entry per type): every type allocates 0x4B2 bytes and runs the
+    // exploding ctor on the "MAGMISS" cell, then only tweaks what it needs.
+    // The child re-stores of 0x4E in 94/158/159/205 and the empty-string
+    // sound stores in 93 re-write what the ctor already wrote — ported
+    // exactly. Types 158 and 159 narrow the exploding target type: if the
+    // sprite's EA is at most EA_GOODCUTOFF, the target EA becomes
+    // EA_GOODCUTOFF (158) / EA_NOTGOOD (159) — note both guards read the
+    // GOODCUTOFF global 0x847C3B (30); only the stored value differs (159
+    // reads 0x847C3D, 31). A NULL sprite skips the pick (the ctor's
+    // ANYONE target type stays).
+    case 93:
+        // Child 22 — the only type here whose field_1DE stays TRUE.
+        pExploding = new CProjectileExploding(CResRef("MAGMISS"));
+        pExploding->m_childProjectileType = 0x16;
+        pExploding->m_fireSoundRef = "";
+        pExploding->m_arrivalSoundRef = "";
+        pProjectile = pExploding;
+        break;
+    case 94:
+        pExploding = new CProjectileExploding(CResRef("MAGMISS"));
+        pExploding->m_childProjectileType = 0x4E;
+        pExploding->field_1DE = FALSE;
+        pProjectile = pExploding;
+        break;
+    case 158:
+        pExploding = new CProjectileExploding(CResRef("MAGMISS"));
+        pExploding->m_childProjectileType = 0x4E;
+        pExploding->field_1DE = FALSE;
+        if (pSprite != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
+                pExploding->m_targetType.Set(type);
+            }
+        }
+        pProjectile = pExploding;
+        break;
+    case 159:
+        // The guard still reads EA_GOODCUTOFF; only the stored EA differs.
+        pExploding = new CProjectileExploding(CResRef("MAGMISS"));
+        pExploding->m_childProjectileType = 0x4E;
+        pExploding->field_1DE = FALSE;
+        if (pSprite != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
+                pExploding->m_targetType.Set(type);
+            }
+        }
+        pProjectile = pExploding;
+        break;
+    case 205:
+        // Strike ranges tightened from the ctor's 0x100 to 0x50.
+        pExploding = new CProjectileExploding(CResRef("MAGMISS"));
+        pExploding->m_childProjectileType = 0x4E;
+        pExploding->field_1DE = FALSE;
+        pExploding->m_strikeRange = 0x50;
+        pExploding->m_preCheckRange = 0x50;
+        pProjectile = pExploding;
         break;
     case 95:
         // Stinking Cloud.

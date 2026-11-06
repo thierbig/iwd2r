@@ -2327,6 +2327,65 @@ TEST_CASE("visual projectiles: the sparkle bursts decode to their children", "[v
     }
 }
 
+// The bare exploding missiles (DecodeProjectile 0x51EAF0, ctor 0x52CCE0
+// CProjectileExploding, one entry per type): each allocates on the "MAGMISS"
+// cell — which CHITIN.KEY only holds as a type-4 entry, not the BAM type
+// 1000 the CVidCell helper looks up, so SetResRef misses and stores "" — and
+// tweaks the ctor's arming: 93 swaps the child to 22 and keeps the BAM
+// ctor's field_1DE TRUE (the only type here that flies); 94, 158, 159 and
+// 205 ground it (field_1DE FALSE) and re-store the ctor's child 78; 205
+// alone tightens the strike and pre-check ranges from 0x100 to 0x50. 158
+// and 159 also narrow the anyone target type: a sprite whose EA is at most
+// EA_GOODCUTOFF retargets the burst at EA_GOODCUTOFF (158) / EA_NOTGOOD
+// (159) — both guards read the GOODCUTOFF global, only the stored EA
+// differs. Decoding draws nothing.
+TEST_CASE("visual projectiles: the bare exploding missiles decode to their tweaks", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        SHORT nChild;
+        BOOL bFlying;
+        WORD nStrike;
+        bool bPick;
+        BYTE nTargetEA;
+    };
+    const Spec kExploding[] = {
+        {93, 0x16, TRUE, 0x100, false, 0},
+        {94, 0x4E, FALSE, 0x100, false, 0},
+        {158, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_GOODCUTOFF},
+        {159, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_NOTGOOD},
+        {205, 0x4E, FALSE, 0x50, false, 0},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kExploding) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileExploding* pMissile = dynamic_cast<CProjectileExploding*>(pProjectile);
+        REQUIRE(pMissile != nullptr);
+        CHECK(pMissile->m_projectileType == spec.nType - 1);
+        CHECK(pMissile->m_animation->GetResRef() == CResRef(""));
+        CHECK(pMissile->m_speed == 20);
+        CHECK(pMissile->field_1DE == spec.bFlying);
+        CHECK(pMissile->field_E6 == 0x20000);
+        CHECK(pMissile->m_childProjectileType == spec.nChild);
+        CHECK(pMissile->m_strikeRange == spec.nStrike);
+        CHECK(pMissile->m_preCheckRange == spec.nStrike);
+        CHECK(pMissile->m_strikesLeft == 1);
+        CHECK(pMissile->m_lingerPeriod == 100);
+        CHECK(pMissile->m_fireSoundRef == CResRef(""));
+        CHECK(pMissile->m_arrivalSoundRef == CResRef(""));
+        if (spec.bPick) {
+            // The PC caster (EA_PC <= EA_GOODCUTOFF) takes the pick branch.
+            CHECK(pMissile->m_targetType.m_nEnemyAlly == spec.nTargetEA);
+        } else {
+            CHECK(pMissile->m_targetType.m_nEnemyAlly == CAIObjectType::ANYONE.m_nEnemyAlly);
+        }
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary
