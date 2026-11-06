@@ -3858,3 +3858,66 @@ TEST_CASE("visual projectiles: the line beams decode to their rakes", "[visualpr
         delete pProjectile;
     }
 }
+
+TEST_CASE("visual projectiles: the skull trap and glyph decode to their bursts", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        SHORT nEngineType; // the ctor's third argument, stamped to +0x4B2
+        const char* sCell;
+        const char* sShadow;
+        SHORT nStrikeRange;
+        const char* sFire;
+        const char* sArrival;
+        const char* sExplode;
+        DWORD nMirror; // field_1C6, the fork's m_mirror
+    };
+    const Spec kTraps[] = {
+        { 96, 0x400, "sklT", "ShSkull", 0x64, "", "ARE_M06", "EFF_M35", 0 },
+        { 100, 0x410, "glphwrdT", "ShGlyph", 0x50, "EFF_P22a", "", "EFF_P22b", 1 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kTraps) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSkullTrap* pSkull = dynamic_cast<CProjectileSkullTrap*>(pProjectile);
+        REQUIRE(pSkull != nullptr);
+        CHECK(pSkull->m_projectileType == spec.nType - 1);
+        CHECK(pSkull->m_nType == spec.nEngineType);
+        CHECK(pSkull->m_bHasHeight == TRUE);
+        CHECK(pSkull->m_strikeRange == spec.nStrikeRange);
+        CHECK(pSkull->m_preCheckRange == 0x32);
+        CHECK(pSkull->m_animation->GetResRef() == CResRef(spec.sCell));
+        CHECK(pSkull->m_shadow->GetResRef() == CResRef(spec.sShadow));
+        CHECK(pSkull->m_fireSoundRef == CResRef(spec.sFire));
+        CHECK(pSkull->m_arrivalSoundRef == CResRef(spec.sArrival));
+        CHECK(pSkull->m_explodeSound == spec.sExplode);
+        if (spec.nMirror != 0) {
+            CHECK(pSkull->m_loopFireSound == TRUE);
+        } else {
+            CHECK(pSkull->m_loopArrivalSound == TRUE);
+        }
+        CHECK(pSkull->field_1BE == FALSE);
+        CHECK(pSkull->field_1C2 == FALSE);
+        CHECK(pSkull->field_1C6 == spec.nMirror);
+        CHECK(pSkull->field_1D4 == TRUE);
+        CHECK(pSkull->field_1D8 == 1);
+        CHECK(pSkull->m_childProjectileType == 0x4E);
+        CHECK(pSkull->m_strikesLeft == 1);
+        CHECK(pSkull->m_lingerPeriod == 100);
+        CHECK(pSkull->m_bPreScan == 1);
+        // Both explosion cells are armed: cell 1 carries the travel BAM,
+        // cell 2 the burst BAM.
+        CHECK(pSkull->m_explodeCell1.GetResRef() == CResRef(spec.sCell));
+        CHECK(pSkull->m_bExplodeCell1Active == 1);
+        CHECK(pSkull->m_explodeCell2.GetResRef() == CResRef(spec.sShadow));
+        CHECK(pSkull->m_bExplodeCell2Active == 1);
+        // The speed is the cell's frame width doubled by a native WORD
+        // shift; pin it against a directly built sibling, not a literal.
+        CProjectileSkullTrap direct(CResRef(spec.sCell), CResRef(spec.sShadow), spec.nEngineType);
+        CHECK(pSkull->m_speed == direct.m_speed);
+        delete pProjectile;
+    }
+}

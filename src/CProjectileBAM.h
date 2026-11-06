@@ -170,17 +170,30 @@ public:
 // The skull trap missile (vtable 0x84DD80): Explode (slot 0x0088) is the
 // ShSkull burst sound fire-and-forget on channel 14 followed by the bone
 // chunk spray the shatter effect throws (CGameChunk, sized by the trap's
-// own child type). The ctor (0x52F260, three resrefs) and AIUpdate
-// (0x52F9E0) are parked from i065 on this class, so only the virtual and
-// the members Explode reads are declared.
+// own child type). AIUpdate (0x52F9E0) stays parked from i065 on this
+// class, so that slot inherits the base virtual.
 class CProjectileSkullTrap : public CProjectileExploding {
 public:
+    // 0x52F260 (ret 0xC — the resrefs pass by reference in the exe): binds
+    // the spell's travel BAM through the exploding base, then makes the
+    // burst BAM a non-double-sized shadow cell, sequence 0 on both cells,
+    // clears the mirror fields, one strike of a 100-tick linger with the
+    // pre-scan on, child type 78 again (the base ctor already stored it),
+    // speed doubled with a native WORD shift, and arms both explosion
+    // cells — cell 1 with the travel BAM, cell 2 with the burst BAM, each
+    // flagged active only when its ref is non-empty. DecodeProjectile's
+    // types 96 (Skull Trap) and 100 (Glyph of Warding) build this.
+    CProjectileSkullTrap(const CResRef& cMissileRef, const CResRef& cExplodeRef,
+        SHORT nType);
     /* 0088 */ virtual void Explode();
 
     // Native exe offsets, past the tail of m_explodeCell2; ours lay out after
     // the base under the reduced packing.
     /* 04B2 */ SHORT m_nType;
-    /* 04B4 */ CResRef m_explodeSound;
+    // The exe member is the 4-byte VC6 CString: the ctor's nil-sentinel
+    // store at +0x4B4, the case bodies' CString::operator= assigns into it,
+    // and the decoder's operator-new size 0x4B8 is this member plus 4.
+    /* 04B4 */ CString m_explodeSound;
 };
 
 // The invisible projectile an area projectile fires at each target, type 79

@@ -125,6 +125,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSPFLMARR* pFlame;
     CProjectileExplodingWeapon* pWeapon;
     CProjectileLightningBolt* pBolt;
+    CProjectileSkullTrap* pSkull;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -1686,6 +1687,34 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Stinking Cloud.
         pProjectile = new CProjectileArea8501B0();
         break;
+    case 96:
+        // Skull Trap: the skull rides sklT with ShSkull as its shadow, and
+        // the trap hums ARE_M06 in flight (looped) and breaks with EFF_M35.
+        pSkull = new CProjectileSkullTrap(CResRef("sklT"), CResRef("ShSkull"), 0x400);
+        pSkull->m_bHasHeight = TRUE;
+        pSkull->m_strikeRange = 0x64;
+        pSkull->m_preCheckRange = 0x32;
+        pSkull->m_arrivalSoundRef = "ARE_M06";
+        pSkull->m_loopArrivalSound = TRUE;
+        pSkull->m_explodeSound = "EFF_M35";
+        pProjectile = pSkull;
+        break;
+    case 100:
+        // Glyph of Warding: glphwrdT rides ShGlyph as its shadow, the glyph
+        // hums EFF_P22a in flight (looped) and breaks with EFF_P22b; the
+        // entry also mirrors the sprite (field_1C6 — the fork's m_mirror),
+        // stored last in the exe.
+        pSkull = new CProjectileSkullTrap(CResRef("glphwrdT"), CResRef("ShGlyph"), 0x410);
+        pSkull->m_bHasHeight = TRUE;
+        pSkull->m_strikeRange = 0x50;
+        pSkull->m_preCheckRange = 0x32;
+        pSkull->m_fireSoundRef = "EFF_P22a";
+        pSkull->m_loopFireSound = TRUE;
+        pSkull->m_arrivalSoundRef = "";
+        pSkull->m_explodeSound = "EFF_P22b";
+        pSkull->field_1C6 = 1;
+        pProjectile = pSkull;
+        break;
     case 101:
         // Grease.
         pProjectile = new CProjectileArea84F7F0();
@@ -2630,7 +2659,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
-        //   TODO: types 96, 100: ctor 0x52F260 not ported
         //   TODO: types 80, 105: ctor 0x52FC20 not ported
         //   TODO: types 206, 380: ctor 0x52FE90 not ported
         //   TODO: type 210: ctor 0x537010 not ported
@@ -3211,10 +3239,48 @@ void CProjectileExplodingFlame::Explode()
         static_cast<BYTE>(m_speed) >> 1, 1, 0);
 }
 
+// 0x52F260
+//
+// The skull trap and glyph carrier. Exe store order: the exploding base
+// (the missile ref); the nil CString sentinel into +0x4B4 (the m_explodeSound
+// member's default construction here); the burst BAM as a new non-double-sized
+// shadow cell, sequence 0 on it and on the animation; the doubled-speed read
+// (kept a single expression at its later store — nothing between reads it);
+// the empty fire sound; the mirror trio cleared; field_1D4=TRUE and
+// field_1D8=1; the doubled speed; the type; the child-type re-store; one
+// strike; the 100-tick linger; the pre-scan; then the two explosion cells,
+// each through CVidCell::SetResRef with its active flag set to whether the
+// ref was non-empty.
+CProjectileSkullTrap::CProjectileSkullTrap(const CResRef& cMissileRef,
+    const CResRef& cExplodeRef, SHORT nType)
+    : CProjectileExploding(cMissileRef)
+{
+    m_shadow = new CVidCell(cExplodeRef, FALSE);
+    m_shadow->SequenceSet(0);
+    m_animation->SequenceSet(0);
+    m_fireSoundRef = "";
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = TRUE;
+    field_1D8 = 1;
+    m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
+    m_nType = nType;
+    // The base ctor already stored 0x4E; the exe stores it again.
+    m_childProjectileType = 0x4E;
+    m_strikesLeft = 1;
+    m_lingerPeriod = 100;
+    m_bPreScan = 1;
+    m_explodeCell1.SetResRef(cMissileRef, FALSE, TRUE, TRUE);
+    m_bExplodeCell1Active = (cMissileRef != "");
+    m_explodeCell2.SetResRef(cExplodeRef, FALSE, TRUE, TRUE);
+    m_bExplodeCell2Active = (cExplodeRef != "");
+}
+
 // 0x52F760
 //
-// The skull trap's burst: the ShSkull sound (the resref the parked ctor
-// stored at +0x4B4) fire-and-forget on channel 14, then the bone chunk
+// The skull trap's burst: the ShSkull sound (the CString the ctor and the
+// decoder store at +0x4B4) fire-and-forget on channel 14, then the bone chunk
 // spray the shatter effect throws — one CGameChunk per count, sized by the
 // trap's own child type, thrown sideways at up to 5 either way and upwards
 // at one of three speeds, the chunk lifetime the shatter effect uses.
@@ -3225,7 +3291,7 @@ void CProjectileSkullTrap::Explode()
     // NOTE: the exe passes a stack buffer it never writes here.
     BYTE colorRangeValues[7];
 
-    sound.SetResRef(m_explodeSound, TRUE, TRUE);
+    sound.SetResRef(CResRef(m_explodeSound), TRUE, TRUE);
     sound.SetFireForget(TRUE);
     sound.SetChannel(14, reinterpret_cast<DWORD_PTR>(m_pArea));
     sound.Play(m_pos.x, m_pos.y, 0, FALSE);
