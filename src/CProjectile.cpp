@@ -556,6 +556,17 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The ice-storm cloud: the ctor carries the whole description.
         pProjectile = new CProjectileIceStorm();
         break;
+    case 210:
+        // Chain lightning, first hop. The exe's case body (0x5250B0) news
+        // 0x2BE and builds an empty std::set<LONG> temp with the VC6 _Tree
+        // ctor 0x537010, hands it by reference to the carrier ctor 0x57C510,
+        // then destroys the temp with 0x5370C0 and jumps to the shared store
+        // tail (stamping m_projectileType = 0xD1). Subsequent hops call the
+        // ctor directly and keep its default type, so only this first decode
+        // passes the empty set. The body's two conditionals are the
+        // operator-new null check and the SEH temp bit test — both excluded.
+        pProjectile = new IcewindCProjectileChainLightning(std::set<LONG>());
+        break;
     case 211:
         // The acid-storm cloud.
         pProjectile = new CProjectileAcidStorm();
@@ -2728,7 +2739,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 210: ctor 0x537010 not ported
         //   TODO: type 217: ctor 0x5745E0 not ported
         //   TODO: type 274: ctor 0x574D50 not ported
         //   TODO: type 283: ctor 0x575090 not ported

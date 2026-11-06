@@ -4098,3 +4098,32 @@ TEST_CASE("visual projectiles: the type-352 shot decodes to the bare flight", "[
     CHECK(pBare->m_arrivalSoundRef == "");
     delete pProjectile;
 }
+
+TEST_CASE("visual projectiles: the chain-lightning hop decodes to its carrier", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(210, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    IcewindCProjectileChainLightning* pBolt =
+        dynamic_cast<IcewindCProjectileChainLightning*>(pProjectile);
+    REQUIRE(pBolt != nullptr);
+    // The case body (0x5250B0) only news the carrier with an empty
+    // struck-target set; everything else is the ctor 0x57C510's own tuning
+    // plus the shared tail's type stamp (210 - 1 = 0xD1).
+    CHECK(pBolt->m_projectileType == 209);
+    CHECK(pBolt->m_animation->GetResRef() == CResRef("CLightT"));
+    CHECK(pBolt->m_fireSoundRef == CResRef("TRA_09"));
+    CHECK(pBolt->m_visualEffect.m_dwFlags == 0x20200u);
+    CHECK(pBolt->m_bHasHeight == FALSE);
+    CHECK(pBolt->field_1C2 == FALSE);
+    CHECK(pBolt->field_1D8 == 16);
+    REQUIRE(pBolt->m_struckTargets.empty());
+    // The ctor doubles the speed with a native WORD shift; the decode adds
+    // no retune of its own, so pin the field against a directly built
+    // carrier rather than a literal.
+    std::set<LONG> emptyTargets;
+    IcewindCProjectileChainLightning boltDirect(emptyTargets);
+    CHECK(pBolt->m_speed == boltDirect.m_speed);
+    delete pProjectile;
+}
