@@ -2671,6 +2671,55 @@ TEST_CASE("the spell-hit bursts decode to their colour ranges", "[visualprojecti
     }
 }
 
+// The plain area effects (DecodeProjectile 0x51EAF0): nine no-arg area
+// ctors the decoder calls with no post-construction work at all — the ctor
+// carries the whole description.
+TEST_CASE("the plain area effects decode straight to their ctors", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+
+    struct Spec {
+        WORD nType;
+        const char* sAnimation;
+        const char* sSound;
+        LONG nRadius;
+        BOOL bPin1D8;
+    };
+    const Spec kSpecs[] = {
+        { 98, "IStormX", "", 200, TRUE }, // 0x573460
+        { 211, "AStormX", "", 200, TRUE }, // 0x571170
+        { 214, "ICloudX", "EFF_M40", 100, TRUE }, // 0x573600
+        { 215, "PFireX", "EFF_P45", 60, TRUE }, // 0x574140
+        { 216, "IPlaguX", "RNG_P01", 250, TRUE }, // 0x573AF0
+        { 267, "DSpellX", "EFF_M42", 300, FALSE }, // 0x571930
+        { 279, "DFogX", "RNG_M01", 250, TRUE }, // 0x573CC0
+        { 306, "", "ARE_P27", 0x15E, FALSE }, // 0x575B90
+        { 383, "", "", 100, TRUE }, // 0x577590
+    };
+
+    for (const Spec& spec : kSpecs) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+
+        CProjectileArea* pArea = dynamic_cast<CProjectileArea*>(pProjectile);
+        REQUIRE(pArea != nullptr);
+        CHECK(pArea->m_projectileType == spec.nType - 1);
+        CHECK(pArea->m_explosion1.m_animation == spec.sAnimation);
+        CHECK(pArea->m_explosion1.m_sound == spec.sSound);
+        CHECK(pArea->m_nRadius == spec.nRadius);
+        CHECK(pArea->field_1D8 == (spec.bPin1D8 ? 1 : 0));
+        if (spec.nType == 383) {
+            // The boulder also travels with its own sound pair.
+            CHECK(pArea->m_bTravels == TRUE);
+            CHECK(pArea->m_fireSoundRef == CResRef("AM6103e"));
+            CHECK(pArea->m_arrivalSoundRef == CResRef("AM5101e"));
+        }
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

@@ -10,8 +10,8 @@
 #include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
-#include "CProjectile84E940.h"
 #include "CProjectile84DFA4.h"
+#include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
@@ -435,6 +435,42 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBurst->m_fireSoundRef = "";
         pBurst->m_arrivalSoundRef = "";
         pProjectile = pBurst;
+        break;
+    case 98:
+        // The ice-storm cloud: the ctor carries the whole description.
+        pProjectile = new CProjectileIceStorm();
+        break;
+    case 211:
+        // The acid-storm cloud.
+        pProjectile = new CProjectileAcidStorm();
+        break;
+    case 214:
+        // The fiery cloud.
+        pProjectile = new CProjectileFieryCloud();
+        break;
+    case 215:
+        // The produce-fire circle.
+        pProjectile = new CProjectileProduceFire();
+        break;
+    case 216:
+        // The insect plague.
+        pProjectile = new CProjectileInsectPlague();
+        break;
+    case 267:
+        // The circle of death.
+        pProjectile = new CProjectileCircleOfDeath();
+        break;
+    case 279:
+        // The corrosive fog.
+        pProjectile = new CProjectileCorrosiveFog();
+        break;
+    case 306:
+        // The tremor.
+        pProjectile = new CProjectileTremor();
+        break;
+    case 383:
+        // The big boulder.
+        pProjectile = new CProjectileBigBoulder();
         break;
     case 68:
     case 69:
