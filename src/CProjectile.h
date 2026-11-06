@@ -88,4 +88,16 @@ public:
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
 };
 
+// Type 352's projectile (vtable 0x84DAD4): a memberless direct CProjectile
+// subclass — the decoder news exactly sizeof(CProjectile) (0x192), calls the
+// constructor and nothing else. Its ctor stamps the base vtable 0x84D7B8
+// mid-construction before installing its own. Against CProjectile's
+// 32-entry vtable 0x84D7B8 it overrides only the deleting dtor (0x529E30 —
+// ours implicit, the class adds no members) and Fire (0x5818F0, not in
+// tree, left undeclared per the IcewindCProjectileScorcher precedent).
+class CProjectile84DAD4 : public CProjectile {
+public:
+    CProjectile84DAD4();
+};
+
 #endif /* CPROJECTILE_H_ */

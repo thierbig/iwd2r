@@ -4042,3 +4042,20 @@ TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualproj
     CHECK(pCow->m_speed == static_cast<SHORT>(cowDirect.m_speed * 2));
     delete pProjectile;
 }
+
+TEST_CASE("visual projectiles: the type-352 shot decodes to the bare flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(352, world.pCharacter, 0);
+    CProjectile84DAD4* pBare = dynamic_cast<CProjectile84DAD4*>(pProjectile);
+    REQUIRE(pBare != nullptr);
+    // The case body (0x527F57) carries no stores of its own: everything
+    // below is the base constructor's own clearing plus the shared tail's
+    // type stamp (352 - 1).
+    CHECK(pBare->m_projectileType == 351);
+    CHECK(pBare->m_speed == 0);
+    CHECK(pBare->m_bHasHeight == FALSE);
+    CHECK(pBare->m_fireSoundRef == "");
+    CHECK(pBare->m_arrivalSoundRef == "");
+    delete pProjectile;
+}

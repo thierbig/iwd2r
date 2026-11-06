@@ -2578,6 +2578,12 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
+    case 352:
+        // The bare shot: the exe's case body (0x527F57) is nothing but
+        // operator new(0x192), the ctor call and the jump to the shared
+        // store tail — no stores, no sounds, no animation.
+        pProjectile = new CProjectile84DAD4();
+        break;
     case 362:
         // An area burst over enemies.
         pArea = new CProjectileArea(300);
@@ -2712,7 +2718,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 352: ctor 0x529CE0 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
         //   TODO: type 210: ctor 0x537010 not ported
         //   TODO: type 217: ctor 0x5745E0 not ported
@@ -3175,6 +3180,17 @@ void CProjectile84D8B8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     // NOTE: OnArrival's Delete fails (the projectile was never added to the
     // object array), so the projectile deletes itself here.
     delete this;
+}
+
+// 0x529CE0
+CProjectile84DAD4::CProjectile84DAD4()
+{
+    // The exe inlines the base CProjectile constructor (0x529490) whole,
+    // stamping the base vtable 0x84D7B8 mid-construction (0x529D75) before
+    // installing 0x84DAD4 (0x529E0E); the implicit CProjectile() performs
+    // the same stores — the instruction-level match of this same inlined
+    // body is recorded in docs/evidence/530790.md for ctor 0x530790. The
+    // class adds no members, so there is nothing further to construct.
 }
 
 // 0x52CA10
