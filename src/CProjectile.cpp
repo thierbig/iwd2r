@@ -134,7 +134,13 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 70:
     case 71:
     case 72:
-        // Magic Missile, 1 to 5 missiles. NOTE: The WORD at 0x85E84A is 1.
+    case 73:
+    case 74:
+    case 75:
+    case 76:
+    case 77:
+    case 78:
+        // Magic Missile, 1 to 11 missiles. NOTE: The WORD at 0x85E84A is 1.
         pProjectile = new CProjectile84E0C4(nProjectileType - 67, 1);
         pProjectile->m_fireSoundRef = "TRA_22";
         pProjectile->m_arrivalSoundRef = "";

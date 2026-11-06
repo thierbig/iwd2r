@@ -1927,6 +1927,31 @@ TEST_CASE("visual projectiles: the spell-hit visuals decode to their tinted hits
     }
 }
 
+// The magic-missile barrages (DecodeProjectile 0x51EAF0, one body for types
+// 68 to 78, ctor 0x531120 CProjectile84E0C4): 1 to 11 missiles of type 217,
+// the TRA_22 fire sound, no arrival sound and the height flag. The palette
+// type is the WORD 1 at 0x85E84A. Decoding draws nothing.
+TEST_CASE("visual projectiles: the magic missile barrages decode to their missiles", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    for (WORD nType = 68; nType <= 78; nType++) {
+        INFO("type " << nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile84E0C4* pMissile = dynamic_cast<CProjectile84E0C4*>(pProjectile);
+        REQUIRE(pMissile != nullptr);
+        CHECK(pMissile->m_projectileType == nType - 1);
+        CHECK(pMissile->m_nCount == nType - 67);
+        CHECK(pMissile->m_nType == 217);
+        CHECK(pMissile->m_animation->GetResRef() == CResRef("SPMAGMIS"));
+        CHECK(pMissile->m_fireSoundRef == "TRA_22");
+        CHECK(pMissile->m_arrivalSoundRef == "");
+        CHECK(pMissile->m_bHasHeight == TRUE);
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary

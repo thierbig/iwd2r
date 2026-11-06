@@ -192,7 +192,7 @@ public:
     /* 02BE */ WORD m_nType;
 };
 
-// Magic Missile, types 68 to 72 (vtable 0x84E0C4): 1 to 5 missiles of type
+// Magic Missile, types 68 to 78 (vtable 0x84E0C4): 1 to 11 missiles of type
 // 218.
 class CProjectile84E0C4 : public CProjectile84E030 {
 public:
