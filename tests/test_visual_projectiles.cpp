@@ -2381,6 +2381,32 @@ TEST_CASE("visual projectiles: the sling stones decode to their flights", "[visu
     }
 }
 
+// The daggers (DecodeProjectile 0x51EAF0, ctor 0x532000
+// CProjectileDagger): the DAGGER BAM with the palette ranges 5 and 4
+// recoloured by the ctor, then the height flag and the empty sound tails
+// from the case body. Decoding draws nothing.
+TEST_CASE("visual projectiles: the daggers decode to their flights", "[visualprojectile][data]")
+{
+    const WORD kTypes[] = { 27, 30, 31 };
+    WORLD_OR_SKIP(world);
+    for (WORD nType : kTypes) {
+        INFO("type " << nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileDagger* pDagger = dynamic_cast<CProjectileDagger*>(pProjectile);
+        REQUIRE(pDagger != nullptr);
+        CHECK(pDagger->m_projectileType == nType - 1);
+        CHECK(pDagger->m_animation->GetResRef() == CResRef("DAGGER"));
+        CHECK(pDagger->m_bHasHeight == TRUE);
+        CHECK(pDagger->m_fireSoundRef == "");
+        CHECK(pDagger->m_arrivalSoundRef == "");
+        CHECK(pDagger->m_palette.m_rangeColors[4] == 30);
+        CHECK(pDagger->m_palette.m_rangeColors[5] == 27);
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike
