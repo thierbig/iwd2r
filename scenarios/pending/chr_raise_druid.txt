@@ -658,12 +658,35 @@ key SPACE
 wait 40
 wait 150
 checkpoint south1
-# Legs 5-18 (corridor south, clean walks, no presses): SW into the
-# corridor, down x~184..232, past the bend at y~1550 (the bend's
-# (185..190,1560..1575) cells are impassable -- the targets hop it at
-# x=200), then SE into the Door6 pocket from the south.  A party that
-# has been walking for ~15 s cannot be hit.
-# Leg 5: from (296,1098), click (336,360) = world (232,1158).
+# Legs 5-18 (corridor south, clean walks, no presses): launch 2 parked
+# the party at (456,1086) act=0 at south1 (f9251; frame dump: no
+# movement and no further hits through world_end) -- 160px short of the
+# old legs' assumed base (296,1098).  Every recentered click is
+# RELATIVE to the actual position, so the old corridor clicks landed on
+# the 'Half-Built Ship' info trigger (bbox 347,1124-806,1282: the click
+# becomes examine text, no walk) or the impassable row behind it.  The
+# crossing is not optional: AR1000 bans rest (flags 0x2), only AR1006
+# allows it.  New route, BFS over the searchmap (PASS idx per
+# CGameObject::DEFAULT_TERRAIN_TABLE, every target a passable cell
+# outside all 8 info bboxes): no westward passage exists at row 90
+# (blocked cols 20-27), so leg 5 paths over the row-89 north band
+# (~y1070) and down its west end to (296,1098) in one click -- the
+# engine's A* follows the BFS cells; legs 6-17 are the corridor clicks
+# as before; leg 18 crosses from (216,1698) straight into Door6's box
+# (A* routes through the (232..264,1722) pocket).  Walk speed measured
+# from this run's approach legs: ~4 px/frame, so wait 200 covers the
+# ~220px leg 5 and every shorter leg with >2x margin.
+# Leg 5 (the band hop): from (456,1086), click (240,312) = world
+# (296,1098).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 240 312
+wait 10
+wait 200
+# Leg 6: from (296,1098), click (336,360) = world (232,1158).
 origin ui
 click 528 460
 click 528 460
@@ -672,7 +695,7 @@ origin screen
 click 336 360
 wait 10
 wait 200
-# Leg 6: from (232,1158), click (384,366) = world (216,1224).
+# Leg 7: from (232,1158), click (384,366) = world (216,1224).
 origin ui
 click 528 460
 click 528 460
@@ -681,7 +704,7 @@ origin screen
 click 384 366
 wait 10
 wait 200
-# Leg 7: from (216,1224), click (392,340) = world (208,1264).
+# Leg 8: from (216,1224), click (392,340) = world (208,1264).
 origin ui
 click 528 460
 click 528 460
@@ -690,7 +713,7 @@ origin screen
 click 392 340
 wait 10
 wait 200
-# Leg 8: from (208,1264), click (392,338) = world (200,1302).
+# Leg 9: from (208,1264), click (392,338) = world (200,1302).
 origin ui
 click 528 460
 click 528 460
@@ -700,7 +723,7 @@ click 392 338
 wait 10
 wait 200
 checkpoint south2
-# Leg 9: from (200,1302), click (392,346) = world (192,1348).
+# Leg 10: from (200,1302), click (392,346) = world (192,1348).
 origin ui
 click 528 460
 click 528 460
@@ -709,7 +732,7 @@ origin screen
 click 392 346
 wait 10
 wait 200
-# Leg 10: from (192,1348), click (392,350) = world (184,1398).
+# Leg 11: from (192,1348), click (392,350) = world (184,1398).
 origin ui
 click 528 460
 click 528 460
@@ -718,7 +741,7 @@ origin screen
 click 392 350
 wait 10
 wait 200
-# Leg 11: from (184,1398), click (400,372) = world (184,1470).
+# Leg 12: from (184,1398), click (400,372) = world (184,1470).
 origin ui
 click 528 460
 click 528 460
@@ -727,7 +750,7 @@ origin screen
 click 400 372
 wait 10
 wait 200
-# Leg 12: from (184,1470), click (400,324) = world (184,1494).
+# Leg 13: from (184,1470), click (400,324) = world (184,1494).
 origin ui
 click 528 460
 click 528 460
@@ -736,7 +759,7 @@ origin screen
 click 400 324
 wait 10
 wait 200
-# Leg 13: from (184,1494), click (400,354) = world (184,1548).
+# Leg 14: from (184,1494), click (400,354) = world (184,1548).
 origin ui
 click 528 460
 click 528 460
@@ -745,7 +768,7 @@ origin screen
 click 400 354
 wait 10
 wait 200
-# Leg 14 (the bend): from (184,1548), click (416,330) = world
+# Leg 15 (the bend): from (184,1548), click (416,330) = world
 # (200,1578) -- straight over the blocked bend cells; only the target
 # cell must be passable, the engine's A* hops the corner.
 origin ui
@@ -757,7 +780,7 @@ click 416 330
 wait 10
 wait 200
 checkpoint south3
-# Leg 15: from (200,1578), click (400,348) = world (200,1626).
+# Leg 16: from (200,1578), click (400,348) = world (200,1626).
 origin ui
 click 528 460
 click 528 460
@@ -766,7 +789,7 @@ origin screen
 click 400 348
 wait 10
 wait 200
-# Leg 16: from (200,1626), click (416,372) = world (216,1698).
+# Leg 17: from (200,1626), click (416,372) = world (216,1698).
 origin ui
 click 528 460
 click 528 460
@@ -775,41 +798,23 @@ origin screen
 click 416 372
 wait 10
 wait 200
-# Leg 17: from (216,1698), click (416,324) = world (232,1722).
-origin ui
-click 528 460
-click 528 460
-wait 10
-origin screen
-click 416 324
-wait 10
-wait 200
-# Leg 18: from (232,1722), click (432,300) = world (264,1722) -- the
-# pocket floor, in front of Door6's box (259..306 x 1649..1713).
-origin ui
-click 528 460
-click 528 460
-wait 10
-origin screen
-click 432 300
-wait 10
-wait 200
 checkpoint south4
 shot south4
-# Leg 19 (the crossing): from (264,1722), click (416,268) = world
-# (280,1690), inside Door6's box.  The walk enters the box at
-# ~(259,1711), opens the door and fires the To1006 travel, so the walk
-# never reaches its target.  The wait covers the walk, the travel and
-# AR1006's load.  CHECK in traveled: the party must read AR1006
-# coordinates (FR1000 entry, (154,233) facing 8, near the return
-# trigger at 46..177 x 292..494); a party still at y < 1650 means the
-# door stayed closed.
+# Leg 18 (the crossing): from (216,1698), click (464,292) = world
+# (280,1690), inside Door6's box (259..306 x 1649..1713).  The walk
+# routes through the (232..264,1722) pocket, enters the box from the
+# south, opens the door and fires the To1006 travel (263..301 x
+# 1652..1708), so it never reaches its target.  The wait covers the
+# walk, the travel and AR1006's load.  CHECK in traveled: the party
+# must read AR1006 coordinates (FR1000 entry, (154,233) facing 8, near
+# the return trigger at 46..177 x 292..494); a party still at y < 1650
+# means the door stayed closed.
 origin ui
 click 528 460
 click 528 460
 wait 10
 origin screen
-click 416 268
+click 464 292
 wait 10
 wait 600
 checkpoint traveled
