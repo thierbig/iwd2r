@@ -553,14 +553,19 @@ click 160 82
 wait 150
 checkpoint goblin_sighted
 shot goblin_sighted
-# Space ends the pause: the druid walks on and stops at 519,902; the
-# goblin's combat script brings it to 504,882, and its first attack
-# auto-pauses the game (Attacked, 0x2) -- seed 1, as in first_fight.
+# Space ends the pause: the druid walks on and stops -- attempt 5
+# said (519,902), the goblin closing to (504,882) and attacking
+# (Attacked auto-pause, 0x2); 77f launch 1 (same seed) stopped at
+# (568,906), the goblin 68px away, and NO attack ever came -- hp
+# 49/49 flat from here through world_end.  The fight is a per-run
+# coin flip (thread timing shifts the goblin's first swing), so no
+# fixed press count can be matched against it.  This press pairs
+# with the one deterministic pause (enemy-sighted, which pinned the
+# party both runs): 1 press + 1 pause = even = unpaused.
 key SPACE
 wait 80
 checkpoint engaged
 shot engaged
-wait 120
 checkpoint attacked
 # South through Door6 into AR1006.  Attempt 4 rewrite.  Two findings
 # close attempt 3 (runs/20261105-230243: the party sat at (568,906)
@@ -593,14 +598,22 @@ checkpoint attacked
 # the only actors near the corridor are dead goblins.  Per-leg world
 # delta = click - (400,300) after recentering, so a party short of one
 # leg's target still walks on -- the clicks chain.
-# Leg 0: the Attacked pause from the fight still holds here -- one
-# Space releases it so leg 1's walk starts at once (the fight walk at
-# leg 7 above used exactly this).
-key SPACE
-wait 10
+# Attempt 2 (77f launch 1): this was a Space releasing the fight's
+# Attacked pause -- but the fight never came (no attack, hp 49/49),
+# so the press landed on an UNPAUSED world and paused it: leg 1's
+# walk queued act=23 at f8070 with zero integration through world_end
+# f14274; traveled and rested pinned at (568,906) in AR1000, and the
+# export came out FlameStrike 0/1 memorized-not-castable (the slots
+# are granted at rest, which never ran).  Press deleted, wait 120
+# attack-window deleted: walk on at once -- the pre-fight shape.  A
+# chaser must stop to swing, so a party that keeps moving never
+# takes the hit and no Attacked pause can ever fire.  From here to
+# world_end the file holds exactly ONE press (the sighted release
+# above): parity stays even no matter what the fight does.
 # Leg 1 (diagonal SW): from (568,906), click (328,372) = world
-# (496,978).  No presses: the goblin is mid-swing, its hit lands a
-# round out, in leg 2's window.
+# (496,978).  Waits inside chase range are 60, under one ~90-frame
+# swing round: the ~100px walks take ~25 frames at the measured
+# ~4 px/frame (>2x margin) while no idle outlasts a swing.
 origin ui
 click 528 460
 click 528 460
@@ -608,10 +621,13 @@ wait 10
 origin screen
 click 328 372
 wait 10
-wait 240
-# Legs 2-4 (diagonal SW to the corridor mouth, spread presses: these
-# legs eat the chaser's last hits -- each press releases an Attacked
-# re-freeze, and a released leg walks away from the swing).
+wait 60
+# Legs 2-4 (diagonal SW to the corridor mouth, no presses -- one
+# press in the whole file, see leg 1).  The old nine presses here
+# were the attempt-5 bug (odd parity froze the world at south1), and
+# the old wait 40x3+150 idles were the attempt-2 fix target: a
+# ~90-frame swing round connects during any 150+-frame idle inside
+# chase range, so every wait in this stretch is now 60.
 # Leg 2: from (496,978), click (328,324) = world (424,1002).
 origin ui
 click 528 460
@@ -620,13 +636,7 @@ wait 10
 origin screen
 click 328 324
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-wait 150
+wait 60
 # Leg 3: from (424,1002), click (336,372) = world (360,1074).
 origin ui
 click 528 460
@@ -635,13 +645,7 @@ wait 10
 origin screen
 click 336 372
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-wait 150
+wait 60
 # Leg 4: from (360,1074), click (336,324) = world (296,1098).
 origin ui
 click 528 460
@@ -650,42 +654,28 @@ wait 10
 origin screen
 click 336 324
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-wait 150
+wait 60
 checkpoint south1
-# Legs 5-18 (corridor south, clean walks, no presses): launch 2 parked
-# the party at (456,1086) act=0 at south1 (f9251; frame dump: no
-# movement and no further hits through world_end) -- 160px short of the
-# old legs' assumed base (296,1098).  Every recentered click is
-# RELATIVE to the actual position, so the old corridor clicks landed on
-# the 'Half-Built Ship' info trigger (bbox 347,1124-806,1282: the click
-# becomes examine text, no walk) or the impassable row behind it.  The
-# crossing is not optional: AR1000 bans rest (flags 0x2), only AR1006
-# allows it.  New route, BFS over the searchmap (PASS idx per
-# CGameObject::DEFAULT_TERRAIN_TABLE, every target a passable cell
-# outside all 8 info bboxes): no westward passage exists at row 90
-# (blocked cols 20-27), so leg 5 paths over the row-89 north band
-# (~y1070) and down its west end to (296,1098) in one click -- the
-# engine's A* follows the BFS cells; legs 6-17 are the corridor clicks
-# as before; leg 18 crosses from (216,1698) straight into Door6's box
-# (A* routes through the (232..264,1722) pocket).  Walk speed measured
-# from this run's approach legs: ~4 px/frame, so wait 200 covers the
-# ~220px leg 5 and every shorter leg with >2x margin.
-# Leg 5 (the band hop): from (456,1086), click (240,312) = world
-# (296,1098).
-origin ui
-click 528 460
-click 528 460
-wait 10
-origin screen
-click 240 312
-wait 10
-wait 200
+# Legs 6-18 (corridor south from the mouth, clean walks, no presses --
+# the attempt-5 BFS route, kept).  The old leg 5 was a band hop from
+# (456,1086), where the pause-storm-frozen attempt-5 launch 2 PARKED,
+# 160px short of the mouth (its legs cut mid-walk).  With the storm
+# gone, legs 1-4 complete and hand leg 6 its designed base (296,1098)
+# directly, so leg 5 is deleted: fired from the mouth, its (-160,+12)
+# click would target (136,1110), off-corridor west.  The clicks are
+# RELATIVE to the actual position and every walk completes before the
+# next click, so bases track the documented targets; the ship info
+# trigger (bbox 347,1124-806,1282: the click becomes examine text, no
+# walk) and the impassable row-90 block (cols 20-27) are why the
+# corridor runs x~184..232.  The crossing is not optional: AR1000
+# bans rest (flags 0x2), only AR1006 allows it.  BFS over the
+# searchmap (PASS idx per CGameObject::DEFAULT_TERRAIN_TABLE, every
+# target a passable cell outside all 8 info bboxes); leg 18 crosses
+# from (216,1698) straight into Door6's box (A* routes through the
+# (232..264,1722) pocket).  Walk speed ~4 px/frame: wait 200 covers
+# every <=110px leg with >2x margin.  By leg 6 the party is 330px+
+# from the goblin's home and widening -- out of its aggro range
+# (attempt 5: a party parked ~400px away for 5000 frames, no attack).
 # Leg 6: from (296,1098), click (336,360) = world (232,1158).
 origin ui
 click 528 460
