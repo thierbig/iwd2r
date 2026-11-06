@@ -260,4 +260,22 @@ public:
     /* 0356 */ LONG m_wanderSeed;
 };
 
+// The spell-school travel projectile (vtable 0x8511AC): DecodeProjectile's
+// types 227-234 build one of these per school of magic — AbjurT, AlterT,
+// InvocT, NecroT, ConjuT, EnchaT, IllusT, DivinT. Every vtable slot holds
+// the base CProjectileSingleTarget function except slot 0, whose deleting
+// dtor (0x579B10) is a plain wrapper over the base body 0x5783E0 through
+// thunk 0x57E570; the ctor only retunes base members, so the class adds no
+// fields — the decoder news the base size 0x2AE for it.
+class CProjectile8511AC : public CProjectileSingleTarget {
+public:
+    // 0x57E370: the school's BAM through the base ctor (the char* argument
+    // folds through a CString temp into the CResRef the base takes), then
+    // the retune — the visual effect flagged for the flight, cell sequence
+    // 0, speed doubled with a native WORD shift, the strike fields cleared,
+    // no callback projectile, empty visual-effect name, height on, TRA_02
+    // fire sound over a dead "" store, empty arrival sound.
+    CProjectile8511AC(const char* szResRef);
+};
+
 #endif /* CPROJECTILESINGLETARGET_H_ */

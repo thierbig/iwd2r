@@ -3697,3 +3697,54 @@ TEST_CASE("visual projectiles: Acid Fog fires its secondary at any sprite, dead 
     pArea->SortLists();
     ClearMessages();
 }
+
+// The spell-school travel projectiles (DecodeProjectile 0x51EAF0, ctor
+// 0x57E370 CProjectile8511AC): one per school of magic (types 227-234,
+// AbjurT through DivinT) for a spell whose projectile is its school's
+// travel BAM. The ctor flags the visual effect, doubles the flight speed
+// with a native WORD shift, clears the strike fields, forbids a callback
+// projectile, turns height on and stamps the TRA_02 fire sound over a dead
+// "" store with an empty arrival sound. Decoding draws nothing.
+TEST_CASE("visual projectiles: the school travels decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* sSchool;
+    };
+    const Spec kSchools[] = {
+        { 227, "AbjurT" },
+        { 228, "AlterT" },
+        { 229, "InvocT" },
+        { 230, "NecroT" },
+        { 231, "ConjuT" },
+        { 232, "EnchaT" },
+        { 233, "IllusT" },
+        { 234, "DivinT" },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kSchools) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile8511AC* pTravel = dynamic_cast<CProjectile8511AC*>(pProjectile);
+        REQUIRE(pTravel != nullptr);
+        CHECK(pTravel->m_projectileType == spec.nType - 1);
+        CHECK(pTravel->m_animation->GetResRef() == CResRef(spec.sSchool));
+        CHECK(pTravel->m_visualEffect.m_dwFlags == 0x20200u);
+        CHECK(pTravel->field_1BE == FALSE);
+        CHECK(pTravel->field_1C2 == FALSE);
+        CHECK(pTravel->field_1D4 == 0);
+        CHECK(pTravel->m_callBackProjectile == CGameObjectArray::INVALID_INDEX);
+        CHECK(pTravel->m_sVisualEffect == "");
+        CHECK(pTravel->field_182 == CGameObjectArray::INVALID_INDEX);
+        CHECK(pTravel->m_bHasHeight == TRUE);
+        CHECK(pTravel->m_fireSoundRef == CResRef("TRA_02"));
+        CHECK(pTravel->m_arrivalSoundRef == CResRef(""));
+        // The speed is the cell's frame width doubled by a native WORD
+        // shift; pin it against a directly built sibling, not a literal.
+        CProjectile8511AC direct(spec.sSchool);
+        CHECK(pTravel->m_speed == direct.m_speed);
+        delete pProjectile;
+    }
+}

@@ -1812,6 +1812,38 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "TRA_02";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 227:
+        // School travel: Abjuration.
+        pProjectile = new CProjectile8511AC("AbjurT");
+        break;
+    case 228:
+        // School travel: Alteration.
+        pProjectile = new CProjectile8511AC("AlterT");
+        break;
+    case 229:
+        // School travel: Invocation.
+        pProjectile = new CProjectile8511AC("InvocT");
+        break;
+    case 230:
+        // School travel: Necromancy.
+        pProjectile = new CProjectile8511AC("NecroT");
+        break;
+    case 231:
+        // School travel: Conjuration.
+        pProjectile = new CProjectile8511AC("ConjuT");
+        break;
+    case 232:
+        // School travel: Enchantment.
+        pProjectile = new CProjectile8511AC("EnchaT");
+        break;
+    case 233:
+        // School travel: Illusion.
+        pProjectile = new CProjectile8511AC("IllusT");
+        break;
+    case 234:
+        // School travel: Divination.
+        pProjectile = new CProjectile8511AC("DivinT");
+        break;
     case 235:
         // Entangle.
         pProjectile = new CProjectileArea84F4E4();
@@ -2470,7 +2502,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 360: ctor 0x576990 not ported
         //   TODO: type 207: ctor 0x57D390 not ported
         //   TODO: type 261: ctor 0x57E1B0 not ported
-        //   TODO: types 227-234: ctor 0x57E370 not ported
         //   TODO: type 312: ctor 0x57F210 not ported
         //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
@@ -3872,6 +3903,30 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x57E370
+// The spell-school travel projectile: the school's BAM goes through the base
+// ctor (the char* argument folds through a CString temp into the CResRef the
+// base takes), then the retune. The "" first stored into m_fireSoundRef is
+// dead — the TRA_02 store below overwrites it — but kept as the exe spells
+// it.
+CProjectile8511AC::CProjectile8511AC(const char* szResRef)
+    : CProjectileSingleTarget(CResRef(CString(szResRef)))
+{
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_animation->SequenceSet(0);
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1D4 = 0;
+    m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
+    m_fireSoundRef = ""; // dead store in the exe: TRA_02 below overwrites it
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    m_bHasHeight = TRUE;
+    m_fireSoundRef = "TRA_02";
+    m_arrivalSoundRef = "";
 }
 
 // 0x57F760
