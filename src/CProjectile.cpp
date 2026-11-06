@@ -207,6 +207,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 32:
+    case 35:
+    case 36:
+        // The dart: height flag and empty sound tails.
+        pProjectile = new CProjectileDart();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
     case 68:
     case 69:
     case 70:
