@@ -2258,6 +2258,75 @@ TEST_CASE("visual projectiles: the sparkle-stream bolts decode to their flights"
     }
 }
 
+// The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
+// CProjectileSparkleExplosion): the delayed-burst carrier built on the
+// exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike
+// and pre-check ranges, one strike, 100-tick linger), with TRAVEL handed to
+// the ctor as the cell (no post-construct swap) and the flight speed left at
+// the BAM default 20. Every entry overwrites the ctor's child with the
+// burst's own, arms the sparkle tail, sets the trails flag (field_E6 |= 8 —
+// load-bearing, the ctor chain leaves 0x20000) and the two sound refs — the
+// arrival ref is a real sound here, not the empty string. 153 to 155 skip
+// the alternate palette; 182 reuses 157's child (54) with colour 11; 183's
+// child (184) is itself a sparkle-stream bolt. Decoding draws nothing.
+TEST_CASE("visual projectiles: the sparkle bursts decode to their children", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* altPalette;
+        WORD nColour;
+        SHORT nChild;
+        const char* fire;
+        const char* arrival;
+    };
+    const Spec kBursts[] = {
+        {149, "STTRAVL1", 2, 0x2E, "TRA_04A", "CAS_M08"},
+        {150, "STTRAVL2", 4, 0x2F, "TRA_04C", "EFF_M05"},
+        {151, "STTRAVL5", 6, 0x30, "TRA_04B", "CAS_P03"},
+        {152, "STTRAVL7", 9, 0x31, "", ""},
+        {153, nullptr, 0xA, 0x32, "", ""},
+        {154, nullptr, 1, 0x33, "", ""},
+        {155, nullptr, 3, 0x34, "", ""},
+        {156, "STTRAVL6", 7, 0x35, "", ""},
+        {157, "STTRAVL3", 5, 0x36, "TRA_04A", "CAS_P02"},
+        {182, "STTRAVL4", 0xB, 0x36, "", ""},
+        {183, "STTRAVL8", 0xC, 0xB8, "TRA_03", "EFF_M04"},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kBursts) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSparkleExplosion* pBurst = dynamic_cast<CProjectileSparkleExplosion*>(pProjectile);
+        REQUIRE(pBurst != nullptr);
+        CHECK(pBurst->m_projectileType == spec.nType - 1);
+        CHECK(pBurst->m_animation->GetResRef() == CResRef("TRAVEL"));
+        CHECK(pBurst->m_speed == 20);
+        CHECK(pBurst->field_1DE == TRUE);
+        CHECK(pBurst->field_E6 == 0x20008);
+        CHECK(pBurst->m_bSparkle == TRUE);
+        CHECK(pBurst->m_nSparkleColour == spec.nColour);
+        CHECK(pBurst->m_bHasHeight == TRUE);
+        CHECK(pBurst->m_childProjectileType == spec.nChild);
+        CHECK(pBurst->m_fireSoundRef == spec.fire);
+        CHECK(pBurst->m_arrivalSoundRef == spec.arrival);
+        // The exploding-intermediate ctor's arming, untouched by the case.
+        CHECK(pBurst->m_strikeRange == 0x100);
+        CHECK(pBurst->m_preCheckRange == 0x100);
+        CHECK(pBurst->m_strikesLeft == 1);
+        CHECK(pBurst->m_lingerPeriod == 100);
+        if (spec.altPalette != nullptr) {
+            CHECK(pBurst->field_1E2.GetResRef() == CResRef(spec.altPalette));
+            CHECK(pBurst->field_1E2.m_bDoubleSize == FALSE);
+            CHECK(pBurst->field_29C == 1);
+        } else {
+            CHECK(pBurst->field_29C == 0);
+        }
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary

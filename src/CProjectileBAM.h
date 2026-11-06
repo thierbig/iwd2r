@@ -59,27 +59,6 @@ public:
     /* 02A1 */ BYTE field_2A1;
 };
 
-// The sparkle-burst projectile: Explode decodes the child projectile its
-// sparkle colour maps to (types 196 to 203) and fires it at the target
-// (vtable 0x84D938, which sits immediately before CProjectileBAM's).
-// NOTE: The exe's vtable for this class overrides Fire too (slot 0x6C
-// -> 0x52D9F0, shared with the sibling class at vtable 0x84DC68 — the
-// exploding-projectile intermediate whose ctor 0x52CCE0 this class's
-// ctor 0x5297B0 calls). That Fire override is not part of batch i058,
-// so ours inherits CProjectileBAM::Fire.
-class CProjectileSparkleExplosion : public CProjectileBAM {
-public:
-    // 0x5297B0. The exe ctor forwards the resref to the exploding
-    // intermediate 0x52CCE0 — which bases on CProjectileBAM (0x52AD60),
-    // stores vtable 0x84DBDC, and initializes the exploding fields our
-    // anchor does not model (the CVidCells at +0x2FA and +0x3D8, the
-    // CAIObjectType at +0x2B4, and +0x2A4 = 78) — then stores 0x84D938.
-    // Ours forwards straight to CProjectileBAM; the resref is passed by
-    // value in the exe (ret 0x8).
-    CProjectileSparkleExplosion(CResRef resRef);
-    /* 0088 */ virtual void Explode();
-};
-
 // The single travelling spell missile (vtable 0x84DB54, between
 // CProjectileSparkleExplosion's 0x84D938 and the exploding intermediate's
 // 0x84DBDC): the magic-missile bolt. DecodeProjectile's sparkle cases hand
@@ -130,6 +109,27 @@ public:
     /* 02FA */ CVidCell m_explodeCell1;
     /* 03D4 */ int m_bExplodeCell2Active;
     /* 03D8 */ CVidCell m_explodeCell2;
+};
+
+// The sparkle-burst projectile: Explode decodes the child projectile its
+// sparkle colour maps to (types 196 to 203) and fires it at the target
+// (vtable 0x84D938, which sits immediately before CProjectileBAM's).
+// NOTE: The exe's vtable for this class overrides Fire too (slot 0x6C
+// -> 0x52D9F0, shared with the exploding-projectile intermediate — the
+// direct base here, whose ctor 0x52CCE0 this class's ctor 0x5297B0
+// calls). That Fire override is not part of batch i058, so ours inherits
+// CProjectileBAM::Fire.
+class CProjectileSparkleExplosion : public CProjectileExploding {
+public:
+    // 0x5297B0. The exe ctor forwards the resref to the exploding
+    // intermediate 0x52CCE0 — which bases on CProjectileBAM (0x52AD60),
+    // stores vtable 0x84DBDC, and initializes the exploding fields (the
+    // CVidCells at +0x2FA and +0x3D8, the CAIObjectType at +0x2B4, and
+    // +0x2A4 = 78) — then stores 0x84D938. Ours bases on the ported
+    // CProjectileExploding ctor, so the chaining matches the exe; the
+    // resref is passed by value in the exe (ret 0x8).
+    CProjectileSparkleExplosion(CResRef resRef);
+    /* 0088 */ virtual void Explode();
 };
 
 // The exploding weapon missile (vtable 0x84DC68): Explode (slot 0x0088) is

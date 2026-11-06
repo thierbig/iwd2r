@@ -114,6 +114,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSpellHit* pSpellHit;
     CProjectileSingleTarget* pSingle;
     CProjectileSparkle* pSparkle;
+    CProjectileSparkleExplosion* pSparkleExplosion;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -744,6 +745,159 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pSparkle->m_fireSoundRef = "TRA_03";
         pSparkle->m_arrivalSoundRef = "";
         pProjectile = pSparkle;
+        break;
+    // The sparkle-burst missiles (0x5297B0, CProjectileSparkleExplosion):
+    // the delayed-burst carrier built on the exploding intermediate, with
+    // TRAVEL handed to the ctor as the cell (no post-construct swap, unlike
+    // the sparkle-stream family). Every entry overwrites the ctor's child
+    // projectile ([+0x2A4], 78) with the burst's own, then arms the sparkle
+    // tail (m_bSparkle, m_nSparkleColour, m_bHasHeight), sets the trails
+    // flag (field_E6 |= 8 — load-bearing here, since unlike the
+    // sparkle-stream ctor the exploding ctor chain leaves field_E6 at
+    // 0x20000), and the two sound refs — the arrival ref is a real sound
+    // here, not the empty string. Types 153 to 155 skip the alternate
+    // palette; 182 reuses 157's child (54) with colour 11.
+    case 149:
+        // Colour 2, child 46.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL1");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 2;
+        pSparkleExplosion->m_childProjectileType = 0x2E;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "TRA_04A";
+        pSparkleExplosion->m_arrivalSoundRef = "CAS_M08";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 150:
+        // Colour 4, child 47.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL2");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 4;
+        pSparkleExplosion->m_childProjectileType = 0x2F;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "TRA_04C";
+        pSparkleExplosion->m_arrivalSoundRef = "EFF_M05";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 151:
+        // Colour 6, child 48.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL5");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 6;
+        pSparkleExplosion->m_childProjectileType = 0x30;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "TRA_04B";
+        pSparkleExplosion->m_arrivalSoundRef = "CAS_P03";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 152:
+        // Colour 9, child 49. Both sound refs are the empty string.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL7");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 9;
+        pSparkleExplosion->m_childProjectileType = 0x31;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 153:
+        // Colour 10, child 50; no alternate palette.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 0xA;
+        pSparkleExplosion->m_childProjectileType = 0x32;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 154:
+        // Colour 1, child 51; no alternate palette. The exe holds one 1 in
+        // eax and feeds it to all three stores at once (sparkle, colour,
+        // has-height); ours spells the literals out.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 1;
+        pSparkleExplosion->m_childProjectileType = 0x33;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 155:
+        // Colour 3, child 52; no alternate palette.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 3;
+        pSparkleExplosion->m_childProjectileType = 0x34;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 156:
+        // Colour 7, child 53.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL6");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 7;
+        pSparkleExplosion->m_childProjectileType = 0x35;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 157:
+        // Colour 5, child 54.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL3");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 5;
+        pSparkleExplosion->m_childProjectileType = 0x36;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "TRA_04A";
+        pSparkleExplosion->m_arrivalSoundRef = "CAS_P02";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 182:
+        // Colour 11, child 54 — the same child as 157.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL4");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 0xB;
+        pSparkleExplosion->m_childProjectileType = 0x36;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "";
+        pSparkleExplosion->m_arrivalSoundRef = "";
+        pProjectile = pSparkleExplosion;
+        break;
+    case 183:
+        // Colour 12, child 184.
+        pSparkleExplosion = new CProjectileSparkleExplosion(CResRef("TRAVEL"));
+        pSparkleExplosion->SetAltPalette("STTRAVL8");
+        pSparkleExplosion->m_bSparkle = TRUE;
+        pSparkleExplosion->m_nSparkleColour = 0xC;
+        pSparkleExplosion->m_childProjectileType = 0xB8;
+        pSparkleExplosion->m_bHasHeight = TRUE;
+        pSparkleExplosion->field_E6 |= 8;
+        pSparkleExplosion->m_fireSoundRef = "TRA_03";
+        pSparkleExplosion->m_arrivalSoundRef = "EFF_M04";
+        pProjectile = pSparkleExplosion;
         break;
     case 95:
         // Stinking Cloud.
@@ -2086,7 +2240,7 @@ void CProjectileBAM::SetAltPalette(const char* sName)
 
 // 0x5297B0
 CProjectileSparkleExplosion::CProjectileSparkleExplosion(CResRef resRef)
-    : CProjectileBAM(resRef)
+    : CProjectileExploding(resRef)
 {
 }
 
