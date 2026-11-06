@@ -2523,6 +2523,37 @@ TEST_CASE("visual projectiles: the flame arrows decode to their flights", "[visu
     }
 }
 
+// The acid blobs (DecodeProjectile 0x51EAF0, ctor 0x532260
+// CProjectileAcidBlob): the ACIDBLOB BAM with palette range 0 recoloured
+// to 73 by the ctor, then the height flag and the two empty sound tails
+// from the case body. Types 192/193/194 additionally recolour range 0 to
+// 0x56/0x6E/0x1A through SetColorRange (which rebinds the cell's palette
+// to the projectile's own). Decoding draws nothing.
+TEST_CASE("visual projectiles: the acid blobs decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        BYTE nRange0;
+    };
+    const Spec kBlobs[] = { { 108, 73 }, { 192, 0x56 }, { 193, 0x6E }, { 194, 0x1A } };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kBlobs) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileAcidBlob* pBlob = dynamic_cast<CProjectileAcidBlob*>(pProjectile);
+        REQUIRE(pBlob != nullptr);
+        CHECK(pBlob->m_projectileType == spec.nType - 1);
+        CHECK(pBlob->m_animation->GetResRef() == CResRef("ACIDBLOB"));
+        CHECK(pBlob->m_bHasHeight == TRUE);
+        CHECK(pBlob->m_fireSoundRef == "");
+        CHECK(pBlob->m_arrivalSoundRef == "");
+        CHECK(pBlob->m_palette.m_rangeColors[0] == spec.nRange0);
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

@@ -318,6 +318,42 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pFlame->m_arrivalSoundRef = "";
         pProjectile = pFlame;
         break;
+    case 108:
+        // The acid blob: height flag and empty sound tails.
+        pProjectile = new CProjectileAcidBlob();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 192:
+        // The acid blob tinted through SetColorRange: the cell's palette is
+        // rebound to the projectile's own and range 0 recoloured to 0x56
+        // over the ctor's 73, after the height flag.
+        pBam = new CProjectileAcidBlob();
+        pBam->m_bHasHeight = TRUE;
+        pBam->SetColorRange(0, 0x56);
+        pBam->m_fireSoundRef = "";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 193:
+        // The acid blob tinted to 0x6e.
+        pBam = new CProjectileAcidBlob();
+        pBam->m_bHasHeight = TRUE;
+        pBam->SetColorRange(0, 0x6e);
+        pBam->m_fireSoundRef = "";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 194:
+        // The acid blob tinted to 0x1a.
+        pBam = new CProjectileAcidBlob();
+        pBam->m_bHasHeight = TRUE;
+        pBam->SetColorRange(0, 0x1a);
+        pBam->m_fireSoundRef = "";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
     case 68:
     case 69:
     case 70:
