@@ -1431,8 +1431,9 @@ TEST_CASE("combat: a party member's ForceSpell action hurts the goblin", "[comba
 // Swing's missile branch (0x73A679-0x73AC06): a goblin archer (10GOBAR,
 // a bow and arrows) given Attack at the party member six squares away shoots
 // from where it stands: its rounds go by, it never closes to melee, and the
-// arrows that hit carry Damage's effect to the party member (the arrow's
-// projectile, CProjectile84D8B8, arrives at once).
+// arrows that hit carry Damage's effect to the party member. The arrow really
+// flies (DecodeProjectile type 6 -> CProjectileArrow, ctor 0x5324A0), so the
+// effect is applied on the arrival frame, a few frames after the shot.
 TEST_CASE("combat: a goblin archer shoots arrows at the party member", "[combat][data]")
 {
     if (DataDir() == nullptr) {
@@ -1506,8 +1507,13 @@ TEST_CASE("combat: a goblin archer shoots arrows at the party member", "[combat]
     CHECK(nearest >= 5);
     CHECK_FALSE(hpRose);
     CHECK(characterStart == 9);
-    // Each shot also draws its swing sound (sub_756930: the bow's "Sw_Ms").
-    CHECK(pCharacter->GetBaseStats()->m_hitPoints == 7);
+    // The arrow's flight moves the damage effect's application draws from the
+    // fire frame to the arrival frame, which offsets the fixed rand stream
+    // for every later roll: with srand(21) three of the sixteen shots hit for
+    // 1 damage each, 9 -> 6. (The old expectation of 7 was calibrated against
+    // the pre-arrow fallback CProjectile84D8B8, which applies its effects the
+    // moment it is fired — two hits, no flight draws in between.)
+    CHECK(pCharacter->GetBaseStats()->m_hitPoints == 6);
 }
 
 namespace {
