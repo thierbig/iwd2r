@@ -2453,6 +2453,28 @@ TEST_CASE("visual projectiles: the spears decode to their flights", "[visualproj
     }
 }
 
+// The burning-hands stream (DecodeProjectile 0x51EAF0, ctor 0x532CA0
+// CProjectileSPBRNHND): the SPBRNHND BAM; the case body sets the height
+// flag first, then rebinds the cell's palette to the projectile's own and
+// recolours range 0 from the ctor's 71 to 0x43, and plays EFF_M20 on
+// fire. Decoding draws nothing.
+TEST_CASE("visual projectiles: the burning-hands stream decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(26, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileSPBRNHND* pHands = dynamic_cast<CProjectileSPBRNHND*>(pProjectile);
+    REQUIRE(pHands != nullptr);
+    CHECK(pHands->m_projectileType == 25);
+    CHECK(pHands->m_animation->GetResRef() == CResRef("SPBRNHND"));
+    CHECK(pHands->m_bHasHeight == TRUE);
+    CHECK(pHands->m_fireSoundRef == "EFF_M20");
+    CHECK(pHands->m_arrivalSoundRef == "");
+    CHECK(pHands->m_palette.m_rangeColors[0] == 0x43);
+    delete pProjectile;
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

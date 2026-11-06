@@ -225,6 +225,18 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 26:
+        // The burning-hands stream: the height flag first, then the cell's
+        // palette rebound to the projectile's own and range 0 recoloured to
+        // 0x43 over the ctor's 71.
+        pBam = new CProjectileSPBRNHND();
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_animation->SetPalette(pBam->m_palette);
+        pBam->m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        pBam->m_fireSoundRef = "EFF_M20";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
     case 68:
     case 69:
     case 70:
