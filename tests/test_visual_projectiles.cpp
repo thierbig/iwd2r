@@ -2725,6 +2725,22 @@ TEST_CASE("visual projectiles: the boulder decodes to its flight", "[visualproje
     delete pProjectile;
 }
 
+// The scorcher beam (DecodeProjectile 0x51EAF0, entry 0x51FF03, ctor
+// 0x57AEB0 IcewindCProjectileScorcher): the decoder's only post-ctor work
+// is re-assigning the fire sound to TRA_17 over the ctor's TRA_M04.
+TEST_CASE("visual projectiles: the scorcher decodes to its beam", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(73);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(109, world.pCharacter, 0);
+    CHECK(Draws(73, iwd2r_rand_state()) == 0);
+    IcewindCProjectileScorcher* pScorcher = dynamic_cast<IcewindCProjectileScorcher*>(pProjectile);
+    REQUIRE(pScorcher != nullptr);
+    CHECK(pScorcher->m_projectileType == 108);
+    CHECK(pScorcher->m_fireSoundRef == "TRA_17");
+    delete pProjectile;
+}
+
 // The plain area effects (DecodeProjectile 0x51EAF0): nine no-arg area
 // ctors the decoder calls with no post-construction work at all — the ctor
 // carries the whole description.

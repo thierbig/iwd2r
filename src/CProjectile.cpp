@@ -599,6 +599,12 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pProjectile = pArea;
         break;
+    case 109:
+        // The scorcher beam: the ctor's own fire sound (TRA_M04) is
+        // replaced with TRA_17.
+        pProjectile = new IcewindCProjectileScorcher();
+        pProjectile->m_fireSoundRef = "TRA_17";
+        break;
     case 68:
     case 69:
     case 70:
