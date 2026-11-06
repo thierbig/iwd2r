@@ -1903,6 +1903,24 @@ TEST_CASE("visual projectiles: the area spells decode to their area projectiles"
     CHECK(pProjectile->m_fireSoundRef == "TRA_04C");
     CHECK(pProjectile->m_arrivalSoundRef == "EFF_M05");
     delete pProjectile;
+    // The portal flips retarget everything but sprites and carry only
+    // their opening/closing sound.
+    pProjectile = CProjectile::DecodeProjectile(294, world.pCharacter, 0);
+    CProjectilePortalAnimFlip* pPortal = dynamic_cast<CProjectilePortalAnimFlip*>(pProjectile);
+    REQUIRE(pPortal != nullptr);
+    CHECK(pPortal->m_projectileType == 293);
+    CHECK(pPortal->m_nRadius == 0x7D0);
+    CHECK(pPortal->m_explosion1.m_sound == "PRTL_OP");
+    CHECK(pPortal->m_targetType.m_nEnemyAlly == CAIObjectType::NOT_SPRITE.m_nEnemyAlly);
+    delete pProjectile;
+    pProjectile = CProjectile::DecodeProjectile(297, world.pCharacter, 0);
+    pPortal = dynamic_cast<CProjectilePortalAnimFlip*>(pProjectile);
+    REQUIRE(pPortal != nullptr);
+    CHECK(pPortal->m_projectileType == 296);
+    CHECK(pPortal->m_nRadius == 0x7D0);
+    CHECK(pPortal->m_explosion1.m_sound == "PRTL_CL");
+    CHECK(pPortal->m_targetType.m_nEnemyAlly == CAIObjectType::NOT_SPRITE.m_nEnemyAlly);
+    delete pProjectile;
 }
 
 // The spell-hit visuals the game's spells and items use (DecodeProjectile

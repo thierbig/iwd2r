@@ -504,6 +504,18 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_arrivalSoundRef = CResRef("EFF_M05");
         pProjectile = pArea;
         break;
+    case 294:
+        // The portal opening.
+        pArea = new CProjectilePortalAnimFlip();
+        pArea->m_explosion1.m_sound = "PRTL_OP";
+        pProjectile = pArea;
+        break;
+    case 297:
+        // The portal closing.
+        pArea = new CProjectilePortalAnimFlip();
+        pArea->m_explosion1.m_sound = "PRTL_CL";
+        pProjectile = pArea;
+        break;
     case 68:
     case 69:
     case 70:
