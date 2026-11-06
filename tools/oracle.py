@@ -2042,7 +2042,9 @@ def record_original(script, actions, seed, timeout, dump_every, run_dir,
     run_dir/subdir, inside Windows Sandbox (record_in_sandbox) or with
     sandbox False on the host's desktop; prints the run as replay record
     does and returns its exit code (0, 1 or INJECTOR_TIMEOUT). saves (a
-    save_plan) gives the run a mpsave of its own (prepared_saves)."""
+    save_plan) gives the run a mpsave of its own (prepared_saves). A
+    "# fixtures:" header stages its characters into the copy for the
+    launch (scenario_fixtures, prepare_character_fixtures)."""
     import play
     build = os.path.join(play.WIN_CHECKOUT, REPLAY_DIR_REL)
     injector = os.path.join(build, INJECTOR)
@@ -2052,6 +2054,7 @@ def record_original(script, actions, seed, timeout, dump_every, run_dir,
             sys.exit('oracle: no %s; run tools/oracle.py build' % path)
     game = ensure_vanilla()
     prepare_replay_ini(game)
+    fixtures = scenario_fixtures(script)
     with open(REPLAY_SCHEMA) as f:
         schema = json.load(f)
     stamp = os.path.basename(run_dir)
@@ -2068,16 +2071,26 @@ def record_original(script, actions, seed, timeout, dump_every, run_dir,
     with filelock.hold(winsandbox.SANDBOX_LOCK, 'sandbox'), \
             prepared_saves(mpsave_dir(game), saves, out_dir,
                            save_aside(game)) as save_report:
-        if sandbox:
-            code, stdout, stderr, extra = record_in_sandbox(
-                build, game, script, seed, timeout, dump_every, stamp,
-                subdir, out_dir, steal_focus, no_focus_guard,
-                slow_reads=slow_reads)
-        else:
-            code, stdout, stderr = record_on_host(
-                injector, recorder, game, script, seed, timeout, dump_every,
-                stamp, out_dir, steal_focus, no_focus_guard,
-                slow_reads=slow_reads)
+        # The scenario's fixtures go into the copy for the launch and come
+        # out after it, whatever the launch did (a killed run included) —
+        # the same staging frida/probe.py does. Inside the sandbox lock:
+        # only the copy changes, never the install.
+        prior_fixtures = prepare_character_fixtures(game, fixtures) \
+            if fixtures else []
+        try:
+            if sandbox:
+                code, stdout, stderr, extra = record_in_sandbox(
+                    build, game, script, seed, timeout, dump_every, stamp,
+                    subdir, out_dir, steal_focus, no_focus_guard,
+                    slow_reads=slow_reads)
+            else:
+                code, stdout, stderr = record_on_host(
+                    injector, recorder, game, script, seed, timeout,
+                    dump_every, stamp, out_dir, steal_focus, no_focus_guard,
+                    slow_reads=slow_reads)
+        finally:
+            if prior_fixtures:
+                restore_character_fixtures(game, prior_fixtures)
     extra = dict(extra, saves=save_report)
     for line in stdout.splitlines():
         print('  %s' % line)
@@ -2210,6 +2223,18 @@ def load_actions(script):
     import realinput
     try:
         return realinput.load_scenario(script)
+    except realinput.ScenarioError as e:
+        sys.exit('oracle: %s' % e)
+
+
+def scenario_fixtures(script):
+    """A scenario's "# fixtures:" character list (realinput
+    .load_header_fixtures): the run stages them into the copy's Characters
+    folder around the launch (prepare_character_fixtures), as play.py
+    stages them for our engine."""
+    import realinput
+    try:
+        return realinput.load_header_fixtures(script)
     except realinput.ScenarioError as e:
         sys.exit('oracle: %s' % e)
 

@@ -4314,6 +4314,189 @@ class OracleCharacterFixturesTest(unittest.TestCase):
                 reparse=self.no_reparse)
 
 
+class ReplayFixtureStagingTest(unittest.TestCase):
+    """replay record/compare stage a scenario's "# fixtures:" characters
+    into the oracle copy around the original's launch (the same staging
+    frida/probe.py does): staged before winsandbox.run_replay, inside the
+    locks the launch holds, and restored after it — also when the launch
+    dies. The launch itself is the stub SandboxReplayTest uses; no sandbox
+    and no game run."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = os.path.realpath(self._tmp.name)
+        self.oracle_dir = os.path.join(self.tmp, 'oracle')
+        self.game = os.path.join(self.oracle_dir, 'game')
+        self.install = os.path.join(self.tmp, 'Games', 'Icewind Dale II')
+        for path in (self.game, self.install):
+            os.makedirs(path)
+        # A scenarios/ tree: load_header_fixtures resolves each fixture
+        # source against the nearest ancestor dir of that name.
+        scenarios = os.path.join(self.tmp, 'scenarios')
+        os.makedirs(os.path.join(scenarios, 'chr'))
+        self.fixture = os.path.join(scenarios, 'chr', 'DRUID.CHR')
+        with open(self.fixture, 'wb') as f:
+            f.write(b'fixture-druid')
+        self.script = os.path.join(scenarios, 'staged.txt')
+
+    def scenario(self, fixtures=True):
+        header = ('# fixtures: chr/DRUID.CHR:0DRUID7.CHR\n'
+                  if fixtures else '')
+        with open(self.script, 'w') as f:
+            f.write('# A staging test scenario.\n' + header +
+                    'wait 60\ncheckpoint start\nquit\n')
+        return self.script
+
+    def run_oracle(self, argv, fail_launch=False):
+        """oracle.main(argv) with the sandbox launch stubbed (the seam
+        SandboxReplayTest mocks). The stub records the copy's Characters
+        folder while the launch runs; prepare/restore_character_fixtures
+        run for real on the tmp copy (unsafe_target wants the game inside
+        ORACLE_DIR and a reparse that stays off Windows drives). Returns
+        (exit code, events, locks, sandbox)."""
+        from unittest import mock
+        oracle_play = __import__('play')
+        locks = LockRecorder()
+        events = []
+        build = os.path.join(self.tmp, 'win')
+        out = os.path.join(build, oracle.REPLAY_DIR_REL)
+        os.makedirs(out, exist_ok=True)
+        for name in (oracle.INJECTOR, oracle.RECORDER):
+            open(os.path.join(out, name), 'w').close()
+        dump = {'frame': 10, 'globals': {'reinitializing': 0,
+                                         'ai_stalled_frames': 0}}
+
+        def run_replay(build_dir, game_dir, script, env, timeout, host_run,
+                       out_dir, log):
+            chars = os.path.join(game_dir, 'Characters')
+            events.append(('launch',
+                           sorted(os.listdir(chars))
+                           if os.path.isdir(chars) else None,
+                           list(locks.held)))
+            if fail_launch:
+                raise RuntimeError('the sandbox refused to start')
+            os.makedirs(out_dir)
+            with open(os.path.join(out_dir, 'status.txt'), 'w') as f:
+                f.write('frame=10\nstate=finished\n')
+            with open(os.path.join(out_dir, 'checkpoint-start.json'),
+                      'w') as f:
+                json.dump(dump, f)
+            return {'code': 0, 'stdout': 'injector: pid 1', 'stderr': '',
+                    'error': None, 'seconds': 31.0}
+
+        def run_ours(exe, game, script, actions, seed, timeout, dump_every,
+                     run_dir, subdir, saves=None):
+            ours = os.path.join(run_dir, subdir)
+            os.makedirs(ours)
+            for name in ('status.txt', 'checkpoint-start.json'):
+                with open(os.path.join(ours, name), 'w') as f:
+                    (f.write('frame=10\nstate=finished\n')
+                     if name == 'status.txt' else json.dump(dump, f))
+            return 0
+
+        real_prepare = oracle.prepare_character_fixtures
+        real_restore = oracle.restore_character_fixtures
+
+        def prepare(game, fixtures):
+            events.append(('stage', fixtures))
+            return real_prepare(game, fixtures, self.install,
+                                reparse=lambda path: None)
+
+        def restore(game, prior):
+            events.append(('restore', prior))
+            return real_restore(game, prior, self.install,
+                                reparse=lambda path: None)
+
+        sandbox = types.SimpleNamespace(
+            available=lambda: True, ENABLE_HINT='play: off',
+            VM_ROOT=os.path.join(self.tmp, 'vm'),
+            SANDBOX_LOCK=os.path.join(self.tmp, 'vm', 'sandbox.lock'),
+            BOX_REPLAY_DIR=winsandbox.BOX_REPLAY_DIR,
+            deploy_runtime=lambda exe, log, arch: None,
+            run_replay=run_replay)
+        with LockRecorder.patch(oracle, locks), \
+                mock.patch.dict(sys.modules, {'winsandbox': sandbox}), \
+                mock.patch.object(oracle, 'ORACLE_DIR', self.oracle_dir), \
+                mock.patch.object(oracle_play, 'WIN_CHECKOUT', build), \
+                mock.patch.object(oracle, 'ensure_vanilla',
+                                  lambda: self.game), \
+                mock.patch.object(oracle, 'prepare_replay_ini',
+                                  lambda g: None), \
+                mock.patch.object(oracle, 'run_ours', run_ours), \
+                mock.patch.object(oracle, 'record_on_host',
+                                  lambda *a, **kw: (0, '', '')), \
+                mock.patch.object(oracle, 'RUNS_DIR',
+                                  os.path.join(self.tmp, 'runs')), \
+                mock.patch.object(oracle, 'check_dumps', lambda d, schema: {
+                    n: [] for n in os.listdir(d)
+                    if n.startswith('checkpoint-')}), \
+                mock.patch.object(oracle, 'prepare_character_fixtures',
+                                  prepare), \
+                mock.patch.object(oracle, 'restore_character_fixtures',
+                                  restore), \
+                contextlib.redirect_stdout(io.StringIO()):
+            try:
+                code = oracle.main(argv)
+            except SystemExit as e:  # a launch that died mid-run
+                code = e.code
+        return code, events, locks, sandbox
+
+    def test_record_stages_the_scenario_fixtures(self):
+        code, events, locks, sandbox = self.run_oracle(
+            ['replay', 'record', self.scenario(), '--seed', '3'])
+        self.assertEqual(code, 0)
+        self.assertEqual(events[0],
+                         ('stage', [(self.fixture, '0DRUID7.CHR')]))
+        # The launch sees the staged character, under the launch's locks.
+        self.assertEqual(events[1][0], 'launch')
+        self.assertEqual(events[1][1], ['0DRUID7.CHR'])
+        self.assertEqual(events[1][2], [oracle.REPLAY_LOCK,
+                                        sandbox.SANDBOX_LOCK])
+        # Afterwards the copy is as it was (the file was not there before).
+        self.assertEqual(events[2], ('restore', [('0DRUID7.CHR', None)]))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.game, 'Characters', '0DRUID7.CHR')))
+        self.assertEqual(locks.held, [])
+
+    def test_record_restores_when_the_launch_fails(self):
+        code, events, locks, sandbox = self.run_oracle(
+            ['replay', 'record', self.scenario(), '--seed', '3'],
+            fail_launch=True)
+        self.assertTrue(code)  # the launch failed, oracle exits
+        self.assertEqual(events[0][0], 'stage')
+        self.assertEqual(events[1][1], ['0DRUID7.CHR'])  # it was staged
+        self.assertEqual(events[2], ('restore', [('0DRUID7.CHR', None)]))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.game, 'Characters', '0DRUID7.CHR')))
+        self.assertEqual(locks.held, [])
+
+    def test_record_without_fixtures_stages_nothing(self):
+        code, events, locks, sandbox = self.run_oracle(
+            ['replay', 'record', self.scenario(fixtures=False),
+             '--seed', '3'])
+        self.assertEqual(code, 0)
+        self.assertEqual([e[0] for e in events], ['launch'])
+        self.assertEqual(events[0][1], None)  # no Characters folder at all
+        self.assertFalse(os.path.exists(
+            os.path.join(self.game, 'Characters')))
+
+    def test_compare_stages_on_the_original_side(self):
+        code, events, locks, sandbox = self.run_oracle(
+            ['replay', 'compare', self.scenario(), '--no-build',
+             '--seed', '3'])
+        self.assertEqual(code, 0)
+        self.assertEqual(events[0],
+                         ('stage', [(self.fixture, '0DRUID7.CHR')]))
+        launches = [e for e in events if e[0] == 'launch']
+        # Only the original launches; ours is the stub above.
+        self.assertEqual(len(launches), 1)
+        self.assertEqual(launches[0][1], ['0DRUID7.CHR'])
+        self.assertEqual(events[-1], ('restore', [('0DRUID7.CHR', None)]))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.game, 'Characters', '0DRUID7.CHR')))
+
+
 def fake_cmd(returncode=0, stdout='', stderr='', raises=None):
     calls = []
 
