@@ -1787,6 +1787,53 @@ const AreaType kAreaTypes[] = {
     { 385, 65, "", "", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
 };
 
+// A spell-hit visual type as DecodeProjectile (0x51EAF0) builds it (ctor
+// 0x535F20, CProjectile84E9C0): its animation and its palette tint (empty:
+// untinted). The sound, flags 8, trans 0 and the cleared sound refs are the
+// same for every type.
+struct VisualHitType {
+    WORD nType;
+    const char* sAnimation;
+    const char* sPalette;
+};
+
+const VisualHitType kVisualHitTypes[] = {
+    { 119, "SHAir", "" },
+    { 120, "SHEarth", "" },
+    { 121, "SHWater", "" },
+    { 122, "SHAir", "SHAir1" },
+    { 123, "SHEarth", "SHEarth1" },
+    { 124, "SHWater", "SHWater1" },
+    { 125, "SHAir", "SHAir2" },
+    { 126, "SHEarth", "SHEarth2" },
+    { 127, "SHWater", "SHWater2" },
+    { 128, "SHAir", "SHAir3" },
+    { 129, "SHEarth", "SHEarth3" },
+    { 130, "SHWater", "SHWater3" },
+    { 131, "SHAir", "SHAir4" },
+    { 132, "SHEarth", "SHEarth4" },
+    { 133, "SHWater", "SHWater4" },
+    { 134, "SHAir", "SHAir5" },
+    { 135, "SHEarth", "SHEarth5" },
+    { 136, "SHWater", "SHWater5" },
+    { 137, "SHAir", "SHAir6" },
+    { 138, "SHEarth", "SHEarth6" },
+    { 139, "SHWater", "SHWater6" },
+    { 140, "SHAir", "SHAir7" },
+    { 141, "SHEarth", "SHEarth7" },
+    { 142, "SHWater", "SHWater7" },
+    { 148, "SHAir", "SHAir7" },
+    { 196, "SHAREA", "" },
+    { 197, "SHAREA", "SHAREA1" },
+    { 198, "SHAREA", "" },
+    { 199, "SHAREA", "SHAREA3" },
+    { 200, "SHAREA", "SHAREA4" },
+    { 201, "SHAREA", "SHAREA5" },
+    { 202, "SHAREA", "SHAREA6" },
+    { 203, "SHAREA", "SHAREA2" },
+    { 208, "SPFDEATH", "" },
+};
+
 }
 
 // The area projectile types the game's spells and items use (DecodeProjectile
@@ -1845,6 +1892,39 @@ TEST_CASE("visual projectiles: the area spells decode to their area projectiles"
     CHECK(pProjectile->m_fireSoundRef == "TRA_04A");
     CHECK(pProjectile->m_arrivalSoundRef == "CAS_P02");
     delete pProjectile;
+}
+
+// The spell-hit visuals the game's spells and items use (DecodeProjectile
+// 0x51EAF0, the 0x535F20 cases): the elemental hits of the Visual Spell Hit
+// effect, their tinted variants, the area hits and the death visual. They
+// decode without touching rand.
+TEST_CASE("visual projectiles: the spell-hit visuals decode to their tinted hits", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    for (const VisualHitType& spec : kVisualHitTypes) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile84E9C0* pHit = dynamic_cast<CProjectile84E9C0*>(pProjectile);
+        REQUIRE(pHit != nullptr);
+        CHECK(pHit->m_projectileType == spec.nType - 1);
+        // SPFDEATH's BAM is not in this install's keyfile, so
+        // CResHelper::SetResRef (src/CRes.h) leaves the animation ref empty
+        // - it keeps the ref only when GetResObject resolves it. Every other
+        // animation resolves to itself.
+        const char* sAnimStored = (spec.nType == 208) ? "" : spec.sAnimation;
+        CHECK(pHit->m_animation.GetResRef() == CResRef(sAnimStored));
+        CHECK(pHit->m_bPalette == (spec.sPalette[0] != '\0' ? TRUE : FALSE));
+        if (spec.sPalette[0] != '\0') {
+            CHECK(pHit->m_palette.GetResRef() == CResRef(spec.sPalette));
+        }
+        CHECK(pHit->m_dwFlags == 8);
+        CHECK(pHit->m_nTransValue == 0);
+        CHECK(pHit->m_fireSoundRef == "");
+        CHECK(pHit->m_arrivalSoundRef == "");
+        delete pProjectile;
+    }
 }
 
 namespace {

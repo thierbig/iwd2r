@@ -10,6 +10,7 @@
 #include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
+#include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
 #include "CProjectileSingleTarget.h"
@@ -182,6 +183,159 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Grease.
         pProjectile = new CProjectileArea84F7F0();
         break;
+    // The elemental spell-hit visuals (0x535F20, CProjectile84E9C0): an
+    // animation, an empty sound, an optional palette tint, flags 8, trans 0;
+    // both sound refs are then cleared.
+    case 119:
+        // Air.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 120:
+        // Earth.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 121:
+        // Water.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 122:
+        // Air, palette 1.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir1", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 123:
+        // Earth, palette 1.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth1", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 124:
+        // Water, palette 1.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater1", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 125:
+        // Air, palette 2.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir2", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 126:
+        // Earth, palette 2.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth2", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 127:
+        // Water, palette 2.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater2", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 128:
+        // Air, palette 3.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir3", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 129:
+        // Earth, palette 3.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth3", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 130:
+        // Water, palette 3.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater3", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 131:
+        // Air, palette 4.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir4", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 132:
+        // Earth, palette 4.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth4", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 133:
+        // Water, palette 4.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater4", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 134:
+        // Air, palette 5.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir5", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 135:
+        // Earth, palette 5.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth5", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 136:
+        // Water, palette 5.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater5", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 137:
+        // Air, palette 6.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir6", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 138:
+        // Earth, palette 6.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth6", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 139:
+        // Water, palette 6.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater6", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 140:
+        // Air, palette 7.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir7", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 141:
+        // Earth, palette 7.
+        pProjectile = new CProjectile84E9C0("SHEarth", "", "SHEarth7", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 142:
+        // Water, palette 7.
+        pProjectile = new CProjectile84E9C0("SHWater", "", "SHWater7", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 148:
+        // Air, palette 7 again.
+        pProjectile = new CProjectile84E9C0("SHAir", "", "SHAir7", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
     case 187:
         // Cloudkill.
         pProjectile = new CProjectileArea84F310();
@@ -193,6 +347,62 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_fireSoundRef = CResRef("TRA_04C");
         pArea->m_arrivalSoundRef = CResRef("EFF_M05");
         pProjectile = pArea;
+        break;
+    // The area spell-hit visuals (0x535F20, CProjectile84E9C0), built like
+    // the elemental ones above.
+    case 196:
+        // Area.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 197:
+        // Area, palette 1.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA1", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 198:
+        // Area.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 199:
+        // Area, palette 3.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA3", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 200:
+        // Area, palette 4.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA4", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 201:
+        // Area, palette 5.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA5", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 202:
+        // Area, palette 6.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA6", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 203:
+        // Area, palette 2.
+        pProjectile = new CProjectile84E9C0("SHAREA", "", "SHAREA2", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 208:
+        // Death.
+        pProjectile = new CProjectile84E9C0("SPFDEATH", "", "", 8, 0);
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
         break;
     case 212:
         // Acid Fog.
@@ -848,6 +1058,11 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   DecodeProjectile again instead of constructing - 160-181 with
         //   (type - 11), 186 with 94 followed by setting the byte at
         //   0x2F2 on the result; port exactly;
+        // - TODO: 0x5201C0 (type 45): builds the CProjectile84E9C0 (ctor
+        //   0x535F20, like types 119-142) and then overwrites its vtable
+        //   with 0x84D838 - a CProjectile84E9C0-derived class whose
+        //   constructor is fully inlined at the call site; the class is not
+        //   ported;
         // - types whose constructor is not ported yet:
         //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
