@@ -108,6 +108,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
 {
     CProjectile* pProjectile = NULL;
     CProjectileArea* pArea;
+    CProjectileMAGMISS* pMAGMISS;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -176,6 +177,33 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 79:
         pProjectile = new CProjectile84DF1C();
+        break;
+    // The follow-up magic-missile barrage (0x534600, CProjectileMAGMISS),
+    // one body for types 81 to 91: 1 to 11 shots of type 22 (MAGMISS), and
+    // the target type the caster's side picks. NOTE: Unlike case 42 the
+    // original dereferences pSprite here with no NULL check.
+    case 81:
+    case 82:
+    case 83:
+    case 84:
+    case 85:
+    case 86:
+    case 87:
+    case 88:
+    case 89:
+    case 90:
+    case 91:
+        pMAGMISS = new CProjectileMAGMISS(nProjectileType - 80, 1);
+        {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_NOTEVIL) {
+                type.m_nEnemyAlly = CAIObjectType::EA_EVILCUTOFF;
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTEVIL;
+            }
+            pMAGMISS->m_targetType.Set(type);
+        }
+        pProjectile = pMAGMISS;
         break;
     case 92:
         // Fire Storm, Lightning Bolt.

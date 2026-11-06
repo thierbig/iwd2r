@@ -1952,6 +1952,36 @@ TEST_CASE("visual projectiles: the magic missile barrages decode to their missil
     }
 }
 
+// The follow-up barrages (DecodeProjectile 0x51EAF0, one body for types 81
+// to 91, ctor 0x534600 CProjectileMAGMISS): 1 to 11 MAGMISS shots (child
+// type 22) every 300 ticks keeping the source, over the party member's own
+// target type - a PC caster (EA_PC <= EA_NOTEVIL) picks EA_EVILCUTOFF - and
+// with line of sight checked. Decoding draws nothing.
+TEST_CASE("visual projectiles: the follow-up magic missile barrages decode to their launchers", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    for (WORD nType = 81; nType <= 91; nType++) {
+        INFO("type " << nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileMAGMISS* pLauncher = dynamic_cast<CProjectileMAGMISS*>(pProjectile);
+        REQUIRE(pLauncher != nullptr);
+        CHECK(pLauncher->m_projectileType == nType - 1);
+        CHECK(pLauncher->m_remainingShots == nType - 80);
+        CHECK(pLauncher->m_childType == 22);
+        // The ctor hands the cell "MAGMISS", but CHITIN.KEY only holds a
+        // MAGMISS entry of type 4 - not the BAM type 1000 the CVidCell
+        // helper looks up - so SetResRef misses and stores "".
+        CHECK(pLauncher->m_animation->GetResRef() == CResRef(""));
+        CHECK(pLauncher->m_interval == 300);
+        CHECK(pLauncher->m_keepSource == TRUE);
+        CHECK(pLauncher->m_targetType.m_nEnemyAlly == CAIObjectType::EA_EVILCUTOFF);
+        CHECK(pLauncher->m_checkLOS == TRUE);
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary
