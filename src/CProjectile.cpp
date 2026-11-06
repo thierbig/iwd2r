@@ -11,6 +11,7 @@
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CProjectile84E940.h"
+#include "CProjectile84DFA4.h"
 #include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
@@ -123,6 +124,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSPFLMARR* pFlame;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
+    CProjectile84DFA4* pBurst;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -405,6 +407,34 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pDoor->m_fireSoundRef = "EFF_M09";
         pDoor->m_arrivalSoundRef = "";
         pProjectile = pDoor;
+        break;
+    case 143:
+        // The spell-hit burst with the gold colour range: same construction
+        // the Visual Spell Hit modes 0x20..0x22 use.
+        pBurst = new CProjectile84DFA4();
+        pBurst->field_1D8 = 1;
+        pBurst->SetColorRange(0, 0x43);
+        pBurst->m_fireSoundRef = "";
+        pBurst->m_arrivalSoundRef = "";
+        pProjectile = pBurst;
+        break;
+    case 144:
+        // The spell-hit burst with the blue-green colour range.
+        pBurst = new CProjectile84DFA4();
+        pBurst->field_1D8 = 1;
+        pBurst->SetColorRange(0, 0x41);
+        pBurst->m_fireSoundRef = "";
+        pBurst->m_arrivalSoundRef = "";
+        pProjectile = pBurst;
+        break;
+    case 145:
+        // The spell-hit burst with the violet colour range.
+        pBurst = new CProjectile84DFA4();
+        pBurst->field_1D8 = 1;
+        pBurst->SetColorRange(0, 0x45);
+        pBurst->m_fireSoundRef = "";
+        pBurst->m_arrivalSoundRef = "";
+        pProjectile = pBurst;
         break;
     case 68:
     case 69:

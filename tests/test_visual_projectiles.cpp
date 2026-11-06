@@ -2634,6 +2634,43 @@ TEST_CASE("the dimension door decodes to its flight", "[visualprojectile][data]"
     delete pProjectile;
 }
 
+// The spell-hit bursts (DecodeProjectile 0x51EAF0, ctor 0x530300
+// CProjectile84DFA4): the decoder re-pins field_1D8 to 1 and overrides the
+// ctor's colour range (SetColorRange 0x52B150) per type — 0x43/0x41/0x45,
+// the same three colours the Visual Spell Hit modes 0x20..0x22 use.
+TEST_CASE("the spell-hit bursts decode to their colour ranges", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+
+    struct Spec {
+        WORD nType;
+        WORD nColor;
+    };
+    const Spec kSpecs[] = {
+        { 143, 0x43 },
+        { 144, 0x41 },
+        { 145, 0x45 },
+    };
+
+    for (const Spec& spec : kSpecs) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+
+        CProjectile84DFA4* pBurst = dynamic_cast<CProjectile84DFA4*>(pProjectile);
+        REQUIRE(pBurst != nullptr);
+        CHECK(pBurst->m_projectileType == spec.nType - 1);
+        CHECK(pBurst->m_animation->GetResRef() == CResRef("SPBOOM"));
+        CHECK(pBurst->field_1D8 == 1);
+        CHECK(pBurst->field_1DE == TRUE);
+        CHECK(pBurst->m_bHasHeight == FALSE);
+        CHECK(pBurst->m_fireSoundRef == "");
+        CHECK(pBurst->m_arrivalSoundRef == "");
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike
