@@ -1922,10 +1922,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   219-226, 259, 265 and 348 call UtilAssert and fall through to
         //   the fallback below; the default path already reproduces that,
         //   so they stay unwired;
-        // - TODO: 0x51EB93-0x528DEF (types 160-181, 186): these call
-        //   DecodeProjectile again instead of constructing - 160-181 with
-        //   (type - 11), 186 with 94 followed by setting the byte at
-        //   0x2F2 on the result; port exactly;
         // - TODO: 0x5201C0 (type 45): builds the CProjectile84E9C0 (ctor
         //   0x535F20, like types 119-142) and then overwrites its vtable
         //   with 0x84D838 - a CProjectile84E9C0-derived class whose
