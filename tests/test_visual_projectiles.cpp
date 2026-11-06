@@ -2475,6 +2475,54 @@ TEST_CASE("visual projectiles: the burning-hands stream decodes to its flight", 
     delete pProjectile;
 }
 
+// The flame arrows (DecodeProjectile 0x51EAF0, ctor 0x532720
+// CProjectileSPFLMARR): the SPFLMARR BAM with palette range 0 tinted 0x43
+// and the seven trail colours 0x41 by the ctor. Types 9/14/29/34 swap the
+// animation cell to the mundane AXE/BOLT/DAGGER/DART ammunition and play
+// TRA_10; type 4 keeps the flame cell and plays TRA_24. Types 102/103/188
+// rebind the cell's palette to the projectile's own, recolour range 0 to
+// 0x45/0x44/0x47 and set all seven trail colours to the same value. Every
+// variant ends with the height flag and the empty arrival tail. Decoding
+// draws nothing.
+TEST_CASE("visual projectiles: the flame arrows decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* cell;
+        const char* fire;
+        BYTE nRange0;
+        BYTE nTrail;
+    };
+    const Spec kFlames[] = {
+        { 4, "SPFLMARR", "TRA_24", 0x43, 0x41 },
+        { 9, "AXE", "TRA_10", 0x43, 0x41 },
+        { 14, "BOLT", "TRA_10", 0x43, 0x41 },
+        { 29, "DAGGER", "TRA_10", 0x43, 0x41 },
+        { 34, "DART", "TRA_10", 0x43, 0x41 },
+        { 102, "SPFLMARR", "TRA_10", 0x45, 0x45 },
+        { 103, "SPFLMARR", "TRA_10", 0x44, 0x44 },
+        { 188, "SPFLMARR", "TRA_10", 0x47, 0x47 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kFlames) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSPFLMARR* pFlame = dynamic_cast<CProjectileSPFLMARR*>(pProjectile);
+        REQUIRE(pFlame != nullptr);
+        CHECK(pFlame->m_projectileType == spec.nType - 1);
+        CHECK(pFlame->m_animation->GetResRef() == CResRef(spec.cell));
+        CHECK(pFlame->m_bHasHeight == TRUE);
+        CHECK(pFlame->m_fireSoundRef == spec.fire);
+        CHECK(pFlame->m_arrivalSoundRef == "");
+        CHECK(pFlame->m_palette.m_rangeColors[0] == spec.nRange0);
+        for (int i = 0; i < 7; ++i)
+            CHECK(pFlame->m_trailColorRanges[i] == spec.nTrail);
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

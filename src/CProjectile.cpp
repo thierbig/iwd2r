@@ -118,6 +118,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileExploding* pExploding;
     CProjectileExploding* pPick;
     CProjectileBAM* pBam;
+    CProjectileSPFLMARR* pFlame;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -236,6 +237,86 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_fireSoundRef = "EFF_M20";
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
+        break;
+    case 4:
+        // The plain flame arrow, playing the arrow-launch tail.
+        pBam = new CProjectileSPFLMARR();
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "TRA_24";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 9:
+        // The flame arrow over the throwing-axe cell.
+        pBam = new CProjectileSPFLMARR();
+        pBam->SetVidCell(CResRef("AXE"));
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "TRA_10";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 14:
+        // The flame arrow over the bolt cell.
+        pBam = new CProjectileSPFLMARR();
+        pBam->SetVidCell(CResRef("BOLT"));
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "TRA_10";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 29:
+        // The flame arrow over the dagger cell.
+        pBam = new CProjectileSPFLMARR();
+        pBam->SetVidCell(CResRef("DAGGER"));
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "TRA_10";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 34:
+        // The flame arrow over the dart cell.
+        pBam = new CProjectileSPFLMARR();
+        pBam->SetVidCell(CResRef("DART"));
+        pBam->m_bHasHeight = TRUE;
+        pBam->m_fireSoundRef = "TRA_10";
+        pBam->m_arrivalSoundRef = "";
+        pProjectile = pBam;
+        break;
+    case 102:
+        // The hottest flame-arrow tint: the cell's palette is rebound to
+        // the projectile's own, range 0 recoloured to 0x45 over the ctor's
+        // 0x43, and all seven trail colours follow it.
+        pFlame = new CProjectileSPFLMARR();
+        pFlame->m_animation->SetPalette(pFlame->m_palette);
+        pFlame->m_palette.SetRange(0, 0x45, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        memset(pFlame->m_trailColorRanges, 0x45, sizeof(pFlame->m_trailColorRanges));
+        pFlame->m_bHasHeight = TRUE;
+        pFlame->m_fireSoundRef = "TRA_10";
+        pFlame->m_arrivalSoundRef = "";
+        pProjectile = pFlame;
+        break;
+    case 103:
+        // The mid flame-arrow tint: range 0 and the trail colours to 0x44.
+        pFlame = new CProjectileSPFLMARR();
+        pFlame->m_animation->SetPalette(pFlame->m_palette);
+        pFlame->m_palette.SetRange(0, 0x44, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        memset(pFlame->m_trailColorRanges, 0x44, sizeof(pFlame->m_trailColorRanges));
+        pFlame->m_bHasHeight = TRUE;
+        pFlame->m_fireSoundRef = "TRA_10";
+        pFlame->m_arrivalSoundRef = "";
+        pProjectile = pFlame;
+        break;
+    case 188:
+        // The coolest flame-arrow tint: range 0 and the trail colours to
+        // 0x47.
+        pFlame = new CProjectileSPFLMARR();
+        pFlame->m_animation->SetPalette(pFlame->m_palette);
+        pFlame->m_palette.SetRange(0, 0x47, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        memset(pFlame->m_trailColorRanges, 0x47, sizeof(pFlame->m_trailColorRanges));
+        pFlame->m_bHasHeight = TRUE;
+        pFlame->m_fireSoundRef = "TRA_10";
+        pFlame->m_arrivalSoundRef = "";
+        pProjectile = pFlame;
         break;
     case 68:
     case 69:
