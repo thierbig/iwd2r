@@ -3976,3 +3976,44 @@ TEST_CASE("visual projectiles: the flame jets decode to their flights", "[visual
         delete pProjectile;
     }
 }
+
+TEST_CASE("visual projectiles: the searing-light shots decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        LONG nBounces;
+    };
+    const Spec kShots[] = {
+        { 206, 1 },
+        { 380, 6 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kShots) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile84DE94* pLight = dynamic_cast<CProjectile84DE94*>(pProjectile);
+        REQUIRE(pLight != nullptr);
+        CHECK(pLight->m_projectileType == spec.nType - 1);
+        // The ctor binds "SPLightB" (0x8AD0AC, mixed case — the exe's own
+        // spelling), but this install's CHITIN.KEY indexes no SPLightB in
+        // ANY casing (whole-file brute force), and the exe's FindKey
+        // compares resrefs as two raw dwords (0x78B494-0x78B4A4 —
+        // case-sensitive), so CResHelper::SetResRef stores "" in the
+        // original engine on this data too. Assert the parity outcome; the
+        // intended resref is covered by the ctor-body port and evidence.
+        CHECK(pLight->m_animation->GetResRef() == "");
+        CHECK(pLight->m_bHasHeight == TRUE);
+        CHECK(pLight->m_fireSoundRef == "TRA_09");
+        CHECK(pLight->m_arrivalSoundRef == "");
+        CHECK(pLight->m_nBounces == spec.nBounces);
+        delete pProjectile;
+    }
+    // The ctor's own stamp: a directly built shot starts unbounced (the
+    // exe seeds +0x2A0 with 0xFFFFFFFF; the decoder re-stamps 1 or 6), and
+    // the same keyfile fact above leaves its cell unbound here.
+    CProjectile84DE94 direct;
+    CHECK(direct.m_nBounces == CGameObjectArray::INVALID_INDEX);
+    CHECK(direct.m_animation->GetResRef() == "");
+}

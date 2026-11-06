@@ -127,6 +127,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileLightningBolt* pBolt;
     CProjectileSkullTrap* pSkull;
     CProjectile84DE0C* pJet;
+    CProjectile84DE94* pLight;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -1025,6 +1026,16 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
+    case 380:
+        // The six-rebound searing light (SPLightB) — the same flight as
+        // type 206 with the decoder's bounce count stamped 6.
+        pLight = new CProjectile84DE94();
+        pLight->m_bHasHeight = TRUE;
+        pLight->m_fireSoundRef = "TRA_09";
+        pLight->m_arrivalSoundRef = "";
+        pLight->m_nBounces = 6;
+        pProjectile = pLight;
+        break;
     case 382:
         // The GShoutT cone (the narrow cone).
         pPuff = new CProjectile850DDC("", "GShoutT");
@@ -1605,6 +1616,16 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pExploding->m_strikeRange = 0x50;
         pExploding->m_preCheckRange = 0x50;
         pProjectile = pExploding;
+        break;
+    case 206:
+        // The searing light (SPLightB), single pass — the decoder's only
+        // difference from 380 is the bounce count stamped 1.
+        pLight = new CProjectile84DE94();
+        pLight->m_bHasHeight = TRUE;
+        pLight->m_fireSoundRef = "TRA_09";
+        pLight->m_arrivalSoundRef = "";
+        pLight->m_nBounces = 1;
+        pProjectile = pLight;
         break;
     // The recursing bolt wrappers (six entries in the exe, one body each):
     // every type re-decodes an already-wired bolt as its carrier and most
@@ -2680,7 +2701,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
-        //   TODO: types 206, 380: ctor 0x52FE90 not ported
         //   TODO: type 210: ctor 0x537010 not ported
         //   TODO: type 217: ctor 0x5745E0 not ported
         //   TODO: type 274: ctor 0x574D50 not ported
@@ -3349,6 +3369,13 @@ CProjectile84DE0C::CProjectile84DE0C(const char* szResRef)
     m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
     m_sVisualEffect = "";
     field_182 = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x52FE90
+CProjectile84DE94::CProjectile84DE94()
+    : CProjectileBAM(CResRef("SPLightB"))
+{
+    m_nBounces = CGameObjectArray::INVALID_INDEX;
 }
 
 // 0x531360

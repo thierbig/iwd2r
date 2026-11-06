@@ -219,6 +219,29 @@ public:
     CProjectile84DE0C(const char* szResRef);
 };
 
+// The SPLightB searing-light shot (vtable 0x84DE94): DecodeProjectile's
+// types 206 and 380 — the same flight either as a single pass or with six
+// rebounds, per the bounce count the decoder stamps at +0x2A0. Its Fire
+// (0x530010) spawns a rebounding-bolt child (ctor 0x57D390, type 207) and
+// hands that count over as the child's m_nBounces (+0x2B2). The exe
+// overrides six CProjectileBAM slots — dtor 0x52FED0, AIUpdate 0x52B900,
+// Render 0x52B190, Fire 0x530010, GetField_E6 0x5297D0,
+// UpdateBasedOnTargetPoint 0x52BD20 — none declared here (the
+// IcewindCProjectileScorcher precedent: a declared-but-undefined virtual
+// would become the key function and leave the vtable unemitted), so ours
+// inherits the base virtuals.
+class CProjectile84DE94 : public CProjectileBAM {
+public:
+    // Native exe offset; ours lays out after sizeof(CProjectileBAM) = 0x2A2
+    // under the reduced packing — the same drift as CProjectileExploding's
+    // tail and CProjectile84E030's WORD m_nCount, whose DWORD-at-0x2A0 also
+    // spans the base's field_2A0/field_2A1.
+    /* 02A0 */ LONG m_nBounces;
+    // 0x52FE90 (plain ret — no stack args; the cell is hardcoded in the
+    // ctor body rather than passed by the decoder)
+    CProjectile84DE94();
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {
