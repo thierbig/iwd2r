@@ -2561,6 +2561,68 @@ TEST_CASE("visual projectiles: the flame arrows decode to their flights", "[visu
     }
 }
 
+// The exploding weapon missiles (DecodeProjectile 0x51EAF0, ctor 0x52E230
+// CProjectileExplodingWeapon): the SPFIREBL burst carrier with palette range
+// 0 tinted 0x43 and handed to the cell, mirror bounds 15/11, mirroring on,
+// leaf render param 0x80, 16 directions, doubled speed, all seven trail
+// colours 'A', trail tick 0 and explosion colour 0x43. Types
+// 8/13/18/28/33/57 swap the animation cell to the mundane
+// AXE/BOLT/MAGICSTN/DAGGER/DART/SPEAR ammunition — only the bolt plays a
+// launch sound (TRA_10). Types 104/204 rebind the cell's palette to the
+// projectile's own before recolouring — range 0, the trail colours and the
+// explosion colour to 0x45/0x47 — and play TRA_06. Every variant ends with
+// the height flag and the empty arrival tail. Decoding draws nothing.
+TEST_CASE("visual projectiles: the exploding weapons decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* cell;
+        const char* fire;
+        BYTE nRange0;
+        BYTE nTrail;
+        BYTE nExplode;
+    };
+    const Spec kWeapons[] = {
+        { 8, "AXE", "", 0x43, 0x41, 0x43 },
+        { 13, "BOLT", "TRA_10", 0x43, 0x41, 0x43 },
+        { 18, "MAGICSTN", "", 0x43, 0x41, 0x43 },
+        { 28, "DAGGER", "", 0x43, 0x41, 0x43 },
+        { 33, "DART", "", 0x43, 0x41, 0x43 },
+        { 57, "SPEAR", "", 0x43, 0x41, 0x43 },
+        { 104, "SPFIREBL", "TRA_06", 0x45, 0x45, 0x45 },
+        { 204, "SPFIREBL", "TRA_06", 0x47, 0x47, 0x47 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kWeapons) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileExplodingWeapon* pWeapon = dynamic_cast<CProjectileExplodingWeapon*>(pProjectile);
+        REQUIRE(pWeapon != nullptr);
+        CHECK(pWeapon->m_projectileType == spec.nType - 1);
+        CHECK(pWeapon->m_animation->GetResRef() == CResRef(spec.cell));
+        CHECK(pWeapon->m_bHasHeight == TRUE);
+        CHECK(pWeapon->m_fireSoundRef == spec.fire);
+        CHECK(pWeapon->m_arrivalSoundRef == "");
+        CHECK(pWeapon->m_palette.m_rangeColors[0] == spec.nRange0);
+        for (int i = 0; i < 7; ++i)
+            CHECK(pWeapon->m_trailColorRanges[i] == spec.nTrail);
+        CHECK(pWeapon->m_trailTick == 0);
+        CHECK(pWeapon->m_explodeColorRange == spec.nExplode);
+        CHECK(pWeapon->field_1CA == 0xF);
+        CHECK(pWeapon->field_1CE == 0xB);
+        CHECK(pWeapon->field_1C6 == TRUE);
+        CHECK(pWeapon->field_1D2 == 0x80);
+        CHECK(pWeapon->field_1D8 == 0x10);
+        CHECK(pWeapon->m_childProjectileType == 0x4E);
+        // The doubled speed, pinned against a directly built sibling.
+        CProjectileExplodingWeapon direct;
+        CHECK(pWeapon->m_speed == direct.m_speed);
+        delete pProjectile;
+    }
+}
+
 // The acid blobs (DecodeProjectile 0x51EAF0, ctor 0x532260
 // CProjectileAcidBlob): the ACIDBLOB BAM with palette range 0 recoloured
 // to 73 by the ctor, then the height flag and the two empty sound tails

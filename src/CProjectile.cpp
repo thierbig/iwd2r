@@ -123,6 +123,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileExploding* pPick;
     CProjectileBAM* pBam;
     CProjectileSPFLMARR* pFlame;
+    CProjectileExplodingWeapon* pWeapon;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -185,6 +186,16 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 18:
+        // The exploding sling stone: the burst missile on the stone cell,
+        // no launch sound.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("MAGICSTN"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
+        break;
     case 17:
     case 20:
     case 21:
@@ -233,6 +244,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 57:
+        // The exploding spear.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("SPEAR"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
+        break;
     case 26:
         // The burning-hands stream: the height flag first, then the cell's
         // palette rebound to the projectile's own and range 0 recoloured to
@@ -253,6 +273,16 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
         break;
+    case 8:
+        // The exploding throwing axe: the burst missile on the axe cell,
+        // no launch sound.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("AXE"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
+        break;
     case 9:
         // The flame arrow over the throwing-axe cell.
         pBam = new CProjectileSPFLMARR();
@@ -261,6 +291,16 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_fireSoundRef = "TRA_10";
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
+        break;
+    case 13:
+        // The exploding bolt — the only weapon missile with a launch
+        // sound.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("BOLT"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "TRA_10";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
         break;
     case 14:
         // The flame arrow over the bolt cell.
@@ -271,6 +311,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
         break;
+    case 28:
+        // The exploding thrown dagger.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("DAGGER"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
+        break;
     case 29:
         // The flame arrow over the dagger cell.
         pBam = new CProjectileSPFLMARR();
@@ -279,6 +328,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_fireSoundRef = "TRA_10";
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
+        break;
+    case 33:
+        // The exploding dart.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->SetVidCell(CResRef("DART"));
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
         break;
     case 34:
         // The flame arrow over the dart cell.
@@ -324,6 +382,34 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pFlame->m_fireSoundRef = "TRA_10";
         pFlame->m_arrivalSoundRef = "";
         pProjectile = pFlame;
+        break;
+    case 104:
+        // The hottest weapon tint: like the flame arrows, the cell's palette
+        // is rebound to the projectile's own before recolouring — range 0 to
+        // 0x45 over the ctor's 0x43, all seven trail colours and the
+        // explosion colour following it, with the arrow-launch tail.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->m_animation->SetPalette(pWeapon->m_palette);
+        pWeapon->m_palette.SetRange(0, 0x45, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        memset(pWeapon->m_trailColorRanges, 0x45, sizeof(pWeapon->m_trailColorRanges));
+        pWeapon->m_explodeColorRange = 0x45;
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "TRA_06";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
+        break;
+    case 204:
+        // The coolest weapon tint: range 0, the trail colours and the
+        // explosion colour to 0x47.
+        pWeapon = new CProjectileExplodingWeapon();
+        pWeapon->m_animation->SetPalette(pWeapon->m_palette);
+        pWeapon->m_palette.SetRange(0, 0x47, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        memset(pWeapon->m_trailColorRanges, 0x47, sizeof(pWeapon->m_trailColorRanges));
+        pWeapon->m_explodeColorRange = 0x47;
+        pWeapon->m_bHasHeight = TRUE;
+        pWeapon->m_fireSoundRef = "TRA_06";
+        pWeapon->m_arrivalSoundRef = "";
+        pProjectile = pWeapon;
         break;
     case 108:
         // The acid blob: height flag and empty sound tails.
@@ -2487,7 +2573,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // - types whose constructor is not ported yet:
         //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
-        //   TODO: types 8, 13, 18, 28, 33, 57, 104, 204: ctor 0x52E230 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
         //   TODO: types 96, 100: ctor 0x52F260 not ported
         //   TODO: types 80, 105: ctor 0x52FC20 not ported
@@ -3019,6 +3104,30 @@ CProjectileExploding::CProjectileExploding(CResRef resRef)
     m_bExplodeCell2Active = 0;
     m_bCheckNonSprites = 0;
     m_burstType = 0xFF;
+}
+
+// 0x52E230
+CProjectileExplodingWeapon::CProjectileExplodingWeapon()
+    : CProjectileExploding(CResRef("SPFIREBL"))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1CA = 0xF;
+    field_1CE = 0xB;
+    m_explodeColorRange = 0x43;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = TRUE;
+    field_1D2 = 0x80;
+    field_1D4 = FALSE;
+    field_1D8 = 0x10;
+    m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
+    m_fireSoundRef = "";
+    memset(m_trailColorRanges, 0x41, sizeof(m_trailColorRanges));
+    m_trailTick = 0;
+    // The base ctor already stored 0x4E; the exe stores it again.
+    m_childProjectileType = 0x4E;
 }
 
 // 0x52E940

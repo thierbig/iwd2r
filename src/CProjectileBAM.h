@@ -135,15 +135,26 @@ public:
 // The exploding weapon missile (vtable 0x84DC68): Explode (slot 0x0088) is
 // the fireball burst (CGameObject85BFE8, 0x7105B0) at the missile position —
 // the strike range around, expanding at half the flight speed — coloured by
-// the leaf's own explosion colour range byte. The ctor (0x52E230) is parked
-// from i065 on this class, so only the virtual and the byte it reads are
-// declared.
+// the leaf's own explosion colour range byte. The exe vtable also overrides
+// slots 0x000C (AIUpdate 0x52E4D0, docs/wso/import-parked/52E4D0.json) and
+// +0x98 (0x52EC80, docs/wso/import-parked/52EC80.json); both stay parked, so
+// ours inherits the base virtuals for them and declares only Explode.
 class CProjectileExplodingWeapon : public CProjectileExploding {
 public:
+    // 0x52E230: the SPFIREBL burst carrier on the exploding intermediate,
+    // then the retune — cell sequence 0, palette range 0 recoloured 0x43 off
+    // the master bitmap and handed to the cell, mirror bounds 15/11, the
+    // same 0x43 as the explosion colour, mirroring on with the leaf render
+    // param 0x80 and 16 directions, doubled speed, the empty fire sound, all
+    // seven trail colours 'A' with the trail tick cleared, and child type 78
+    // again (the base ctor already stored it).
+    CProjectileExplodingWeapon();
     /* 0088 */ virtual void Explode();
 
-    // Native exe offset, past the tail of m_explodeCell2; ours lay out after
+    // Native exe offsets, past the tail of m_explodeCell2; ours lay out after
     // the base under the reduced packing.
+    /* 04B2 */ BYTE m_trailColorRanges[7];
+    /* 04B9 */ BYTE m_trailTick;
     /* 04BA */ BYTE m_explodeColorRange;
 };
 
