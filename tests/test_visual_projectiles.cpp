@@ -13,6 +13,7 @@
 #include "CProjectile84DFA4.h"
 #include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
+#include "CProjectile850F9C.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
 #include "CProjectileShaft.h"
@@ -2739,6 +2740,52 @@ TEST_CASE("visual projectiles: the scorcher decodes to its beam", "[visualprojec
     CHECK(pScorcher->m_projectileType == 108);
     CHECK(pScorcher->m_fireSoundRef == "TRA_17");
     delete pProjectile;
+}
+
+// The casting glows (DecodeProjectile 0x51EAF0, ctor 0x57CAC0
+// CProjectile850F9C): one per school, sound "" and delay 0. The loop
+// count is the decoder's third parameter — nUnknown when nonzero, else
+// 0x32 (the exe's test al,al two-arm). The glow BAMs live in CHITIN.KEY,
+// so the ctor's sequence-length check may rewrite m_nLoops; each decode
+// is therefore compared against a direct construction with the same
+// count, pinning the arm rather than the BAM's sequence length.
+TEST_CASE("visual projectiles: the casting glows read the loop count from the caller", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+
+    struct
+    {
+        WORD nType;
+        const char* sSchool;
+    } schools[] = {
+        { 111, "NecroCG" },
+        { 112, "AlterCG" },
+        { 113, "EnchaCG" },
+        { 114, "AbjurCG" },
+        { 115, "IllusCG" },
+        { 116, "ConjuCG" },
+        { 117, "InvocCG" },
+        { 118, "DivinCG" },
+    };
+
+    for (const auto& school : schools) {
+        for (BYTE nUnknown : { BYTE(0), BYTE(7) }) {
+            CAPTURE(school.nType, nUnknown);
+
+            CProjectile* pDecoded = CProjectile::DecodeProjectile(school.nType, world.pCharacter, nUnknown);
+            CProjectile850F9C* pGlow = dynamic_cast<CProjectile850F9C*>(pDecoded);
+            REQUIRE(pGlow != nullptr);
+
+            CProjectile850F9C direct(school.sSchool, "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+
+            CHECK(pGlow->m_projectileType == school.nType - 1);
+            CHECK(pGlow->m_fireSoundRef == direct.m_fireSoundRef);
+            CHECK(pGlow->m_nLoops == direct.m_nLoops);
+            CHECK(pGlow->m_nDelay == direct.m_nDelay);
+
+            delete pDecoded;
+        }
+    }
 }
 
 // The plain area effects (DecodeProjectile 0x51EAF0): nine no-arg area

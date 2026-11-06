@@ -13,6 +13,7 @@
 #include "CProjectile84DFA4.h"
 #include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
+#include "CProjectile850F9C.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
 #include "CProjectileShaft.h"
@@ -604,6 +605,40 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // replaced with TRA_17.
         pProjectile = new IcewindCProjectileScorcher();
         pProjectile->m_fireSoundRef = "TRA_17";
+        break;
+    case 111:
+        // The necromancy casting glow. The loop count is the caller's
+        // nUnknown, or 50 when the caller passed none (the exe's
+        // test al,al two-arm).
+        pProjectile = new CProjectile850F9C("NecroCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 112:
+        // The alteration casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("AlterCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 113:
+        // The enchantment casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("EnchaCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 114:
+        // The abjuration casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("AbjurCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 115:
+        // The illusion casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("IllusCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 116:
+        // The conjuration casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("ConjuCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 117:
+        // The invocation casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("InvocCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        break;
+    case 118:
+        // The divination casting glow; loop count as in 111.
+        pProjectile = new CProjectile850F9C("DivinCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
         break;
     case 68:
     case 69:
