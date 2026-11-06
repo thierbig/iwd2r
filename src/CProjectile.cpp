@@ -576,6 +576,29 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
         break;
+    case 363:
+    case 364:
+        // Symbol of death (363/364 share the jump-table entry 0x52831D).
+        // The vanilla decoder builds and fully dresses a CProjectileArea(300)
+        // here — enemy target, SoHopeX burst on EFF_P50, the copy-from-back
+        // flag — and then drops it on the floor when the symbol object is
+        // allocated (the mov esi,eax overwrites its only pointer). Ported
+        // literally, abandoned dressing included.
+        pArea = new CProjectileArea(300);
+        pArea->TargetEnemy(pSprite);
+        pArea->m_explosion1.m_animation = "SoHopeX";
+        pArea->m_explosion1.m_sound = "EFF_P50";
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pArea = new CProjectileSymbolOfDeath();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
+    case 365:
+        // Symbol of death.
+        pArea = new CProjectileSymbolOfDeath();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
     case 68:
     case 69:
     case 70:
