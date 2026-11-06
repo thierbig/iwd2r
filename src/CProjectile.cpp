@@ -124,6 +124,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileBAM* pBam;
     CProjectileSPFLMARR* pFlame;
     CProjectileExplodingWeapon* pWeapon;
+    CProjectileExplodingFlame* pExplodingFlame;
     CProjectileLightningBolt* pBolt;
     CProjectileSkullTrap* pSkull;
     CProjectile84DE0C* pJet;
@@ -160,6 +161,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_bHasHeight = TRUE;
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 3:
+        // The exploding flame arrow: the flame missile with the axe's
+        // launch sound.
+        pExplodingFlame = new CProjectileExplodingFlame();
+        pExplodingFlame->m_bHasHeight = TRUE;
+        pExplodingFlame->m_fireSoundRef = "TRA_10";
+        pExplodingFlame->m_arrivalSoundRef = "";
+        pProjectile = pExplodingFlame;
         break;
     case 5:
         // The arrow with the third palette range recoloured. The original
@@ -2718,7 +2728,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 3: ctor 0x52E9F0 not ported
         //   TODO: type 210: ctor 0x537010 not ported
         //   TODO: type 217: ctor 0x5745E0 not ported
         //   TODO: type 274: ctor 0x574D50 not ported
@@ -3294,6 +3303,36 @@ void CProjectileExplodingWeapon::Explode()
     memset(colorRangeValues, m_explodeColorRange, sizeof(colorRangeValues));
     new CGameObject85BFE8(0, colorRangeValues, m_pArea, m_pos, m_strikeRange,
         static_cast<BYTE>(m_speed) >> 1, 1, 0);
+}
+
+// 0x52E9F0
+//
+// The flame missile: builds the "SPFLMARR" exploding base, then configures
+// it like its plain sibling CProjectileSPFLMARR — first animation sequence,
+// a two-range palette recolour (0x43/0x39, ranges 0 and 2) from the game
+// master bitmap, an untinted unmirrored 16-direction cell at 3x the base
+// velocity, an empty fire-sound resref, and the default 'A' trail colour
+// ranges.
+CProjectileExplodingFlame::CProjectileExplodingFlame()
+    : CProjectileExploding(CResRef("SPFLMARR"))
+{
+    m_animation->SequenceSet(0);
+
+    m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_palette.SetRange(2, 0x39, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+
+    m_speed = static_cast<SHORT>(m_speed * 3);
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = FALSE;
+    field_1D4 = FALSE;
+    field_1D8 = 0x10;
+    m_fireSoundRef = "";
+    memset(m_trailColorRanges, 0x41, sizeof(m_trailColorRanges));
+    m_trailTick = 0;
+    // The base ctor already stored 0x4E; the exe stores it again.
+    m_childProjectileType = 0x4E;
 }
 
 // 0x52F1C0

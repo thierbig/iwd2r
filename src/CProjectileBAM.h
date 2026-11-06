@@ -159,12 +159,27 @@ public:
 };
 
 // The exploding flame missile (vtable 0x84DCF4): Explode (slot 0x0088) is
-// the same fireball burst with the colour ranges hardwired to 0x43. The ctor
-// (0x52E9F0) is parked from i065 on this class, so only the virtual is
-// declared. It adds no members of its own.
+// the same fireball burst with the colour ranges hardwired to 0x43. The exe
+// vtable also overrides slot 0x000C (AIUpdate 0x52EC80, parked); ours
+// inherits the base virtual there. The trail members are the weapon
+// missile's two, minus its explosion colour byte.
 class CProjectileExplodingFlame : public CProjectileExploding {
 public:
+    // 0x52E9F0: the SPFLMARR burst carrier on the exploding intermediate,
+    // then the retune — cell sequence 0, a two-range palette recolour
+    // (range 0 to 0x43, range 2 to 0x39) off the master bitmap handed to
+    // the cell, the mirror fields cleared with 16 directions, tripled
+    // speed, the empty fire sound, all seven trail colours 'A' with the
+    // trail tick cleared, and child type 78 again (the base ctor already
+    // stored it).
+    CProjectileExplodingFlame();
+
     /* 0088 */ virtual void Explode();
+
+    // Native exe offsets, past the tail of m_explodeCell2; ours lay out after
+    // the base under the reduced packing.
+    /* 04B2 */ BYTE m_trailColorRanges[7];
+    /* 04B9 */ BYTE m_trailTick;
 };
 
 // The skull trap missile (vtable 0x84DD80): Explode (slot 0x0088) is the

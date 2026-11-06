@@ -2623,6 +2623,45 @@ TEST_CASE("visual projectiles: the exploding weapons decode to their flights", "
     }
 }
 
+// The exploding flame arrow (DecodeProjectile 0x51EAF0, ctor 0x52E9F0
+// CProjectileExplodingFlame): the SPFLMARR burst carrier retuned for the
+// flight — animation sequence 0, range 0 recoloured to 0x43 and range 2 to
+// 0x39 from the game master bitmap, sixteen directions with the
+// tint/mirror/shadow switches cleared, the speed tripled, the axe's launch
+// sound TRA_10 over an empty arrival sound, and the default 'A' trail
+// colour ranges. The case body only adds the height flag and the two
+// sounds; the shared tail stamps type 3-1 = 2. SPFLMARR binds normally on
+// this install (keyfile carries the uppercase entry).
+TEST_CASE("visual projectiles: the exploding flame decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(3, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileExplodingFlame* pFlame = dynamic_cast<CProjectileExplodingFlame*>(pProjectile);
+    REQUIRE(pFlame != nullptr);
+    CHECK(pFlame->m_projectileType == 2);
+    CHECK(pFlame->m_animation->GetResRef() == CResRef("SPFLMARR"));
+    CHECK(pFlame->m_bHasHeight == TRUE);
+    CHECK(pFlame->m_fireSoundRef == "TRA_10");
+    CHECK(pFlame->m_arrivalSoundRef == "");
+    CHECK(pFlame->m_palette.m_rangeColors[0] == 0x43);
+    CHECK(pFlame->m_palette.m_rangeColors[2] == 0x39);
+    for (int i = 0; i < 7; ++i)
+        CHECK(pFlame->m_trailColorRanges[i] == 0x41);
+    CHECK(pFlame->m_trailTick == 0);
+    CHECK(pFlame->m_childProjectileType == 0x4E);
+    CHECK(pFlame->field_1D8 == 0x10);
+    CHECK(pFlame->field_1BE == FALSE);
+    CHECK(pFlame->field_1C2 == FALSE);
+    CHECK(pFlame->field_1C6 == FALSE);
+    CHECK(pFlame->field_1D4 == FALSE);
+    // The tripled speed, pinned against a directly built flame.
+    CProjectileExplodingFlame direct;
+    CHECK(pFlame->m_speed == direct.m_speed);
+    delete pProjectile;
+}
+
 // The acid blobs (DecodeProjectile 0x51EAF0, ctor 0x532260
 // CProjectileAcidBlob): the ACIDBLOB BAM with palette range 0 recoloured
 // to 73 by the ctor, then the height flag and the two empty sound tails
