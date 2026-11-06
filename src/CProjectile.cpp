@@ -609,36 +609,37 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 111:
         // The necromancy casting glow. The loop count is the caller's
         // nUnknown, or 50 when the caller passed none (the exe's
-        // test al,al two-arm).
-        pProjectile = new CProjectile850F9C("NecroCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        // test al,al two-arm). The visual effect is the function's own
+        // default-built local, as in the original.
+        pProjectile = new CProjectile850F9C("NecroCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 112:
         // The alteration casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("AlterCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("AlterCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 113:
         // The enchantment casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("EnchaCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("EnchaCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 114:
         // The abjuration casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("AbjurCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("AbjurCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 115:
         // The illusion casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("IllusCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("IllusCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 116:
         // The conjuration casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("ConjuCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("ConjuCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 117:
         // The invocation casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("InvocCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("InvocCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 118:
         // The divination casting glow; loop count as in 111.
-        pProjectile = new CProjectile850F9C("DivinCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, IcewindCVisualEffect());
+        pProjectile = new CProjectile850F9C("DivinCG", "", (nUnknown != 0) ? nUnknown : 0x32, 0, visualEffect);
         break;
     case 68:
     case 69:
