@@ -126,6 +126,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileExplodingWeapon* pWeapon;
     CProjectileLightningBolt* pBolt;
     CProjectileSkullTrap* pSkull;
+    CProjectile84DE0C* pJet;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -803,6 +804,26 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 79:
         pProjectile = new CProjectile84DF1C();
+        break;
+    // The plain flame jet (0x52FC20, CProjectile84DE0C): type 80 as cast,
+    // type 105 the same jet with its palette range widened one entry (0x44
+    // over the ctor's 0x43; the tint order is SetPalette then SetRange,
+    // the reverse of the ctor's).
+    case 80:
+        pJet = new CProjectile84DE0C("SPFIREBL");
+        pJet->m_bHasHeight = TRUE;
+        pJet->m_fireSoundRef = "TRA_06";
+        pJet->m_arrivalSoundRef = "";
+        pProjectile = pJet;
+        break;
+    case 105:
+        pJet = new CProjectile84DE0C("SPFIREBL");
+        pJet->m_animation->SetPalette(pJet->m_palette);
+        pJet->m_palette.SetRange(0, 0x44, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+        pJet->m_bHasHeight = TRUE;
+        pJet->m_fireSoundRef = "TRA_06";
+        pJet->m_arrivalSoundRef = "";
+        pProjectile = pJet;
         break;
     // The follow-up magic-missile barrage (0x534600, CProjectileMAGMISS),
     // one body for types 81 to 91: 1 to 11 shots of type 22 (MAGMISS), and
@@ -2659,7 +2680,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 189: ctor 0x529A90 not ported
         //   TODO: type 352: ctor 0x529CE0 not ported
         //   TODO: type 3: ctor 0x52E9F0 not ported
-        //   TODO: types 80, 105: ctor 0x52FC20 not ported
         //   TODO: types 206, 380: ctor 0x52FE90 not ported
         //   TODO: type 210: ctor 0x537010 not ported
         //   TODO: type 217: ctor 0x5745E0 not ported
@@ -3307,6 +3327,28 @@ void CProjectileSkullTrap::Explode()
             CHUNK_DURATION + 1);
         nChunks--;
     }
+}
+
+// 0x52FC20
+CProjectile84DE0C::CProjectile84DE0C(const char* szResRef)
+    : CProjectileBAM(CResRef(szResRef))
+{
+    m_animation->SequenceSet(0);
+    m_palette.SetRange(0, 0x43, *g_pBaldurChitin->GetObjectGame()->GetMasterBitmap());
+    m_animation->SetPalette(m_palette);
+    field_1CA = 0xF;
+    field_1CE = 0xB;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1C6 = TRUE;
+    field_1D2 = 0x80;
+    field_1D4 = FALSE;
+    field_1D8 = 0x10;
+    m_fireSoundRef = "";
+    m_speed = static_cast<SHORT>(m_speed * 3);
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
 }
 
 // 0x531360

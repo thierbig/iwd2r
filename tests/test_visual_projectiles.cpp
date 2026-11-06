@@ -3921,3 +3921,58 @@ TEST_CASE("visual projectiles: the skull trap and glyph decode to their bursts",
         delete pProjectile;
     }
 }
+
+// The plain flame jets (DecodeProjectile 0x51EAF0, ctor 0x52FC20
+// CProjectile84DE0C): the SPFIREBL carrier with palette range 0 recoloured
+// 0x43 off the master bitmap and handed to the cell, mirror bounds 15/11
+// with mirroring on, the leaf render param 0x80, field_1D4 clear, 16
+// directions and the speed tripled, then the no-callback / no-visual-effect
+// stamps. Type 80 takes the ctor's palette as cast; type 105 rebinds the
+// cell's palette to the projectile's own and widens range 0 one entry to
+// 0x44 (SetPalette before SetRange, the reverse of the ctor's order). Both
+// case bodies end with the height flag, the TRA_06 launch sound and the
+// empty arrival tail. Decoding draws nothing.
+TEST_CASE("visual projectiles: the flame jets decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        BYTE nRange0;
+    };
+    const Spec kJets[] = {
+        { 80, 0x43 },
+        { 105, 0x44 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kJets) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile84DE0C* pJet = dynamic_cast<CProjectile84DE0C*>(pProjectile);
+        REQUIRE(pJet != nullptr);
+        CHECK(pJet->m_projectileType == spec.nType - 1);
+        CHECK(pJet->m_animation->GetResRef() == CResRef("SPFIREBL"));
+        CHECK(pJet->m_bHasHeight == TRUE);
+        CHECK(pJet->m_fireSoundRef == "TRA_06");
+        CHECK(pJet->m_arrivalSoundRef == "");
+        CHECK(pJet->m_palette.m_rangeColors[0] == spec.nRange0);
+        CHECK(pJet->field_1CA == 0xF);
+        CHECK(pJet->field_1CE == 0xB);
+        CHECK(pJet->field_1BE == FALSE);
+        CHECK(pJet->field_1C2 == FALSE);
+        CHECK(pJet->field_1C6 == TRUE);
+        CHECK(pJet->field_1D2 == 0x80);
+        CHECK(pJet->field_1D4 == FALSE);
+        CHECK(pJet->field_1D8 == 0x10);
+        CHECK(pJet->m_callBackProjectile == CGameObjectArray::INVALID_INDEX);
+        CHECK(pJet->field_182 == CGameObjectArray::INVALID_INDEX);
+        CHECK(pJet->m_sVisualEffect == "");
+        // The tripled speed, pinned against the plain type-79 sibling (the
+        // same SPFIREBL base with no speed store) and a directly built one.
+        CProjectile84DF1C plain;
+        CProjectile84DE0C direct("SPFIREBL");
+        CHECK(direct.m_speed == plain.m_speed * 3);
+        CHECK(pJet->m_speed == direct.m_speed);
+        delete pProjectile;
+    }
+}

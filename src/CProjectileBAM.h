@@ -196,6 +196,29 @@ public:
     /* 04B4 */ CString m_explodeSound;
 };
 
+// The plain SPFIREBL flame jet (vtable 0x84DE0C): DecodeProjectile's types
+// 80 and 105 — the jet as cast, and the same jet with its palette range
+// widened one entry (0x44 over the ctor's 0x43). It adds no members of its
+// own: the ctor writes only inherited fields. The exe overrides six
+// CProjectileBAM slots — dtor 0x52FD50, AIUpdate 0x52B900, Render
+// 0x52B190, Fire 0x52C050, GetField_E6 0x5297D0,
+// UpdateBasedOnTargetPoint 0x52BD20 — none of which are declared here:
+// their bodies are not in-tree, and a declared-but-undefined virtual would
+// become the key function and leave the vtable unemitted
+// (IcewindCProjectileScorcher precedent), so ours inherits the base
+// virtuals.
+class CProjectile84DE0C : public CProjectileBAM {
+public:
+    // 0x52FC20 (ret 0x4 — the cell's name arrives as a char* and folds
+    // through a CResRef temp into the base): sequence 0, palette range 0
+    // recoloured 0x43 off the master bitmap and handed to the animation
+    // (SetRange before SetPalette, the reverse of the decoder's tints),
+    // mirror bounds 15/11 with mirroring on, field_1D2 = 0x80, 16
+    // directions, speed times 3, and the no-callback / no-visual-effect
+    // stamps.
+    CProjectile84DE0C(const char* szResRef);
+};
+
 // The invisible projectile an area projectile fires at each target, type 79
 // (vtable 0x84DF1C).
 class CProjectile84DF1C : public CProjectileBAM {
