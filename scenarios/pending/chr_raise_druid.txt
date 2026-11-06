@@ -397,6 +397,237 @@ checkpoint dr_w2_world
 key R
 wait 60
 checkpoint dr_level_check
+# === Task 77 Part B: Flame Strike into the empty single L4 slot, a rest
+# in AR1006, then the export.  Task 59c: a freshly memorized spell reads
+# 0/1 (memorized, not castable) on BOTH engines until a rest, and AR1000
+# forbids resting (flags 0x2 -> "You may not rest at this time.").  The
+# nearest restable neighbour is AR1006 (ARE flags 0x0, no creatures, no
+# doors): AR1000's To1006 travel trigger sits at the south door
+# (263..301 x 1652..1708, walkTo (404,1812)), past the goblin.  The
+# exported RYSDRD7C.CHR must carry Flame Strike CASTABLE (f18=1) -- that
+# is the fixture chr_druid_cast needs.  Spike Stones (SPPR512) stays
+# known-unmemorized for that scenario's mid-fight slot swap. ===
+# Close the record the check opened; the spellbook needs the world screen.
+key ESCAPE
+wait 90
+# Key S opens the spellbook on the sole member (chr_druid_cast geometry:
+# level tabs x=761, +39 per level -> L4 (761,198); known column x=510,
+# row n at 96+42(n-1) -> Flame Strike known #4 (510,222)).  ONE click on
+# the known spell memorizes it into the empty L4 slot at once
+# (CUIControlButtonSpellbookSpell::OnLButtonClick, ids 30-37 ->
+# MemorizeSpell; no popup).  NO slot click follows: a click on the filled
+# slot REMOVES it ((307,94), the race run 20261030-141837 lost), and the
+# 60-frame waits ride out the memorize flash, which drops every click
+# (CScreenSpellbook::OnLButtonDown 0x669700).  The two chargen L1
+# memorizations stay: chr_druid_cast clears its own rows.
+key S
+wait 60
+checkpoint fs_book_open
+shot fs_book_open
+click 761 198
+wait 60
+click 510 222
+wait 60
+checkpoint fs_memorized
+shot fs_memorized
+key ESCAPE
+wait 60
+# The walk to the south door is chr_druid_cast's, verbatim as far as the
+# goblin: every leg and every Reig response is proven on the original,
+# and Reig's dialog MUST be answered -- his stop is the only way west.
+# Centre the view, click-to-move on the deck: the druid walks to
+# 2328,905.
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 314 224
+wait 90
+checkpoint moved
+# Hedron's circle: the dialog opens at entry 34 with 5 responses, and
+# "Nothing today, thanks. Farewell." (5) then "Very well. Farewell." (1)
+# end it.
+origin screen
+move 497 217
+wait 5
+click 497 217
+wait 90
+checkpoint dialog
+origin ui
+click 260 424
+wait 60
+click 220 399
+wait 60
+checkpoint dialog_end
+# Leg 1: centre, walk to below the gangplank (2104,1002).
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 56 312
+wait 150
+# Leg 2: centre, walk along the dock (1784,960).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 80 174
+wait 150
+# Leg 3: centre, walk towards the west; Reig stops the party with his
+# dialog (about 1667,949).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 144 180
+wait 150
+checkpoint reig_dialog
+# Reig's dialog, chr_druid_cast's responses: the farewell line sits
+# below the journal note and the druid's line, so its click is (300,450)
+# -- the solo party renders the journal note line.
+origin ui
+click 290 386
+wait 60
+click 340 399
+wait 60
+click 398 583
+wait 60
+click 398 583
+wait 60
+click 398 583
+wait 60
+click 340 424
+wait 60
+click 300 399
+wait 60
+click 230 386
+wait 60
+click 398 583
+wait 60
+click 250 386
+wait 60
+click 250 386
+wait 60
+click 300 450
+wait 60
+checkpoint reig_farewell
+click 230 386
+wait 90
+checkpoint reig_done
+# Leg 4: centre, walk past Reig and Jon (1352,846).
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 85 113
+wait 150
+# Leg 5: centre, walk to in front of the houses (1032,972).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 80 342
+wait 150
+# Leg 6: centre and walk west on the path south of the houses; the
+# goblin comes into view and the game auto-pauses (Enemy Sighted).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 128 269
+wait 150
+checkpoint leg6
+# Leg 7: the game is paused already.  Centre and give the walk to the
+# north-south path the goblin stands on (505,889).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 160 82
+wait 150
+checkpoint goblin_sighted
+shot goblin_sighted
+# Space ends the pause: the druid walks on and stops at 519,902; the
+# goblin's combat script brings it to 504,882, and its first attack
+# auto-pauses the game (Attacked, 0x2) -- seed 1, as in first_fight.
+key SPACE
+wait 80
+checkpoint engaged
+shot engaged
+wait 120
+checkpoint attacked
+# South to the To1006 door.  Three legs of at most ~290 world units
+# (view = party - (400,300), so screen y 570 is the practical floor),
+# each recentred so drift does not accumulate, each opened by one Space
+# -- the world is paused at attacked, and the goblin's hits re-pause
+# (Attacked) as the druid walks away; the next leg's leading Space clears
+# whichever state a leg ends in.  The waypoints keep ~150 units west of
+# Jorun (641,1461): an unanswered NPC stop froze the sorcerer run, and
+# his dialog has no proven responses.  Leg 1: from (519,902) to about
+# (500,1170) -- screen (380,570) with the view at (119,602).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+key SPACE
+wait 30
+click 380 570
+wait 150
+checkpoint south1
+# Leg 2: from ~(500,1170) to about (450,1440), still west of Jorun --
+# screen (350,570).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+key SPACE
+wait 30
+click 350 570
+wait 150
+checkpoint south2
+# Leg 3: from ~(450,1440) through the door gap into AR1006.  The click
+# (355,590) is world ~(404,1732) -- ground SOUTH of the wall, so the
+# pather must funnel through the door gap (263..301 x 1652..1708) and
+# cross To1006's trigger; the walkTo (404,1812) the trigger itself
+# declares is the same approach line.  The wait covers the walk, the
+# travel and AR1006's load.  CHECK in traveled: the party must read
+# AR1006 coordinates (FR1000 entry, near the return trigger at
+# 46..177 x 292..496); a party still at y < 1650 means the door was
+# closed -- attempt 2 clicks it open.
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+key SPACE
+wait 30
+click 355 590
+wait 250
+key SPACE
+wait 250
+checkpoint traveled
+shot traveled
+# Rest: Z (keymap rest -> CScreenWorld OnRestButtonClick 0x6984F0 ->
+# RestParty(1,0) -> ACTION 96).  AR1006 allows it; the rest turns the
+# fresh L4 memorization 0/1 -> 1/1 and heals the goblin's hits.  CHECK in
+# rested: hp back to full is the visible half; the castable half is the
+# exported file's f18, read after the run.
+key Z
+wait 900
+checkpoint rested
+shot rested
+# Record again (the export needs the record sheet; it opens anywhere,
+# AR1006 included) and export as before.
+key R
+wait 60
 # Export from the record: Export (314,373) -> popup 13.  The name edit
 # (397,283) PRE-FILLS with the character's name (launch 4 typed after the
 # fill and still exported RYSDRD7, collision-renamed); clear it (8x BACK
