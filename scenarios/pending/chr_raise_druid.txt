@@ -661,6 +661,14 @@ click 467 465
 wait 90
 checkpoint exported
 shot exported
+# Task 77: the oracle copy's Characters folder already holds RYSDRD7C.CHR
+# (task 49's own export), so Done lands on the "Overwrite existing
+# character?" prompt (popup 10) exactly as task 53's sorcerer export did:
+# Overwrite (click 329 291, src/CScreenCharacter.cpp:7335/7374) writes the
+# live rested-AR1006 marshal over the file.  Without this click the export
+# stalls unanswered and the fixture stays stale.
+click 329 291
+wait 60
 key ESCAPE
 wait 60
 checkpoint world_end
