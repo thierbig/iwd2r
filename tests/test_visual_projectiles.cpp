@@ -2304,6 +2304,29 @@ TEST_CASE("visual projectiles: the arrows decode to their flights", "[visualproj
     }
 }
 
+// The throwing axes (DecodeProjectile 0x51EAF0, ctor 0x531BE0
+// CProjectileAxe): the AXE BAM, the height flag and the two empty sound
+// tails from the case body. Decoding draws nothing.
+TEST_CASE("visual projectiles: the throwing axes decode to their flights", "[visualprojectile][data]")
+{
+    const WORD kTypes[] = { 7, 10, 11 };
+    WORLD_OR_SKIP(world);
+    for (WORD nType : kTypes) {
+        INFO("type " << nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileAxe* pAxe = dynamic_cast<CProjectileAxe*>(pProjectile);
+        REQUIRE(pAxe != nullptr);
+        CHECK(pAxe->m_projectileType == nType - 1);
+        CHECK(pAxe->m_animation->GetResRef() == CResRef("AXE"));
+        CHECK(pAxe->m_bHasHeight == TRUE);
+        CHECK(pAxe->m_fireSoundRef == "");
+        CHECK(pAxe->m_arrivalSoundRef == "");
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

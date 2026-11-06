@@ -159,6 +159,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pBam->m_arrivalSoundRef = "";
         pProjectile = pBam;
         break;
+    case 7:
+    case 10:
+    case 11:
+        // The throwing axe: height flag and empty sound tails.
+        pProjectile = new CProjectileAxe();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
     case 68:
     case 69:
     case 70:
