@@ -516,6 +516,59 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_explosion1.m_sound = "PRTL_CL";
         pProjectile = pArea;
         break;
+    case 209:
+        // The rage burst area.
+        pArea = new CProjectileArea8504BC(150);
+        pArea->m_explosion1.m_animation = "MRageX";
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pProjectile = pArea;
+        break;
+    case 308:
+        // The slow pulse area.
+        pArea = new CProjectileArea8504BC(70);
+        pArea->m_explosion3.m_sound = "EFF_P101";
+        pArea->m_nTriggerInterval = 5;
+        pArea->m_nTriggerCountdown = 0;
+        pArea->m_nHitModulus = 0x14;
+        pArea->m_nDuration = 0x12C;
+        pProjectile = pArea;
+        break;
+    case 311:
+        // The fast pulse area.
+        pArea = new CProjectileArea8504BC(70);
+        pArea->m_nTriggerInterval = 5;
+        pArea->m_nTriggerCountdown = 0;
+        pArea->m_nHitModulus = 0x14;
+        pArea->m_explosion3.m_sound = "EFF_P100";
+        pArea->m_nDuration = 0xC8;
+        pProjectile = pArea;
+        break;
+    case 335:
+        // The fire-burst area.
+        pArea = new CProjectileArea8504BC(250);
+        pArea->m_explosion1.m_animation = "FirebaX";
+        pArea->m_explosion1.m_sound = "RNG_M03";
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pArea->m_explosion2.m_animation = "FirebaR";
+        pArea->m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pArea->m_explosion2.field_2C = TRUE;
+        pArea->m_explosion2.field_2E = 0x14;
+        pArea->m_explosion3.m_animation = "FirebaA";
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pArea->m_explosion3.field_34 = TRUE;
+        pArea->m_explosion3.field_35 = TRUE;
+        pArea->m_explosion3.field_36 = TRUE;
+        pArea->m_nTriggerInterval = 0x2710;
+        pArea->m_nTriggerCountdown = 0;
+        pArea->m_nHitModulus = 0xA;
+        pArea->m_nDuration = 0x2D;
+        pProjectile = pArea;
+        break;
+    case 369:
+        // The plain pulse area.
+        pArea = new CProjectileArea8504BC(70);
+        pProjectile = pArea;
+        break;
     case 68:
     case 69:
     case 70:
