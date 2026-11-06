@@ -2430,6 +2430,29 @@ TEST_CASE("visual projectiles: the darts decode to their flights", "[visualproje
     }
 }
 
+// The spears (DecodeProjectile 0x51EAF0, ctor 0x531DF0 CProjectileSpear):
+// the SPEAR BAM, the height flag and the two empty sound tails from the
+// case body. Decoding draws nothing.
+TEST_CASE("visual projectiles: the spears decode to their flights", "[visualprojectile][data]")
+{
+    const WORD kTypes[] = { 56, 59, 60 };
+    WORLD_OR_SKIP(world);
+    for (WORD nType : kTypes) {
+        INFO("type " << nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSpear* pSpear = dynamic_cast<CProjectileSpear*>(pProjectile);
+        REQUIRE(pSpear != nullptr);
+        CHECK(pSpear->m_projectileType == nType - 1);
+        CHECK(pSpear->m_animation->GetResRef() == CResRef("SPEAR"));
+        CHECK(pSpear->m_bHasHeight == TRUE);
+        CHECK(pSpear->m_fireSoundRef == "");
+        CHECK(pSpear->m_arrivalSoundRef == "");
+        delete pProjectile;
+    }
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike
