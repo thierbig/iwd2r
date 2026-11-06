@@ -562,38 +562,93 @@ checkpoint engaged
 shot engaged
 wait 120
 checkpoint attacked
-# South through Door6 into AR1006.  Attempt 3 rewrite.  Attempt 2
-# (click, then a tight 5x30 Space burst) never moved ours' party a
-# pixel (runs/20261105-222421: (568,906) at south1..rested, action 0,
-# the log full of "Auto-Paused: Attacked") -- a world click that lands
-# while the Attacked auto-pause holds never became a walk on ours, and
-# the burst after it just toggled parity with nothing queued.  On the
-# original a walk order survives pauses (the fight walk above ran
-# through the same storm), so click-first still works there; what it
-# needs is presses SPREAD through the walk so each Attacked re-freeze
-# is released soon, and an ODD count so a storm-free leg ends
-# unpaused.  Each walk stays <=~210 px: screen clicks stay y <= 510
-# (y > 512 is the command bar).  NO clicks after the Door6 crossing:
-# AR1006's entry is (154,233) and the To1000 return trigger (46..177 x
-# 292..494) is exactly where a screen-centred click retargets from
-# there -- a blind rescue click would walk the party straight back to
-# AR1000.  Waypoints stay well west of Jorun (641,1461); the only
-# actors near x~300 south of y~1400 are dead goblins, and the nearest
-# live ones sit >1800, ~445 from Door6.  Per-leg world delta = click -
-# (400,300) after recentering.
+# South through Door6 into AR1006.  Attempt 4 rewrite.  Two findings
+# close attempt 3 (runs/20261105-230243: the party sat at (568,906)
+# through south1..south3 on the ORIGINAL too -- the freeze was never an
+# ours/original divergence):
+# (1) HUD: attempt 3's clicks at screen y=510 are UI clicks.  The
+#     stone command bar starts at screen y~435 (screenshot proof), so
+#     CUIManager consumed every one and CGameArea never saw a
+#     button-down.  World clicks below stay y <= 372.
+# (2) Terrain, corrected from the engine itself: CGameObject::
+#     DEFAULT_TERRAIN_TABLE (src/CGameObject.cpp:96) over the 16x12
+#     grid of CPathSearch makes idx 0/8/10/12/13/14 impassable and
+#     1..7/9/11/15 passable -- the old walkable set {8,11} was
+#     backwards.  On the corrected map the route from (568,906) is the
+#     west corridor: SW to (232,1158), south along x~184..232, then
+#     into the Door6 pocket from the SOUTH (its north/west mouth cells
+#     are impassable; entering at y~1690 was never possible).  Every
+#     leg target below is a PASS cell, checked against AR1000SR.BMP.
+# Pause semantics, engine-read: CGameArea::OnActionButtonClickGround ->
+# CAIGroup::GroupSetTarget has NO m_bPaused gate, so a click during an
+# Attacked auto-pause still queues the walk; Space (CScreenWorld
+# 2477/2512) is a strict toggle.  A walking party breaks melee (the
+# chaser must stop to swing), so the storm is front-loaded: presses
+# only on the first legs, then clean walks (the proven pre-fight
+# shape).  Rest and export need no Space at all: OnRestButtonClick has
+# no pause gate and the export is pure UI.  NO clicks after the Door6
+# crossing: AR1006's entry is (154,233) and the To1000 return trigger
+# (46..177 x 292..494) is exactly where a screen-centred click
+# retargets from there.  Waypoints stay well west of Jorun (641,1461);
+# the only actors near the corridor are dead goblins.  Per-leg world
+# delta = click - (400,300) after recentering, so a party short of one
+# leg's target still walks on -- the clicks chain.
 # Leg 0: the Attacked pause from the fight still holds here -- one
-# Space releases it so leg 1's click lands on a running world (later
-# legs cannot do this: their parity is unknowable mid-storm, and the
-# original queues a paused click anyway).
+# Space releases it so leg 1's walk starts at once (the fight walk at
+# leg 7 above used exactly this).
 key SPACE
 wait 10
-# Leg 1 (diagonal): from (519,902), click (290,510) = world (409,1112).
+# Leg 1 (diagonal SW): from (568,906), click (328,372) = world
+# (496,978).  No presses: the goblin is mid-swing, its hit lands a
+# round out, in leg 2's window.
 origin ui
 click 528 460
 click 528 460
 wait 10
 origin screen
-click 290 510
+click 328 372
+wait 10
+wait 240
+# Legs 2-4 (diagonal SW to the corridor mouth, spread presses: these
+# legs eat the chaser's last hits -- each press releases an Attacked
+# re-freeze, and a released leg walks away from the swing).
+# Leg 2: from (496,978), click (328,324) = world (424,1002).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 328 324
+wait 10
+key SPACE
+wait 40
+key SPACE
+wait 40
+key SPACE
+wait 40
+wait 150
+# Leg 3: from (424,1002), click (336,372) = world (360,1074).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 336 372
+wait 10
+key SPACE
+wait 40
+key SPACE
+wait 40
+key SPACE
+wait 40
+wait 150
+# Leg 4: from (360,1074), click (336,324) = world (296,1098).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 336 324
 wait 10
 key SPACE
 wait 40
@@ -603,69 +658,159 @@ key SPACE
 wait 40
 wait 150
 checkpoint south1
-# Leg 2 (diagonal): from (409,1112), click (290,510) = world (299,1322).
-# A party short of leg 1's point still walks south -- the clicks chain.
+# Legs 5-18 (corridor south, clean walks, no presses): SW into the
+# corridor, down x~184..232, past the bend at y~1550 (the bend's
+# (185..190,1560..1575) cells are impassable -- the targets hop it at
+# x=200), then SE into the Door6 pocket from the south.  A party that
+# has been walking for ~15 s cannot be hit.
+# Leg 5: from (296,1098), click (336,360) = world (232,1158).
 origin ui
 click 528 460
 click 528 460
 wait 10
 origin screen
-click 290 510
+click 336 360
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-wait 150
+wait 200
+# Leg 6: from (232,1158), click (384,366) = world (216,1224).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 384 366
+wait 10
+wait 200
+# Leg 7: from (216,1224), click (392,340) = world (208,1264).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 392 340
+wait 10
+wait 200
+# Leg 8: from (208,1264), click (392,338) = world (200,1302).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 392 338
+wait 10
+wait 200
 checkpoint south2
-# Leg 3 (vertical): from (299,1322), click (400,510) = world (299,1532).
+# Leg 9: from (200,1302), click (392,346) = world (192,1348).
 origin ui
 click 528 460
 click 528 460
 wait 10
 origin screen
-click 400 510
+click 392 346
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-wait 150
+wait 200
+# Leg 10: from (192,1348), click (392,350) = world (184,1398).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 392 350
+wait 10
+wait 200
+# Leg 11: from (184,1398), click (400,372) = world (184,1470).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 400 372
+wait 10
+wait 200
+# Leg 12: from (184,1470), click (400,324) = world (184,1494).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 400 324
+wait 10
+wait 200
+# Leg 13: from (184,1494), click (400,354) = world (184,1548).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 400 354
+wait 10
+wait 200
+# Leg 14 (the bend): from (184,1548), click (416,330) = world
+# (200,1578) -- straight over the blocked bend cells; only the target
+# cell must be passable, the engine's A* hops the corner.
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 416 330
+wait 10
+wait 200
 checkpoint south3
-# Leg 4 (vertical, the crossing): from (299,1532), click (400,510) =
-# world (299,1742).  The walk passes through Door6's closed box
-# (259..306 x 1649..1713 at x=299): walking into the box opens the
-# door and fires the To1006 travel, so the walk never reaches its
-# target.  The longest walk under the heaviest storm (the chaser keeps
-# hitting): seven spread presses, then a wait covering the walk, the
-# travel and AR1006's load.  CHECK in traveled: the party must read
-# AR1006 coordinates (FR1000 entry, (154,233) facing 8, near the
-# return trigger at 46..177 x 292..494); a party still at y < 1650
-# means the door stayed closed.
+# Leg 15: from (200,1578), click (400,348) = world (200,1626).
 origin ui
 click 528 460
 click 528 460
 wait 10
 origin screen
-click 400 510
+click 400 348
 wait 10
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
-wait 40
-key SPACE
+wait 200
+# Leg 16: from (200,1626), click (416,372) = world (216,1698).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 416 372
+wait 10
+wait 200
+# Leg 17: from (216,1698), click (416,324) = world (232,1722).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 416 324
+wait 10
+wait 200
+# Leg 18: from (232,1722), click (432,300) = world (264,1722) -- the
+# pocket floor, in front of Door6's box (259..306 x 1649..1713).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 432 300
+wait 10
+wait 200
+checkpoint south4
+shot south4
+# Leg 19 (the crossing): from (264,1722), click (416,268) = world
+# (280,1690), inside Door6's box.  The walk enters the box at
+# ~(259,1711), opens the door and fires the To1006 travel, so the walk
+# never reaches its target.  The wait covers the walk, the travel and
+# AR1006's load.  CHECK in traveled: the party must read AR1006
+# coordinates (FR1000 entry, (154,233) facing 8, near the return
+# trigger at 46..177 x 292..494); a party still at y < 1650 means the
+# door stayed closed.
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 416 268
+wait 10
 wait 600
 checkpoint traveled
 shot traveled
