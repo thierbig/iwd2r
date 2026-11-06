@@ -906,12 +906,12 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     // exploding ctor on the "MAGMISS" cell, then only tweaks what it needs.
     // The child re-stores of 0x4E in 94/158/159/205 and the empty-string
     // sound stores in 93 re-write what the ctor already wrote — ported
-    // exactly. Types 158 and 159 narrow the exploding target type: if the
-    // sprite's EA is at most EA_GOODCUTOFF, the target EA becomes
-    // EA_GOODCUTOFF (158) / EA_NOTGOOD (159) — note both guards read the
-    // GOODCUTOFF global 0x847C3B (30); only the stored value differs (159
-    // reads 0x847C3D, 31). A NULL sprite skips the pick (the ctor's
-    // ANYONE target type stays).
+    // exactly. Types 158 and 159 narrow the exploding target type by the
+    // caster's EA against the GOODCUTOFF global 0x847C3B (30): both arms
+    // of the branch store one — 158 picks EA_GOODCUTOFF at-or-below and
+    // EA_NOTGOOD above (159 the reverse, its other arm reading 0x847C3D,
+    // 31). A NULL sprite skips the pick (the ctor's ANYONE target type
+    // stays).
     case 93:
         // Child 22 — the only type here whose field_1DE stays TRUE.
         pExploding = new CProjectileExploding(CResRef("MAGMISS"));
@@ -931,25 +931,30 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pExploding->m_childProjectileType = 0x4E;
         pExploding->field_1DE = FALSE;
         if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
-                pExploding->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
             }
+            pExploding->m_targetType.Set(type);
         }
         pProjectile = pExploding;
         break;
     case 159:
-        // The guard still reads EA_GOODCUTOFF; only the stored EA differs.
+        // The guard still reads EA_GOODCUTOFF; the arms are 159's reverse
+        // of 158's: NOTGOOD at-or-below, GOODCUTOFF above.
         pExploding = new CProjectileExploding(CResRef("MAGMISS"));
         pExploding->m_childProjectileType = 0x4E;
         pExploding->field_1DE = FALSE;
         if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
-                pExploding->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
             }
+            pExploding->m_targetType.Set(type);
         }
         pProjectile = pExploding;
         break;
@@ -964,13 +969,21 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     // The recursing bolt wrappers (six entries in the exe, one body each):
     // every type re-decodes an already-wired bolt as its carrier and most
-    // then retarget it — the same NULL-checked pick as 158/159 (the guard
-    // always reads the GOODCUTOFF global 0x847C3B; only the stored EA
-    // differs), applied to the RESULT's exploding target type (+0x2B4).
-    // 160-168 and 169-177 offset their own type (-11 / -20, both landing
-    // in the sparkle bursts 149-157); 178/180 re-decode the fixed bolt
-    // 182, 179/181 the bolt 183; 186 re-decodes 94 with no pick but sets
-    // m_bCheckNonSprites (+0x2F2, an int) on the result.
+    // then retarget it — the same two-armed pick as 158/159 (the guard
+    // always reads the GOODCUTOFF global 0x847C3B; both arms store one,
+    // only the stored EA differs), applied to the RESULT's exploding
+    // target type (+0x2B4). 160-168 and 169-177 offset their own type
+    // (-11 / -20, both landing in the sparkle bursts 149-157); 178/180
+    // re-decode the fixed bolt 182, 179/181 the bolt 183; 186 re-decodes
+    // 94 with no pick but sets m_bCheckNonSprites (+0x2F2, an int) on the
+    // result.
+    //
+    // NOTE: the original writes r+0x2B4 and r+0x2F2 with no type check and
+    // no NULL check on the decoded result — every carrier these re-decode
+    // (149-157 and 182/183 = CProjectileSparkleExplosion, 0x5297B0; 94 =
+    // CProjectileExploding, 0x52CCE0) IS-A CProjectileExploding, so the
+    // downcast here is static. The pSprite NULL check stays (the original
+    // tests the sprite before reading its EA).
     case 160:
     case 161:
     case 162:
@@ -981,13 +994,15 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 167:
     case 168:
         pProjectile = DecodeProjectile(nProjectileType - 11, pSprite, 0);
-        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
-        if (pSprite != NULL && pPick != NULL) {
+        pPick = static_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
-                pPick->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
             }
+            pPick->m_targetType.Set(type);
         }
         break;
     case 169:
@@ -1000,48 +1015,55 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 176:
     case 177:
         pProjectile = DecodeProjectile(nProjectileType - 20, pSprite, 0);
-        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
-        if (pSprite != NULL && pPick != NULL) {
+        pPick = static_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
-                pPick->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
             }
+            pPick->m_targetType.Set(type);
         }
         break;
     case 178:
     case 179:
-        // Entries 0x524260/0x524342: fixed bolts 182/183, NOTGOOD pick.
+        // Entries 0x524260/0x524342: fixed bolts 182/183, NOTGOOD below /
+        // GOODCUTOFF above.
         pProjectile = DecodeProjectile(nProjectileType == 178 ? 182 : 183, pSprite, 0);
-        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
-        if (pSprite != NULL && pPick != NULL) {
+        pPick = static_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
-                pPick->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
             }
+            pPick->m_targetType.Set(type);
         }
         break;
     case 180:
     case 181:
-        // Entries 0x524424/0x524506: fixed bolts 182/183, GOODCUTOFF pick.
+        // Entries 0x524424/0x524506: fixed bolts 182/183, GOODCUTOFF below /
+        // NOTGOOD above.
         pProjectile = DecodeProjectile(nProjectileType == 180 ? 182 : 183, pSprite, 0);
-        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
-        if (pSprite != NULL && pPick != NULL) {
+        pPick = static_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL) {
+            CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
             if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
-                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
                 type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
-                pPick->m_targetType.Set(type);
+            } else {
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
             }
+            pPick->m_targetType.Set(type);
         }
         break;
     case 186:
-        // Entry 0x5245E8: re-decode 94, then set m_bCheckNonSprites only.
+        // Entry 0x5245E8: re-decode 94, then set m_bCheckNonSprites only
+        // (the +0x2F2 write above — no type or NULL check in the original).
         pProjectile = DecodeProjectile(94, pSprite, 0);
-        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
-        if (pPick != NULL) {
-            pPick->m_bCheckNonSprites = 1;
-        }
+        pPick = static_cast<CProjectileExploding*>(pProjectile);
+        pPick->m_bCheckNonSprites = 1;
         break;
     case 95:
         // Stinking Cloud.
@@ -3336,7 +3358,8 @@ void IcewindCProjectileScorcher::DeliverEffects()
 
 // 0x57C510
 IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::set<LONG>& struckTargets)
-    : CProjectileSingleTarget(CResRef("CLightT")), m_struckTargets(struckTargets)
+    : CProjectileSingleTarget(CResRef("CLightT"))
+    , m_struckTargets(struckTargets)
 {
     m_animation->SequenceSet(0);
     field_1D8 = 16;

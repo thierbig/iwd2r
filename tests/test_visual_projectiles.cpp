@@ -2344,10 +2344,10 @@ TEST_CASE("visual projectiles: the sparkle bursts decode to their children", "[v
 // ctor's field_1DE TRUE (the only type here that flies); 94, 158, 159 and
 // 205 ground it (field_1DE FALSE) and re-store the ctor's child 78; 205
 // alone tightens the strike and pre-check ranges from 0x100 to 0x50. 158
-// and 159 also narrow the anyone target type: a sprite whose EA is at most
-// EA_GOODCUTOFF retargets the burst at EA_GOODCUTOFF (158) / EA_NOTGOOD
-// (159) — both guards read the GOODCUTOFF global, only the stored EA
-// differs. Decoding draws nothing.
+// and 159 also narrow the anyone target type by the caster's EA against
+// the GOODCUTOFF global, both arms storing one: at-or-below picks
+// EA_GOODCUTOFF (158) / EA_NOTGOOD (159), above it the other way round.
+// Decoding draws nothing.
 TEST_CASE("visual projectiles: the bare exploding missiles decode to their tweaks", "[visualprojectile][data]")
 {
     struct Spec {
@@ -2403,9 +2403,10 @@ TEST_CASE("visual projectiles: the bare exploding missiles decode to their tweak
 // 0x524342, 0x524424, 0x524506) or the exploding missile 94 (186, 0x5245E8)
 // — and the common exit (0x528E1C) then re-stamps the carrier with the
 // wrapper's own type minus one. 160-181 retarget the carrier exactly like
-// 158/159: the guard always reads the GOODCUTOFF global, only the stored EA
-// differs — GOODCUTOFF for 160-168, 180 and 181, NOTGOOD for 169-177, 178
-// and 179. 186 picks no target but flips the carrier's m_bCheckNonSprites.
+// 158/159: the guard always reads the GOODCUTOFF global, and both arms
+// store one — GOODCUTOFF at-or-below for 160-168, 180 and 181 (NOTGOOD
+// above), NOTGOOD at-or-below for 169-177, 178 and 179 (GOODCUTOFF above).
+// 186 picks no target but flips the carrier's m_bCheckNonSprites.
 // Decoding draws nothing.
 TEST_CASE("visual projectiles: the recursing bolt wrappers decode via their carrier", "[visualprojectile][data]")
 {
@@ -2481,6 +2482,44 @@ TEST_CASE("visual projectiles: the recursing bolt wrappers decode via their carr
         if (!spec.bPick) {
             CHECK(pMissile->m_targetType.m_nEnemyAlly == CAIObjectType::ANYONE.m_nEnemyAlly);
         }
+        delete pProjectile;
+    }
+}
+
+// The EA cutoff picks (DecodeProjectile 0x51EAF0, entries 0x523E42-0x5245E8)
+// have two storing arms: the branch on the caster's EA against the
+// GOODCUTOFF global never skips the pick, a hostile caster just retargets
+// the other way. A caster held above the cutoff (EA_EVILCUTOFF) gets the
+// else arm: the other EA for 158 and the 160-168/180-181 bodies, back to
+// GOODCUTOFF for the 169-177 body. The sprite's EA is flipped only around
+// the decode; the world is a per-process singleton.
+TEST_CASE("visual projectiles: a caster above the cutoff gets the other target EA", "[visualprojectile][data]")
+{
+    static_assert(CAIOBJECTTYPE_EA_EVILCUTOFF > CAIOBJECTTYPE_EA_GOODCUTOFF,
+        "the hostile caster must sit above the cutoff");
+
+    struct Spec {
+        WORD nType;
+        BYTE nElseEA;
+    };
+    const Spec kElsePicks[] = {
+        { 158, CAIObjectType::EA_NOTGOOD },
+        { 160, CAIObjectType::EA_NOTGOOD },
+        { 169, CAIObjectType::EA_GOODCUTOFF },
+        { 180, CAIObjectType::EA_NOTGOOD },
+    };
+    WORLD_OR_SKIP(world);
+    const BYTE nSavedEA = world.pCharacter->m_typeAI.m_nEnemyAlly;
+    for (const Spec& spec : kElsePicks) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        world.pCharacter->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_EVILCUTOFF;
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        world.pCharacter->m_typeAI.m_nEnemyAlly = nSavedEA;
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileExploding* pMissile = dynamic_cast<CProjectileExploding*>(pProjectile);
+        REQUIRE(pMissile != nullptr);
+        CHECK(pMissile->m_targetType.m_nEnemyAlly == spec.nElseEA);
         delete pProjectile;
     }
 }
