@@ -2386,6 +2386,96 @@ TEST_CASE("visual projectiles: the bare exploding missiles decode to their tweak
     }
 }
 
+// The recursing bolt wrappers (DecodeProjectile 0x51EAF0, six entries
+// 0x524092-0x5245E8, no ctor of their own): each re-decodes an already
+// registered bolt as its carrier — its own type minus 11 (160-168, entry
+// 0x524092) or minus 20 (169-177, 0x524179), both landing in the sparkle
+// bursts 149-157, the fixed bursts 182/183 (178-181, entries 0x524260,
+// 0x524342, 0x524424, 0x524506) or the exploding missile 94 (186, 0x5245E8)
+// — and the common exit (0x528E1C) then re-stamps the carrier with the
+// wrapper's own type minus one. 160-181 retarget the carrier exactly like
+// 158/159: the guard always reads the GOODCUTOFF global, only the stored EA
+// differs — GOODCUTOFF for 160-168, 180 and 181, NOTGOOD for 169-177, 178
+// and 179. 186 picks no target but flips the carrier's m_bCheckNonSprites.
+// Decoding draws nothing.
+TEST_CASE("visual projectiles: the recursing bolt wrappers decode via their carrier", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        WORD nInner;
+        SHORT nChild;
+        bool bPick;
+        BYTE nTargetEA;
+    };
+    const Spec kWrappers[] = {
+        {160, 149, 0x2E, true, CAIObjectType::EA_GOODCUTOFF},
+        {161, 150, 0x2F, true, CAIObjectType::EA_GOODCUTOFF},
+        {162, 151, 0x30, true, CAIObjectType::EA_GOODCUTOFF},
+        {163, 152, 0x31, true, CAIObjectType::EA_GOODCUTOFF},
+        {164, 153, 0x32, true, CAIObjectType::EA_GOODCUTOFF},
+        {165, 154, 0x33, true, CAIObjectType::EA_GOODCUTOFF},
+        {166, 155, 0x34, true, CAIObjectType::EA_GOODCUTOFF},
+        {167, 156, 0x35, true, CAIObjectType::EA_GOODCUTOFF},
+        {168, 157, 0x36, true, CAIObjectType::EA_GOODCUTOFF},
+        {169, 149, 0x2E, true, CAIObjectType::EA_NOTGOOD},
+        {170, 150, 0x2F, true, CAIObjectType::EA_NOTGOOD},
+        {171, 151, 0x30, true, CAIObjectType::EA_NOTGOOD},
+        {172, 152, 0x31, true, CAIObjectType::EA_NOTGOOD},
+        {173, 153, 0x32, true, CAIObjectType::EA_NOTGOOD},
+        {174, 154, 0x33, true, CAIObjectType::EA_NOTGOOD},
+        {175, 155, 0x34, true, CAIObjectType::EA_NOTGOOD},
+        {176, 156, 0x35, true, CAIObjectType::EA_NOTGOOD},
+        {177, 157, 0x36, true, CAIObjectType::EA_NOTGOOD},
+        {178, 182, 0x36, true, CAIObjectType::EA_NOTGOOD},
+        {179, 183, 0xB8, true, CAIObjectType::EA_NOTGOOD},
+        {180, 182, 0x36, true, CAIObjectType::EA_GOODCUTOFF},
+        {181, 183, 0xB8, true, CAIObjectType::EA_GOODCUTOFF},
+        {186, 94, 0x4E, false, 0},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kWrappers) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileExploding* pMissile = dynamic_cast<CProjectileExploding*>(pProjectile);
+        REQUIRE(pMissile != nullptr);
+        // The common exit re-stamps the carrier with the wrapper's type.
+        CHECK(pMissile->m_projectileType == spec.nType - 1);
+        // The right inner decode ran: its own child survived the wrapper.
+        CHECK(pMissile->m_childProjectileType == spec.nChild);
+        CHECK(pMissile->m_speed == 20);
+        if (spec.nType == 186) {
+            // Carrier 94: the grounded exploding missile, check-non-sprites
+            // flipped, no target picked.
+            CHECK(dynamic_cast<CProjectileSparkleExplosion*>(pProjectile) == nullptr);
+            CHECK(pMissile->m_animation->GetResRef() == CResRef(""));
+            CHECK(pMissile->field_1DE == FALSE);
+            CHECK(pMissile->field_E6 == 0x20000);
+            CHECK(pMissile->m_bCheckNonSprites == 1);
+            CHECK(pMissile->m_targetType.m_nEnemyAlly == CAIObjectType::ANYONE.m_nEnemyAlly);
+        } else {
+            // Carrier 149-157/182/183: a sparkle burst, flying, trails on.
+            CProjectileSparkleExplosion* pBurst = dynamic_cast<CProjectileSparkleExplosion*>(pProjectile);
+            REQUIRE(pBurst != nullptr);
+            CHECK(pBurst->m_animation->GetResRef() == CResRef("TRAVEL"));
+            CHECK(pBurst->field_1DE == TRUE);
+            CHECK(pBurst->field_E6 == 0x20008);
+            CHECK(pBurst->m_bCheckNonSprites == 0);
+            CHECK(pBurst->m_strikeRange == 0x100);
+            CHECK(pBurst->m_strikesLeft == 1);
+            if (spec.bPick) {
+                // The PC caster (EA_PC <= EA_GOODCUTOFF) takes the pick branch.
+                CHECK(pBurst->m_targetType.m_nEnemyAlly == spec.nTargetEA);
+            }
+        }
+        if (!spec.bPick) {
+            CHECK(pMissile->m_targetType.m_nEnemyAlly == CAIObjectType::ANYONE.m_nEnemyAlly);
+        }
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary

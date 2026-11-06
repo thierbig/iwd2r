@@ -116,6 +116,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileSparkle* pSparkle;
     CProjectileSparkleExplosion* pSparkleExplosion;
     CProjectileExploding* pExploding;
+    CProjectileExploding* pPick;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -960,6 +961,87 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pExploding->m_strikeRange = 0x50;
         pExploding->m_preCheckRange = 0x50;
         pProjectile = pExploding;
+        break;
+    // The recursing bolt wrappers (six entries in the exe, one body each):
+    // every type re-decodes an already-wired bolt as its carrier and most
+    // then retarget it — the same NULL-checked pick as 158/159 (the guard
+    // always reads the GOODCUTOFF global 0x847C3B; only the stored EA
+    // differs), applied to the RESULT's exploding target type (+0x2B4).
+    // 160-168 and 169-177 offset their own type (-11 / -20, both landing
+    // in the sparkle bursts 149-157); 178/180 re-decode the fixed bolt
+    // 182, 179/181 the bolt 183; 186 re-decodes 94 with no pick but sets
+    // m_bCheckNonSprites (+0x2F2, an int) on the result.
+    case 160:
+    case 161:
+    case 162:
+    case 163:
+    case 164:
+    case 165:
+    case 166:
+    case 167:
+    case 168:
+        pProjectile = DecodeProjectile(nProjectileType - 11, pSprite, 0);
+        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL && pPick != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
+                pPick->m_targetType.Set(type);
+            }
+        }
+        break;
+    case 169:
+    case 170:
+    case 171:
+    case 172:
+    case 173:
+    case 174:
+    case 175:
+    case 176:
+    case 177:
+        pProjectile = DecodeProjectile(nProjectileType - 20, pSprite, 0);
+        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL && pPick != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
+                pPick->m_targetType.Set(type);
+            }
+        }
+        break;
+    case 178:
+    case 179:
+        // Entries 0x524260/0x524342: fixed bolts 182/183, NOTGOOD pick.
+        pProjectile = DecodeProjectile(nProjectileType == 178 ? 182 : 183, pSprite, 0);
+        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL && pPick != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_NOTGOOD;
+                pPick->m_targetType.Set(type);
+            }
+        }
+        break;
+    case 180:
+    case 181:
+        // Entries 0x524424/0x524506: fixed bolts 182/183, GOODCUTOFF pick.
+        pProjectile = DecodeProjectile(nProjectileType == 180 ? 182 : 183, pSprite, 0);
+        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
+        if (pSprite != NULL && pPick != NULL) {
+            if (pSprite->GetAIType().m_nEnemyAlly <= CAIObjectType::EA_GOODCUTOFF) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.m_nEnemyAlly = CAIObjectType::EA_GOODCUTOFF;
+                pPick->m_targetType.Set(type);
+            }
+        }
+        break;
+    case 186:
+        // Entry 0x5245E8: re-decode 94, then set m_bCheckNonSprites only.
+        pProjectile = DecodeProjectile(94, pSprite, 0);
+        pPick = dynamic_cast<CProjectileExploding*>(pProjectile);
+        if (pPick != NULL) {
+            pPick->m_bCheckNonSprites = 1;
+        }
         break;
     case 95:
         // Stinking Cloud.
