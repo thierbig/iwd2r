@@ -472,6 +472,38 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The big boulder.
         pProjectile = new CProjectileBigBoulder();
         break;
+    case 249:
+        // Hold Animal.
+        pArea = new CProjectileHoldAnimal();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
+    case 262:
+        // The static-charge area.
+        pArea = new CProjectileArea850078();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
+    case 263:
+        // Hold Monster.
+        pArea = new CProjectileHoldMonster();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
+    case 278:
+        // Power Word, Kill.
+        pArea = new CProjectilePowerWordKill();
+        pArea->TargetEnemy(pSprite);
+        pProjectile = pArea;
+        break;
+    case 357:
+        // Halt Undead.
+        pArea = new CProjectileHaltUndead();
+        pArea->TargetEnemy(pSprite);
+        pArea->m_fireSoundRef = CResRef("TRA_04C");
+        pArea->m_arrivalSoundRef = CResRef("EFF_M05");
+        pProjectile = pArea;
+        break;
     case 68:
     case 69:
     case 70:

@@ -1729,6 +1729,7 @@ const AreaType kAreaTypes[] = {
     { 246, 150, "AbjuraX", "ARE_M20", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
     { 247, 200, "AlteraX", "ARE_M19", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 248, 200, "AlteraX", "ARE_M19", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
+    { 249, 200, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 250, 200, "AbjuraX", "ARE_M20", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 252, 250, "AlteraX", "ARE_M19", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 253, 600, "Area1X", "EFF_P99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
@@ -1738,6 +1739,8 @@ const AreaType kAreaTypes[] = {
     { 257, 100, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 258, 200, "AbjuraX", "ARE_M20", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 260, 600, "Area1X", "EFF_P99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
+    { 262, 275, "", "", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
+    { 263, 200, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 264, 200, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 266, 350, "AbjuraX", "ARE_M20", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 270, 70, "FSeedsX", "EFF_P45", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
@@ -1745,6 +1748,7 @@ const AreaType kAreaTypes[] = {
     { 275, 200, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 276, 300, "SoPainX", "EFF_P49", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 277, 300, "SoHopeX", "EFF_P50", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
+    { 278, 150, "PWKillX", "EFF_M39", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 280, 100, "", "", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
     { 281, 250, "", "", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
     { 282, 100, "", "", "SCloudR", 7, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
@@ -1774,6 +1778,7 @@ const AreaType kAreaTypes[] = {
     { 342, 500, "", "", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 349, 200, "DBreatH", "ARE_M21", "", 0x7FFFFFFF, "DBreatA", "", 0, 1, 1, 500, 45, 10000, 10, 0 },
     { 351, 125, "", "", "CloudKR", 7, "", "", 0, 0, 0, 250, 45, 10000, 10, 0 },
+    { 357, 150, "EnchanX", "ARE_M21", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
     { 358, 125, "Area1X", "EFF_M99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 359, 300, "Area1X", "EFF_P99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ALLY },
     { 362, 300, "Area1X", "EFF_W99", "", 0x7FFFFFFF, "", "", 0, 0, 0, 250, 45, 10000, 10, CAIObjectType::EA_ENEMY },
@@ -1892,6 +1897,11 @@ TEST_CASE("visual projectiles: the area spells decode to their area projectiles"
     CHECK(dynamic_cast<CProjectileArea850C0C*>(pProjectile) != nullptr);
     CHECK(pProjectile->m_fireSoundRef == "TRA_04A");
     CHECK(pProjectile->m_arrivalSoundRef == "CAS_P02");
+    delete pProjectile;
+    pProjectile = CProjectile::DecodeProjectile(357, world.pCharacter, 0);
+    CHECK(dynamic_cast<CProjectileHaltUndead*>(pProjectile) != nullptr);
+    CHECK(pProjectile->m_fireSoundRef == "TRA_04C");
+    CHECK(pProjectile->m_arrivalSoundRef == "EFF_M05");
     delete pProjectile;
 }
 
