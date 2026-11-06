@@ -32,9 +32,9 @@
 # Cast order: Ray of Enfeeblement FIRST (F2, row 2) -- it drains STR, no
 # HP, so the 4 HP goblin stays alive as cast 2's target; its landing
 # signal is the goblin's timed_effects going 0 -> 1 in enemy_creatures.
-# Larloch's SECOND (F1, row 1) -- 1d4 per two levels, 5d4 at level 12,
-# against 4 HP it is the kill; its landing signal is the goblin's hp
-# drop or its absence from the list. No melee risk between the casts:
+# Larloch's SECOND (F1, row 1) -- SPL decode: flat 1d4 (op 241 dice 1d4),
+# against 4 HP it can wound but not kill; its landing signal is the goblin's
+# hp drop. No melee risk between the casts:
 # run 20261030-141837 (ours) held the world unpaused beside the goblin
 # for ~1000 frames with no enemy hp dropping -- a caster without an
 # attack order does not retaliate.
@@ -288,9 +288,9 @@ checkpoint cast1_after
 shot cast1_after
 # Cast 2: Larloch's Minor Drain (F1, row 1) at the same goblin -- still
 # alive: Ray drained STR only, and no retaliation happens without an
-# attack order. CHECK in cast2_after: the goblin's hp drops 4 -> 0 or
-# it leaves enemy_creatures (5d4 at level 12); a party walk again means
-# the arm failed.
+# attack order. CHECK in cast2_after: the goblin's hp drops 4 -> 1..3
+# (SPL decode: flat 1d4, op 241; observed 3 on ours); a party walk
+# again means the arm failed.
 checkpoint cast2_before
 key 1
 wait 10
