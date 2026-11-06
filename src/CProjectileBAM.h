@@ -214,14 +214,14 @@ public:
 // The plain SPFIREBL flame jet (vtable 0x84DE0C): DecodeProjectile's types
 // 80 and 105 — the jet as cast, and the same jet with its palette range
 // widened one entry (0x44 over the ctor's 0x43). It adds no members of its
-// own: the ctor writes only inherited fields. The exe overrides six
-// CProjectileBAM slots — dtor 0x52FD50, AIUpdate 0x52B900, Render
-// 0x52B190, Fire 0x52C050, GetField_E6 0x5297D0,
-// UpdateBasedOnTargetPoint 0x52BD20 — none of which are declared here:
-// their bodies are not in-tree, and a declared-but-undefined virtual would
-// become the key function and leave the vtable unemitted
-// (IcewindCProjectileScorcher precedent), so ours inherits the base
-// virtuals.
+// own: the ctor writes only inherited fields. Against the CProjectileBAM
+// vtable (0x84D9C4) the exe overrides only the deleting dtor (0x52FD50 over
+// the base's 0x52B010 — ours is implicit; an earlier reading diffed against
+// CProjectile's 0x84D7B8 and counted the base's own AIUpdate 0x52B900,
+// Render 0x52B190, Fire 0x52C050, GetField_E6 0x5297D0 and
+// UpdateBasedOnTargetPoint 0x52BD20 as this class's — all inherited
+// unchanged), so nothing is declared here and ours inherits the base
+// virtuals throughout.
 class CProjectile84DE0C : public CProjectileBAM {
 public:
     // 0x52FC20 (ret 0x4 — the cell's name arrives as a char* and folds
@@ -238,13 +238,17 @@ public:
 // types 206 and 380 — the same flight either as a single pass or with six
 // rebounds, per the bounce count the decoder stamps at +0x2A0. Its Fire
 // (0x530010) spawns a rebounding-bolt child (ctor 0x57D390, type 207) and
-// hands that count over as the child's m_nBounces (+0x2B2). The exe
-// overrides six CProjectileBAM slots — dtor 0x52FED0, AIUpdate 0x52B900,
-// Render 0x52B190, Fire 0x530010, GetField_E6 0x5297D0,
-// UpdateBasedOnTargetPoint 0x52BD20 — none declared here (the
-// IcewindCProjectileScorcher precedent: a declared-but-undefined virtual
-// would become the key function and leave the vtable unemitted), so ours
-// inherits the base virtuals.
+// hands that count over as the child's m_nBounces (+0x2B2). Against the
+// CProjectileBAM vtable (0x84D9C4) the exe overrides exactly two slots —
+// the deleting dtor 0x52FED0 (over the base's 0x52B010; ours is implicit)
+// and Fire 0x530010 (the bounce hand-off above; not in-tree, undeclared
+// per the IcewindCProjectileScorcher precedent — a declared-but-undefined
+// virtual would become the key function and leave the vtable unemitted).
+// An earlier reading diffed against CProjectile's 0x84D7B8 and counted
+// the base's own AIUpdate 0x52B900, Render 0x52B190, GetField_E6
+// 0x5297D0 and UpdateBasedOnTargetPoint 0x52BD20 as this class's too;
+// those are inherited unchanged, so ours inherits the base virtuals in
+// every slot but Fire.
 class CProjectile84DE94 : public CProjectileBAM {
 public:
     // Native exe offset; ours lays out after sizeof(CProjectileBAM) = 0x2A2
