@@ -2192,6 +2192,72 @@ TEST_CASE("visual projectiles: the single-target missiles decode to their flight
     }
 }
 
+// The sparkle-stream bolts (DecodeProjectile 0x51EAF0, ctor 0x52CA10
+// CProjectileSparkle): the magic-missile bolt body — SPMAGMIS cell, speed
+// doubled to 40, field_E6 |= 8, field_1DE cleared — then all but type 37
+// swap the cell to TRAVEL, all but 51 to 53 arm the alternate palette
+// bitmap (SetAltPalette 0x529660: resref, double-size clear, field_29C 1)
+// with one of the eight STTRAVL palette bitmaps, and all but 37 set the
+// sparkle tail (m_bSparkle, m_nSparkleColour, m_bHasHeight) before the two
+// sound refs. 51 to 53 carry only the colour; 65 doubles the flight speed
+// once more (80) after re-clearing field_1DE; 37 keeps the bare SPMAGMIS
+// cell with no tail. The ctor's palette recolour is keyed off the WORD at
+// 0x85E848, which is 0, so no missile recolours. Decoding draws nothing.
+TEST_CASE("visual projectiles: the sparkle-stream bolts decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* cell;
+        SHORT nSpeed;
+        WORD nColour;
+        BOOL bSparkle;
+        const char* fire;
+        const char* altPalette;
+    };
+    const Spec kSparkles[] = {
+        {37, "SPMAGMIS", 40, 0, FALSE, "TRA_02", nullptr},
+        {47, "TRAVEL", 40, 2, TRUE, "TRA_04A", "STTRAVL1"},
+        {48, "TRAVEL", 40, 4, TRUE, "TRA_04C", "STTRAVL2"},
+        {49, "TRAVEL", 40, 6, TRUE, "", "STTRAVL5"},
+        {50, "TRAVEL", 40, 9, TRUE, "TRA_01", "STTRAVL7"},
+        {51, "TRAVEL", 40, 0xA, TRUE, "", nullptr},
+        {52, "TRAVEL", 40, 1, TRUE, "", nullptr},
+        {53, "TRAVEL", 40, 3, TRUE, "", nullptr},
+        {54, "TRAVEL", 40, 7, TRUE, "", "STTRAVL6"},
+        {55, "TRAVEL", 40, 5, TRUE, "TRA_04D", "STTRAVL3"},
+        {65, "TRAVEL", 80, 0xA, TRUE, "TRA_04C", "STTRAVL2"},
+        {184, "TRAVEL", 40, 0xB, TRUE, "TRA_04A", "STTRAVL4"},
+        {185, "TRAVEL", 40, 0xC, TRUE, "TRA_03", "STTRAVL8"},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kSparkles) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSparkle* pSparkle = dynamic_cast<CProjectileSparkle*>(pProjectile);
+        REQUIRE(pSparkle != nullptr);
+        CHECK(pSparkle->m_projectileType == spec.nType - 1);
+        CHECK(pSparkle->m_animation->GetResRef() == CResRef(spec.cell));
+        CHECK(pSparkle->m_speed == spec.nSpeed);
+        CHECK(pSparkle->field_1DE == FALSE);
+        CHECK(pSparkle->field_E6 == 0x20008);
+        CHECK(pSparkle->m_bSparkle == spec.bSparkle);
+        CHECK(pSparkle->m_nSparkleColour == spec.nColour);
+        CHECK(pSparkle->m_bHasHeight == TRUE);
+        CHECK(pSparkle->m_fireSoundRef == spec.fire);
+        CHECK(pSparkle->m_arrivalSoundRef == "");
+        if (spec.altPalette != nullptr) {
+            CHECK(pSparkle->field_1E2.GetResRef() == CResRef(spec.altPalette));
+            CHECK(pSparkle->field_1E2.m_bDoubleSize == FALSE);
+            CHECK(pSparkle->field_29C == 1);
+        } else {
+            CHECK(pSparkle->field_29C == 0);
+        }
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary

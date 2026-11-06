@@ -113,6 +113,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectile850DDC* pPuff;
     CProjectileSpellHit* pSpellHit;
     CProjectileSingleTarget* pSingle;
+    CProjectileSparkle* pSparkle;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -582,6 +583,167 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pSingle->m_bHasHeight = TRUE;
         pSingle->field_1C2 = TRUE;
         pProjectile = pSingle;
+        break;
+    // The sparkle-stream missiles (0x52CA10, CProjectileSparkle): the
+    // travelling spell bolt. Every entry constructs with the palette type
+    // read from the WORD at 0x85E848, which is 0 — no recolour — then,
+    // except type 37, swaps the cell to TRAVEL, and, except types 51 to 53,
+    // arms the alternate palette bitmap (0x529660) before the sparkle tail
+    // (m_bSparkle, m_nSparkleColour, m_bHasHeight) and the two sound refs.
+    // Types 47 to 55 and 184/185 are the eight STTRAVL colours plus the
+    // three plain (colour-only) bolts; 65 doubles the flight speed once
+    // more, on top of the ctor's own doubling.
+    case 37:
+        // The bare bolt: no TRAVEL swap, no sparkle tail.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_02";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 47:
+        // Colour 2.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL1");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 2;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_04A";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 48:
+        // Colour 4.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL2");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 4;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_04C";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 49:
+        // Colour 6.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL5");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 6;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 50:
+        // Colour 9.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL7");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 9;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_01";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 51:
+        // Colour 10, no alternate palette.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 0xA;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 52:
+        // Colour 1, no alternate palette.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 1;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 53:
+        // Colour 3, no alternate palette.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 3;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 54:
+        // Colour 7.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL6");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 7;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 55:
+        // Colour 5.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL3");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 5;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_04D";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 65:
+        // Colour 10: field_1DE re-cleared after the ctor already cleared
+        // it, and the flight speed doubled once more.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL2");
+        pSparkle->field_1DE = FALSE;
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 0xA;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_speed = static_cast<SHORT>(pSparkle->m_speed * 2);
+        pSparkle->m_fireSoundRef = "TRA_04C";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 184:
+        // Colour 11.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL4");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 0xB;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_04A";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
+        break;
+    case 185:
+        // Colour 12.
+        pSparkle = new CProjectileSparkle(0);
+        pSparkle->SetVidCell(CResRef("TRAVEL"));
+        pSparkle->SetAltPalette("STTRAVL8");
+        pSparkle->m_bSparkle = TRUE;
+        pSparkle->m_nSparkleColour = 0xC;
+        pSparkle->m_bHasHeight = TRUE;
+        pSparkle->m_fireSoundRef = "TRA_03";
+        pSparkle->m_arrivalSoundRef = "";
+        pProjectile = pSparkle;
         break;
     case 95:
         // Stinking Cloud.
@@ -1910,6 +2072,16 @@ void CProjectileBAM::SetVidCell(CResRef resRef)
         delete m_animation;
     }
     m_animation = new CVidCell(resRef, FALSE);
+}
+
+// 0x529660: point the alternate palette bitmap (field_1E2) at the named
+// resource, clear its double-size flag, and arm it (field_29C) as the
+// palette Render swaps in for the cell.
+void CProjectileBAM::SetAltPalette(const char* sName)
+{
+    field_1E2.SetResRef(CResRef(sName), TRUE, TRUE);
+    field_1E2.m_bDoubleSize = FALSE;
+    field_29C = 1;
 }
 
 // 0x5297B0

@@ -25,6 +25,9 @@ public:
     void SetSequenceDirection(CVidCell* pVidCell);
     // 0x5295D0 (the resref is passed by value in the exe — ret 0x8)
     void SetVidCell(CResRef resRef);
+    // 0x529660 (the exe builds a CString from the literal and hands it
+    // here; ours takes the name directly)
+    void SetAltPalette(const char* sName);
 
     /* 0192 */ CVidCell* m_animation;
     /* 0196 */ CVidCell* m_shadow;
