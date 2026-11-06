@@ -1,0 +1,366 @@
+# Task 80: the projectile-class scenario for the 28 not-exercised rows of
+# the 2026-11-03 remeasure. Built on chr_sorcerer_cast.txt (Task 77 Part A,
+# runs/20261105-221004: the import and both casts play the same on both
+# engines): same import, same '# fixtures:' header, same walk and goblin
+# fight, same two casts -- they are the pair this task wants.
+#
+# Which rows the casts reach (task-80 report steps 2-3): the sorcerer's
+# cast list is built level-ascending over ALL known spells and only rows
+# 1-2 arm (F1/F2; task-43), so the only castable spells are permanently
+# F2 = SPWI226 Ray of Enfeeblement (missile 232) and F1 = SPWI119
+# Larloch's Minor Drain (missile 230). On the original both construct
+# IcewindCProjectileTravellingVFX (DecodeProjectile -> ctor 0x57E370,
+# vtable 0x8511AC) -- the class behind rows 21-23 of the 28 (578AB0,
+# 578ED0, 579860). On ours DecodeProjectile (Task 79, 316/386) has no
+# case for 230/232, so the same casts construct the documented
+# default-instant deviation: the cast fires, the spell effects land
+# instantly on the Fire frame, and the projectile object is the
+# NULL-fallback CProjectile84D8B8 (DecodeProjectile's tail news it
+# when no case matched). No log line or checkpoint field names the
+# class on either engine -- the code path plus the effects landing
+# is the proof (task-80 report, Step 4). The other 25 rows need spells
+# this caster cannot arm (SPWI103 Cone, SPWI304 Fireball, SPWI401
+# SpellHit sit at list rows 3+) or need classes no spell builds at all
+# (PhaseBAM 110, ImpactBAM 119-142/148/196-203/208: zero spells in the
+# corpus) -- see the report.
+#
+# The '# fixtures:' header stages scenarios/chr/RYSSC12C.CHR into both
+# engines' Characters folders as 0SORC12.CHR (the alias sorts before
+# every real entry in either folder, so it is row 1 of the import list
+# on both), and the run imports it through chargen Import exactly as
+# chr_druid_cast.txt imports its druid.
+#
+# Proof checkpoints, one after each cast's impact (the wait 300 lands
+# the projectile before anything else runs):
+# - imported: game.members[].level must read 12 (the file's level;
+#   chargen would give 1). That is the import proof.
+# - cast1_after: Ray of Enfeeblement FIRED -- party.action runs
+#   0 -> 23 (short step into cast range) -> 83 (the cast window). The
+#   Ray is a ranged touch attack and can MISS (validated run
+#   20261106-141621: missed -- goblin hp 4, timed_effects 0); a hit
+#   gains timed_effects 1 (STR drain). Either way missile 232 built.
+# - cast2_after: Larloch's FIRED and landed -- flat 1d4 (op 241) vs 4
+#   hp leaves 1..3 or kills (validated run: rolled 4, goblin dead hp
+#   0, caster static ~58 units off = a ranged kill); both prove
+#   missile 230 built.
+#
+# NO spellbook step, unlike the druid: a sorcerer needs no memorization,
+# and the CHR's castable counts (f18) are nonzero on every level
+# (6/6/6/6/5/3), so the Task 59c rest problem does not apply -- every
+# slot is castable as imported.
+#
+# Cast order: Ray of Enfeeblement FIRST (F2) -- its touch attack drains
+# STR and never HP, so even a hit leaves the 4 HP goblin alive as cast
+# 2's target. Larloch's SECOND (F1) -- flat 1d4 CAN kill the 4 HP
+# goblin (validated run: it did, at range), and that is fine: a dead
+# target is the landing proof and nothing after cast 2 needs a live
+# goblin. The caster never closes to melee: run 20261030-141837 (ours)
+# held the world unpaused beside the goblin for ~1000 frames with no
+# retaliation. The party's own hp DOES drift -- the goblin is an
+# archer ("Goblin Archer Attacks Rysscl2" in the validated run's
+# message log; 36 -> 32 by the end, one arrow landing even after the
+# kill), which a level-12 sorcerer shrugs off.
+#
+# The walk and the fight are first_fight.txt's (solo party, seed 1),
+# copied from chr_druid_cast.txt / chr_sorcerer_cast.txt unchanged: the
+# legs to the goblin, the Enemy Sighted auto-pause on leg 6, the goblin
+# to 504,882 and its first attack's Attacked auto-pause. Coordinates for
+# Resolution=800.
+#
+# timeout: 900
+# fixtures: chr/RYSSC12C.CHR:0SORC12.CHR
+
+wait 150
+checkpoint menu
+# New Game (645,262), Done (537,562) with New Party selected, then the
+# first slot's Create Character (530,100): chargen hosts the import.
+click 645 262
+wait 180
+click 537 562
+wait 150
+click 530 100
+wait 150
+checkpoint chargen
+# On the chargen main menu the bottom bar reads Biography | Import |
+# Back | Finish | Cancel, so Import is the second button, centred
+# (260,562); the click opens the import popup (panel 20).
+click 260 562
+wait 30
+checkpoint import_popup
+shot import_popup
+# Row 1 of the popup's list (391,126) selects 0SORC12.CHR -- a click
+# selects only; Done (536,562) imports it into slot 1.
+click 391 126
+wait 20
+click 536 562
+wait 60
+checkpoint imported_chargen
+shot imported_chargen
+# The imported character finishes the way a fresh one does: Appearance
+# (400,338), Next (536,562) to the sound panel, Next back to the menu,
+# Name (400,373), Done (458,268), then Finish (536,562). NO type step:
+# the import prefills the name field with the file's own name (Ryssc12).
+click 400 338
+wait 30
+click 536 562
+wait 30
+click 536 562
+wait 30
+click 400 373
+wait 30
+click 458 268
+wait 30
+checkpoint named
+shot named
+click 536 562
+wait 60
+checkpoint party_formation
+# Done (634,507) starts the game on the chapter screen; its Done
+# (514,549) loads the start area into the world screen.
+click 634 507
+wait 150
+checkpoint chapter
+click 514 549
+wait 150
+checkpoint world
+# THE IMPORT PROOF: this checkpoint's game.members[].level must read 12.
+checkpoint imported
+wait 300
+checkpoint world_settled
+# The opening dialog (Hedron, entry 0), as in first_fight.
+checkpoint opening_dialog
+click 300 399
+wait 60
+click 340 437
+wait 60
+click 250 386
+wait 60
+click 280 437
+wait 60
+click 398 583
+wait 60
+click 250 399
+wait 120
+checkpoint opening_done
+# Centre the view on the sorcerer, as first_fight does: the legs need
+# the view exact.
+origin ui
+click 528 460
+click 528 460
+wait 10
+# Click-to-move on the deck: the sorcerer walks to 2328,905 and stops.
+origin screen
+click 314 224
+wait 90
+checkpoint moved
+# Hedron's circle: the dialog opens at entry 34 with 5 responses, and
+# "Nothing today, thanks. Farewell." (5) then "Very well. Farewell." (1)
+# end it.
+origin screen
+move 497 217
+wait 5
+click 497 217
+wait 90
+checkpoint dialog
+origin ui
+click 260 424
+wait 60
+click 220 399
+wait 60
+checkpoint dialog_end
+# Leg 1: centre, walk to below the gangplank (2104,1002).
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 56 312
+wait 150
+# Leg 2: centre, walk along the dock (1784,960).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 80 174
+wait 150
+# Leg 3: centre, walk towards the west; Reig stops the party with his
+# dialog (about 1667,949).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 144 180
+wait 150
+checkpoint reig_dialog
+# Reig's dialog, first_fight's responses: the farewell line sits below
+# the journal note and the sorcerer's line, so its click is (300,450) --
+# the solo party renders the journal note line.
+origin ui
+click 290 386
+wait 60
+click 340 399
+wait 60
+click 398 583
+wait 60
+click 398 583
+wait 60
+click 398 583
+wait 60
+click 340 424
+wait 60
+click 300 399
+wait 60
+click 230 386
+wait 60
+click 398 583
+wait 60
+click 250 386
+wait 60
+click 250 386
+wait 60
+click 300 450
+wait 60
+checkpoint reig_farewell
+click 230 386
+wait 90
+checkpoint reig_done
+# Leg 4: centre, walk past Reig and Jon (1352,846).
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 85 113
+wait 150
+# Leg 5: centre, walk to in front of the houses (1032,972).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 80 342
+wait 150
+# Leg 6: centre and walk west on the path south of the houses; the
+# goblin comes into view and the game auto-pauses (Enemy Sighted).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 128 269
+wait 150
+checkpoint leg6
+# Leg 7: the game is paused already. Centre and give the walk to the
+# north-south path the goblin stands on (505,889).
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+click 160 82
+wait 150
+checkpoint goblin_sighted
+shot goblin_sighted
+# Space ends the pause: the sorcerer resumes the leg-7 walk west and
+# stops at 568,906 (our engine ends that walk ~63 units east of leg
+# 7's 505,889 -- measured, run 20261106-141621; chr_sorcerer_cast's
+# header says 519,902, which our run did not reproduce); the goblin's
+# combat script brings it to 504,882, and its first attack auto-pauses
+# the game (Attacked, 0x2) -- seed 1, as in first_fight.
+key SPACE
+wait 80
+checkpoint engaged
+shot engaged
+wait 120
+checkpoint attacked
+# Centre on the sorcerer and give the two casts. (chr_sorcerer_cast's
+# geometry -- sorcerer 519,902, view 119,686, goblin at screen
+# 385,196 -- shifts with the early stop: at 568,906 the view is
+# 168,690 and the goblin sits near screen 336,192, ~54 px west of the
+# 390,188 click; the validated run proves the click still armed both
+# casts at the goblin.) Each cycle: reselect the sorcerer
+# (resets the action bar), F5 opens the cast list, then F1/F2 arm rows
+# 1/2 (task-43: the F-key index is the list index; only rows 1-2 arm),
+# then the target click, then a Space burst: the goblin's every hit
+# re-pauses (Attacked), and run 20261030-140342 showed one Space does
+# not outlast it. Pausing never discards a pending cast.
+origin ui
+click 528 460
+click 528 460
+wait 10
+origin screen
+checkpoint cast1_before
+# Cast 1: Ray of Enfeeblement (F2, row 2) at the goblin, clicked the
+# way first_fight's Magic Missile was (390,188, the sprite clear of the
+# sorcerer's). The projectile is missile 232 -> TravellingVFX on the
+# original (rows 21-23), default-instant on ours. CHECK in cast1_after:
+# party.action 0 -> 23 -> 83 -- a SHORT step into cast range (~17 px,
+# 568,906 -> 562,890 in the validated run) then the cast window; a
+# LONG walk to the click point is what a failed arm looks like (run
+# 20261030-141837: an unarmed ground click WALKS there, an unarmed
+# creature click does nothing). The Ray is a ranged touch attack: a
+# hit gives goblin hp 4 + timed_effects 1, a miss keeps timed_effects
+# 0 (the validated run missed) -- either way the cast fired.
+key 1
+wait 10
+key F5
+wait 10
+key F2
+wait 10
+click 390 188
+wait 10
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 300
+checkpoint cast1_after
+shot cast1_after
+# Cast 2: Larloch's Minor Drain (F1, row 1) at the same goblin -- still
+# alive either way: cast 1's Ray drains STR only, never HP. The
+# projectile is missile 230 -> TravellingVFX on the original (rows
+# 21-23), default-instant on ours. CHECK in cast2_after: the goblin's
+# hp drops 4 -> 0..3 (SPL decode: flat 1d4, op 241; the validated run
+# rolled 4 and killed it -- action 3 with the caster STATIC at 562,890
+# while the goblin died ~58 units away: a ranged kill, and a dead
+# goblin is the cleanest landing proof). A party walk to the click
+# means the arm failed.
+checkpoint cast2_before
+key 1
+wait 10
+key F5
+wait 10
+key F1
+wait 10
+click 390 188
+wait 10
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 30
+key SPACE
+wait 300
+checkpoint cast2_after
+shot cast2_after
+# One more Space: the last queued cast resolves on the next toggle, and
+# nothing follows to unpause a world this one might pause.
+key SPACE
+wait 120
+# Thirty seconds of aftermath for the projectiles to land and the
+# coverage hooks to count.
+wait 700
+checkpoint cast_done
+shot cast_done
+wait 150
+checkpoint fight_done
+shot fight_done
+quit
