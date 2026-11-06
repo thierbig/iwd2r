@@ -569,6 +569,13 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea8504BC(70);
         pProjectile = pArea;
         break;
+    case 375:
+        // The boulder.
+        pProjectile = new CProjectileBoulder();
+        pProjectile->m_bHasHeight = TRUE;
+        pProjectile->m_fireSoundRef = "";
+        pProjectile->m_arrivalSoundRef = "";
+        break;
     case 68:
     case 69:
     case 70:

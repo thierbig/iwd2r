@@ -2704,6 +2704,24 @@ TEST_CASE("the spell-hit bursts decode to their colour ranges", "[visualprojecti
     }
 }
 
+// The boulder (DecodeProjectile 0x51EAF0, entry 0x51F2E4, ctor 0x531570
+// CProjectileBoulder): the decoder's only post-ctor work is pinning the
+// height flag and re-assigning both sound refs to the empty string.
+TEST_CASE("visual projectiles: the boulder decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(375, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileBoulder* pBoulder = dynamic_cast<CProjectileBoulder*>(pProjectile);
+    REQUIRE(pBoulder != nullptr);
+    CHECK(pBoulder->m_projectileType == 374);
+    CHECK(pBoulder->m_bHasHeight == TRUE);
+    CHECK(pBoulder->m_fireSoundRef == "");
+    CHECK(pBoulder->m_arrivalSoundRef == "");
+    delete pProjectile;
+}
+
 // The plain area effects (DecodeProjectile 0x51EAF0): nine no-arg area
 // ctors the decoder calls with no post-construction work at all — the ctor
 // carries the whole description.
