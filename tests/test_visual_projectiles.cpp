@@ -2609,6 +2609,31 @@ TEST_CASE("the shafts decode to their columns", "[visualprojectile][data]")
     }
 }
 
+// The dimension door (DecodeProjectile 0x51EAF0, ctor 0x535320
+// CProjectile84E940): the empty-palette arm of the ctor runs, the door
+// animation opens and closes, and the decoder only adds the sound tails.
+TEST_CASE("the dimension door decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(110, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+
+    CProjectile84E940* pDoor = dynamic_cast<CProjectile84E940*>(pProjectile);
+    REQUIRE(pDoor != nullptr);
+    CHECK(pDoor->m_projectileType == 109);
+    CHECK(pDoor->m_sAnimation == "SPDimDr");
+    CHECK(pDoor->m_animation.GetResRef() == CResRef("SPDimDr2"));
+    CHECK(pDoor->m_bPalette == FALSE);
+    CHECK(pDoor->m_dwFlags == 0);
+    CHECK(pDoor->m_nTransValue == 0);
+    CHECK(pDoor->m_bHasHeight == FALSE);
+    CHECK(pDoor->m_fireSoundRef == "EFF_M09");
+    CHECK(pDoor->m_arrivalSoundRef == "");
+    delete pProjectile;
+}
+
 // The sparkle bursts (DecodeProjectile 0x51EAF0, ctor 0x5297B0
 // CProjectileSparkleExplosion): the delayed-burst carrier built on the
 // exploding intermediate (0x52CCE0 — child 78, anyone filter, 0x100 strike

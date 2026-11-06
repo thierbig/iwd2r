@@ -10,6 +10,7 @@
 #include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
+#include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
@@ -121,6 +122,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileBAM* pBam;
     CProjectileSPFLMARR* pFlame;
     CProjectileShaft* pShaft;
+    CProjectile84E940* pDoor;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -395,6 +397,14 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pShaft->m_fireSoundRef = "EFF_M10";
         pShaft->m_arrivalSoundRef = "";
         pProjectile = pShaft;
+        break;
+    case 110:
+        // The dimension door: the ctor's empty-palette arm runs (no palette
+        // BAM), the door animation provides the visuals.
+        pDoor = new CProjectile84E940("SPDimDr", "", "", 0, 0);
+        pDoor->m_fireSoundRef = "EFF_M09";
+        pDoor->m_arrivalSoundRef = "";
+        pProjectile = pDoor;
         break;
     case 68:
     case 69:
