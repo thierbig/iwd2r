@@ -409,6 +409,34 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
+    // The MFMissT barrages (0x5309C0, CProjectile84E030): one body for types
+    // 324 to 334 - 1 to 11 missiles of child type 314 - and type 345's seven
+    // of child type 344, all on the MFMissT cell. The palette type is the
+    // WORD 1 at 0x85E84A. The children are decoded with pSprite NULL; types
+    // 314 and 344 fall to the default path's fallback until their families
+    // are wired.
+    case 324:
+    case 325:
+    case 326:
+    case 327:
+    case 328:
+    case 329:
+    case 330:
+    case 331:
+    case 332:
+    case 333:
+    case 334:
+        pProjectile = new CProjectile84E030(313, "MFMissT", nProjectileType - 323, 1);
+        pProjectile->m_fireSoundRef = "TRA_55";
+        pProjectile->m_arrivalSoundRef = "";
+        pProjectile->m_bHasHeight = TRUE;
+        break;
+    case 345:
+        pProjectile = new CProjectile84E030(343, "MFMissT", 7, 1);
+        pProjectile->m_fireSoundRef = "TRA_55";
+        pProjectile->m_arrivalSoundRef = "";
+        pProjectile->m_bHasHeight = TRUE;
+        break;
     case 95:
         // Stinking Cloud.
         pProjectile = new CProjectileArea8501B0();

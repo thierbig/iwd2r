@@ -2050,6 +2050,46 @@ TEST_CASE("visual projectiles: the cone types decode to their wave-puff cones", 
     }
 }
 
+// The MFMissT barrages (DecodeProjectile 0x51EAF0, ctor 0x5309C0
+// CProjectile84E030): one body for types 324 to 334 - 1 to 11 missiles of
+// child type 314 - plus type 345's seven of child type 344, on the MFMissT
+// cell (CHITIN.KEY holds MFMISST as BAM type 1000, so the cell keeps the
+// name), with the palette WORD 1 at 0x85E84A, the TRA_55 fire sound, no
+// arrival sound and the height flag. The children are decoded with pSprite
+// NULL; types 314 and 344 are not wired yet, so the ctor's DecodeProjectile
+// calls land on the default path's CProjectile84D8B8 fallback. Decoding
+// draws nothing.
+TEST_CASE("visual projectiles: the MFMissT barrages decode to their batteries", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        WORD nChildType;
+        WORD nCount;
+    };
+    const Spec kBatteries[] = {
+        {324, 313, 1}, {325, 313, 2}, {326, 313, 3}, {327, 313, 4}, {328, 313, 5},
+        {329, 313, 6}, {330, 313, 7}, {331, 313, 8}, {332, 313, 9}, {333, 313, 10},
+        {334, 313, 11}, {345, 343, 7},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kBatteries) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectile84E030* pBattery = dynamic_cast<CProjectile84E030*>(pProjectile);
+        REQUIRE(pBattery != nullptr);
+        CHECK(pBattery->m_projectileType == spec.nType - 1);
+        CHECK(pBattery->m_nType == spec.nChildType);
+        CHECK(pBattery->m_nCount == spec.nCount);
+        CHECK(pBattery->m_animation->GetResRef() == CResRef("MFMissT"));
+        CHECK(pBattery->m_fireSoundRef == "TRA_55");
+        CHECK(pBattery->m_arrivalSoundRef == "");
+        CHECK(pBattery->m_bHasHeight == TRUE);
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary
