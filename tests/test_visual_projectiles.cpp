@@ -3810,3 +3810,51 @@ TEST_CASE("visual projectiles: the school travels decode to their flights", "[vi
         delete pProjectile;
     }
 }
+
+TEST_CASE("visual projectiles: the line beams decode to their rakes", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* sCell;
+        const char* sFire;
+        LONG nBeam;
+        SHORT nSpeed;
+        BOOL bHeight;
+        BOOL bOffset;
+        int nGround; // field_2A0 when the case stores it, -1 when it doesn't
+    };
+    const Spec kBolts[] = {
+        { 40, "LightnT", "TRA_09", 400, 20, TRUE, TRUE, -1 },
+        { 302, "SWaveX", "TRA_56", 400, 10, FALSE, FALSE, 0 },
+        { 313, "LoDisrT", "TRA_59", 600, 20, TRUE, TRUE, -1 },
+        { 378, "HDABreT", "TRA_59", 600, 20, TRUE, TRUE, -1 },
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kBolts) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileLightningBolt* pBolt = dynamic_cast<CProjectileLightningBolt*>(pProjectile);
+        REQUIRE(pBolt != nullptr);
+        CHECK(pBolt->m_projectileType == spec.nType - 1);
+        CHECK(pBolt->m_animation->GetResRef() == CResRef(spec.sCell));
+        CHECK(pBolt->m_speed == spec.nSpeed);
+        CHECK(pBolt->field_1D8 == 16);
+        CHECK(pBolt->m_bHasHeight == spec.bHeight);
+        CHECK(pBolt->field_1C2 == spec.bOffset);
+        if (spec.nGround >= 0) {
+            CHECK(pBolt->field_2A0 == spec.nGround);
+        }
+        CHECK(pBolt->m_visualEffect.m_dwFlags == 0x20200u);
+        CHECK(pBolt->m_beamRange == spec.nBeam);
+        CHECK(pBolt->m_fireSoundRef == CResRef(spec.sFire));
+        // The ctor arms the strike tracker; the case bodies only retune its
+        // range (a DWORD store over the map's WORD plus tail padding).
+        CHECK(pBolt->m_targetMap.m_pOwner == pBolt);
+        CHECK(pBolt->m_targetMap.m_servicePeriod == 2);
+        CHECK(pBolt->m_targetMap.m_strikeInterval == 33);
+        CHECK(pBolt->m_targetMap.m_nRange == 50);
+        delete pProjectile;
+    }
+}

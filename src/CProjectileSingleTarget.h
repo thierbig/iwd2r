@@ -6,6 +6,7 @@
 #include "CVidBitmap.h"
 #include "CVidCell.h"
 #include "CVidPalette.h"
+#include "IcewindCProjectileTargetMap.h"
 #include "IcewindCVisualEffect.h"
 
 #include <set>
@@ -196,23 +197,32 @@ public:
 // the anchor used here (the same substitution as the two classes above).
 class CProjectileLightningBolt : public CProjectileSingleTarget {
 public:
+    // 0x5806C0. Binds the spell's travel BAM through the base (the char*
+    // argument folds through a CResRef temp), then constructs the strike
+    // tracker at +0x2B2 (its ctor 0x55ACC0) and arms it: this projectile
+    // owns it, it services every 2 ticks and re-strikes each victim every
+    // 33 in-range passes. The rake length is stamped to 400 (the disruption
+    // and breath entries retune to 600).
+    CProjectileLightningBolt(const char* szResRef);
     // 0x580B30. Reads the caster's position, pushes the target point out to
     // m_beamRange past the target along the caster->target heading, then
     // launches through the base Fire.
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
-    // The ctor 0x5806C0 is parked (docs/wso/import-parked/5806C0.json — it
-    // embeds the fork-only IcewindCProjectileTargetMap at +0x2B2 through its
-    // ctor 0x55ACC0, self-wiring the owner back-pointer at +0x2B6 and the
-    // service period 2 / strike interval 33 stamps at +0x2CA/+0x2D2), as are
-    // the dtor body 0x580770 (docs/wso/import-parked/580770.json) and slot
-    // 0x000C (AIUpdate 0x5808A0, docs/wso/import-parked/5808A0.json — the
-    // strike tracker it walks is that same map), so the class inherits the
-    // base virtuals for those slots; a declared-but-undefined dtor would
-    // become the key function and leave the vtable unemitted, breaking the
-    // link.
+    // The dtor body 0x580770 stays parked (docs/wso/import-parked/580770.json
+    // — it only destroys the strike tracker, which the implicit dtor does
+    // here), as does slot 0x000C (AIUpdate 0x5808A0,
+    // docs/wso/import-parked/5808A0.json — the strike tracker it walks is
+    // that same map), so the class inherits the base virtual for that slot;
+    // a declared-but-undefined dtor would become the key function and leave
+    // the vtable unemitted, breaking the link.
     // Distance the shot is pushed past the picked target: the radius handed
     // to IcewindMisc::sub_5847B0 in Fire (a DWORD read at +0x2AE in the exe).
     /* 02AE */ LONG m_beamRange;
+    // The strike tracker the ctor arms (its own vtable 0x84EEA8): the ids
+    // inside the rake with their re-strike counters (exe embed at +0x2B2:
+    // owner +0x2B6, service period +0x2CA, strike interval +0x2D2, range
+    // +0x2E4, decoder allocation 0x2E8).
+    /* 02B2 */ IcewindCProjectileTargetMap m_targetMap;
 };
 
 // The whirlwind (vtable 0x851444): a tornado that wanders the area on a

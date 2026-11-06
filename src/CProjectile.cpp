@@ -124,6 +124,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileBAM* pBam;
     CProjectileSPFLMARR* pFlame;
     CProjectileExplodingWeapon* pWeapon;
+    CProjectileLightningBolt* pBolt;
     CProjectileShaft* pShaft;
     CProjectile84E940* pDoor;
     CProjectile84DFA4* pBurst;
@@ -204,6 +205,20 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_bHasHeight = TRUE;
         pProjectile->m_fireSoundRef = "";
         pProjectile->m_arrivalSoundRef = "";
+        break;
+    case 40:
+        // Lightning Bolt: the line-beam carrier with a 50-foot tracker.
+        pBolt = new CProjectileLightningBolt("LightnT");
+        // (The exe re-stores the 400 beam the ctor just set — dead, kept as
+        // a comment.)
+        pBolt->m_targetMap.m_nRange = 50;
+        pBolt->m_speed = 20;
+        pBolt->field_1D8 = 16;
+        pBolt->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pBolt->m_bHasHeight = TRUE;
+        pBolt->field_1C2 = TRUE;
+        pBolt->m_fireSoundRef = "TRA_09";
+        pProjectile = pBolt;
         break;
     case 41:
         // The sling stone with the base palette range recoloured. The
@@ -629,6 +644,19 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_explosion3.m_sound = "EFF_P100";
         pArea->m_nDuration = 0xC8;
         pProjectile = pArea;
+        break;
+    case 313:
+        // Lance of Disruption: the 600-long rake.
+        pBolt = new CProjectileLightningBolt("LoDisrT");
+        pBolt->m_speed = 20;
+        pBolt->field_1D8 = 16;
+        pBolt->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pBolt->m_bHasHeight = TRUE;
+        pBolt->field_1C2 = TRUE;
+        pBolt->m_targetMap.m_nRange = 50;
+        pBolt->m_beamRange = 600;
+        pBolt->m_fireSoundRef = "TRA_59";
+        pProjectile = pBolt;
         break;
     case 335:
         // The fire-burst area.
@@ -2279,6 +2307,21 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_nDuration = 200;
         pProjectile = pArea;
         break;
+    case 302:
+        // Smashing Wave: the water-jet beam hugs the ground.
+        pBolt = new CProjectileLightningBolt("SWaveX");
+        pBolt->m_speed = 10;
+        pBolt->field_1D8 = 16;
+        pBolt->field_2A0 = 0;
+        pBolt->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pBolt->m_bHasHeight = FALSE;
+        pBolt->field_1C2 = FALSE;
+        pBolt->m_targetMap.m_nRange = 50;
+        pBolt->m_fireSoundRef = "TRA_56";
+        // (The exe re-stores the 400 beam the ctor just set after the sound
+        // — dead, kept as a comment.)
+        pProjectile = pBolt;
+        break;
     case 307:
         // A miasma.
         pArea = new CProjectileArea(120);
@@ -2528,6 +2571,19 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_nDuration = 300;
         pProjectile = pArea;
         break;
+    case 378:
+        // The half-dragon acid breath: the disruption rake's twin.
+        pBolt = new CProjectileLightningBolt("HDABreT");
+        pBolt->m_speed = 20;
+        pBolt->field_1D8 = 16;
+        pBolt->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pBolt->m_bHasHeight = TRUE;
+        pBolt->field_1C2 = TRUE;
+        pBolt->m_targetMap.m_nRange = 50;
+        pBolt->m_beamRange = 600;
+        pBolt->m_fireSoundRef = "TRA_59";
+        pProjectile = pBolt;
+        break;
     case 381:
         // A breath of gas. The original also re-stores the radius (a
         // no-op here).
@@ -2590,7 +2646,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   TODO: type 312: ctor 0x57F210 not ported
         //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
-        //   TODO: types 40, 302, 313, 378: ctor 0x5806C0 not ported
         //   TODO: type 314: ctor 0x580C00 not ported
         //   TODO: type 346: ctor 0x581060 not ported
         //   TODO: type 370: ctor 0x581CA0 not ported
@@ -4066,6 +4121,22 @@ void CProjectileWhirlwind::Fire(CGameArea* pArea, LONG source, LONG target, CPoi
     m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
 
     CProjectileSingleTarget::Fire(pArea, source, CGameObjectArray::INVALID_INDEX, targetPos, nHeight, nType);
+}
+
+// 0x5806C0
+// The line-beam carrier's ctor: the spell's travel BAM goes through the
+// base (the char* argument folds through a CResRef temp), then the strike
+// tracker is constructed at +0x2B2 (its ctor 0x55ACC0) and armed — this
+// projectile owns it, it services every 2 ticks and re-strikes each victim
+// every 33 in-range passes — and the rake length is stamped to 400 (the
+// disruption and breath entries retune it to 600).
+CProjectileLightningBolt::CProjectileLightningBolt(const char* szResRef)
+    : CProjectileSingleTarget(CResRef(szResRef))
+{
+    m_beamRange = 400;
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_strikeInterval = 33;
+    m_targetMap.m_servicePeriod = 2;
 }
 
 // 0x580B30
