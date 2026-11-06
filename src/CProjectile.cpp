@@ -112,6 +112,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileMAGMISS* pMAGMISS;
     CProjectile850DDC* pPuff;
     CProjectileSpellHit* pSpellHit;
+    CProjectileSingleTarget* pSingle;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -414,9 +415,9 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     // The MFMissT barrages (0x5309C0, CProjectile84E030): one body for types
     // 324 to 334 - 1 to 11 missiles of child type 314 - and type 345's seven
     // of child type 344, all on the MFMissT cell. The palette type is the
-    // WORD 1 at 0x85E84A. The children are decoded with pSprite NULL; types
-    // 314 and 344 fall to the default path's fallback until their families
-    // are wired.
+    // WORD 1 at 0x85E84A. The children are decoded with pSprite NULL; type
+    // 314 falls to the default path's fallback until its family is wired
+    // (344 wires to the MFMissT single-target below).
     case 324:
     case 325:
     case 326:
@@ -505,6 +506,82 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 361:
         // The GateX hit: bare default visual effect, no sub_586A90.
         pProjectile = new CProjectileSpellHit("GateX", visualEffect);
+        break;
+    // The single-target missiles (0x578110, CProjectileSingleTarget): one
+    // animation flying to one target. Every entry builds a CResRef for its
+    // cell and hands it to the ctor by value; the object's own visual
+    // effect at 0x2A2 is armed afterwards (sub_586A90(TRUE)) except for
+    // MSporeT, which instead displays effect feedback 4386 off pSprite
+    // before constructing and leaves the effect bare. Types 269 and 271
+    // share their OFSpheT tail block byte for byte.
+    case 24:
+        // The COrbT missile.
+        pSingle = new CProjectileSingleTarget(CResRef("COrbT"));
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_bHasHeight = TRUE;
+        pSingle->m_fireSoundRef = "TRA_23";
+        pSingle->m_arrivalSoundRef = "";
+        pProjectile = pSingle;
+        break;
+    case 251:
+        // The IcelanT missile.
+        pSingle = new CProjectileSingleTarget(CResRef("IcelanT"));
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->field_1D8 = 0x10;
+        pSingle->m_fireSoundRef = "TRA_19";
+        pProjectile = pSingle;
+        break;
+    case 268:
+        // The DisintT missile.
+        pSingle = new CProjectileSingleTarget(CResRef("DisintT"));
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->field_1D8 = 0x10;
+        pSingle->m_fireSoundRef = "TRA_20";
+        pProjectile = pSingle;
+        break;
+    case 269:
+    case 271:
+        // The OFSpheT missiles: one shared body for both types.
+        pSingle = new CProjectileSingleTarget(CResRef("OFSpheT"));
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->field_1D8 = 0x10;
+        pProjectile = pSingle;
+        break;
+    case 285:
+        // The MSporeT missile: feedback text first, bare visual effect.
+        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4386, 0);
+        pProjectile = new CProjectileSingleTarget(CResRef("MSporeT"));
+        break;
+    case 298:
+        // The ALanceT missile.
+        pSingle = new CProjectileSingleTarget(CResRef("ALanceT"));
+        pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->field_1D8 = 0x10;
+        pSingle->field_2A0 = 0;
+        pSingle->m_fireSoundRef = "TRA_57";
+        pProjectile = pSingle;
+        break;
+    case 316:
+        // The VSpherT missile.
+        pSingle = new CProjectileSingleTarget(CResRef("VSpherT"));
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
+        pSingle->field_1D8 = 1;
+        pSingle->m_bHasHeight = TRUE;
+        pSingle->field_1C2 = TRUE;
+        pSingle->m_fireSoundRef = "TRA_60";
+        pSingle->m_arrivalSoundRef = "";
+        pProjectile = pSingle;
+        break;
+    case 344:
+        // The MFMissT missile (type 345's barrage children decode here).
+        pSingle = new CProjectileSingleTarget(CResRef("MFMissT"));
+        pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
+        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_bHasHeight = TRUE;
+        pSingle->field_1C2 = TRUE;
+        pProjectile = pSingle;
         break;
     case 95:
         // Stinking Cloud.

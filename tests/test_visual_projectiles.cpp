@@ -2056,9 +2056,9 @@ TEST_CASE("visual projectiles: the cone types decode to their wave-puff cones", 
 // cell (CHITIN.KEY holds MFMISST as BAM type 1000, so the cell keeps the
 // name), with the palette WORD 1 at 0x85E84A, the TRA_55 fire sound, no
 // arrival sound and the height flag. The children are decoded with pSprite
-// NULL; types 314 and 344 are not wired yet, so the ctor's DecodeProjectile
-// calls land on the default path's CProjectile84D8B8 fallback. Decoding
-// draws nothing.
+// NULL; type 314 is not wired yet, so those children land on the default
+// path's CProjectile84D8B8 fallback (344 wires to the MFMissT
+// single-target). Decoding draws nothing.
 TEST_CASE("visual projectiles: the MFMissT barrages decode to their batteries", "[visualprojectile][data]")
 {
     struct Spec {
@@ -2134,6 +2134,60 @@ TEST_CASE("visual projectiles: the spell-hit cells decode to their hits", "[visu
         CHECK(pSpellHit->m_arrivalSoundRef == spec.arrival);
         CHECK(pSpellHit->m_bDrawBehind == spec.bDrawBehind);
         CHECK(pSpellHit->m_bHasHeight == FALSE);
+        delete pProjectile;
+    }
+}
+
+// The single-target missiles (DecodeProjectile 0x51EAF0, ctor 0x578110
+// CProjectileSingleTarget): one animation flying to one target, speed 20
+// and field_1D8 0 from the ctor, m_bHasHeight and field_1C2 left set,
+// field_2A0 defaulting to 1. Most entries arm the object's visual effect
+// (sub_586A90(TRUE), m_dwFlags 0x20200) and set field_1D8 0x10; ALanceT,
+// VSpherT and MFMissT double the speed; MSporeT alone skips the arming
+// (bare 0x20000) after displaying effect feedback 4386, and ALanceT alone
+// clears field_2A0. Types 269 and 271 share the OFSpheT body byte for
+// byte. All eight cells are BAMs in CHITIN.KEY, so the animation keeps
+// its name. Decoding draws nothing.
+TEST_CASE("visual projectiles: the single-target missiles decode to their flights", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* cell;
+        SHORT nSpeed;
+        WORD nField1D8;
+        const char* fire;
+        BOOL bArmed;
+        BYTE nField2A0;
+    };
+    const Spec kFlights[] = {
+        {24, "COrbT", 20, 0, "TRA_23", TRUE, 1},
+        {251, "IcelanT", 20, 0x10, "TRA_19", TRUE, 1},
+        {268, "DisintT", 20, 0x10, "TRA_20", TRUE, 1},
+        {269, "OFSpheT", 20, 0x10, "", TRUE, 1},
+        {271, "OFSpheT", 20, 0x10, "", TRUE, 1},
+        {285, "MSporeT", 20, 0, "", FALSE, 1},
+        {298, "ALanceT", 40, 0x10, "TRA_57", TRUE, 0},
+        {316, "VSpherT", 40, 1, "TRA_60", TRUE, 1},
+        {344, "MFMissT", 40, 0, "", TRUE, 1},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kFlights) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSingleTarget* pSingle = dynamic_cast<CProjectileSingleTarget*>(pProjectile);
+        REQUIRE(pSingle != nullptr);
+        CHECK(pSingle->m_projectileType == spec.nType - 1);
+        CHECK(pSingle->m_animation->GetResRef() == CResRef(spec.cell));
+        CHECK(pSingle->m_speed == spec.nSpeed);
+        CHECK(pSingle->field_1D8 == spec.nField1D8);
+        CHECK(pSingle->m_fireSoundRef == spec.fire);
+        CHECK(pSingle->m_arrivalSoundRef == "");
+        CHECK(pSingle->m_visualEffect.m_dwFlags == (spec.bArmed ? 0x20200u : 0x20000u));
+        CHECK(pSingle->m_bHasHeight == TRUE);
+        CHECK(pSingle->field_1C2 == TRUE);
+        CHECK(pSingle->field_2A0 == spec.nField2A0);
         delete pProjectile;
     }
 }
