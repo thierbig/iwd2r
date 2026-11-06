@@ -2090,6 +2090,54 @@ TEST_CASE("visual projectiles: the MFMissT barrages decode to their batteries", 
     }
 }
 
+// The spell-hit cells (DecodeProjectile 0x51EAF0, ctor 0x57E490
+// CProjectileSpellHit): one animation played where the spell lands, its
+// effects delivered the moment it fires. DecodeProjectile's prologue
+// default-constructs the visual effect (0x586A40) and every entry but
+// GateX applies sub_586A90(TRUE) before the ctor copies it (m_dwFlags
+// 0x20200; GateX keeps the default 0x20000). The five summoning and
+// elemental hits also take the EFF_M13 arrival sound and draw behind
+// sprites. All nine cells are BAMs in CHITIN.KEY (CEElemX is keyed as the
+// seven-char CEELEMX), so the animation keeps its name; the ctor clears
+// the height flag after the base set it. Decoding draws nothing.
+TEST_CASE("visual projectiles: the spell-hit cells decode to their hits", "[visualprojectile][data]")
+{
+    struct Spec {
+        WORD nType;
+        const char* cell;
+        BOOL bArmed;
+        const char* arrival;
+        BOOL bDrawBehind;
+    };
+    const Spec kHits[] = {
+        {289, "MSumm1X", TRUE, "EFF_M13", TRUE},
+        {290, "ASumm1X", TRUE, "EFF_M13", TRUE},
+        {291, "CEElemX", TRUE, "EFF_M13", TRUE},
+        {292, "CFElemX", TRUE, "EFF_M13", TRUE},
+        {293, "CWElemX", TRUE, "EFF_M13", TRUE},
+        {347, "PortalH", TRUE, "", FALSE},
+        {353, "IllusH", TRUE, "", FALSE},
+        {354, "CCDamaH", TRUE, "", FALSE},
+        {361, "GateX", FALSE, "", FALSE},
+    };
+    WORLD_OR_SKIP(world);
+    for (const Spec& spec : kHits) {
+        INFO("type " << spec.nType);
+        iwd2r_srand(71);
+        CProjectile* pProjectile = CProjectile::DecodeProjectile(spec.nType, world.pCharacter, 0);
+        CHECK(Draws(71, iwd2r_rand_state()) == 0);
+        CProjectileSpellHit* pSpellHit = dynamic_cast<CProjectileSpellHit*>(pProjectile);
+        REQUIRE(pSpellHit != nullptr);
+        CHECK(pSpellHit->m_projectileType == spec.nType - 1);
+        CHECK(pSpellHit->m_animation->GetResRef() == CResRef(spec.cell));
+        CHECK(pSpellHit->m_visualEffect.m_dwFlags == (spec.bArmed ? 0x20200u : 0x20000u));
+        CHECK(pSpellHit->m_arrivalSoundRef == spec.arrival);
+        CHECK(pSpellHit->m_bDrawBehind == spec.bDrawBehind);
+        CHECK(pSpellHit->m_bHasHeight == FALSE);
+        delete pProjectile;
+    }
+}
+
 namespace {
 
 // An area projectile that records the targets it would fire its secondary

@@ -14,6 +14,7 @@
 #include "CProjectileArea.h"
 #include "CProjectileBAM.h"
 #include "CProjectileSingleTarget.h"
+#include "CProjectileSpellHit.h"
 #include "CTimerWorld.h"
 #include "CUtil.h"
 #include "IcewindCVisualEffect.h"
@@ -110,6 +111,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileArea* pArea;
     CProjectileMAGMISS* pMAGMISS;
     CProjectile850DDC* pPuff;
+    CProjectileSpellHit* pSpellHit;
     CString sResRef;
     CString sTemp1;
     CString sTemp2;
@@ -436,6 +438,73 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_fireSoundRef = "TRA_55";
         pProjectile->m_arrivalSoundRef = "";
         pProjectile->m_bHasHeight = TRUE;
+        break;
+    // The spell-hit cells (0x57E490, CProjectileSpellHit): one animation
+    // played where the spell lands, its effects delivered the moment it
+    // fires. DecodeProjectile's prologue default-constructs the shared
+    // visual effect (0x586A40); every entry but type 361 arms it
+    // (sub_586A90(TRUE), m_dwFlags 0x20200) before the ctor copies it, so
+    // GateX keeps the bare default (0x20000). The five summoning and
+    // elemental hits also take the EFF_M13 arrival sound and draw behind
+    // sprites.
+    case 289:
+        // The MSumm1X hit.
+        visualEffect.sub_586A90(TRUE);
+        pSpellHit = new CProjectileSpellHit("MSumm1X", visualEffect);
+        pSpellHit->m_arrivalSoundRef = "EFF_M13";
+        pSpellHit->m_bDrawBehind = TRUE;
+        pProjectile = pSpellHit;
+        break;
+    case 290:
+        // The ASumm1X hit.
+        visualEffect.sub_586A90(TRUE);
+        pSpellHit = new CProjectileSpellHit("ASumm1X", visualEffect);
+        pSpellHit->m_arrivalSoundRef = "EFF_M13";
+        pSpellHit->m_bDrawBehind = TRUE;
+        pProjectile = pSpellHit;
+        break;
+    case 291:
+        // The CEElemX hit.
+        visualEffect.sub_586A90(TRUE);
+        pSpellHit = new CProjectileSpellHit("CEElemX", visualEffect);
+        pSpellHit->m_arrivalSoundRef = "EFF_M13";
+        pSpellHit->m_bDrawBehind = TRUE;
+        pProjectile = pSpellHit;
+        break;
+    case 292:
+        // The CFElemX hit.
+        visualEffect.sub_586A90(TRUE);
+        pSpellHit = new CProjectileSpellHit("CFElemX", visualEffect);
+        pSpellHit->m_arrivalSoundRef = "EFF_M13";
+        pSpellHit->m_bDrawBehind = TRUE;
+        pProjectile = pSpellHit;
+        break;
+    case 293:
+        // The CWElemX hit.
+        visualEffect.sub_586A90(TRUE);
+        pSpellHit = new CProjectileSpellHit("CWElemX", visualEffect);
+        pSpellHit->m_arrivalSoundRef = "EFF_M13";
+        pSpellHit->m_bDrawBehind = TRUE;
+        pProjectile = pSpellHit;
+        break;
+    case 347:
+        // The PortalH hit.
+        visualEffect.sub_586A90(TRUE);
+        pProjectile = new CProjectileSpellHit("PortalH", visualEffect);
+        break;
+    case 353:
+        // The IllusH hit.
+        visualEffect.sub_586A90(TRUE);
+        pProjectile = new CProjectileSpellHit("IllusH", visualEffect);
+        break;
+    case 354:
+        // The CCDamaH hit.
+        visualEffect.sub_586A90(TRUE);
+        pProjectile = new CProjectileSpellHit("CCDamaH", visualEffect);
+        break;
+    case 361:
+        // The GateX hit: bare default visual effect, no sub_586A90.
+        pProjectile = new CProjectileSpellHit("GateX", visualEffect);
         break;
     case 95:
         // Stinking Cloud.
