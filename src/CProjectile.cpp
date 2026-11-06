@@ -232,7 +232,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_bRandomPuffFrame = 1;
         pPuff->field_2EE = 16;
         pPuff->m_nPuffSpacing = 50;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_15";
         pProjectile = pPuff;
         break;
@@ -246,7 +246,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpacing = 50;
         pPuff->m_nFrames = 8;
         pPuff->m_nWaveInterval = 4;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -257,7 +257,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nLength = 200;
         pPuff->m_bRandomPuffFrame = 1;
         pPuff->m_nPuffSpacing = 30;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_16";
         pProjectile = pPuff;
         break;
@@ -268,7 +268,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nLength = 400;
         pPuff->m_bRandomPuffFrame = 1;
         pPuff->m_nPuffSpacing = 30;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_21";
         pProjectile = pPuff;
         break;
@@ -282,7 +282,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpacing = 50;
         pPuff->m_nFrames = 8;
         pPuff->m_nWaveInterval = 4;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -298,7 +298,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpacing = 35;
         pPuff->m_nFrames = 8;
         pPuff->m_nWaveInterval = 4;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pPuff;
         break;
     case 315:
@@ -313,7 +313,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpeedRandom = 0;
         pPuff->m_nFrames = 12;
         pPuff->m_nWaveInterval = 2;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -329,7 +329,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpeedRandom = 0;
         pPuff->m_nFrames = 12;
         pPuff->m_nWaveInterval = 2;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -340,7 +340,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nLength = 200;
         pPuff->m_bRandomPuffFrame = 1;
         pPuff->m_nPuffSpacing = 30;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pPuff;
         break;
     case 368:
@@ -352,7 +352,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_bRandomPuffFrame = 1;
         pPuff->field_2EE = 16;
         pPuff->m_nPuffSpacing = 50;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_15";
         pProjectile = pPuff;
         break;
@@ -368,7 +368,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpeedRandom = 0;
         pPuff->m_nFrames = 12;
         pPuff->m_nWaveInterval = 2;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -382,7 +382,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpacing = 50;
         pPuff->m_nFrames = 8;
         pPuff->m_nWaveInterval = 4;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -398,7 +398,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpeedRandom = 0;
         pPuff->m_nFrames = 12;
         pPuff->m_nWaveInterval = 2;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -412,7 +412,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_nPuffSpacing = 50;
         pPuff->m_nFrames = 8;
         pPuff->m_nWaveInterval = 4;
-        pPuff->m_visualEffect.sub_586A90(TRUE);
+        pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pPuff->m_fireSoundRef = "TRA_08";
         pProjectile = pPuff;
         break;
@@ -448,13 +448,13 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     // played where the spell lands, its effects delivered the moment it
     // fires. DecodeProjectile's prologue default-constructs the shared
     // visual effect (0x586A40); every entry but type 361 arms it
-    // (sub_586A90(TRUE), m_dwFlags 0x20200) before the ctor copies it, so
+    // (the 0x586A90 arm call, m_dwFlags 0x20200) before the ctor copies it, so
     // GateX keeps the bare default (0x20000). The five summoning and
     // elemental hits also take the EFF_M13 arrival sound and draw behind
     // sprites.
     case 289:
         // The MSumm1X hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSpellHit = new CProjectileSpellHit("MSumm1X", visualEffect);
         pSpellHit->m_arrivalSoundRef = "EFF_M13";
         pSpellHit->m_bDrawBehind = TRUE;
@@ -462,7 +462,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 290:
         // The ASumm1X hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSpellHit = new CProjectileSpellHit("ASumm1X", visualEffect);
         pSpellHit->m_arrivalSoundRef = "EFF_M13";
         pSpellHit->m_bDrawBehind = TRUE;
@@ -470,7 +470,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 291:
         // The CEElemX hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSpellHit = new CProjectileSpellHit("CEElemX", visualEffect);
         pSpellHit->m_arrivalSoundRef = "EFF_M13";
         pSpellHit->m_bDrawBehind = TRUE;
@@ -478,7 +478,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 292:
         // The CFElemX hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSpellHit = new CProjectileSpellHit("CFElemX", visualEffect);
         pSpellHit->m_arrivalSoundRef = "EFF_M13";
         pSpellHit->m_bDrawBehind = TRUE;
@@ -486,7 +486,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 293:
         // The CWElemX hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSpellHit = new CProjectileSpellHit("CWElemX", visualEffect);
         pSpellHit->m_arrivalSoundRef = "EFF_M13";
         pSpellHit->m_bDrawBehind = TRUE;
@@ -494,34 +494,34 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 347:
         // The PortalH hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = new CProjectileSpellHit("PortalH", visualEffect);
         break;
     case 353:
         // The IllusH hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = new CProjectileSpellHit("IllusH", visualEffect);
         break;
     case 354:
         // The CCDamaH hit.
-        visualEffect.sub_586A90(TRUE);
+        visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = new CProjectileSpellHit("CCDamaH", visualEffect);
         break;
     case 361:
-        // The GateX hit: bare default visual effect, no sub_586A90.
+        // The GateX hit: bare default visual effect, no 0x586A90 arm call.
         pProjectile = new CProjectileSpellHit("GateX", visualEffect);
         break;
     // The single-target missiles (0x578110, CProjectileSingleTarget): one
     // animation flying to one target. Every entry builds a CResRef for its
     // cell and hands it to the ctor by value; the object's own visual
-    // effect at 0x2A2 is armed afterwards (sub_586A90(TRUE)) except for
+    // effect at 0x2A2 is armed afterwards (the 0x586A90 call) except for
     // MSporeT, which instead displays effect feedback 4386 off pSprite
     // before constructing and leaves the effect bare. Types 269 and 271
     // share their OFSpheT tail block byte for byte.
     case 24:
         // The COrbT missile.
         pSingle = new CProjectileSingleTarget(CResRef("COrbT"));
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->m_bHasHeight = TRUE;
         pSingle->m_fireSoundRef = "TRA_23";
         pSingle->m_arrivalSoundRef = "";
@@ -530,7 +530,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 251:
         // The IcelanT missile.
         pSingle = new CProjectileSingleTarget(CResRef("IcelanT"));
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->field_1D8 = 0x10;
         pSingle->m_fireSoundRef = "TRA_19";
         pProjectile = pSingle;
@@ -538,7 +538,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 268:
         // The DisintT missile.
         pSingle = new CProjectileSingleTarget(CResRef("DisintT"));
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->field_1D8 = 0x10;
         pSingle->m_fireSoundRef = "TRA_20";
         pProjectile = pSingle;
@@ -547,20 +547,20 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 271:
         // The OFSpheT missiles: one shared body for both types.
         pSingle = new CProjectileSingleTarget(CResRef("OFSpheT"));
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->field_1D8 = 0x10;
         pProjectile = pSingle;
         break;
     case 285:
         // The MSporeT missile: feedback text first, bare visual effect.
-        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4386, 0);
+        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4386, 0); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = new CProjectileSingleTarget(CResRef("MSporeT"));
         break;
     case 298:
         // The ALanceT missile.
         pSingle = new CProjectileSingleTarget(CResRef("ALanceT"));
         pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->field_1D8 = 0x10;
         pSingle->field_2A0 = 0;
         pSingle->m_fireSoundRef = "TRA_57";
@@ -569,7 +569,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 316:
         // The VSpherT missile.
         pSingle = new CProjectileSingleTarget(CResRef("VSpherT"));
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
         pSingle->field_1D8 = 1;
         pSingle->m_bHasHeight = TRUE;
@@ -582,7 +582,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The MFMissT missile (type 345's barrage children decode here).
         pSingle = new CProjectileSingleTarget(CResRef("MFMissT"));
         pSingle->m_speed = static_cast<SHORT>(pSingle->m_speed * 2);
-        pSingle->m_visualEffect.sub_586A90(TRUE);
+        pSingle->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pSingle->m_bHasHeight = TRUE;
         pSingle->field_1C2 = TRUE;
         pProjectile = pSingle;
@@ -1297,7 +1297,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 237:
@@ -1306,7 +1306,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 238:
@@ -1315,7 +1315,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 239:
@@ -1323,7 +1323,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(300);
         pArea->m_explosion1.m_animation = "Area2X";
         pArea->m_explosion1.m_sound = "EFF_M99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 240:
@@ -1332,7 +1332,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "Area2X";
         pArea->m_explosion1.m_sound = "EFF_M99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 241:
@@ -1341,7 +1341,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "Area4X";
         pArea->m_explosion1.m_sound = "EFF_M99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 242:
@@ -1350,7 +1350,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 243:
@@ -1358,7 +1358,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(350);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 244:
@@ -1372,7 +1372,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(150);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 246:
@@ -1385,7 +1385,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 248:
@@ -1394,7 +1394,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 250:
@@ -1403,7 +1403,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 252:
@@ -1412,7 +1412,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 253:
@@ -1420,7 +1420,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(600);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 254:
@@ -1429,7 +1429,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 255:
@@ -1437,7 +1437,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(150);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 256:
@@ -1446,7 +1446,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 257:
@@ -1455,7 +1455,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 258:
@@ -1464,7 +1464,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 260:
@@ -1472,7 +1472,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(600);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 264:
@@ -1481,7 +1481,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 266:
@@ -1489,7 +1489,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(350);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->TargetFriend(pSprite);
         pProjectile = pArea;
         break;
@@ -1499,7 +1499,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 270:
@@ -1512,7 +1512,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "Area3X";
         pArea->m_explosion1.m_sound = "EFF_M99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 276:
@@ -1521,7 +1521,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "SoPainX";
         pArea->m_explosion1.m_sound = "EFF_P49";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 277:
@@ -1530,7 +1530,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "SoHopeX";
         pArea->m_explosion1.m_sound = "EFF_P50";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 280:
@@ -1546,24 +1546,24 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 282:
         // A stinking cloud, after a floating line over the caster.
-        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4388, 0);
+        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4388, 0); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea = new CProjectileArea(100);
         pArea->m_explosion2.m_animation = "SCloudR";
-        pArea->m_explosion2.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion2.field_2C = TRUE;
         pArea->m_explosion2.field_2E = 7;
         pProjectile = pArea;
         break;
     case 284:
         // SPIN991: the same cloud, after a floating line over the caster.
-        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4387, 0);
+        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 4387, 0); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = new CProjectileArea84F310();
         break;
     case 286:
         // An incendiary cloud.
         pArea = new CProjectileArea(150);
         pArea->m_explosion3.m_animation = "ICloudB";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_36 = TRUE;
         pArea->m_explosion3.field_38 = 500;
@@ -1573,7 +1573,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // An incendiary cloud.
         pArea = new CProjectileArea(150);
         pArea->m_explosion3.m_animation = "ICloudA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.field_38 = 500;
@@ -1596,7 +1596,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Soul Eater.
         pArea = new CProjectileArea(120);
         pArea->m_explosion3.m_animation = "SEaterA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "ARE_M18";
@@ -1608,9 +1608,9 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(150);
         pArea->m_explosion1.m_animation = "SGrowtX";
         pArea->m_explosion1.m_sound = "EFF_P111";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.m_animation = "SGrowtA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "AFT_P24";
@@ -1625,7 +1625,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // A lingering cloud.
         pArea = new CProjectileArea(300);
         pArea->m_explosion3.m_animation = "CloudBA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "ARE_P24";
@@ -1641,7 +1641,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(120);
         pArea->m_explosion1.m_sound = "EFF_P104";
         pArea->m_explosion3.m_animation = "MoEldaA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.field_38 = 1200;
@@ -1651,7 +1651,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // A pestilence cloud.
         pArea = new CProjectileArea(200);
         pArea->m_explosion3.m_animation = "CoPestA";
-        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x80);
+        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x80); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "ARE_P25";
@@ -1677,7 +1677,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // A suffocation cloud.
         pArea = new CProjectileArea(120);
         pArea->m_explosion3.m_animation = "SuffocA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "AFT_M18";
@@ -1693,7 +1693,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(300);
         pArea->m_explosion1.m_animation = "ADHWilX";
         pArea->m_explosion1.m_sound = "ARE_M17";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 320:
@@ -1722,14 +1722,14 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "PWStunH";
         pArea->m_explosion1.m_sound = "EFF_M38";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 337:
         // Holy Smite.
         pArea = new CProjectileArea(200);
         pArea->m_explosion3.m_animation = "HSmiteA";
-        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x40);
+        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x40); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_38 = 300;
@@ -1743,7 +1743,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // Unholy Blight.
         pArea = new CProjectileArea(200);
         pArea->m_explosion3.m_animation = "UBlighA";
-        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x40);
+        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x40); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_38 = 300;
@@ -1758,7 +1758,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(300);
         pArea->m_explosion1.m_animation = "SoHopeX";
         pArea->m_explosion1.m_sound = "EFF_P50";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 341:
@@ -1766,7 +1766,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(300);
         pArea->m_explosion1.m_animation = "SoHopeX";
         pArea->m_explosion1.m_sound = "EFF_P50";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 342:
@@ -1781,10 +1781,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         break;
     case 351:
         // A cloudkill, after a floating line over the caster.
-        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 27030, 0);
+        IcewindMisc::sub_584880(static_cast<CGameSprite*>(pSprite), 27030, 0); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea = new CProjectileArea(125);
         pArea->m_explosion2.m_animation = "CloudKR";
-        pArea->m_explosion2.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion2.field_2C = TRUE;
         pArea->m_explosion2.field_2E = 7;
         pProjectile = pArea;
@@ -1795,7 +1795,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_M99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 359:
@@ -1804,7 +1804,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_P99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 362:
@@ -1813,7 +1813,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetEnemy(pSprite);
         pArea->m_explosion1.m_animation = "Area1X";
         pArea->m_explosion1.m_sound = "EFF_W99";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 366:
@@ -1821,7 +1821,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(300);
         pArea->m_explosion3.m_animation = "MSwarmA";
         pArea->m_explosion3.m_sound = "ARE_P03";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_34 = FALSE;
         pArea->m_explosion3.field_35 = FALSE;
         pArea->m_explosion3.field_38 = 250;
@@ -1838,7 +1838,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 371:
@@ -1847,7 +1847,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->TargetFriend(pSprite);
         pArea->m_explosion1.m_animation = "AlteraX";
         pArea->m_explosion1.m_sound = "ARE_M19";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 372:
@@ -1855,7 +1855,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(160);
         pArea->m_explosion1.m_animation = "AbjuraX";
         pArea->m_explosion1.m_sound = "ARE_M20";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 373:
@@ -1863,7 +1863,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(200);
         pArea->m_explosion1.m_animation = "EnchanX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
     case 376:
@@ -1874,7 +1874,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // A pestilence cloud.
         pArea = new CProjectileArea(200);
         pArea->m_explosion3.m_animation = "CoPestA";
-        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x80);
+        pArea->m_explosion3.m_visualEffect.sub_586AC0(TRUE, 0x80); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_34 = TRUE;
         pArea->m_explosion3.m_sound = "ARE_P25";
@@ -1891,9 +1891,9 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea = new CProjectileArea(200);
         pArea->m_explosion1.m_animation = "GABreaX";
         pArea->m_explosion1.m_sound = "ARE_M21";
-        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.m_animation = "GABreaA";
-        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE);
+        pArea->m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pArea->m_explosion3.field_35 = TRUE;
         pArea->m_explosion3.field_36 = TRUE;
         pArea->m_explosion3.field_38 = 500;
@@ -1916,7 +1916,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
             UTIL_ASSERT(FALSE);
         }
 
-        // TODO: Incomplete (0x51EB93-0x528DEF). The jump table at 0x528E7C
+        // TODO (0x51EB93-0x528DEF): the jump table at 0x528E7C
         // builds one class per type, 2 to 386. Beyond the cases above:
         // - types 19, 39, 43, 44, 46, 58, 61, 62, 63, 99, 106, 107, 191,
         //   219-226, 259, 265 and 348 call UtilAssert and fall through to
@@ -2766,10 +2766,10 @@ CProjectileAcidStorm::CProjectileAcidStorm()
     : CProjectileArea(0x100)
 {
     m_explosion1.m_animation = "AStormX";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.m_animation = "AStormA";
     m_explosion3.m_sound = "ARE_M04";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.field_35 = TRUE;
     m_explosion3.field_36 = TRUE;
     m_nTriggerInterval = 10;
@@ -2786,7 +2786,7 @@ CProjectileCircleOfDeath::CProjectileCircleOfDeath()
 {
     m_explosion1.m_animation = "DSpellX";
     m_explosion1.m_sound = "EFF_M42";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10000;
     m_nTriggerCountdown = 0;
     m_nHitModulus = 10;
@@ -2800,7 +2800,7 @@ CProjectileHoldAnimal::CProjectileHoldAnimal()
 {
     m_explosion1.m_animation = "EnchanX";
     m_explosion1.m_sound = "ARE_M21";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10000;
     m_nTriggerCountdown = 0;
     m_nHitModulus = 10;
@@ -2814,7 +2814,7 @@ CProjectileHoldMonster::CProjectileHoldMonster()
 {
     m_explosion1.m_animation = "EnchanX";
     m_explosion1.m_sound = "ARE_M21";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10000;
     m_nTriggerCountdown = 0;
     m_nHitModulus = 10;
@@ -2828,7 +2828,7 @@ CProjectileHaltUndead::CProjectileHaltUndead()
 {
     m_explosion1.m_animation = "EnchanX";
     m_explosion1.m_sound = "ARE_M21";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10000;
     m_nTriggerCountdown = 0;
     m_nHitModulus = 10;
@@ -2841,10 +2841,10 @@ CProjectileIceStorm::CProjectileIceStorm()
     : CProjectileArea(0x100)
 {
     m_explosion1.m_animation = "IStormX";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.m_animation = "IStormA";
     m_explosion3.m_sound = "ARE_M04";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.field_34 = TRUE;
     m_explosion3.field_35 = TRUE;
     m_nTriggerInterval = 10;
@@ -2862,14 +2862,14 @@ CProjectileFieryCloud::CProjectileFieryCloud()
     field_65E = 0;
     m_explosion1.m_animation = "ICloudX";
     m_explosion1.m_sound = "EFF_M40";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.m_animation = "ICloudR";
-    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.field_2C = TRUE;
     m_explosion2.field_2E = 13;
     m_explosion3.m_animation = "ICloudA";
     m_explosion3.m_sound = "ARE_M05";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.field_34 = TRUE;
     m_explosion3.field_35 = TRUE;
     m_explosion3.field_38 = 1500;
@@ -2885,14 +2885,14 @@ CProjectileInsectPlague::CProjectileInsectPlague()
 {
     m_explosion1.m_animation = "IPlaguX";
     m_explosion1.m_sound = "RNG_P01";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.m_animation = "IPlaguR";
-    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.field_2C = TRUE;
     m_explosion2.field_2E = 13;
     m_explosion3.m_animation = "IPlaguA";
     m_explosion3.m_sound = "ARE_P02";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10;
     m_nHitModulus = 10;
     m_explosion3.field_34 = TRUE;
@@ -2909,14 +2909,14 @@ CProjectileCorrosiveFog::CProjectileCorrosiveFog()
 {
     m_explosion1.m_animation = "DFogX";
     m_explosion1.m_sound = "RNG_M01";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.m_animation = "DFogR";
-    m_explosion2.m_visualEffect.sub_586A90(TRUE);
+    m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion2.field_2C = TRUE;
     m_explosion2.field_2E = 26;
     m_explosion3.m_animation = "DFogA";
     m_explosion3.m_sound = "ARE_M02";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10;
     m_nHitModulus = 10;
     m_explosion3.field_34 = TRUE;
@@ -2934,7 +2934,7 @@ CProjectilePowerWordKill::CProjectilePowerWordKill()
 {
     m_explosion1.m_animation = "PWKillX";
     m_explosion1.m_sound = "EFF_M39";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_nTriggerInterval = 10000;
     m_nTriggerCountdown = 0;
     m_nHitModulus = 10;
@@ -2948,10 +2948,10 @@ CProjectileProduceFire::CProjectileProduceFire()
 {
     m_explosion1.m_animation = "PFireX";
     m_explosion1.m_sound = "EFF_P45";
-    m_explosion1.m_visualEffect.sub_586A90(TRUE);
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.m_animation = "PFireA";
     m_explosion3.m_sound = "ARE_P03";
-    m_explosion3.m_visualEffect.sub_586A90(TRUE);
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_explosion3.field_34 = TRUE;
     m_explosion3.field_35 = TRUE;
     m_explosion3.field_38 = 750;
@@ -3342,7 +3342,7 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     field_1D8 = 16;
     m_fireSoundRef = "TRA_09";
     m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
-    m_visualEffect.sub_586A90(TRUE);
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
 }

@@ -2006,20 +2006,20 @@ TEST_CASE("visual projectiles: the cone types decode to their wave-puff cones", 
         const char* sFireSound;
     };
     const Spec kCones[] = {
-        {22, "BHandsT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15"},
-        {25, "CoColdT", 200, 350, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
-        {97, "CSprayT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_16"},
-        {272, "PSprayT", 175, 400, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_21"},
-        {296, "CoColdT", 200, 120, 40, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
-        {303, "TSprayT", 600, 300, 60, 35, 35, 45, 8, 4, 1, 0, 16, ""},
-        {315, "ShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
-        {319, "GShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
-        {343, "WOWispT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, ""},
-        {368, "FFingeT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15"},
-        {374, "ShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
-        {379, "HDFBreT", 300, 300, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
-        {382, "GShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08"},
-        {386, "HDFBreT", 150, 150, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08"},
+        { 22, "BHandsT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15" },
+        { 25, "CoColdT", 200, 350, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08" },
+        { 97, "CSprayT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_16" },
+        { 272, "PSprayT", 175, 400, 20, 30, 35, 45, 15, 5, 1, 1, 1, "TRA_21" },
+        { 296, "CoColdT", 200, 120, 40, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08" },
+        { 303, "TSprayT", 600, 300, 60, 35, 35, 45, 8, 4, 1, 0, 16, "" },
+        { 315, "ShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08" },
+        { 319, "GShoutT", 100, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08" },
+        { 343, "WOWispT", 200, 200, 20, 30, 35, 45, 15, 5, 1, 1, 1, "" },
+        { 368, "FFingeT", 200, 80, 20, 50, 35, 45, 15, 5, 1, 0, 16, "TRA_15" },
+        { 374, "ShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08" },
+        { 379, "HDFBreT", 300, 300, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08" },
+        { 382, "GShoutT", 120, 300, 30, 1000, 75, 0, 12, 2, 0, 1, 16, "TRA_08" },
+        { 386, "HDFBreT", 150, 150, 60, 50, 35, 45, 8, 4, 1, 1, 1, "TRA_08" },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kCones) {
@@ -2067,9 +2067,18 @@ TEST_CASE("visual projectiles: the MFMissT barrages decode to their batteries", 
         WORD nCount;
     };
     const Spec kBatteries[] = {
-        {324, 313, 1}, {325, 313, 2}, {326, 313, 3}, {327, 313, 4}, {328, 313, 5},
-        {329, 313, 6}, {330, 313, 7}, {331, 313, 8}, {332, 313, 9}, {333, 313, 10},
-        {334, 313, 11}, {345, 343, 7},
+        { 324, 313, 1 },
+        { 325, 313, 2 },
+        { 326, 313, 3 },
+        { 327, 313, 4 },
+        { 328, 313, 5 },
+        { 329, 313, 6 },
+        { 330, 313, 7 },
+        { 331, 313, 8 },
+        { 332, 313, 9 },
+        { 333, 313, 10 },
+        { 334, 313, 11 },
+        { 345, 343, 7 },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kBatteries) {
@@ -2110,15 +2119,15 @@ TEST_CASE("visual projectiles: the spell-hit cells decode to their hits", "[visu
         BOOL bDrawBehind;
     };
     const Spec kHits[] = {
-        {289, "MSumm1X", TRUE, "EFF_M13", TRUE},
-        {290, "ASumm1X", TRUE, "EFF_M13", TRUE},
-        {291, "CEElemX", TRUE, "EFF_M13", TRUE},
-        {292, "CFElemX", TRUE, "EFF_M13", TRUE},
-        {293, "CWElemX", TRUE, "EFF_M13", TRUE},
-        {347, "PortalH", TRUE, "", FALSE},
-        {353, "IllusH", TRUE, "", FALSE},
-        {354, "CCDamaH", TRUE, "", FALSE},
-        {361, "GateX", FALSE, "", FALSE},
+        { 289, "MSumm1X", TRUE, "EFF_M13", TRUE },
+        { 290, "ASumm1X", TRUE, "EFF_M13", TRUE },
+        { 291, "CEElemX", TRUE, "EFF_M13", TRUE },
+        { 292, "CFElemX", TRUE, "EFF_M13", TRUE },
+        { 293, "CWElemX", TRUE, "EFF_M13", TRUE },
+        { 347, "PortalH", TRUE, "", FALSE },
+        { 353, "IllusH", TRUE, "", FALSE },
+        { 354, "CCDamaH", TRUE, "", FALSE },
+        { 361, "GateX", FALSE, "", FALSE },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kHits) {
@@ -2160,15 +2169,15 @@ TEST_CASE("visual projectiles: the single-target missiles decode to their flight
         BYTE nField2A0;
     };
     const Spec kFlights[] = {
-        {24, "COrbT", 20, 0, "TRA_23", TRUE, 1},
-        {251, "IcelanT", 20, 0x10, "TRA_19", TRUE, 1},
-        {268, "DisintT", 20, 0x10, "TRA_20", TRUE, 1},
-        {269, "OFSpheT", 20, 0x10, "", TRUE, 1},
-        {271, "OFSpheT", 20, 0x10, "", TRUE, 1},
-        {285, "MSporeT", 20, 0, "", FALSE, 1},
-        {298, "ALanceT", 40, 0x10, "TRA_57", TRUE, 0},
-        {316, "VSpherT", 40, 1, "TRA_60", TRUE, 1},
-        {344, "MFMissT", 40, 0, "", TRUE, 1},
+        { 24, "COrbT", 20, 0, "TRA_23", TRUE, 1 },
+        { 251, "IcelanT", 20, 0x10, "TRA_19", TRUE, 1 },
+        { 268, "DisintT", 20, 0x10, "TRA_20", TRUE, 1 },
+        { 269, "OFSpheT", 20, 0x10, "", TRUE, 1 },
+        { 271, "OFSpheT", 20, 0x10, "", TRUE, 1 },
+        { 285, "MSporeT", 20, 0, "", FALSE, 1 },
+        { 298, "ALanceT", 40, 0x10, "TRA_57", TRUE, 0 },
+        { 316, "VSpherT", 40, 1, "TRA_60", TRUE, 1 },
+        { 344, "MFMissT", 40, 0, "", TRUE, 1 },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kFlights) {
@@ -2215,19 +2224,19 @@ TEST_CASE("visual projectiles: the sparkle-stream bolts decode to their flights"
         const char* altPalette;
     };
     const Spec kSparkles[] = {
-        {37, "SPMAGMIS", 40, 0, FALSE, "TRA_02", nullptr},
-        {47, "TRAVEL", 40, 2, TRUE, "TRA_04A", "STTRAVL1"},
-        {48, "TRAVEL", 40, 4, TRUE, "TRA_04C", "STTRAVL2"},
-        {49, "TRAVEL", 40, 6, TRUE, "", "STTRAVL5"},
-        {50, "TRAVEL", 40, 9, TRUE, "TRA_01", "STTRAVL7"},
-        {51, "TRAVEL", 40, 0xA, TRUE, "", nullptr},
-        {52, "TRAVEL", 40, 1, TRUE, "", nullptr},
-        {53, "TRAVEL", 40, 3, TRUE, "", nullptr},
-        {54, "TRAVEL", 40, 7, TRUE, "", "STTRAVL6"},
-        {55, "TRAVEL", 40, 5, TRUE, "TRA_04D", "STTRAVL3"},
-        {65, "TRAVEL", 80, 0xA, TRUE, "TRA_04C", "STTRAVL2"},
-        {184, "TRAVEL", 40, 0xB, TRUE, "TRA_04A", "STTRAVL4"},
-        {185, "TRAVEL", 40, 0xC, TRUE, "TRA_03", "STTRAVL8"},
+        { 37, "SPMAGMIS", 40, 0, FALSE, "TRA_02", nullptr },
+        { 47, "TRAVEL", 40, 2, TRUE, "TRA_04A", "STTRAVL1" },
+        { 48, "TRAVEL", 40, 4, TRUE, "TRA_04C", "STTRAVL2" },
+        { 49, "TRAVEL", 40, 6, TRUE, "", "STTRAVL5" },
+        { 50, "TRAVEL", 40, 9, TRUE, "TRA_01", "STTRAVL7" },
+        { 51, "TRAVEL", 40, 0xA, TRUE, "", nullptr },
+        { 52, "TRAVEL", 40, 1, TRUE, "", nullptr },
+        { 53, "TRAVEL", 40, 3, TRUE, "", nullptr },
+        { 54, "TRAVEL", 40, 7, TRUE, "", "STTRAVL6" },
+        { 55, "TRAVEL", 40, 5, TRUE, "TRA_04D", "STTRAVL3" },
+        { 65, "TRAVEL", 80, 0xA, TRUE, "TRA_04C", "STTRAVL2" },
+        { 184, "TRAVEL", 40, 0xB, TRUE, "TRA_04A", "STTRAVL4" },
+        { 185, "TRAVEL", 40, 0xC, TRUE, "TRA_03", "STTRAVL8" },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kSparkles) {
@@ -2280,17 +2289,17 @@ TEST_CASE("visual projectiles: the sparkle bursts decode to their children", "[v
         const char* arrival;
     };
     const Spec kBursts[] = {
-        {149, "STTRAVL1", 2, 0x2E, "TRA_04A", "CAS_M08"},
-        {150, "STTRAVL2", 4, 0x2F, "TRA_04C", "EFF_M05"},
-        {151, "STTRAVL5", 6, 0x30, "TRA_04B", "CAS_P03"},
-        {152, "STTRAVL7", 9, 0x31, "", ""},
-        {153, nullptr, 0xA, 0x32, "", ""},
-        {154, nullptr, 1, 0x33, "", ""},
-        {155, nullptr, 3, 0x34, "", ""},
-        {156, "STTRAVL6", 7, 0x35, "", ""},
-        {157, "STTRAVL3", 5, 0x36, "TRA_04A", "CAS_P02"},
-        {182, "STTRAVL4", 0xB, 0x36, "", ""},
-        {183, "STTRAVL8", 0xC, 0xB8, "TRA_03", "EFF_M04"},
+        { 149, "STTRAVL1", 2, 0x2E, "TRA_04A", "CAS_M08" },
+        { 150, "STTRAVL2", 4, 0x2F, "TRA_04C", "EFF_M05" },
+        { 151, "STTRAVL5", 6, 0x30, "TRA_04B", "CAS_P03" },
+        { 152, "STTRAVL7", 9, 0x31, "", "" },
+        { 153, nullptr, 0xA, 0x32, "", "" },
+        { 154, nullptr, 1, 0x33, "", "" },
+        { 155, nullptr, 3, 0x34, "", "" },
+        { 156, "STTRAVL6", 7, 0x35, "", "" },
+        { 157, "STTRAVL3", 5, 0x36, "TRA_04A", "CAS_P02" },
+        { 182, "STTRAVL4", 0xB, 0x36, "", "" },
+        { 183, "STTRAVL8", 0xC, 0xB8, "TRA_03", "EFF_M04" },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kBursts) {
@@ -2350,11 +2359,11 @@ TEST_CASE("visual projectiles: the bare exploding missiles decode to their tweak
         BYTE nTargetEA;
     };
     const Spec kExploding[] = {
-        {93, 0x16, TRUE, 0x100, false, 0},
-        {94, 0x4E, FALSE, 0x100, false, 0},
-        {158, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_GOODCUTOFF},
-        {159, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_NOTGOOD},
-        {205, 0x4E, FALSE, 0x50, false, 0},
+        { 93, 0x16, TRUE, 0x100, false, 0 },
+        { 94, 0x4E, FALSE, 0x100, false, 0 },
+        { 158, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_GOODCUTOFF },
+        { 159, 0x4E, FALSE, 0x100, true, CAIObjectType::EA_NOTGOOD },
+        { 205, 0x4E, FALSE, 0x50, false, 0 },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kExploding) {
@@ -2408,29 +2417,29 @@ TEST_CASE("visual projectiles: the recursing bolt wrappers decode via their carr
         BYTE nTargetEA;
     };
     const Spec kWrappers[] = {
-        {160, 149, 0x2E, true, CAIObjectType::EA_GOODCUTOFF},
-        {161, 150, 0x2F, true, CAIObjectType::EA_GOODCUTOFF},
-        {162, 151, 0x30, true, CAIObjectType::EA_GOODCUTOFF},
-        {163, 152, 0x31, true, CAIObjectType::EA_GOODCUTOFF},
-        {164, 153, 0x32, true, CAIObjectType::EA_GOODCUTOFF},
-        {165, 154, 0x33, true, CAIObjectType::EA_GOODCUTOFF},
-        {166, 155, 0x34, true, CAIObjectType::EA_GOODCUTOFF},
-        {167, 156, 0x35, true, CAIObjectType::EA_GOODCUTOFF},
-        {168, 157, 0x36, true, CAIObjectType::EA_GOODCUTOFF},
-        {169, 149, 0x2E, true, CAIObjectType::EA_NOTGOOD},
-        {170, 150, 0x2F, true, CAIObjectType::EA_NOTGOOD},
-        {171, 151, 0x30, true, CAIObjectType::EA_NOTGOOD},
-        {172, 152, 0x31, true, CAIObjectType::EA_NOTGOOD},
-        {173, 153, 0x32, true, CAIObjectType::EA_NOTGOOD},
-        {174, 154, 0x33, true, CAIObjectType::EA_NOTGOOD},
-        {175, 155, 0x34, true, CAIObjectType::EA_NOTGOOD},
-        {176, 156, 0x35, true, CAIObjectType::EA_NOTGOOD},
-        {177, 157, 0x36, true, CAIObjectType::EA_NOTGOOD},
-        {178, 182, 0x36, true, CAIObjectType::EA_NOTGOOD},
-        {179, 183, 0xB8, true, CAIObjectType::EA_NOTGOOD},
-        {180, 182, 0x36, true, CAIObjectType::EA_GOODCUTOFF},
-        {181, 183, 0xB8, true, CAIObjectType::EA_GOODCUTOFF},
-        {186, 94, 0x4E, false, 0},
+        { 160, 149, 0x2E, true, CAIObjectType::EA_GOODCUTOFF },
+        { 161, 150, 0x2F, true, CAIObjectType::EA_GOODCUTOFF },
+        { 162, 151, 0x30, true, CAIObjectType::EA_GOODCUTOFF },
+        { 163, 152, 0x31, true, CAIObjectType::EA_GOODCUTOFF },
+        { 164, 153, 0x32, true, CAIObjectType::EA_GOODCUTOFF },
+        { 165, 154, 0x33, true, CAIObjectType::EA_GOODCUTOFF },
+        { 166, 155, 0x34, true, CAIObjectType::EA_GOODCUTOFF },
+        { 167, 156, 0x35, true, CAIObjectType::EA_GOODCUTOFF },
+        { 168, 157, 0x36, true, CAIObjectType::EA_GOODCUTOFF },
+        { 169, 149, 0x2E, true, CAIObjectType::EA_NOTGOOD },
+        { 170, 150, 0x2F, true, CAIObjectType::EA_NOTGOOD },
+        { 171, 151, 0x30, true, CAIObjectType::EA_NOTGOOD },
+        { 172, 152, 0x31, true, CAIObjectType::EA_NOTGOOD },
+        { 173, 153, 0x32, true, CAIObjectType::EA_NOTGOOD },
+        { 174, 154, 0x33, true, CAIObjectType::EA_NOTGOOD },
+        { 175, 155, 0x34, true, CAIObjectType::EA_NOTGOOD },
+        { 176, 156, 0x35, true, CAIObjectType::EA_NOTGOOD },
+        { 177, 157, 0x36, true, CAIObjectType::EA_NOTGOOD },
+        { 178, 182, 0x36, true, CAIObjectType::EA_NOTGOOD },
+        { 179, 183, 0xB8, true, CAIObjectType::EA_NOTGOOD },
+        { 180, 182, 0x36, true, CAIObjectType::EA_GOODCUTOFF },
+        { 181, 183, 0xB8, true, CAIObjectType::EA_GOODCUTOFF },
+        { 186, 94, 0x4E, false, 0 },
     };
     WORLD_OR_SKIP(world);
     for (const Spec& spec : kWrappers) {
