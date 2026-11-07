@@ -12900,8 +12900,80 @@ BOOL CInfGame::ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCo
             INFINITE);
     }
 
-    // TODO(0x5AE3CF-0x5AE76D): loop 3 — fill the bench from the desired
-    // overflow list.
+    // Loop 3 (0x5AE3CF-0x5AE76D): fill the bench. Every desired bench id
+    // not already on the bench is appended to the overflow array — EA_PC,
+    // a JOINS trigger to every party member, and a cleared dialog
+    // reference. Nothing joins the active six here.
+    for (SHORT j = 0; j < nDesiredOverflowCount; j++) {
+        LONG nId = pDesiredOverflowIds[j];
+
+        // The exe scans the whole bench without breaking (0x5AE3FC-0x5AE424).
+        BOOL bFound = FALSE;
+        for (INT i = 0; i < m_characterOverflow.GetCount(); i++) {
+            if (m_characterOverflow.GetAt(i) == reinterpret_cast<int*>(nId)) {
+                bFound = TRUE;
+            }
+        }
+        if (bFound) {
+            continue;
+        }
+
+        BYTE rc;
+        do {
+            rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+        if (rc != CGameObjectArray::SUCCESS) {
+            return FALSE; // 0x5AF14D
+        }
+
+        m_characterOverflow.SetAtGrow(m_characterOverflow.GetCount(),
+            reinterpret_cast<int*>(nId));
+        m_nCharacterOverflowCount++;
+
+        // All three type copies go PC (0x5AE481-0x5AE559). As in loop 1,
+        // the start copy is rebuilt from the LIVE type (0x5AE4BA and
+        // 0x5AE4E0 both read +0x3DFA), not from start.
+        CAIObjectType typeAI;
+        typeAI.Set(pSprite->GetAIType());
+        typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+        CAIObjectType typeAILive;
+        typeAILive.Set(pSprite->m_liveTypeAI);
+        typeAILive.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+        CAIObjectType typeAIStart;
+        typeAIStart.Set(pSprite->m_liveTypeAI);
+        typeAIStart.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+        pSprite->SetAIType(typeAI, FALSE, FALSE);
+        pSprite->m_liveTypeAI.Set(typeAILive);
+        pSprite->m_startTypeAI.Set(typeAIStart);
+
+        pSprite->m_dialog = "";
+
+        if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+            // No Animate/death handling on this path — only the JOINS
+            // notification (the gate failing skips straight to ReleaseDeny
+            // at 0x5AE6FA).
+            CAITrigger trigger(CAITRIGGER_JOINS, typeAI, 0);
+            for (INT i = 0; i < m_nCharacters; i++) {
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageSetTrigger(trigger, pSprite->m_id, m_characterPortraits[i]),
+                    FALSE);
+            }
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    // TODO(0x5AE76F-0x5AF14F): loop 4 — reconcile the active six, then the
+    // host/settings tail.
     return TRUE;
 }
 
