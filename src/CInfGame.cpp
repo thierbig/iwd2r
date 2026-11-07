@@ -11876,7 +11876,45 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
     }
     pNew[0x25A] = nLevel;
 
-    // TODO(range 2, 0x5A3F52-0x5A41B9): remaining header field moves.
+    // Range 2 (0x5A3F52-0x5A41B9): header field moves. ebx = pNew+8 and
+    // ebp = pOld in the exe, so [ebx+X] <- [ebp+X+8] is identity.
+
+    // Identity block, raw 0x18..0x44 (exe walks it dword/word/byte).
+    memcpy(pNew + 0x18, pOld + 0x18, 0x2D);
+
+    // 0x48..0x56 compact by two (five words + five bytes).
+    memcpy(pNew + 0x46, pOld + 0x48, 0xF);
+
+    // 0x59..0x5c compact by four; 0x5d (signed) is divided by ten — the
+    // imul 0x66666667 / sar 1 / round-toward-zero sequence at 0x5A4014.
+    memcpy(pNew + 0x55, pOld + 0x59, 4);
+    pNew[0x59] = static_cast<BYTE>(*reinterpret_cast<const signed char*>(pOld + 0x5D) / 10);
+    memcpy(pNew + 0x5A, pOld + 0x5E, 6);
+
+    // 0x6b..0x6d compact by six; 0x82 and the 0x84..0xa3 color block by
+    // 0x1a (V2.1 re-rooms that region).
+    memcpy(pNew + 0x65, pOld + 0x6B, 3);
+    pNew[0x68] = pOld[0x82];
+    memcpy(pNew + 0x6A, pOld + 0x84, 0x20);
+
+    // 0xa4..0x1b7 grows by eight (rep movsd 0x40 dwords + five tail dwords).
+    memcpy(pNew + 0xAC, pOld + 0xA4, 0x114);
+
+    // Sparse moves into the V2.1 state block (0x220-0x242 region).
+    pNew[0x258] = pOld[0x220];
+    pNew[0x259] = pOld[0x221];
+    memcpy(pNew + 0x25B, pOld + 0x224, 4);
+    memcpy(pNew + 0x25F, pOld + 0x228, 4);
+    pNew[0x263] = pOld[0x230];
+    pNew[0x265] = pOld[0x237];
+    pNew[0x266] = pOld[0x238];
+    memcpy(pNew + 0x267, pOld + 0x23A, 7);
+    memcpy(pNew + 0x26E, pOld + 0x242, 2);
+
+    // Explicit zero stores in the exe (0x5A417F-0x5A41A4); already zero
+    // from the fill, kept literal.
+    memset(pNew + 0x218, 0, 6);
+
     // TODO(range 3, 0x5A41BA-0x5A4B9B): stat-block conversions and tables.
     // TODO(range 4, 0x5A4B9C-0x5A4F2D): variable-length sections, copy-out.
 
