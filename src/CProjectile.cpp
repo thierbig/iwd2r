@@ -2700,6 +2700,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
+    case 370:
+        // The Wall of Fire (the moonlight wall's fire sibling).
+        pProjectile = new CProjectileWallOfFire();
+        break;
     case 371:
         // An alteration burst over friends.
         pArea = new CProjectileArea(70);
@@ -2801,7 +2805,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   ported;
         // - types whose constructor is not ported yet:
         //   TODO: type 314: ctor 0x580C00 not ported
-        //   TODO: type 370: ctor 0x581CA0 not ported
         // DEVIATION (temporary): unported type -> instant projectile. The
         // original reaches the fallback below only for types out of range
         // and for the assert entries listed above. Until the other cases
@@ -5187,4 +5190,25 @@ CProjectile8515DC::CProjectile8515DC()
     field_1C2 = 1;
     m_nSegments = 0;
     m_lifeSpan = 10;
+}
+
+// 0x581CA0
+CProjectileWallOfFire::CProjectileWallOfFire()
+    : CProjectileSingleTarget(CResRef("WoFireX"))
+{
+    m_nLifetime = 500;
+    field_2B2 = 0;
+    field_1D8 = 16;
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_nRange = 70;
+    m_targetMap.field_36 = 20;
+    m_targetMap.m_strikeInterval = 20;
+    m_targetMap.m_servicePeriod = 5;
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    field_1DE = FALSE;
+    m_speed = static_cast<SHORT>(m_speed * 3);
+    m_bHasHeight = FALSE;
+    field_1C2 = FALSE;
+    m_fireSoundRef = "AFT_P21";
+    m_loopFireSound = TRUE;
 }

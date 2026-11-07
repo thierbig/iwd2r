@@ -4330,6 +4330,65 @@ TEST_CASE("visual projectiles: the short AScorcT beam decodes to its beam", "[vi
     CHECK(direct.m_fireSoundRef == "TRA_M04");
 }
 
+// The Wall of Fire (DecodeProjectile 0x51EAF0, ctor 0x581CA0
+// CProjectileWallOfFire): the moonlight wall's fire sibling — the same
+// retune, but the tracker is armed with a 20-tick strike interval instead
+// of the one-strike-per-victim cap, and +0x2A0 stays whatever the base
+// left it (the moonlight ctor zeroes that byte; this one never stores it).
+// The case body (0x528604) carries no stores of its own: everything below
+// is the ctor's own, plus the shared tail's type stamp (370 - 1).
+TEST_CASE("visual projectiles: the wall of fire decodes to its wall", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(370, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileWallOfFire* pWall = dynamic_cast<CProjectileWallOfFire*>(pProjectile);
+    REQUIRE(pWall != nullptr);
+    CHECK(pWall->m_projectileType == 369);
+    // WoFireX IS in this install's CHITIN.KEY (as WOFIREX), so the cell
+    // binds for real.
+    CHECK(pWall->m_animation->GetResRef() == CResRef("WoFireX"));
+    // The wall retune is the moonlight wall's: a 500-tick lifetime, the
+    // byte at +0x2B2 cleared, sixteen directions, the base's speed
+    // tripled (20 -> 60, a native WORD imul in the exe), both height
+    // gates cleared along with field_1DE, and the shared AFT_P21 fire
+    // sound looped. field_2A0 is deliberately not asserted: the exe's
+    // ctor never stores it, so it keeps the base ctor's value.
+    CHECK(pWall->m_nLifetime == 500);
+    CHECK(pWall->field_2B2 == 0);
+    CHECK(pWall->field_1D8 == 16);
+    CHECK(pWall->m_speed == 60);
+    CHECK(pWall->m_bHasHeight == FALSE);
+    CHECK(pWall->field_1C2 == FALSE);
+    CHECK(pWall->field_1DE == FALSE);
+    CHECK(pWall->m_fireSoundRef == "AFT_P21");
+    CHECK(pWall->m_loopFireSound == TRUE);
+    // The wall tracker the ctor arms: this wall owns it, gather radius 70,
+    // serviced every 5 ticks, wall length 20, and a strike every 20 ticks
+    // — the fire delta from the moonlight sibling, whose per-victim cap
+    // (explicitly 1 there) and total cap stay the derived ctor's inherited
+    // default here, since this ctor stores neither.
+    CHECK(pWall->m_targetMap.m_pOwner == pWall);
+    CHECK(pWall->m_targetMap.m_strikeInterval == 20);
+    CHECK(pWall->m_targetMap.m_nRange == 70);
+    CHECK(pWall->m_targetMap.m_servicePeriod == 5);
+    CHECK(pWall->m_targetMap.m_maxStrikesPerTarget == 100000);
+    CHECK(pWall->m_targetMap.m_maxStrikesTotal == 100000);
+    CHECK(pWall->m_targetMap.m_bSkipSource == FALSE);
+    CHECK(pWall->m_targetMap.field_36 == 20);
+    delete pProjectile;
+    // A directly built wall pins the same tracker arming and the
+    // frame-derived speed against the decode.
+    CProjectileWallOfFire wallDirect;
+    CHECK(wallDirect.m_targetMap.field_3A == 0);
+    CHECK(wallDirect.m_targetMap.m_servicePeriod == 5);
+    CHECK(wallDirect.m_targetMap.m_strikeInterval == 20);
+    CHECK(wallDirect.m_targetMap.field_36 == 20);
+    CHECK(wallDirect.m_speed == 60);
+    CHECK(wallDirect.m_fireSoundRef == "AFT_P21");
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);
