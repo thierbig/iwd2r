@@ -4286,6 +4286,50 @@ TEST_CASE("visual projectiles: the wall of moonlight decodes to its wall", "[vis
     CHECK(wallDirect.m_speed == 60);
 }
 
+// The short AScorcT beam (DecodeProjectile 0x51EAF0, ctor 0x581060
+// CProjectile8515DC): the Scorcher's ten-tick sibling — the same AScorcT
+// cell and TRA_M04 fire sound, but no struck-target set and no strike
+// cadence, so the case body (0x527D8B) carries no stores of its own:
+// everything below is the ctor's own, plus the shared tail's type stamp
+// (346 - 1).
+TEST_CASE("visual projectiles: the short AScorcT beam decodes to its beam", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(346, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectile8515DC* pBeam = dynamic_cast<CProjectile8515DC*>(pProjectile);
+    REQUIRE(pBeam != nullptr);
+    CHECK(pBeam->m_projectileType == 345);
+    // AScorcT IS in this install's CHITIN.KEY (the scorcher binds it too),
+    // so the cell binds for real.
+    CHECK(pBeam->m_animation->GetResRef() == CResRef("AScorcT"));
+    // The beam retune: delta-Z and glow cleared with the segment count,
+    // a ten-tick lifespan, both color fields cleared with 16 at +0x1D8,
+    // the height gate and the +0x1C2 flag raised, the callback disabled
+    // and the visual effect blanked.
+    CHECK(pBeam->m_deltaZ == 0);
+    CHECK(pBeam->m_bGlow == FALSE);
+    CHECK(pBeam->m_nSegments == 0);
+    CHECK(pBeam->m_lifeSpan == 10);
+    CHECK(pBeam->field_1C2 == TRUE);
+    CHECK(pBeam->field_1D4 == 0);
+    CHECK(pBeam->field_1D8 == 16);
+    CHECK(pBeam->m_bHasHeight == TRUE);
+    CHECK(pBeam->m_callBackProjectile == -1);
+    CHECK(pBeam->m_sVisualEffect == "");
+    // The decoder leaves the ctor's TRA_M04 in place (unlike the scorcher
+    // case 109, which re-assigns TRA_17 over it).
+    CHECK(pBeam->m_fireSoundRef == "TRA_M04");
+    delete pProjectile;
+    // The speed comes from the cell's frame height (three quarters of it),
+    // so the decode and a direct construction must agree.
+    CProjectile8515DC direct;
+    CHECK(direct.m_speed == pBeam->m_speed);
+    CHECK(direct.m_lifeSpan == 10);
+    CHECK(direct.m_fireSoundRef == "TRA_M04");
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);

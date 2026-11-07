@@ -358,6 +358,32 @@ public:
     /* 0310 */ CSound m_loopSound;
 };
 
+// The short AScorcT beam (vtable 0x8515DC, sizeof 0x2B6): a ten-tick
+// sibling of the Scorcher above — the same base resref, fire sound and
+// first four tail members, but no struck-target set and no strike cadence
+// (the binary class stops at m_bGlow). Its Fire (0x581170) chains the base
+// Fire and then calls DeliverEffects (slot 0x78, the inherited 0x52A1A0).
+class CProjectile8515DC : public CProjectileSingleTarget {
+public:
+    // 0x581060. Binds the AScorcT beam through the base, zeroes the beam's
+    // delta-Z and glow, pins frame 0 of the cell, clears the two color
+    // fields and seeds 16 at +0x1D8, rebinds the TRA_M04 fire sound, takes
+    // the beam's speed from three quarters of the cell's frame height,
+    // disables the callback projectile, blanks the visual effect and
+    // +0x182, raises the height gate and the +0x1C2 flag, then zeroes the
+    // segment count and gives the beam its ten-tick lifespan.
+    CProjectile8515DC();
+
+    // Four slots differ from the base vtable — dtor 0x579B10 (slot 0),
+    // AIUpdate 0x5811B0 (slot 3), Render 0x581520 (slot 19), Fire 0x581170
+    // (slot 27) — and stay undeclared here (not ported), so the class
+    // inherits the base's virtuals everywhere else.
+    /* 02AE */ BYTE m_lifeSpan;
+    /* 02AF */ BYTE m_nSegments;
+    /* 02B0 */ LONG m_deltaZ;
+    /* 02B4 */ BYTE m_bGlow;
+};
+
 // The spell-school travel projectile (vtable 0x8511AC): DecodeProjectile's
 // types 227-234 build one of these per school of magic — AbjurT, AlterT,
 // InvocT, NecroT, ConjuT, EnchaT, IllusT, DivinT. Every vtable slot holds

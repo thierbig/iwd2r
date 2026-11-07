@@ -1160,6 +1160,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile->m_arrivalSoundRef = "";
         pProjectile->m_bHasHeight = TRUE;
         break;
+    case 346:
+        // The short AScorcT beam (the Scorcher's ten-tick sibling).
+        pProjectile = new CProjectile8515DC();
+        break;
     // The spell-hit cells (0x57E490, CProjectileSpellHit): one animation
     // played where the spell lands, its effects delivered the moment it
     // fires. DecodeProjectile's prologue default-constructs the shared
@@ -2797,7 +2801,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   ported;
         // - types whose constructor is not ported yet:
         //   TODO: type 314: ctor 0x580C00 not ported
-        //   TODO: type 346: ctor 0x581060 not ported
         //   TODO: type 370: ctor 0x581CA0 not ported
         // DEVIATION (temporary): unported type -> instant projectile. The
         // original reaches the fallback below only for types out of range
@@ -5161,4 +5164,27 @@ void CProjectileLightningBolt::Fire(CGameArea* pArea, LONG source, LONG target, 
             source, CGameObjectArray::THREAD_ASYNCH, INFINITE);
         CProjectileSingleTarget::Fire(pArea, source, target, endPoint, nHeight, nType);
     }
+}
+
+// 0x581060
+CProjectile8515DC::CProjectile8515DC()
+    : CProjectileSingleTarget(CResRef("AScorcT"))
+{
+    m_deltaZ = 0;
+    m_bGlow = FALSE;
+    m_animation->FrameSet(0);
+    field_1C2 = 0;
+    field_1D4 = 0;
+    field_1D8 = 16;
+    m_fireSoundRef = "TRA_M04";
+    CSize size;
+    m_animation->GetFrameSize(0, 0, size, FALSE);
+    m_speed = static_cast<SHORT>(static_cast<LONG>(static_cast<DWORD>(size.cy) * 3) / 4);
+    m_callBackProjectile = -1;
+    m_sVisualEffect = "";
+    field_182 = -1;
+    m_bHasHeight = TRUE;
+    field_1C2 = 1;
+    m_nSegments = 0;
+    m_lifeSpan = 10;
 }
