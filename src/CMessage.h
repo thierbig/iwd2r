@@ -1236,6 +1236,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void Run() override;
 
     /* 000C */ LONG* m_pPath;
     /* 0010 */ SHORT m_nPath;
