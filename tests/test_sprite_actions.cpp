@@ -3415,6 +3415,132 @@ TEST_CASE("sprite: JoinParty overflows a full party without moving the gold", "[
     CHECK(pJoiner->m_movementScript != NULL);
 }
 
+TEST_CASE("game: ApplyPartyRoster replaces a party slot and resets the newcomer", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    const auto newSprite = [&](const std::vector<BYTE>& bytes) {
+        CGameSprite* pSprite = new CGameSprite(const_cast<BYTE*>(bytes.data()),
+            static_cast<LONG>(bytes.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        pSprite->m_pArea = pArea;
+        return pSprite;
+    };
+
+    CGameSprite* pMember = newSprite(candidates[1]);
+    REQUIRE(pGame->AddCharacterToParty(pMember->GetId(), -1) == TRUE);
+    const LONG nProbeId = pCharacter->GetId();
+    const LONG nMemberId = pMember->GetId();
+    REQUIRE(pGame->m_nCharacters == 2);
+
+    // Slot 0 stays; slot 1's member is removed (neutral EA, no portrait)
+    // and a newcomer is added in its place (EA_PC, cleared dialog).
+    CGameSprite* pNewcomer = newSprite(candidates[1]);
+    pNewcomer->m_dialog = "multig";
+    const LONG nNewcomerId = pNewcomer->GetId();
+    LONG desired[6] = { nProbeId, nNewcomerId, -1, -1, -1, -1 };
+    ClearMessages();
+    CHECK(pGame->ApplyPartyRoster(desired, 0, NULL) == TRUE);
+    CHECK(pGame->m_nCharacters == 2);
+    CHECK(pGame->m_characters[0] == nProbeId);
+    CHECK(pGame->m_characters[1] == nNewcomerId);
+    CHECK(pGame->GetCharacterPortraitNum(nMemberId) == -1);
+    CHECK(pMember->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_NEUTRAL);
+    CHECK(pGame->GetCharacterPortraitNum(nNewcomerId) != -1);
+    CHECK(pNewcomer->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pNewcomer->m_dialog == CResRef(""));
+
+    // Feeding the now-current roster back changes nothing: every slot takes
+    // the equal advance at 0x5AF02D and no message is posted (the replace
+    // call above left five unconsumed messages in the queue).
+    ClearMessages();
+    CHECK(pGame->ApplyPartyRoster(desired, 0, NULL) == TRUE);
+    CHECK(pGame->m_nCharacters == 2);
+    CHECK(pGame->m_characters[0] == nProbeId);
+    CHECK(pGame->m_characters[1] == nNewcomerId);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetCount() == 0);
+
+    ClearMessages();
+}
+
+TEST_CASE("game: ApplyPartyRoster benches and releases overflow members", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.size() < 2) {
+        SKIP("[iwd2r-skip] fewer than two CHR V2.2 files");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(candidates[0]);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->m_pArea;
+    REQUIRE(pArea != NULL);
+
+    CGameSprite* pBenched = new CGameSprite(const_cast<BYTE*>(candidates[1].data()),
+        static_cast<LONG>(candidates[1].size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    pBenched->m_pArea = pArea;
+    pBenched->m_dialog = "multig";
+    const LONG nProbeId = pCharacter->GetId();
+    const LONG nBenchedId = pBenched->GetId();
+
+    // A desired bench id joins the overflow array only: EA_PC and a cleared
+    // dialog, but never a portrait slot or the active six.
+    LONG desired[6] = { nProbeId, -1, -1, -1, -1, -1 };
+    LONG desiredOverflow[1] = { nBenchedId };
+    ClearMessages();
+    CHECK(pGame->ApplyPartyRoster(desired, 1, desiredOverflow) == TRUE);
+    REQUIRE(pGame->m_nCharacterOverflowCount == 1);
+    CHECK(static_cast<int>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow[0])) == nBenchedId);
+    CHECK(pGame->m_nCharacters == 1);
+    CHECK(pGame->GetCharacterPortraitNum(nBenchedId) == -1);
+    CHECK(pBenched->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_PC);
+    CHECK(pBenched->m_dialog == CResRef(""));
+
+    // A later roster without the bench entry releases it entirely: the
+    // bench array empties and the sprite goes back to neutral EA. The
+    // overflow COUNT field stays — the exe only ever increments it here
+    // (0x5AE47A); RemoveCharacterFromParty strips the array, not the count.
+    CHECK(pGame->ApplyPartyRoster(desired, 0, NULL) == TRUE);
+    CHECK(pGame->m_characterOverflow.GetCount() == 0);
+    CHECK(pBenched->m_typeAI.m_nEnemyAlly == CAIOBJECTTYPE_EA_NEUTRAL);
+
+    ClearMessages();
+}
+
 TEST_CASE("sprite: JumpToArea (225) queues the party member for an unloaded area", "[ai][data]")
 {
     if (DataDir() == nullptr) {
