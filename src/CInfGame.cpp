@@ -12709,7 +12709,81 @@ LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature)
         }
     }
 
-    // TODO(range 3, 0x5A6ED1-0x5A7461): loop 2 — the known-spell headers.
+    // Loop 2 — the V2.1 known-spell headers (header array pointer dword
+    // @0x3C2, header count @0x3C6, known-spell pool dword @0x3CA; header
+    // stride 0x10, pool stride 0xC). The exe skips each header's body when
+    // its count is 0 and folds the 0x10-per-header bytes once at the end
+    // (0x5A7461); same sum here.
+    {
+        COldCreatureFileSpellHeader* pHeader = reinterpret_cast<COldCreatureFileSpellHeader*>(pOldCreature + *reinterpret_cast<DWORD*>(pOldCreature + 0x3C2));
+        DWORD nHeaderCount = *reinterpret_cast<DWORD*>(pOldCreature + 0x3C6);
+        COldCreatureFileKnownSpell* pPool = reinterpret_cast<COldCreatureFileKnownSpell*>(pOldCreature + *reinterpret_cast<DWORD*>(pOldCreature + 0x3CA));
+
+        for (DWORD i = 0; i < nHeaderCount; i++, pHeader++) {
+            nOldSpellBytes += sizeof(COldCreatureFileSpellHeader) + pHeader->m_count * sizeof(COldCreatureFileKnownSpell);
+
+            for (LONG j = 0; j < pHeader->m_count; j++) {
+                COldCreatureFileKnownSpell* pKnown = pPool + pHeader->m_startIndex + j;
+
+                CResRef resRef(pKnown->m_resRef);
+                UINT nID = 0;
+                const unsigned int one = 1;
+                const unsigned int zero = 0;
+                const unsigned int nFlags = pKnown->m_flags & 1; // (flag & 1) ? 1 : 0
+
+                if (pHeader->m_type == 2) { // 2: .rdata byte @0x85BB63
+                    if (pGame->m_songs.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (songSpells.Find(nID, nIndex)) {
+                            songSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else if (pGame->m_shapeshifts.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (shapeSpells.Find(nID, nIndex)) {
+                            shapeSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else if (pGame->m_innateSpells.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (innateSpells.Find(nID, nIndex)) {
+                            innateSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else {
+                        char sResRef[9];
+                        memcpy(sResRef, pKnown->m_resRef, 8);
+                        sResRef[8] = '\0';
+                        CString sObsolete(" ");
+                        sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                    }
+                } else {
+                    if (pGame->m_spells.Find(resRef, nID)) {
+                        const UINT nLevel = static_cast<UINT>(static_cast<unsigned short>(pHeader->m_level));
+                        CGameSpriteGroupedSpellList* pClassSpells = spells.Get(nClassIndex);
+
+                        UINT nIndex = 0;
+                        if (pClassSpells->Find(nID, nLevel, nIndex)) {
+                            pClassSpells->Add(nID, nLevel, one, nFlags, zero);
+                        }
+
+                        // The domain lookup runs regardless of the class
+                        // lookup above. It cannot fire here (domainSpells
+                        // starts empty and only this arm could fill it), but
+                        // the exe performs it; ported as written.
+                        nIndex = 0;
+                        if (domainSpells.Find(nID, nLevel, nIndex)) {
+                            domainSpells.Add(nID, nLevel, one, nFlags, zero);
+                        }
+                    } else {
+                        char sResRef[9];
+                        memcpy(sResRef, pKnown->m_resRef, 8);
+                        sResRef[8] = '\0';
+                        CString sObsolete(" ");
+                        sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                    }
+                }
+            }
+        }
+    }
+
     // TODO(range 4, 0x5A7461-0x5A7731): the sizing walk and the delta.
 
     return 0;
