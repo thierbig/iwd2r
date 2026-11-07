@@ -514,11 +514,10 @@ public:
 // override waits until something comes within 100 of the resting bead before
 // firing the base detonation. The dtor is the family's folded empty one
 // (0x85099C slot 0 = 0x5768A0, anchored on the Acid Fog row; both members are
-// trivial, so the body is unmarked empty braces). The ctor (0x576990) is
-// parked from i064 and stays undeclared with it (never declare a slot without
-// its body).
+// trivial, so the body is unmarked empty braces).
 class CProjectileDBFireball : public CProjectileArea {
 public:
+    CProjectileDBFireball();
     /* 0000 */ ~CProjectileDBFireball() override;
     /* 000C */ void AIUpdate() override;
     // 0x576CE0

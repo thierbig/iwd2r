@@ -2916,6 +2916,7 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         { 350, "", "", 450, 0 }, // 0x576080
         { 355, "", "", 450, 0 }, // 0x576770
         { 356, "", "", 450, 0 }, // 0x576870
+        { 360, "FirebaX", "RNG_M03", 300, 16 }, // 0x576990
         { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
         { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
         { 383, "", "", 100, 1 }, // 0x577590
@@ -2988,6 +2989,33 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
             CProjectileArea850900* pStrike = dynamic_cast<CProjectileArea850900*>(pProjectile);
             REQUIRE(pStrike != nullptr);
             CHECK(pStrike->m_targetHits.empty());
+        }
+        if (spec.nType == 360) {
+            // The delayed blast bead rests after landing until something
+            // comes within 100: the scan bookkeeping starts clear, the bead
+            // flies on FirebaT with its speed doubled, and the burst is the
+            // FirebaR ring and FirebaA area over the FirebaX explosion.
+            CProjectileDBFireball* pBead = dynamic_cast<CProjectileDBFireball*>(pProjectile);
+            REQUIRE(pBead != nullptr);
+            CHECK(pBead->m_bBlasted == 0);
+            CHECK(pBead->m_scanTimer == 0);
+            CHECK(pBead->m_bTravels == TRUE);
+            CHECK(pBead->field_1DE == TRUE);
+            CHECK(pBead->m_animation->GetResRef() == CResRef("FirebaT"));
+            CHECK(pBead->m_fireSoundRef == CResRef("TRA_06"));
+            CHECK(pBead->m_explosion2.m_animation == "FirebaR");
+            CHECK(pBead->m_explosion2.field_2C == TRUE);
+            CHECK(pBead->m_explosion2.field_2E == 20);
+            CHECK(pBead->m_explosion3.m_animation == "FirebaA");
+            CHECK(pBead->m_explosion3.field_34 == TRUE);
+            CHECK(pBead->m_explosion3.field_35 == TRUE);
+            CHECK(pBead->m_explosion3.field_36 == TRUE);
+            CHECK(pBead->m_nTriggerInterval == 10000);
+            CHECK(pBead->m_nHitModulus == 10);
+            CHECK(pBead->m_nTriggerCountdown == 0);
+            CHECK(pBead->m_nDuration == 45);
+            CProjectileDBFireball beadDirect;
+            CHECK(pBead->m_speed == beadDirect.m_speed);
         }
         if (spec.nType == 383) {
             // The boulder also travels with its own sound pair.

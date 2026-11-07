@@ -609,6 +609,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The fighter-gated one-shot strike.
         pProjectile = new CProjectileArea850900();
         break;
+    case 360:
+        // The delayed blast fireball.
+        pProjectile = new CProjectileDBFireball();
+        break;
     case 267:
         // The circle of death.
         pProjectile = new CProjectileCircleOfDeath();
@@ -2765,7 +2769,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 360: ctor 0x576990 not ported
         //   TODO: type 207: ctor 0x57D390 not ported
         //   TODO: type 261: ctor 0x57E1B0 not ported
         //   TODO: type 312: ctor 0x57F210 not ported
@@ -4516,6 +4519,57 @@ CProjectileArea84F3AC::~CProjectileArea84F3AC()
 // declares every slot its vtable overrides.
 CProjectileDBFireball::~CProjectileDBFireball()
 {
+}
+
+// 0x576990
+// Delayed Blast Fireball (projectile type 360, vtable 0x85099C): the
+// Fireball carrier of the 0x571E80 shape on a wider 300 radius — the bead
+// flies as FirebaT on TRA_06 at doubled speed, lands without detonating
+// (the OnArrival below only latches the flag) and later bursts the
+// FirebaX/R/A triple over a 10000-tick trigger, hit modulus 10, 45 ticks.
+CProjectileDBFireball::CProjectileDBFireball()
+    // NOTE: The radius is the WORD at 0x84F1BC (256), then 300.
+    : CProjectileArea(256)
+{
+    m_bBlasted = 0;
+    m_scanTimer = 0;
+
+    // NOTE: Inlined: the travel animation of a name that is not empty.
+    const char* szTravel = "FirebaT";
+    if (strlen(szTravel) != 0) {
+        field_1DE = TRUE;
+        SetTravelAnimation(CResRef(szTravel));
+        m_bTravels = TRUE;
+    } else {
+        field_1DE = FALSE;
+        m_bTravels = FALSE;
+    }
+
+    m_fireSoundRef = "TRA_06";
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    m_explosion1.m_animation = "FirebaX";
+    m_explosion1.m_sound = "RNG_M03";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    m_explosion2.m_animation = "FirebaR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 20;
+
+    m_explosion3.m_animation = "FirebaA";
+    m_explosion3.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    m_nTriggerCountdown = 0;
+    m_speed <<= 1;
+    m_explosion3.field_34 = TRUE;
+    m_explosion3.field_35 = TRUE;
+    m_explosion3.field_36 = TRUE;
+    m_nTriggerInterval = 10000;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    field_1D8 = 16;
+    m_nRadius = 300;
 }
 
 // 0x576BA0
