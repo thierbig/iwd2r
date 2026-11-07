@@ -9911,9 +9911,252 @@ void CInfGame::LeaveAreaLUA(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirectio
         g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
     }
 
-    // TODO: The remainder of the 4,001-byte body (the destination area load,
-    // the party/familiar move and the client panic data) ports below, range
-    // by range.
+    // The parchment names the travel screen again: with one, the image byte
+    // the destination load takes is the travel-screen count at 0x8518BC (5);
+    // without one the load takes 255 (no image).
+    BYTE nTravelScreenImage = 255;
+    if (strcmp(sParchment, "") != 0) {
+        CResRef cRes(sParchment);
+        pGame->m_nTravelScreenImageToUse = 5;
+        pGame->m_cTravelScreenArea = cRes;
+        nTravelScreenImage = 5;
+    }
+
+    // The bar for the load is in place but not required.
+    CGameArea* pArea = pGame->LoadArea(sAreaName, nTravelScreenImage, FALSE, TRUE);
+
+    // The leader is taken under a deny for the move below; unlike the
+    // CInfButtonArray sibling this loop only retries a shared object.
+    CGameSprite* pLeader = NULL;
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetDeny(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pLeader),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED);
+
+    if (pArea == NULL) {
+        // NOTE: The original bails with the deny still held - there is no
+        // ReleaseDeny on this path.
+        g_pChitin->SetProgressBar(FALSE, 0, 0, 0, FALSE, 0, FALSE, 0, FALSE, FALSE, 255);
+        return;
+    }
+
+    if (rc == CGameObjectArray::SUCCESS
+        && (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == pLeader->m_remotePlayerID)) {
+        Icewind586B70::Instance()->sub_5872C0(pLeader);
+
+        SHORT nGridX = nX / CPathSearch::GRID_SQUARE_SIZEX;
+        SHORT nGridY = nY / CPathSearch::GRID_SQUARE_SIZEY;
+
+        pLeader->m_clearAIOnRemoveFromArea = 0;
+
+        // The area left behind is saved to the temp folder once (0x5C4AB0's
+        // PartyTransitionMoveSprite marshals the same way per party member).
+        CGameArea* pOldArea = pLeader->m_pArea;
+        CAreaFile cAreaFile;
+        if (pOldArea != NULL
+            && (!g_pChitin->cNetwork.m_bConnectionEstablished || g_pChitin->cNetwork.m_bIsHost == TRUE)
+            && (pOldArea->m_header.m_flags & 0x1) == 0
+            && !pOldArea->field_436) {
+            BYTE* pData = NULL;
+            DWORD nSize = 0;
+            pOldArea->Marshal(&pData, &nSize, TRUE);
+            if (pData != NULL) {
+                cAreaFile.SetResRef(pOldArea->m_resRef, TRUE, TRUE);
+
+                // NOTE: The original writes through the resource without a
+                // test; it is NULL when the area file is missing. Bounded
+                // (P4-10), as LeaveAreaName does.
+                if (cAreaFile.pRes != NULL) {
+                    static_cast<CRes*>(cAreaFile.pRes)->Write(pGame->m_sTempDir, pData, nSize);
+                }
+
+                pOldArea->field_436 = 1;
+                pOldArea->field_438 = pGame->m_worldTime.m_gameTime;
+
+                delete pData;
+            }
+        }
+
+        CPoint ptEntry;
+
+        pGame->m_bInAreaTransition = TRUE;
+
+        if (pLeader->m_pArea != NULL) {
+            pLeader->RemoveFromArea();
+            pLeader->m_clearAIOnRemoveFromArea = 1;
+
+            BYTE nPersonalSpace = pLeader->m_animation.GetPersonalSpace();
+            CPoint ptOpen = pArea->m_search.GetNearestOpenSquare(CPoint(nGridX, nGridY),
+                pLeader->GetTerrainTable(),
+                nPersonalSpace,
+                nDirection);
+            ptEntry.x = ptOpen.x * CPathSearch::GRID_SQUARE_SIZEX + CPathSearch::GRID_SQUARE_SIZEX / 2;
+            ptEntry.y = ptOpen.y * CPathSearch::GRID_SQUARE_SIZEY + CPathSearch::GRID_SQUARE_SIZEY / 2;
+
+            pLeader->AddToArea(pArea, ptEntry, 0, CGameObject::LIST_FRONT);
+        }
+
+        pGame->m_bInAreaTransition = FALSE;
+        pLeader->SetFacing(nDirection);
+
+        // NOTE: The original compares the view rect against the LEADER's
+        // area but re-centers the DESTINATION area's infinity.
+        if (pGame->m_gameAreas[pGame->m_visibleArea] != pLeader->m_pArea
+            && pLeader->m_pArea != NULL) {
+            CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+            CRect rView = pWorld->GetNewViewSize();
+            if (!EqualRect(&rView, &(pLeader->m_pArea->m_cInfinity.rViewPort))) {
+                pWorld->SetNewViewSize(rView, FALSE);
+            }
+
+            pArea->m_cInfinity.SetViewPosition(ptEntry.x - rView.Width() / 2,
+                ptEntry.y - rView.Height() / 2,
+                TRUE);
+
+            if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pLeader->m_remotePlayerID) {
+                pGame->UnselectAll();
+            }
+        } else if (pOldArea == pArea) {
+            const CRect& rView = pArea->m_cInfinity.rViewPort;
+            pArea->m_cInfinity.SetViewPosition(ptEntry.x - rView.Width() / 2,
+                ptEntry.y - rView.Height() / 2,
+                TRUE);
+        }
+
+        pGame->SelectCharacter(nCharacterId, FALSE);
+        pGame->SelectToolbar();
+
+        const CPoint& ptPos = pLeader->GetPos();
+        if (ptPos.x != -1 || ptPos.y != -1 || pLeader->m_pArea != NULL) {
+            CMessage* message = new CMessageSpriteUpdate(pLeader, nCharacterId, nCharacterId);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    }
+
+    // Every path but the NULL-area bail above funnels here: the deny goes
+    // back and the bar jumps to its target.
+    pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    g_pChitin->cProgressBar.m_nActionProgress = g_pChitin->cProgressBar.m_nActionTarget - 1;
+    g_pChitin->m_bDisplayStale = TRUE;
+    sub_59FA00(TRUE);
+    g_pChitin->cProgressBar.m_nActionProgress = g_pChitin->cProgressBar.m_nActionTarget;
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        pMessage->SendProgressBarStatus(g_pChitin->cProgressBar.m_nActionProgress,
+            g_pChitin->cProgressBar.m_nActionTarget,
+            g_pChitin->cProgressBar.m_bWaiting,
+            g_pChitin->cProgressBar.m_nWaitingReason,
+            g_pChitin->cProgressBar.m_bTimeoutVisible,
+            g_pChitin->cProgressBar.m_nSecondsToTimeout);
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        g_pChitin->cProgressBar.m_bTimeoutVisible = TRUE;
+        g_pChitin->cProgressBar.m_nSecondsToTimeout = pMessage->m_dwSignalSecondsToTimeout;
+
+        // The host waits for the clients' go on the load (51), counting the
+        // wait down on the bar, and releases them (52) once it lands. The
+        // literals follow the ported LeaveAreaName tail's spelling.
+        DWORD nTime = timeGetTime();
+        if (!pMessage->NonBlockingWaitForSignal(CBaldurMessage::SIGNAL_SERVER, 51)) {
+            INT nMsgFrom;
+            DWORD dwSize;
+            BYTE* pData;
+            do {
+                DWORD nElapsed = timeGetTime() - nTime;
+                DWORD nRemaining;
+                if (nElapsed >= pMessage->m_dwSignalSecondsToTimeout * 1000) {
+                    pMessage->KickOutWaitingForSignal(CBaldurMessage::SIGNAL_SERVER, 51);
+                    nRemaining = 0;
+                } else {
+                    nRemaining = pMessage->m_dwSignalSecondsToTimeout - nElapsed / 1000;
+                }
+
+                if (g_pChitin->cProgressBar.m_nSecondsToTimeout != nRemaining) {
+                    g_pChitin->cProgressBar.m_nSecondsToTimeout = nRemaining;
+                    pMessage->SendProgressBarStatus(g_pChitin->cProgressBar.m_nActionProgress,
+                        g_pChitin->cProgressBar.m_nActionTarget,
+                        g_pChitin->cProgressBar.m_bWaiting,
+                        g_pChitin->cProgressBar.m_nWaitingReason,
+                        g_pChitin->cProgressBar.m_bTimeoutVisible,
+                        g_pChitin->cProgressBar.m_nSecondsToTimeout);
+                }
+
+                do {
+                    pData = pMessage->PollSpecificMessageType(CBaldurMessage::MSG_TYPE_RESOURCE,
+                        CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND,
+                        nMsgFrom,
+                        dwSize);
+                    if (pData != NULL) {
+                        pMessage->OnResourceDemanded(nMsgFrom, pData, dwSize);
+                        delete pData;
+                    }
+                } while (pData != NULL);
+
+                do {
+                    pData = pMessage->PollSpecificMessageType(CBaldurMessage::MSG_TYPE_PROGRESSBAR,
+                        CBaldurMessage::MSG_SUBTYPE_PROGRESSBAR_STATUS,
+                        nMsgFrom,
+                        dwSize);
+                    if (pData != NULL) {
+                        pMessage->OnProgressBarStatus(nMsgFrom, pData, dwSize);
+                        delete pData;
+                    }
+                } while (pData != NULL);
+
+                g_pChitin->m_bDisplayStale = TRUE;
+                SleepEx(60, FALSE);
+            } while (!pMessage->NonBlockingWaitForSignal(CBaldurMessage::SIGNAL_SERVER, 51));
+        }
+
+        pMessage->SendSignal(CBaldurMessage::SIGNAL_ALL_CLIENTS, 52);
+        pGame->GetMultiplayerSettings()->SetListenToJoinOption(bListenToJoin, FALSE);
+    } else if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        // The client tells the host it is in (51) and waits for the release
+        // (52), draining the bar updates meanwhile.
+        pMessage->SendSignal(CBaldurMessage::SIGNAL_SERVER, 51);
+        if (!pMessage->NonBlockingWaitForSignal(CBaldurMessage::SIGNAL_ALL_CLIENTS, 52)) {
+            INT nMsgFrom;
+            DWORD dwSize;
+            BYTE* pData;
+            do {
+                do {
+                    pData = pMessage->PollSpecificMessageType(CBaldurMessage::MSG_TYPE_PROGRESSBAR,
+                        CBaldurMessage::MSG_SUBTYPE_PROGRESSBAR_STATUS,
+                        nMsgFrom,
+                        dwSize);
+                    if (pData != NULL) {
+                        pMessage->OnProgressBarStatus(nMsgFrom, pData, dwSize);
+                        delete pData;
+                    }
+                } while (pData != NULL);
+
+                g_pChitin->m_bDisplayStale = TRUE;
+                SleepEx(60, FALSE);
+            } while (!pMessage->NonBlockingWaitForSignal(CBaldurMessage::SIGNAL_ALL_CLIENTS, 52));
+        }
+    }
+
+    g_pChitin->cProgressBar.m_bTimeoutVisible = FALSE;
+    // The original's bump is target-shaped but adds nothing: progress +
+    // (target - progress). Kept verbatim.
+    g_pChitin->cProgressBar.m_nActionProgress = g_pChitin->cProgressBar.m_nActionProgress
+        + (g_pChitin->cProgressBar.m_nActionTarget - g_pChitin->cProgressBar.m_nActionProgress);
+    g_pChitin->m_bDisplayStale = TRUE;
+    sub_59FA00(TRUE);
+    g_pChitin->SetProgressBar(FALSE, 0, 0, 0, FALSE, 0, FALSE, 0, FALSE, FALSE, 255);
+
+    g_pChitin->cSoundMixer.m_nActiveArea = reinterpret_cast<DWORD_PTR>(pGame->m_gameAreas[pGame->m_visibleArea]);
+    g_pChitin->cSoundMixer.UpdateSoundList();
+    g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(FALSE);
 }
 
 // The host's transition of the whole party through a party required travel
