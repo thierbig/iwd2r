@@ -100,4 +100,17 @@ public:
     CProjectile84DAD4();
 };
 
+// Type 261's projectile (vtable 0x85112C): a memberless direct
+// CProjectile84D8B8 subclass — the decoder news exactly
+// sizeof(CProjectile) (0x192) and calls the constructor and nothing
+// else. Against the base's 32-entry vtable 0x84D8B8 it overrides only
+// the deleting dtor (0x57F360 — the scalar half 0x57F380 is a jmp
+// straight to CProjectile's 0x51E9B0; ours implicit, the
+// CProjectile84DAD4 precedent) and DeliverEffects (0x57E1D0, not in
+// tree, left undeclared).
+class CProjectile85112C : public CProjectile84D8B8 {
+public:
+    CProjectile85112C();
+};
+
 #endif /* CPROJECTILE_H_ */

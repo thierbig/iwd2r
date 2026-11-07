@@ -4231,6 +4231,23 @@ TEST_CASE("visual projectiles: the type-352 shot decodes to the bare flight", "[
     delete pProjectile;
 }
 
+TEST_CASE("visual projectiles: the type-261 shot decodes to the bare flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(261, world.pCharacter, 0);
+    CProjectile85112C* pBare = dynamic_cast<CProjectile85112C*>(pProjectile);
+    REQUIRE(pBare != nullptr);
+    // The case body (0x525D53) carries no stores of its own: everything
+    // below is the base constructor's own clearing plus the shared tail's
+    // type stamp (261 - 1).
+    CHECK(pBare->m_projectileType == 260);
+    CHECK(pBare->m_speed == 0);
+    CHECK(pBare->m_bHasHeight == FALSE);
+    CHECK(pBare->m_fireSoundRef == "");
+    CHECK(pBare->m_arrivalSoundRef == "");
+    delete pProjectile;
+}
+
 TEST_CASE("visual projectiles: the chain-lightning hop decodes to its carrier", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);

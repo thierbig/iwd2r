@@ -2291,6 +2291,11 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pArea;
         break;
+    case 261:
+        // A memberless leaf on the instant 84D8B8 base; its only real
+        // override is DeliverEffects (0x57E1D0, not in tree).
+        pProjectile = new CProjectile85112C();
+        break;
     case 264:
         // An enchantment burst over enemies.
         pArea = new CProjectileArea(200);
@@ -2778,7 +2783,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 261: ctor 0x57E1B0 not ported
         //   TODO: type 312: ctor 0x57F210 not ported
         //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
@@ -4970,6 +4974,15 @@ CProjectileReboundingBolt::CProjectileReboundingBolt()
 // Empty braces spell it: the members go down implicitly, exactly what
 // the exe runs.
 CProjectileReboundingBolt::~CProjectileReboundingBolt()
+{
+}
+
+// 0x57E1B0
+// Type 261's leaf: the exe body is six instructions — the base ctor call
+// 0x530790 and the vtable stamp 0x85112C, nothing else. The class adds no
+// members (the decoder allocates the base's 0x192), so the implicit base
+// constructor call and the compiler's own stamp spell the whole thing.
+CProjectile85112C::CProjectile85112C()
 {
 }
 
