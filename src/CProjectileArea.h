@@ -418,6 +418,17 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// The fighter-gated one-shot strike (projectile type 356, vtable
+// 0x850900): the one-shot area strike with one vtable slot different —
+// before the strike runs, its filter erases every gathered id that is
+// not a sprite with the Fighter class bit (mask 0x10). Stringless and
+// memberless like its parent; address-named after its vtable.
+class CProjectileArea850900 : public CProjectileArea8507C8 {
+public:
+    CProjectileArea850900();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
 // Turn Undead (projectile type 376, vtable 0x850A38): 300 around; it turns
 // or destroys the undead the caster's turning check beats.
 class CProjectileArea850A38 : public CProjectileArea {

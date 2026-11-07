@@ -2915,6 +2915,7 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         { 283, "", "", 250, 0 }, // 0x575090
         { 350, "", "", 450, 0 }, // 0x576080
         { 355, "", "", 450, 0 }, // 0x576770
+        { 356, "", "", 450, 0 }, // 0x576870
         { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
         { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
         { 383, "", "", 100, 1 }, // 0x577590
@@ -2977,6 +2978,14 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
             // The warrior filter keeps no state of its own — the strike it
             // gates is the parent's, with the same empty bookkeeping.
             CProjectileArea850864* pStrike = dynamic_cast<CProjectileArea850864*>(pProjectile);
+            REQUIRE(pStrike != nullptr);
+            CHECK(pStrike->m_targetHits.empty());
+        }
+        if (spec.nType == 356) {
+            // The fighter filter keeps no state of its own either — the
+            // strike it gates is the parent's, with the same empty
+            // bookkeeping.
+            CProjectileArea850900* pStrike = dynamic_cast<CProjectileArea850900*>(pProjectile);
             REQUIRE(pStrike != nullptr);
             CHECK(pStrike->m_targetHits.empty());
         }
