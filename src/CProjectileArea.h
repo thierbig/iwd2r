@@ -346,6 +346,20 @@ public:
     CProjectileArea8502E8();
 };
 
+// An aura carrier (projectile type 283, vtable 0x850384): stringless — no
+// cell or sound name anywhere in the ctor. It follows its source, and on
+// its first tick and every hundredth after it re-centres on the source and
+// strikes every sprite newly come within its 250 around, one secondary
+// each; it tears itself down when the source is gone or dead.
+class CProjectileArea850384 : public CProjectileArea {
+public:
+    CProjectileArea850384();
+    /* 000C */ void AIUpdate() override;
+
+    /* 065E */ std::set<LONG> m_struckTargets;
+    /* 066E */ LONG m_nTicks;
+};
+
 // The portal animation flipping hack (projectile types 294 open and 297
 // close, vtable 0x850420): not a spell — the engine reuses an area
 // projectile as the door overlay. The ctor runs the base at 2000 around

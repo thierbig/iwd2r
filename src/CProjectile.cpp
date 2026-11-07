@@ -592,6 +592,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The sunray carrier.
         pProjectile = new CProjectileArea85024C();
         break;
+    case 283:
+        // The aura carrier.
+        pProjectile = new CProjectileArea850384();
+        break;
     case 267:
         // The circle of death.
         pProjectile = new CProjectileCircleOfDeath();
@@ -2748,8 +2752,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 274: ctor 0x574D50 not ported
-        //   TODO: type 283: ctor 0x575090 not ported
         //   TODO: type 350: ctor 0x576080 not ported
         //   TODO: type 355: ctor 0x576770 not ported
         //   TODO: type 356: ctor 0x576870 not ported
@@ -3965,6 +3967,138 @@ void CProjectileArea85024C::OnArrival()
     CProjectileSunray* pSunray = new CProjectileSunray(CString("SunrayX"), CString(""), 0xFF, TRUE, FALSE, 325);
     pSunray->Fire(m_pArea, m_sourceId, m_targetId, m_pos, 0, 0);
     CProjectileArea::OnArrival();
+}
+
+// 0x575090
+CProjectileArea850384::CProjectileArea850384()
+    : CProjectileArea(0x100)
+{
+    m_nTicks = 0;
+    m_nRadius = 250;
+}
+
+// 0x5752E0
+// Vtable slot 0x0C of 0x850384: the aura's own update. It is frozen under
+// Time Stop unless this projectile itself is the caster (the original
+// compares the caster against the projectile's id, not the source sprite's).
+// On its first tick and every hundredth after it re-shares its source,
+// re-centres on it and strikes every sprite the dual gather finds that it
+// has not struck yet — one secondary each. The every-tick tail then keeps
+// the source discipline: gone or dead source, RemoveSelf.
+void CProjectileArea850384::AIUpdate()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // Time Stop: frozen unless this projectile is the caster.
+    if (pGame->m_nTimeStop != 0 && pGame->m_nTimeStopCaster != m_id) {
+        return;
+    }
+
+    if (++m_nTicks % 100 == 1) {
+        CTypedPtrList<CPtrList, LONG*> inRange(10);
+
+        CGameObject* pSource;
+        BYTE rc = pGame->GetObjectArray()->GetShare(m_sourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pSource,
+            INFINITE);
+        if (rc == CGameObjectArray::SUCCESS) {
+            m_pos = pSource->GetPos();
+
+            CGameSprite* pSprite = NULL;
+            if (pSource->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                pSprite = static_cast<CGameSprite*>(pSource);
+            }
+
+            // NOTE: The original passes the possibly-NULL sprite straight
+            // through to IsDead (0x5753B1).
+            if (IcewindMisc::IsDead(pSprite) == TRUE) {
+                RemoveSelf();
+                pGame->GetObjectArray()->ReleaseShare(m_sourceId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return;
+            }
+
+            m_pArea->GetAllInRange(m_posVertList,
+                m_pos,
+                m_targetType,
+                m_nRadius,
+                m_terrainTable,
+                inRange,
+                TRUE,
+                m_bCheckForNonSprites);
+            m_pArea->GetAllInRangeBack(m_pos,
+                m_targetType,
+                m_nRadius,
+                m_terrainTable,
+                inRange,
+                TRUE,
+                FALSE,
+                m_bCheckForNonSprites);
+
+            POSITION pos = inRange.GetHeadPosition();
+            while (pos != NULL) {
+                LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(inRange.GetNext(pos)));
+
+                if (nId == m_sourceId) {
+                    continue;
+                }
+
+                CGameObject* pObject;
+                rc = pGame->GetObjectArray()->GetShare(nId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: One failed share drops the whole round
+                    // (0x57562B) — release the source and bail, not skip.
+                    pGame->GetObjectArray()->ReleaseShare(m_sourceId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return;
+                }
+
+                if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                    // NOTE: The original releases the target's share
+                    // before the set probe and the secondary (0x57553D).
+                    pGame->GetObjectArray()->ReleaseShare(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    if (m_struckTargets.insert(nId).second) {
+                        CreateSecondary(nId);
+                    }
+                } else {
+                    pGame->GetObjectArray()->ReleaseShare(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(m_sourceId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    // The every-tick tail: gone or dead source, RemoveSelf.
+    CGameObject* pSource;
+    BYTE rc = pGame->GetObjectArray()->GetShare(m_sourceId,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pSource,
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        // NOTE: RemoveSelf — and the original still releases the source
+        // share below even though this GetShare never took one (0x575675).
+        RemoveSelf();
+    } else if (pSource->GetObjectType() == CGameObject::TYPE_SPRITE
+        && IcewindMisc::IsDead(static_cast<CGameSprite*>(pSource)) == TRUE) {
+        RemoveSelf();
+    }
+
+    pGame->GetObjectArray()->ReleaseShare(m_sourceId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
 }
 
 // 0x5756C0
