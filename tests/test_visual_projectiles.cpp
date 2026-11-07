@@ -2889,7 +2889,7 @@ TEST_CASE("visual projectiles: the casting glows read the loop count from the ca
     }
 }
 
-// The plain area effects (DecodeProjectile 0x51EAF0): nine no-arg area
+// The plain area effects (DecodeProjectile 0x51EAF0): eleven no-arg area
 // ctors the decoder calls with no post-construction work at all — the ctor
 // carries the whole description.
 TEST_CASE("the plain area effects decode straight to their ctors", "[visualprojectile][data]")
@@ -2911,6 +2911,7 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         { 216, "IPlaguX", "RNG_P01", 250, 1 }, // 0x573AF0
         { 217, "SSSwarX", "RNG_M02", 250, 16 }, // 0x5745E0
         { 267, "DSpellX", "EFF_M42", 300, 0 }, // 0x571930
+        { 274, "", "", 150, 0 }, // 0x574D50
         { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
         { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
         { 383, "", "", 100, 1 }, // 0x577590
@@ -2944,6 +2945,15 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
             CHECK(pArea->m_nDuration == 45);
             CProjectileSnowballSwarm swarmDirect;
             CHECK(pArea->m_speed == swarmDirect.m_speed);
+        }
+        if (spec.nType == 274) {
+            // The sunray carrier never arms a visual of its own — only the
+            // ten-and-ten cadence over a 325-tick, 150-around linger; the
+            // SunrayX burst it builds on arrival is the spell hit's shape.
+            CHECK(pArea->m_nTriggerInterval == 10);
+            CHECK(pArea->m_nHitModulus == 10);
+            CHECK(pArea->m_nTriggerCountdown == 0);
+            CHECK(pArea->m_nDuration == 325);
         }
         if (spec.nType == 383) {
             // The boulder also travels with its own sound pair.

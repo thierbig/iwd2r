@@ -19,6 +19,7 @@
 #include "CProjectileShaft.h"
 #include "CProjectileSingleTarget.h"
 #include "CProjectileSpellHit.h"
+#include "CProjectileSunray.h"
 #include "CTimerWorld.h"
 #include "CUtil.h"
 #include "IcewindCVisualEffect.h"
@@ -586,6 +587,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 217:
         // The snowball swarm.
         pProjectile = new CProjectileSnowballSwarm();
+        break;
+    case 274:
+        // The sunray carrier.
+        pProjectile = new CProjectileArea85024C();
         break;
     case 267:
         // The circle of death.
@@ -3939,6 +3944,29 @@ CProjectileSnowballSwarm::CProjectileSnowballSwarm()
     m_nRadius = 250;
 }
 
+// 0x574D50
+CProjectileArea85024C::CProjectileArea85024C()
+    : CProjectileArea(0x100)
+{
+    m_nTriggerInterval = 10;
+    m_nHitModulus = 10;
+    m_nTriggerCountdown = 0;
+    m_nDuration = 325;
+    m_nRadius = 150;
+}
+
+// 0x574DA0
+// Vtable slot 0x70 of 0x85024C: the carrier itself never shows — on arrival
+// it builds the sunray spell hit directly (the same shape CProjectileSpellHit
+// spells for spell-hit case 57) and fires it at its own position with no
+// height and no type, then chains to the family teardown.
+void CProjectileArea85024C::OnArrival()
+{
+    CProjectileSunray* pSunray = new CProjectileSunray(CString("SunrayX"), CString(""), 0xFF, TRUE, FALSE, 325);
+    pSunray->Fire(m_pArea, m_sourceId, m_targetId, m_pos, 0, 0);
+    CProjectileArea::OnArrival();
+}
+
 // 0x5756C0
 CProjectilePortalAnimFlip::CProjectilePortalAnimFlip()
     : CProjectileArea(0x7D0)
@@ -3958,7 +3986,8 @@ CProjectileTremor::CProjectileTremor()
 // Acid Fog's slot-0 destructor. The body at 0x5768A0 is the deleting
 // thunk MSVC emits beside every destructor definition; the exe
 // ICF-folds every empty spell-hit leaf onto it — Tremor's 0x850558,
-// PortalAnimFlip's 0x850420 and DBFireball's 0x85099C all carry 0x5768A0
+// PortalAnimFlip's 0x850420, DBFireball's 0x85099C, SnowballSwarm's
+// 0x84FF40 and the sunray carrier's 0x85024C all carry 0x5768A0
 // as slot 0, and the scalar half 0x575B20 is a bare jump to the base
 // dtor 0x56F1F0. The fog adds no members of its own, so ours is the
 // empty braces that chain to CProjectileArea::~CProjectileArea.

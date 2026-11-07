@@ -328,6 +328,17 @@ public:
     CProjectileArea8501B0();
 };
 
+// The sunray carrier (projectile type 274, vtable 0x85024C): an invisible
+// carrier — no cells, no sounds, only the 150-around, 325-tick lingering
+// area with a ten-and-ten cadence. On arrival it builds the visible sunray
+// itself (the SunrayX spell hit, transparent, full-bright) and fires it at
+// its own position, then chains to the family teardown.
+class CProjectileArea85024C : public CProjectileArea {
+public:
+    CProjectileArea85024C();
+    /* 0070 */ void OnArrival() override;
+};
+
 // Web (projectile type 64, vtable 0x8502E8): WebX and lingering WebA
 // strands, 150 around, 1500 ticks.
 class CProjectileArea8502E8 : public CProjectileArea {
