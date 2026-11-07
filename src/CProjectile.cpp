@@ -10,6 +10,7 @@
 #include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
+#include "CParticle.h"
 #include "CProjectile84DFA4.h"
 #include "CProjectile84E940.h"
 #include "CProjectile84E9C0.h"
@@ -595,6 +596,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     case 283:
         // The aura carrier.
         pProjectile = new CProjectileArea850384();
+        break;
+    case 350:
+        // The one-shot area strike.
+        pProjectile = new CProjectileArea8507C8();
         break;
     case 267:
         // The circle of death.
@@ -2752,7 +2757,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 350: ctor 0x576080 not ported
         //   TODO: type 355: ctor 0x576770 not ported
         //   TODO: type 356: ctor 0x576870 not ported
         //   TODO: type 360: ctor 0x576990 not ported
@@ -4114,6 +4118,227 @@ CProjectileTremor::CProjectileTremor()
 {
     m_explosion1.m_sound = "ARE_P27";
     m_nRadius = 0x15E;
+}
+
+// 0x576080
+CProjectileArea8507C8::CProjectileArea8507C8()
+    : CProjectileArea(0x100)
+{
+    m_nRadius = 450;
+}
+
+// 0x5760B0
+// Vtable slot 0x0C of 0x8507C8: the whole life of the one-shot strike.
+// Unlike the family it does not check Time Stop and does not chain to the
+// base update — it gathers, applies and removes itself at once.
+void CProjectileArea8507C8::AIUpdate()
+{
+    std::list<LONG> targets = GetTargets();
+    ApplyToTargets(targets);
+    RemoveSelf();
+}
+
+// 0x576150
+// Vtable slot 0x6C of 0x8507C8: the landing. The effect list and the
+// travel delta block of the base Fire are gone — this carrier exists only
+// to stand somewhere (the source's position, line of sight resolved) and
+// let the next update strike.
+void CProjectileArea8507C8::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)nHeight;
+    (void)nType;
+
+    if (pArea == NULL) {
+        return;
+    }
+
+    m_sourceId = source;
+    m_targetId = target;
+    m_pArea = pArea;
+
+    CGameObject* pSource;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pSource,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    CPoint origin;
+    GetSourcePosition(m_sourceId, origin, TRUE);
+
+    rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Add(&m_id, this, INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        LONG nSourceId = m_sourceId;
+        delete this;
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nSourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        return;
+    }
+
+    // NOTE: The original hands the area itself to DetermineHeight
+    // (0x576250) — the shared pSource is fetched and never read, and the
+    // "sprite" is the area, so the height falls out of the m_bHasHeight
+    // branch alone.
+    CGameObject::AddToArea(pArea,
+        origin,
+        DetermineHeight(reinterpret_cast<CGameSprite*>(pArea)),
+        CGameObject::LIST_FRONT);
+    PlaySound(m_fireSoundRef, m_loopFireSound, FALSE);
+
+    m_posExactX = origin.x << CParticle::RESOLUTION_INC;
+    m_posExactY = ((origin.y << CParticle::RESOLUTION_INC) * 4) / 3;
+    m_targetPos.x = targetPos.x;
+    m_pos.x = origin.x;
+    m_pos.y = origin.y;
+    m_targetPos.y = targetPos.y;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+}
+
+// 0x576310
+// Vtable slot 0x90 of 0x8507C8: the base's dual find with the hit
+// bookkeeping, but both gathers drop the line-of-sight requirement the
+// base passes TRUE for.
+std::list<LONG> CProjectileArea8507C8::GetTargets()
+{
+    CTypedPtrList<CPtrList, LONG*> found;
+
+    m_pArea->GetAllInRange(m_posVertList,
+        m_pos,
+        m_targetType,
+        m_nRadius,
+        m_terrainTable,
+        found,
+        FALSE,
+        m_bCheckForNonSprites);
+    m_pArea->GetAllInRangeBack(m_pos,
+        m_targetType,
+        m_nRadius,
+        m_terrainTable,
+        found,
+        FALSE,
+        FALSE,
+        m_bCheckForNonSprites);
+
+    // Forget the targets that are no longer in range.
+    std::map<LONG, LONG>::iterator it = m_targetHits.begin();
+    while (it != m_targetHits.end()) {
+        BOOL bFound = FALSE;
+        POSITION pos = found.GetHeadPosition();
+        while (pos != NULL) {
+            LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(found.GetNext(pos)));
+            if (nId == it->first) {
+                bFound = TRUE;
+                break;
+            }
+        }
+
+        if (bFound) {
+            ++it;
+        } else {
+            std::map<LONG, LONG>::iterator next = it;
+            ++next;
+            m_targetHits.erase(it);
+            it = next;
+        }
+    }
+
+    std::list<LONG> targets;
+
+    POSITION pos = found.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(found.GetNext(pos)));
+
+        if (m_targetHits.find(nId) == m_targetHits.end()) {
+            m_targetHits[nId] = 0;
+        }
+
+        if (m_targetHits[nId] % m_nHitModulus == 0) {
+            targets.push_back(nId);
+        }
+
+        m_targetHits[nId]++;
+    }
+
+    return targets;
+}
+
+// 0x5765F0
+// Vtable slot 0x94 of 0x8507C8: the strike. Unlike the base it shares the
+// source first and only strikes targets on the opposite side of the
+// caster's allegiance (IcewindMisc::sub_5852A0) — and only the first one:
+// the original returns right after the first qualifying secondary.
+void CProjectileArea8507C8::ApplyToTargets(std::list<LONG>& targets)
+{
+    CGameObject* pSource;
+
+    BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceId,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pSource,
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        // NOTE: The original releases the source share here (0x576649)
+        // even though this GetShare never took one.
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        return;
+    }
+
+    if (pSource->GetObjectType() != CGameObject::TYPE_SPRITE) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        return;
+    }
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        CGameObject* pTarget;
+
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pTarget,
+            INFINITE);
+        if (rc != CGameObjectArray::SUCCESS) {
+            // NOTE: The original returns here without undoing anything
+            // (0x5766d3) — the source share leaks on this path.
+            return;
+        }
+
+        if (pTarget->GetObjectType() == CGameObject::TYPE_SPRITE
+            && IcewindMisc::sub_5852A0(static_cast<CGameSprite*>(pTarget),
+                   static_cast<CGameSprite*>(pSource))
+                == TRUE) {
+            CreateSecondary(*it);
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+
+            // NOTE: One shot — the original returns after the first
+            // qualifying target (0x576767) and never releases the source
+            // share on this path either.
+            return;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    // NOTE: List exhausted — the original never releases the source share
+    // on this path either (0x57672d).
 }
 
 // 0x5768A0

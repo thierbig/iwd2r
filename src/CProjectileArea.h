@@ -391,6 +391,21 @@ public:
     /* 065E */ LONG m_nTicks;
 };
 
+// A one-shot area strike (projectile type 350, vtable 0x8507C8): fired, it
+// registers and lands, then its first update gathers the dual find with no
+// line-of-sight requirement and strikes only the first target the gather
+// finds on the opposite side of the caster's allegiance from the source —
+// one secondary, then it removes itself. 450 around; stringless, so the
+// class is address-named after its vtable. No members of its own.
+class CProjectileArea8507C8 : public CProjectileArea {
+public:
+    CProjectileArea8507C8();
+    /* 000C */ void AIUpdate() override;
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+    /* 0090 */ std::list<LONG> GetTargets() override;
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
 // Turn Undead (projectile type 376, vtable 0x850A38): 300 around; it turns
 // or destroys the undead the caster's turning check beats.
 class CProjectileArea850A38 : public CProjectileArea {

@@ -2913,6 +2913,7 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         { 267, "DSpellX", "EFF_M42", 300, 0 }, // 0x571930
         { 274, "", "", 150, 0 }, // 0x574D50
         { 283, "", "", 250, 0 }, // 0x575090
+        { 350, "", "", 450, 0 }, // 0x576080
         { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
         { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
         { 383, "", "", 100, 1 }, // 0x577590
@@ -2963,6 +2964,13 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
             REQUIRE(pAura != nullptr);
             CHECK(pAura->m_struckTargets.empty());
             CHECK(pAura->m_nTicks == 0);
+        }
+        if (spec.nType == 350) {
+            // The one-shot strike lands with its hit bookkeeping empty —
+            // everything else waits for the first update.
+            CProjectileArea8507C8* pStrike = dynamic_cast<CProjectileArea8507C8*>(pProjectile);
+            REQUIRE(pStrike != nullptr);
+            CHECK(pStrike->m_targetHits.empty());
         }
         if (spec.nType == 383) {
             // The boulder also travels with its own sound pair.
