@@ -274,9 +274,9 @@ public:
 // CProjectileWhirlwind < IcewindCProjectileTravellingVFX <
 // CProjectileTravelling; the exe Fire 0x57FF80 closes with
 // CProjectileSingleTarget::Fire (0x5791D0), which is the anchor used here
-// (the same substitution as the classes above). The ctor 0x57F640 is parked
-// (docs/wso/import-parked/57F640.json — it wires the fork-only
-// IcewindCProjectileTargetMap strike tracker at +0x2BA), as are AIUpdate
+// (the same substitution as the classes above). The ctor 0x57F640 landed
+// in task 81g (it wires the IcewindCProjectileTargetMap strike tracker at
+// +0x2BA). Still parked: AIUpdate
 // 0x57F8D0 (docs/wso/import-parked/57F8D0.json), PickWanderPoint 0x5800E0
 // (docs/wso/import-parked/5800E0.json — the fork's 16-entry step table is
 // mirrored against the exe's jump table at 0x58022C: the fork's case n is
@@ -289,10 +289,20 @@ public:
 // class inherits the base virtuals for them.
 class CProjectileWhirlwind : public CProjectileSingleTarget {
 public:
+    // 0x57F640. Binds the WhirlwX tornado through the base, constructs the
+    // strike tracker at +0x2BA and the loop sound's CSound at +0x2F0 (the
+    // implicit member inits), then retunes the wanderer: a 1000-tick
+    // lifetime and leg budget, the finishing flag and the wander seed
+    // cleared (the seed is MP-replicated into +0x356 later, through the
+    // CMessageFireProjectile path), one wander direction, speed 5, the
+    // tracker armed (owner this, 8 strikes total, gather radius 70,
+    // re-strike interval 33, service period 3, never the caster),
+    // copy-from-back on the visual effect, both height gates cleared,
+    // and the EFF_P105 fire sound looped.
+    CProjectileWhirlwind();
     // 0x57F760. Empty braces: the scalar body 0x57F780 is the compiler's
     // member teardown (the loop sound's CSound dtor first, then the strike
-    // tracker map), which the parked tracker's raw bytes cannot spell until
-    // that type is imported.
+    // tracker map), which the members spell implicitly.
     /* 0000 */ ~CProjectileWhirlwind() override;
 
     // 0x57FF80. Points the loop sound at ARE_P23, makes it fire-and-forget
@@ -301,13 +311,14 @@ public:
     // the tornado never homes.
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
 
-    // +0x2BA..+0x2EF is the strike tracker the parked ctor builds (the
-    // fork-only IcewindCProjectileTargetMap); kept as raw bytes until that
-    // type is imported.
+    // The strike tracker the ctor arms (the same embed as the bolt's at
+    // +0x2B6: owner +0x2BE, service period +0x2D2, strike interval +0x2DA,
+    // max total +0x2E2, skip-source +0x2EB, range +0x2EC, decoder
+    // allocation 0x35A).
     /* 02AE */ LONG m_nLifetime;
     /* 02B2 */ LONG m_nLegBudget;
     /* 02B6 */ LONG field_2B6;
-    /* 02BA */ BYTE field_2BA[0x36];
+    /* 02BA */ IcewindCProjectileTargetMap m_targetMap;
     /* 02F0 */ CSound m_loopSound;
     /* 0354 */ BYTE m_bFinishing;
     /* 0356 */ LONG m_wanderSeed;

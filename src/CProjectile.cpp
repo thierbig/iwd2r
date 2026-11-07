@@ -622,6 +622,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The corrosive fog.
         pProjectile = new CProjectileCorrosiveFog();
         break;
+    case 305:
+        // The wandering tornado (Whirlwind, Wing Buffet).
+        pProjectile = new CProjectileWhirlwind();
+        break;
     case 306:
         // The tremor.
         pProjectile = new CProjectileTremor();
@@ -2788,7 +2792,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
         //   TODO: type 314: ctor 0x580C00 not ported
         //   TODO: type 346: ctor 0x581060 not ported
@@ -5028,16 +5031,49 @@ CProjectile85133C::CProjectile85133C()
     // adds no members, so there is nothing further to construct.
 }
 
+// 0x57F640
+// The wandering tornado: the base binds the WhirlwX cell, the strike
+// tracker's ctor 0x55ACC0 and the loop sound's CSound ctor 0x7A8BB0 run
+// as the implicit member inits (+0x2BA, +0x2F0), then the retune: a
+// 1000-tick lifetime and leg budget, the finishing flag and the wander
+// seed cleared (the seed itself is MP-replicated into +0x356 later,
+// through the CMessageFireProjectile path), one wander direction, speed
+// 5, the tracker armed — this projectile owns it, 8 strikes total,
+// gather radius 70, re-strike interval 33, service period 3, and it
+// never strikes the caster — copy-from-back on the visual effect, both
+// height gates cleared, and the EFF_P105 fire sound looped.
+CProjectileWhirlwind::CProjectileWhirlwind()
+    : CProjectileSingleTarget(CResRef("WhirlwX"))
+{
+    m_nLifetime = 1000;
+    m_nLegBudget = 1000;
+    field_2B6 = 0;
+    m_bFinishing = 0;
+    m_wanderSeed = 0;
+    field_1D8 = 1;
+    m_speed = 5;
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_maxStrikesTotal = 8;
+    m_targetMap.m_nRange = 70;
+    m_targetMap.m_strikeInterval = 33;
+    m_targetMap.m_servicePeriod = 3;
+    m_targetMap.m_bSkipSource = TRUE;
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_bHasHeight = FALSE;
+    field_1C2 = FALSE;
+    m_fireSoundRef = "EFF_P105";
+    m_loopFireSound = TRUE;
+}
+
 // 0x57F760
 // The tornado's slot-0 destructor: the body at 0x57F760 is the deleting
 // thunk (call the scalar body 0x57F780, free this when the flag's bit 0
 // is set), and the scalar body is the compiler's member teardown — the
 // loop sound's CSound dtor first (+0x2F0), then the strike tracker map
 // at +0x2C2 (each node's value through 0x582670, the node freed, the
-// tree orphaned), then the CProjectileSingleTarget dtor. Our tracker is
-// parked as raw bytes (+0x2BA), so the empty braces spell the source
-// truth: the members go down implicitly, in reverse declaration order,
-// exactly what the exe runs.
+// tree orphaned), then the CProjectileSingleTarget dtor. Empty braces
+// spell it: the members go down implicitly, in reverse declaration
+// order, exactly what the exe runs.
 CProjectileWhirlwind::~CProjectileWhirlwind()
 {
 }

@@ -4189,6 +4189,52 @@ TEST_CASE("visual projectiles: the rebounding bolt decodes to its flight", "[vis
     CHECK(direct.m_speed == plain.m_speed * 2);
 }
 
+TEST_CASE("visual projectiles: the whirlwind decodes to its wander", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(305, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileWhirlwind* pWind = dynamic_cast<CProjectileWhirlwind*>(pProjectile);
+    REQUIRE(pWind != nullptr);
+    // The case body (0x526ED8) carries no stores of its own: everything
+    // below is the ctor's own, plus the shared tail's type stamp (305 - 1).
+    CHECK(pWind->m_projectileType == 304);
+    // WhirlwX IS in this install's CHITIN.KEY, so the cell binds for real.
+    CHECK(pWind->m_animation->GetResRef() == CResRef("WhirlwX"));
+    // The wander retune: 1000 ticks of life and leg budget, the seed and
+    // the finishing flag cleared (the seed is MP-replicated in later, not
+    // drawn here), one wander direction, speed 5, and both height gates
+    // cleared so the tornado stays on the ground.
+    CHECK(pWind->m_nLifetime == 1000);
+    CHECK(pWind->m_nLegBudget == 1000);
+    CHECK(pWind->field_2B6 == 0);
+    CHECK(pWind->m_bFinishing == 0);
+    CHECK(pWind->m_wanderSeed == 0);
+    CHECK(pWind->field_1D8 == 1);
+    CHECK(pWind->m_speed == 5);
+    CHECK(pWind->m_bHasHeight == FALSE);
+    CHECK(pWind->field_1C2 == FALSE);
+    CHECK(pWind->m_fireSoundRef == "EFF_P105");
+    CHECK(pWind->m_loopFireSound == TRUE);
+    // The strike tracker the ctor arms: this tornado owns it, 8 strikes
+    // total within radius 70, re-striking each victim every 33 in-range
+    // passes, serviced every 3 ticks, never the caster.
+    CHECK(pWind->m_targetMap.m_pOwner == pWind);
+    CHECK(pWind->m_targetMap.m_maxStrikesTotal == 8);
+    CHECK(pWind->m_targetMap.m_nRange == 70);
+    CHECK(pWind->m_targetMap.m_strikeInterval == 33);
+    CHECK(pWind->m_targetMap.m_servicePeriod == 3);
+    CHECK(pWind->m_targetMap.m_bSkipSource == TRUE);
+    delete pProjectile;
+    // The ctor's own stamps on a directly built one: the decode added
+    // nothing, so the speed and the tracker's range read the same.
+    CProjectileWhirlwind direct;
+    CHECK(direct.m_speed == 5);
+    CHECK(direct.m_targetMap.m_nRange == 70);
+    CHECK(direct.m_targetMap.m_maxStrikesTotal == 8);
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);
