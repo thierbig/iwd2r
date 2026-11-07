@@ -5566,7 +5566,7 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteM
 
     // Only the 1 answer performs the transition.
     if (nReply == 1) {
-        pGame->sub_5C3B20(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
+        pGame->LeaveAreaLUA(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
     }
 
     return TRUE;

@@ -9773,13 +9773,50 @@ static void PartyTransitionMoveSprite(CGameSprite* pSprite,
     }
 }
 
+// The host's LEAVEAREALUA transition (CBaldurMessage 0x437950 grants the
+// travel permit and answers 1; the permit-reply handler in CMessage.cpp
+// calls this): the area music fades, the destination area `sAreaName`
+// loads and the character `nCharacterId` (with the party) moves to
+// (`nX`, `nY`) facing `nDirection`, `sParchment` narrating the travel.
+//
 // 0x5C3B20
-void CInfGame::sub_5C3B20(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirection, CString sAreaName, CString sParchment)
+void CInfGame::LeaveAreaLUA(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirection, CString sAreaName, CString sParchment)
 {
-    // TODO: Incomplete. The 4,001-byte LeaveAreaLUA transition (the
-    // destination area load, the party move and the LEAVEAREALUA 88/65
-    // broadcast) is a follow-up; the host permit handler (CBaldurMessage
-    // 0x437950) only answers 1 and calls this.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CBaldurMessage* pMessage = &(g_pBaldurChitin->m_cBaldurMessage);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+    // __LINE__: 19880
+    UTIL_ASSERT(pGame != NULL && pMessage != NULL);
+
+    if (pGame->GetVisibleArea() != NULL) {
+        pGame->GetVisibleArea()->sub_47A190();
+    }
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return;
+    }
+
+    if (g_pChitin->pActiveEngine == g_pBaldurChitin->m_pEngineMap) {
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE
+        && g_pChitin->cNetwork.m_bIsHost == TRUE
+        && g_pChitin->pActiveEngine != g_pBaldurChitin->m_pEngineWorld) {
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    // The area song fades out (StartSong(-1, 3): a 1500 ms fade of the
+    // current song) — the trigger path 0x5C4AD0 does not do this.
+    g_pChitin->cSoundMixer.StartSong(-1, 3);
+    g_pChitin->cSoundMixer.m_nActiveArea = static_cast<DWORD_PTR>(-1);
+    g_pChitin->cSoundMixer.UpdateSoundList();
+
+    g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(TRUE);
+
+    // TODO: The remainder of the 4,001-byte body (the broadcast/progress
+    // screen block onward) ports below, range by range.
 }
 
 // The host's transition of the whole party through a party required travel
