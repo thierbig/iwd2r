@@ -578,12 +578,31 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit requ
     g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
     g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(world.get());
 
+    // The allow arm drives the handler into CInfGame::LeaveAreaLUA, whose
+    // head switches to the world engine when the active engine is the map
+    // engine or, on an established host, anything else — the original
+    // dereferences pActiveEngine there unguarded (0x5C3BDF: mov edx,[ecx]).
+    // The real game always has an engine active; the zeroed CBaldurChitin
+    // left pActiveEngine (NULL from the untouched ChitinScope) equal to the
+    // zeroed m_pEngineMap, and the NULL==NULL switch crashed exactly where
+    // the original would. Pin the active engine to the world engine — the
+    // steady in-game state, in which both compares skip the switch.
+    CWarp* pSavedActiveEngine = g_pChitin->pActiveEngine;
+    g_pChitin->pActiveEngine = g_pBaldurChitin->m_pEngineWorld;
+
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
     for (INT i = 0; i < 6; i++) {
         pSettings->field_AC[i] = 0xFF;
         pSettings->field_B2[i] = FALSE;
     }
+
+    // field_1B86 receives the area name through CString::operator=, which
+    // the original also calls unguarded (0x5C3D9E -> 0x7FCD07): a zeroed
+    // CString is not a constructed one (the empty-string sentinel is not
+    // all-bits-zero), so construct the member the way the real game's
+    // CInfGame constructor would have.
+    new (&pGame->field_1B86) CString();
 
     network.m_psPlayerName[0] = "sender";
     network.m_pbPlayerVisible[0] = TRUE;
@@ -679,6 +698,7 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit requ
     pSettings->m_bHostPermittedDialog = FALSE;
 
     g_pBaldurChitin = pSavedBaldur;
+    g_pChitin->pActiveEngine = pSavedActiveEngine;
 
     // Leave the embedded CNetwork closed before the ChitinScope restores
     // g_pChitin (its destructor would otherwise call OnCloseSession).
