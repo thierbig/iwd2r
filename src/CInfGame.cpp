@@ -11810,6 +11810,81 @@ struct COldCreatureFileKnownSpell {
 };
 static_assert(sizeof(COldCreatureFileKnownSpell) == 0xC, "V2.1 known-spell stride");
 
+// 0x5A3DB0
+// UpgradeCreatureFileV20ToV21 — the "CRE V2.0" -> "CRE V2.1" step of the
+// creature-file upgrade chain (0x5A7740 dispatches on the signature and
+// calls this for "CRE V2.0"; 0x5A5060 then takes V2.1 -> V2.2). Builds the
+// V2.1 image field by field in a temp buffer of *plSize bytes, then copies
+// it back over *ppCreature — source and destination are the same caller
+// buffer, which Unmarshal already grew by 0xCA bytes.
+BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
+{
+    BYTE* pOld = *ppCreature;
+
+    BYTE* pNew = new BYTE[*plSize];
+    memset(pNew, 0, *plSize);
+    memcpy(pNew, "CRE V2.1", 8);
+
+    // The exe zeroes the header block (0xDF dwords past the signature) a
+    // second time before filling it; kept literal.
+    memset(pNew + 8, 0, 0xDF * sizeof(DWORD));
+
+    // First four header dwords move 1:1 (raw 0x8..0x14; the fourth is the
+    // XP total the ladder below reads).
+    memcpy(pNew + 0x8, pOld + 0x8, 0x10);
+
+    // XP total -> level byte at V2.1 raw offset 0x25A (ebx runs from pNew+8
+    // in the exe, so [ebx+0x252] is pNew+0x25A).
+    DWORD nXp = *reinterpret_cast<const DWORD*>(pOld + 0x14);
+    BYTE nLevel;
+    if (nXp > 0xC350) {
+        nLevel = 17;
+    } else if (nXp > 0x7530) {
+        nLevel = 16;
+    } else if (nXp > 0x4E20) {
+        nLevel = 15;
+    } else if (nXp > 0x3A98) {
+        nLevel = 14;
+    } else if (nXp > 0x2EE0) {
+        nLevel = 13;
+    } else if (nXp > 0x2710) {
+        nLevel = 12;
+    } else if (nXp > 0x1F40) {
+        nLevel = 11;
+    } else if (nXp > 0x1770) {
+        nLevel = 10;
+    } else if (nXp > 0xFA0) {
+        nLevel = 9;
+    } else if (nXp > 0x7D0) {
+        nLevel = 8;
+    } else if (nXp > 0x578) {
+        nLevel = 7;
+    } else if (nXp > 0x1A4) {
+        nLevel = 6;
+    } else if (nXp > 0xAF) {
+        nLevel = 5;
+    } else if (nXp > 0x78) {
+        nLevel = 4;
+    } else if (nXp > 0x5A) {
+        nLevel = 3;
+    } else if (nXp > 0x3C) {
+        nLevel = 2;
+    } else if (nXp > 0) {
+        nLevel = 1;
+    } else {
+        nLevel = 0;
+    }
+    pNew[0x25A] = nLevel;
+
+    // TODO(range 2, 0x5A3F52-0x5A41B9): remaining header field moves.
+    // TODO(range 3, 0x5A41BA-0x5A4B9B): stat-block conversions and tables.
+    // TODO(range 4, 0x5A4B9C-0x5A4F2D): variable-length sections, copy-out.
+
+    memcpy(*ppCreature, pNew, *plSize);
+    delete[] pNew;
+    return TRUE;
+}
+
 // 0x5A5060
 BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, void* pUnused)
 {

@@ -94,6 +94,15 @@ public:
     /* 0048 */ UINT m_nHighestLevel;
 };
 
+// 0x5A3DB0
+// NOTE: __fastcall in the exe (plain ret): ECX = ppCreature, EDX = plSize —
+// exactly two register parameters, no stack args. The "CRE V2.0" ->
+// "CRE V2.1" counterpart of UpgradeCreatureFileV21ToV22: the V2.0 image is
+// read from *ppCreature and the converted V2.1 image is written back over
+// the same buffer (the "CRE V2.0" arm of CGameSprite::Unmarshal pre-grew it
+// by 0xCA bytes). *plSize is read-only (allocation and copy-out).
+BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize);
+
 // 0x5A5060
 // NOTE: __fastcall in the exe (ret 8): ECX = ppCreature, EDX = plSize, the
 // stack carries pOldCreature and a fourth word the caller fills with
