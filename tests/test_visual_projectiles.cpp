@@ -4122,8 +4122,7 @@ TEST_CASE("visual projectiles: the chain-lightning hop decodes to its carrier", 
     iwd2r_srand(71);
     CProjectile* pProjectile = CProjectile::DecodeProjectile(210, world.pCharacter, 0);
     CHECK(Draws(71, iwd2r_rand_state()) == 0);
-    IcewindCProjectileChainLightning* pBolt =
-        dynamic_cast<IcewindCProjectileChainLightning*>(pProjectile);
+    IcewindCProjectileChainLightning* pBolt = dynamic_cast<IcewindCProjectileChainLightning*>(pProjectile);
     REQUIRE(pBolt != nullptr);
     // The case body (0x5250B0) only news the carrier with an empty
     // struck-target set; everything else is the ctor 0x57C510's own tuning
