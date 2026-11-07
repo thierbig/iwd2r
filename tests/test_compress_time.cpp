@@ -19,8 +19,8 @@
 namespace {
 
 using engine_world::DataDir;
-using engine_world::FramePump;
 using engine_world::FinishedCharacter;
+using engine_world::FramePump;
 using engine_world::NewGameInStartArea;
 using engine_world::StartEngine;
 
