@@ -12246,39 +12246,41 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         memcpy(pNew + 0x3EE, pOld + 0x33C, nBytes);
     }
 
-    // 0x5A4DE2-0x5A4E22: selected-spells section — 20 bytes per 0x328
-    // entry, copied verbatim from pOld+pOld[0x324] to
-    // pNew+pOld[0x324]+0xB2.
+    // 0x5A4DE2-0x5A4E22: item-slots section — 20 bytes per 0x328 entry,
+    // copied verbatim from pOld+pOld[0x324] to pNew+pOld[0x324]+0xB2 (V2.1
+    // slot pair 0x3D6/0x3DA).
     {
-        DWORD nSelected = *reinterpret_cast<const DWORD*>(pOld + 0x324);
-        memcpy(pNew + nSelected + 0xB2, pOld + nSelected,
+        DWORD nItems = *reinterpret_cast<const DWORD*>(pOld + 0x324);
+        memcpy(pNew + nItems + 0xB2, pOld + nItems,
             20 * *reinterpret_cast<const DWORD*>(pOld + 0x328));
     }
 
-    // 0x5A4E24-0x5A4E63: item-slots section, only when the 0x330 count is
+    // 0x5A4E24-0x5A4E63: effects section, only when the 0x330 count is
     // nonzero — 48 bytes per entry, or 264 when the flag at pNew[0x33]
-    // (copied from pOld[0x33]) is set; from pOld+pOld[0x32C] to
-    // pNew+pOld[0x32C]+0xB2.
+    // (copied from pOld[0x33]; the same last-block flag the V2.1->V2.2
+    // upgrade reads) is set; from pOld+pOld[0x32C] to
+    // pNew+pOld[0x32C]+0xB2 (V2.1 slot pair 0x3DE/0x3E2).
     if (*reinterpret_cast<const DWORD*>(pOld + 0x330) != 0) {
-        DWORD nSlots = *reinterpret_cast<const DWORD*>(pOld + 0x32C);
+        DWORD nEffects = *reinterpret_cast<const DWORD*>(pOld + 0x32C);
         DWORD nBytes = (pNew[0x33] != 0 ? 264 : 48) *
             *reinterpret_cast<const DWORD*>(pOld + 0x330);
-        memcpy(pNew + nSlots + 0xB2, pOld + nSlots, nBytes);
+        memcpy(pNew + nEffects + 0xB2, pOld + nEffects, nBytes);
     }
 
-    // 0x5A4E65-0x5A4EF8: effects header. The V2.0 header at
-    // pOld+pOld[0x320] is rebuilt into the V2.1 header at
-    // pNew+pOld[0x320]+0xB2: 0x68 bytes first filled with 0xFF (rep stosd
-    // of eax = -1, not zero), then the first 0x1A bytes copied 1:1, src
-    // 0x1A..0x4B shifted +8, and the two words at 0x4C/0x4E shifted +0x18.
+    // 0x5A4E65-0x5A4EF8: equipment header (V2.1 slot 0x3D2). The V2.0
+    // header at pOld+pOld[0x320] is rebuilt into the 0x68-byte V2.1 header
+    // at pNew+pOld[0x320]+0xB2: 0x68 bytes first filled with 0xFF (rep
+    // stosd of eax = -1, not zero — the empty-slot sentinel), then the
+    // first 0x1A bytes copied 1:1, src 0x1A..0x4B shifted +8, and the two
+    // words at 0x4C/0x4E shifted +0x18.
     {
-        DWORD nEffects = *reinterpret_cast<const DWORD*>(pOld + 0x320);
-        const BYTE* pEffects = pOld + nEffects;
-        BYTE* pEffectsNew = pNew + nEffects + 0xB2;
-        memset(pEffectsNew, 0xFF, 0x68);
-        memcpy(pEffectsNew, pEffects, 0x1A); // 0x5A4E75-0x5A4EC4
-        memcpy(pEffectsNew + 0x22, pEffects + 0x1A, 0x32); // +8, 0x5A4EC7-0x5A4EE6
-        memcpy(pEffectsNew + 0x64, pEffects + 0x4C, 4); // +0x18, 0x5A4EE8-0x5A4EF8
+        DWORD nEquip = *reinterpret_cast<const DWORD*>(pOld + 0x320);
+        const BYTE* pEquip = pOld + nEquip;
+        BYTE* pEquipNew = pNew + nEquip + 0xB2;
+        memset(pEquipNew, 0xFF, 0x68);
+        memcpy(pEquipNew, pEquip, 0x1A); // 0x5A4E75-0x5A4EC4
+        memcpy(pEquipNew + 0x22, pEquip + 0x1A, 0x32); // +8, 0x5A4EC7-0x5A4EE6
+        memcpy(pEquipNew + 0x64, pEquip + 0x4C, 4); // +0x18, 0x5A4EE8-0x5A4EF8
     }
 
     memcpy(*ppCreature, pNew, *plSize);

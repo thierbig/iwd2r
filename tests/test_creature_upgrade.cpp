@@ -389,3 +389,364 @@ TEST_CASE("upgrade: a cleric's spells land in the cleric block", "[creature-upgr
 
     delete[] pCreature;
 }
+
+// UpgradeCreatureFileV20ToV21 (0x5A3DB0): the "CRE V2.0" -> "CRE V2.1"
+// step of the same upgrade chain (0x5A7740 dispatches on the signature and
+// hands "CRE V2.0" here first; the converter above then takes it to V2.2).
+// Unlike that one it touches no engine state — its body is operator
+// new[]/delete[] plus memcpy/memset — so these cases run without GameOrSkip
+// and without the [data] tag. The caller's buffer is both source and
+// destination: Unmarshal grows it by 0xCA before the call, so the buffers
+// below are V2.1-sized with a V2.0 image at the front, and *plSize is
+// never written.
+
+TEST_CASE("upgrade: a V2.0 fighter becomes a V2.1 file", "[creature-upgrade]")
+{
+    // A well-formed V2.0 image whose tail sections tile the buffer
+    // exactly: one flat memorized spell (12 bytes) at 0x33C, one
+    // known-spell header (0x10 bytes, its +0xC count naming 2 spells) at
+    // 0x348, two pool entries (0xC each) at 0x358, the equipment header at
+    // 0x370, one item slot at equip+0x68 and two 48-byte effects ending at
+    // 0x44C. The buffer is 0x44C + 0xCA bytes — what Unmarshal grows it to.
+    const LONG nV20Size = 0x44C;
+    const LONG nNewSize = 0x516;
+    std::vector<BYTE> buffer(nNewSize);
+    BYTE* pCreature = buffer.data();
+    FillPattern(pCreature, nNewSize);
+    std::memcpy(pCreature, "CRE V2.0", 8);
+    PutDword(pCreature, 0x14, 0xFA1); // XP: one step past the level-9 bound
+    PutByte(pCreature, 0x33, 0); // last-block flag clear -> 48-byte effects
+    PutByte(pCreature, 0x2DB, 2); // BG1 FIGHTER
+    PutByte(pCreature, 0x234, 5); // level
+
+    // V2.0 spellbook sub-header at 0x308..0x33B (the last two dwords are
+    // the dialog resref).
+    PutDword(pCreature, 0x308, 0x33C);
+    PutDword(pCreature, 0x30C, 1);
+    PutDword(pCreature, 0x310, 0x348);
+    PutDword(pCreature, 0x314, 1);
+    PutDword(pCreature, 0x318, 0x358);
+    PutDword(pCreature, 0x31C, 2);
+    PutDword(pCreature, 0x320, 0x370);
+    PutDword(pCreature, 0x324, 0x3D8);
+    PutDword(pCreature, 0x328, 1);
+    PutDword(pCreature, 0x32C, 0x3EC);
+    PutDword(pCreature, 0x330, 2);
+    PutResref(pCreature, 0x334, "DRAGDG01");
+    PutDword(pCreature, 0x354, 2); // the known header's own spell count
+
+    const std::vector<BYTE> oldImage(buffer.begin(), buffer.begin() + nV20Size);
+    const BYTE* oldBytes = oldImage.data();
+
+    BYTE* pCreatureArg = pCreature;
+    LONG nSize = nNewSize;
+    CHECK(UpgradeCreatureFileV20ToV21(&pCreatureArg, &nSize) == TRUE);
+    CHECK(nSize == nNewSize); // *plSize is read-only
+    CHECK(pCreatureArg == pCreature); // written back in place, not reallocated
+
+    const BYTE* out = pCreature;
+
+    // Signature rewrite and the header moves.
+    CHECK(std::memcmp(out, "CRE V2.1", 8) == 0);
+    CHECK(std::memcmp(out + 8, oldBytes + 8, 0x10) == 0); // incl. the XP dword
+    CHECK(std::memcmp(out + 0x18, oldBytes + 0x18, 0x2D) == 0);
+    CHECK(std::memcmp(out + 0x46, oldBytes + 0x48, 0xF) == 0);
+    CHECK(out[0x25A] == 9); // XP ladder: 0xFA1 > 0xFA0
+    CHECK(out[0x21E] == oldBytes[0x45] / 10);
+    CHECK(out[0x226] == oldBytes[0x231] / 10);
+
+    // Fighter arm (BG1 id 2): FIGHTER mask, class byte 5, level slots.
+    CHECK(GetDword(out, 0x3B6) == 0x10); // CLASSMASK_FIGHTER
+    CHECK(out[0x8F] == 5);
+    CHECK(out[0x387] == 5); // CAIOBJECTTYPE_C_FIGHTER
+    CHECK(out[0x8A] == 5);
+    CHECK(out[0x3B4] == 5); // mirror of the class byte
+    CHECK(GetDword(out, 0x270) == 0); // no kit
+
+    // Seeds and the 0x2DC block.
+    CHECK(out[0x384] == oldBytes[0x2D8]);
+    CHECK(out[0x385] == oldBytes[0x2D9]);
+    CHECK(out[0x386] == oldBytes[0x2DA]);
+    CHECK(std::memcmp(out + 0x388, oldBytes + 0x2DC, 0x2C) == 0);
+
+    // The 13-dword V2.1 spellbook sub-header: the six offsets re-based by
+    // the 0xB2 header growth, the counts and the dialog resref unadjusted.
+    CHECK(GetDword(out, 0x3BA) == 0x3EE);
+    CHECK(GetDword(out, 0x3BE) == 1);
+    CHECK(GetDword(out, 0x3C2) == 0x3FA);
+    CHECK(GetDword(out, 0x3C6) == 1);
+    CHECK(GetDword(out, 0x3CA) == 0x40A);
+    CHECK(GetDword(out, 0x3CE) == 2);
+    CHECK(GetDword(out, 0x3D2) == 0x422);
+    CHECK(GetDword(out, 0x3D6) == 0x48A);
+    CHECK(GetDword(out, 0x3DA) == 1);
+    CHECK(GetDword(out, 0x3DE) == 0x49E);
+    CHECK(GetDword(out, 0x3E2) == 2);
+    CHECK(ResrefEquals(out, 0x3E6, "DRAGDG01"));
+
+    // Memorization: 12 (flat entry) + 12*2 (the header's two spells) + 16
+    // (the header record) = 52 bytes, copied verbatim to 0x3EE.
+    CHECK(std::memcmp(out + 0x3EE, oldBytes + 0x33C, 52) == 0);
+
+    // Item slots and effects, verbatim.
+    CHECK(std::memcmp(out + 0x48A, oldBytes + 0x3D8, 20) == 0);
+    CHECK(std::memcmp(out + 0x49E, oldBytes + 0x3EC, 96) == 0);
+
+    // Equipment header: 0x68 bytes at 0x422 — first 0x1A 1:1, 0x1A..0x4B
+    // shifted +8, the word pair at 0x4C shifted +0x18, 0xFF elsewhere.
+    CHECK(std::memcmp(out + 0x422, oldBytes + 0x370, 0x1A) == 0);
+    CHECK(std::memcmp(out + 0x444, oldBytes + 0x38A, 0x32) == 0);
+    CHECK(std::memcmp(out + 0x486, oldBytes + 0x3BC, 4) == 0);
+    for (size_t i = 0x43C; i < 0x444; i++) {
+        CHECK(out[i] == 0xFF);
+    }
+    for (size_t i = 0x476; i < 0x486; i++) {
+        CHECK(out[i] == 0xFF);
+    }
+
+    CHECK(out[0x4FE] == 0); // past the last section: still the zero fill
+}
+
+namespace {
+
+// Runs the converter on a minimal V2.0 image — every section count zero,
+// the equipment header at 0x33C the only tail block (its rebuilt 0x68-byte
+// V2.1 block lands at 0x3EE..0x456, exactly the end of the buffer) — and
+// returns the in-place V2.1 result.
+std::vector<BYTE> UpgradeMinimalV20Class(BYTE nClass, BYTE nFirst, BYTE nSecond, BYTE nThird)
+{
+    const LONG nSize = 0x456;
+    std::vector<BYTE> buffer(nSize);
+    BYTE* pCreature = buffer.data();
+    FillPattern(pCreature, nSize);
+    std::memcpy(pCreature, "CRE V2.0", 8);
+    PutByte(pCreature, 0x2DB, nClass);
+    PutByte(pCreature, 0x234, nFirst);
+    PutByte(pCreature, 0x235, nSecond);
+    PutByte(pCreature, 0x236, nThird);
+
+    PutDword(pCreature, 0x308, 0x33C);
+    PutDword(pCreature, 0x30C, 0);
+    PutDword(pCreature, 0x310, 0x33C);
+    PutDword(pCreature, 0x314, 0);
+    PutDword(pCreature, 0x318, 0x33C);
+    PutDword(pCreature, 0x31C, 0);
+    PutDword(pCreature, 0x320, 0x33C);
+    PutDword(pCreature, 0x324, 0x33C);
+    PutDword(pCreature, 0x328, 0);
+    PutDword(pCreature, 0x32C, 0x33C);
+    PutDword(pCreature, 0x330, 0);
+    PutResref(pCreature, 0x334, "DLGTEST");
+
+    BYTE* pCreatureArg = pCreature;
+    LONG nSizeArg = nSize;
+    CHECK(UpgradeCreatureFileV20ToV21(&pCreatureArg, &nSizeArg) == TRUE);
+    return buffer;
+}
+
+} // namespace
+
+TEST_CASE("upgrade: V2.0 class ids map to V2.1 class slots", "[creature-upgrade]")
+{
+    // The BG1 class.ids byte at 0x2DB drives a dispatch whose arms fill
+    // the class-mask dword at 0x3B6, the primary-class byte at 0x387, the
+    // combined level at 0x8A and the alphabetical level slots (0x8B
+    // barbarian ... 0x95 wizard). Dual classes halve each source level
+    // (<=3 floors at 1), triple classes take max(v/3, 1).
+
+    {
+        // MAGE (1), and its IWD2-beta alias 202: wizard kit dword.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(1, 7, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x400); // CLASSMASK_WIZARD
+        CHECK(out[0x95] == 7);
+        CHECK(out[0x387] == 0xB); // CAIOBJECTTYPE_C_WIZARD
+        CHECK(out[0x8A] == 7);
+        CHECK(GetDword(out.data(), 0x270) == 0x4000);
+
+        const std::vector<BYTE> alias = UpgradeMinimalV20Class(202, 4, 0, 0);
+        CHECK(GetDword(alias.data(), 0x3B6) == 0x400);
+        CHECK(alias[0x95] == 4);
+        CHECK(alias[0x387] == 0xB);
+    }
+
+    {
+        // FIGHTER (2); level 0 floors at 1 before the arm runs.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(2, 5, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x10);
+        CHECK(out[0x8F] == 5);
+        CHECK(out[0x387] == 5);
+        CHECK(out[0x8A] == 5);
+        CHECK(GetDword(out.data(), 0x270) == 0);
+
+        const std::vector<BYTE> floored = UpgradeMinimalV20Class(2, 0, 0, 0);
+        CHECK(floored[0x8F] == 1);
+        CHECK(floored[0x8A] == 1);
+    }
+
+    {
+        // Blank classes normalize to FIGHTER, and unknown ids fall to the
+        // default FIGHTER arm.
+        for (BYTE nClass : { BYTE { 0 }, BYTE { 0xFF }, BYTE { 250 } }) {
+            const std::vector<BYTE> out = UpgradeMinimalV20Class(nClass, 6, 0, 0);
+            CHECK(GetDword(out.data(), 0x3B6) == 0x10);
+            CHECK(out[0x387] == 5);
+            CHECK(out[0x8F] == 6);
+            CHECK(out[0x8A] == 6);
+        }
+    }
+
+    {
+        // THIEF (4): rogue slot, mask 0x100.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(4, 6, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x100); // CLASSMASK_ROGUE
+        CHECK(out[0x93] == 6);
+        CHECK(out[0x387] == 9); // CAIOBJECTTYPE_C_ROGUE
+        CHECK(out[0x8A] == 6);
+    }
+
+    {
+        // PALADIN (6): paladin slot, mask 0x40, kit dword 1.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(6, 8, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x40); // CLASSMASK_PALADIN
+        CHECK(out[0x91] == 8);
+        CHECK(out[0x387] == 7); // CAIOBJECTTYPE_C_PALADIN
+        CHECK(out[0x8A] == 8);
+        CHECK(GetDword(out.data(), 0x270) == 1);
+    }
+
+    {
+        // F/M (7) 12/3: both halved to 6/1; the exe stores 0x8F twice and
+        // the second (halved second class) wins — kept literal — and 0x95
+        // is never stored at all.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(7, 12, 3, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x410); // FIGHTER | WIZARD
+        CHECK(out[0x8F] == 1);
+        CHECK(out[0x95] == 0);
+        CHECK(out[0x387] == 5);
+        CHECK(out[0x8A] == 7);
+    }
+
+    {
+        // C/M (14) 10/4: halved to 5/2, CLERIC class byte, levels summed.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(14, 10, 4, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x404); // CLERIC | WIZARD
+        CHECK(out[0x8D] == 5);
+        CHECK(out[0x95] == 2);
+        CHECK(out[0x387] == 3); // CAIOBJECTTYPE_C_CLERIC
+        CHECK(out[0x8A] == 7);
+    }
+
+    {
+        // F/M/T (10) 9/9/9: thirds 3/3/3 summed to 9.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(10, 9, 9, 9);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x510); // FIGHTER | ROGUE | WIZARD
+        CHECK(out[0x8F] == 3);
+        CHECK(out[0x95] == 3);
+        CHECK(out[0x93] == 3);
+        CHECK(out[0x387] == 5);
+        CHECK(out[0x8A] == 9);
+    }
+
+    {
+        // F/M/C (17) 12/12/12: thirds 4/4/4 summed to 12.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(17, 12, 12, 12);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x414); // FIGHTER | CLERIC | WIZARD
+        CHECK(out[0x8F] == 4);
+        CHECK(out[0x95] == 4);
+        CHECK(out[0x8D] == 4);
+        CHECK(out[0x387] == 5);
+        CHECK(out[0x8A] == 12);
+    }
+
+    {
+        // DRUID (11) 8: halved to 4, and the level sum is the halved
+        // first level, not a pair sum.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(11, 8, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x8); // CLASSMASK_DRUID
+        CHECK(out[0x8E] == 4);
+        CHECK(out[0x387] == 4); // CAIOBJECTTYPE_C_DRUID
+        CHECK(out[0x8A] == 4);
+    }
+
+    {
+        // RANGER (12) 9: no halving.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(12, 9, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x80); // CLASSMASK_RANGER
+        CHECK(out[0x92] == 9);
+        CHECK(out[0x387] == 8); // CAIOBJECTTYPE_C_RANGER
+        CHECK(out[0x8A] == 9);
+    }
+
+    {
+        // SORCERER (19) 6: no kit dword.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(19, 6, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x200); // CLASSMASK_SORCERER
+        CHECK(out[0x94] == 6);
+        CHECK(out[0x387] == 0xA); // CAIOBJECTTYPE_C_SORCERER
+        CHECK(out[0x8A] == 6);
+        CHECK(GetDword(out.data(), 0x270) == 0);
+    }
+
+    {
+        // MONK (20) 3: kit dword 8.
+        const std::vector<BYTE> out = UpgradeMinimalV20Class(20, 3, 0, 0);
+        CHECK(GetDword(out.data(), 0x3B6) == 0x20); // CLASSMASK_MONK
+        CHECK(out[0x90] == 3);
+        CHECK(out[0x387] == 6); // CAIOBJECTTYPE_C_MONK
+        CHECK(out[0x8A] == 3);
+        CHECK(GetDword(out.data(), 0x270) == 8);
+    }
+}
+
+TEST_CASE("upgrade: the V2.0 effects stride follows the last-block flag", "[creature-upgrade]")
+{
+    // Same layout as the fighter case, but the last-block flag at 0x33 is
+    // set and there is one effect: the section copies 0x108 bytes per
+    // entry instead of 0x30, so it ends at 0x4F4 and the buffer grows to
+    // 0x4F4 + 0xCA.
+    const LONG nV20Size = 0x4F4;
+    const LONG nNewSize = 0x5BE;
+    std::vector<BYTE> buffer(nNewSize);
+    BYTE* pCreature = buffer.data();
+    FillPattern(pCreature, nNewSize);
+    std::memcpy(pCreature, "CRE V2.0", 8);
+    PutDword(pCreature, 0x14, 0xFA1);
+    PutByte(pCreature, 0x33, 1); // last-block flag set -> 264-byte effects
+    PutByte(pCreature, 0x2DB, 2);
+    PutByte(pCreature, 0x234, 5);
+
+    PutDword(pCreature, 0x308, 0x33C);
+    PutDword(pCreature, 0x30C, 1);
+    PutDword(pCreature, 0x310, 0x348);
+    PutDword(pCreature, 0x314, 1);
+    PutDword(pCreature, 0x318, 0x358);
+    PutDword(pCreature, 0x31C, 2);
+    PutDword(pCreature, 0x320, 0x370);
+    PutDword(pCreature, 0x324, 0x3D8);
+    PutDword(pCreature, 0x328, 1);
+    PutDword(pCreature, 0x32C, 0x3EC);
+    PutDword(pCreature, 0x330, 1);
+    PutResref(pCreature, 0x334, "DRAGDG01");
+    PutDword(pCreature, 0x354, 2);
+
+    const std::vector<BYTE> oldImage(buffer.begin(), buffer.begin() + nV20Size);
+    const BYTE* oldBytes = oldImage.data();
+
+    BYTE* pCreatureArg = pCreature;
+    LONG nSize = nNewSize;
+    CHECK(UpgradeCreatureFileV20ToV21(&pCreatureArg, &nSize) == TRUE);
+
+    const BYTE* out = pCreature;
+
+    CHECK(std::memcmp(out, "CRE V2.1", 8) == 0);
+    CHECK(GetDword(out, 0x3DE) == 0x49E);
+    CHECK(GetDword(out, 0x3E2) == 1);
+    CHECK(std::memcmp(out + 0x49E, oldBytes + 0x3EC, 264) == 0);
+
+    // The other sections keep their strides and placements.
+    CHECK(GetDword(out, 0x3D6) == 0x48A);
+    CHECK(std::memcmp(out + 0x48A, oldBytes + 0x3D8, 20) == 0);
+    CHECK(std::memcmp(out + 0x3EE, oldBytes + 0x33C, 52) == 0);
+    CHECK(std::memcmp(out + 0x422, oldBytes + 0x370, 0x1A) == 0);
+    CHECK(out[0x5A6] == 0); // past the widened section: still the zero fill
+}
