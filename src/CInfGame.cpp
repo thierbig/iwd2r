@@ -11981,9 +11981,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
     // level slots at 0x8B..0x95 — alphabetical: 0x8B barbarian, 0x8C bard,
     // 0x8D cleric, 0x8E druid, 0x8F fighter, 0x90 monk, 0x91 paladin,
     // 0x92 ranger, 0x93 rogue, 0x94 sorcerer, 0x95 wizard; 0x8A is the
-    // combined level. The trailing comments name each arm's continuation
-    // into range 4.
-    BYTE levelSum = 0; // triple-class arms only; stored at 0x5A4C46 (range 4)
+    // combined level.
+    BYTE levelSum = 0; // triple-class arms only, stored at 0x5A4C46
     switch (pOld[0x2DB]) {
     case 1: // MAGE
     case 202:
@@ -12053,7 +12052,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x8F] = pOld[0x234]; // 0x5A4665...
         pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
         pNew[0x8F] = pOld[0x235]; // ...overwritten at 0x5A4675, kept literal
-        break; // -> 0x5A4BA0
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 8: // FIGHTER/CLERIC
         halveLevel(0x234); // 0x5A4680
@@ -12062,7 +12062,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x8F] = pOld[0x234];
         pNew[0x8D] = pOld[0x235];
         pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
-        break; // -> 0x5A4BA0
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 9: // FIGHTER/THIEF
         halveLevel(0x234); // 0x5A46F0
@@ -12071,7 +12072,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x8F] = pOld[0x234];
         pNew[0x93] = pOld[0x235];
         pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
-        break; // -> 0x5A4BA0
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 10: // FIGHTER/MAGE/THIEF
         splitLevelThirds(0x234); // 0x5A4760
@@ -12084,7 +12086,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x93] = pOld[0x236];
         pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER; // shared tail 0x5A4B13
         levelSum = static_cast<BYTE>(pOld[0x234] + pOld[0x236] + pOld[0x235]);
-        break; // -> 0x5A4C46 stores levelSum
+        pNew[0x8A] = levelSum; // 0x5A4C46
+        break;
 
     case 11: // DRUID
     case 208:
@@ -12093,7 +12096,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_DRUID;
         pNew[0x8E] = pOld[0x234];
         pNew[0x387] = CAIOBJECTTYPE_C_DRUID;
-        break; // -> 0x5A4C40
+        pNew[0x8A] = pOld[0x234]; // 0x5A4C40
+        break;
 
     case 12: // RANGER
     case 209:
@@ -12101,7 +12105,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_RANGER;
         pNew[0x92] = pOld[0x234];
         pNew[0x387] = CAIOBJECTTYPE_C_RANGER;
-        break; // -> 0x5A4C40
+        pNew[0x8A] = pOld[0x234]; // 0x5A4C40
+        break;
 
     case 13: // MAGE/THIEF
         halveLevel(0x234); // 0x5A4897
@@ -12110,7 +12115,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x95] = pOld[0x234];
         pNew[0x93] = pOld[0x235];
         pNew[0x387] = CAIOBJECTTYPE_C_WIZARD;
-        break; // -> 0x5A4BA0
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 14: // CLERIC/MAGE
         halveLevel(0x234); // 0x5A4907
@@ -12118,7 +12124,9 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_WIZARD;
         pNew[0x8D] = pOld[0x234];
         pNew[0x95] = pOld[0x235];
-        break; // -> 0x5A4B9C (no primary-class byte)
+        pNew[0x387] = CAIOBJECTTYPE_C_CLERIC; // 0x5A4B9C
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 15: // CLERIC/THIEF
         halveLevel(0x234); // 0x5A4976
@@ -12126,7 +12134,9 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_ROGUE;
         pNew[0x8D] = pOld[0x234];
         pNew[0x93] = pOld[0x235];
-        break; // -> 0x5A4B9C (no primary-class byte)
+        pNew[0x387] = CAIOBJECTTYPE_C_CLERIC; // 0x5A4B9C
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
     case 16: // FIGHTER/DRUID
         halveLevel(0x234); // 0x5A49E5
@@ -12149,7 +12159,8 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         pNew[0x8D] = pOld[0x236];
         pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER; // shared tail 0x5A4B13
         levelSum = static_cast<BYTE>(pOld[0x234] + pOld[0x236] + pOld[0x235]);
-        break; // -> 0x5A4C46 stores levelSum
+        pNew[0x8A] = levelSum; // 0x5A4C46
+        break;
 
     case 18: // CLERIC/RANGER
         halveLevel(0x234); // 0x5A4B32
@@ -12157,17 +12168,118 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
         *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_RANGER;
         pNew[0x8D] = pOld[0x234];
         pNew[0x92] = pOld[0x235];
-        break; // -> 0x5A4B9C (no primary-class byte)
+        pNew[0x387] = CAIOBJECTTYPE_C_CLERIC; // 0x5A4B9C
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]); // 0x5A4BA0
+        break;
 
-    case 19: // 0x5A4BB7
-    case 20: // 0x5A4BE6
-    default: // 21..201 and 210..255 -> 0x5A4C1F
+    case 19: // SORCERER, 0x5A4BB7
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_SORCERER; // 0x5A4BC1
+        pNew[0x94] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_SORCERER;
+        pNew[0x8A] = pOld[0x234];
+        break;
+
+    case 20: // MONK, 0x5A4BE6
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_MONK; // 0x5A4BF0
+        pNew[0x90] = pOld[0x234];
+        pNew[0x8A] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_MONK;
+        *reinterpret_cast<DWORD*>(pNew + 0x270) = 8; // kit, kept literal
+        break;
+
+    default: // 21..201 and 210..255 land in the fighter arm, 0x5A4C1F
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER; // 0x5A4C29
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+        pNew[0x8A] = pOld[0x234]; // 0x5A4C40
         break;
     }
 
-    (void)levelSum; // consumed by the 0x5A4C46 store in range 4
+    // --- 0x5A4C4C-0x5A4F2D: post-dispatch common tail ---
 
-    // TODO(range 4, 0x5A4B9C-0x5A4F2D): variable-length sections, copy-out.
+    // 0x5A4C50: mirror the primary class byte into the V2.1 copy.
+    pNew[0x3B4] = pNew[0x387];
+    // 0x5A4C5C-0x5A4CB3: 0x2C bytes, 0x2DC..0x307 -> 0x388..0x3B3.
+    memcpy(pNew + 0x388, pOld + 0x2DC, 0x2C);
+
+    // 0x5A4CB5-0x5A4D09: spellbook sub-header — 13 dwords from 0x308 land
+    // at src+0xB2 (0x3BA..0x3EA). The six offset-valued dwords (0x308,
+    // 0x310, 0x318, 0x320, 0x324, 0x32C) are re-based by the 0xB2 header
+    // growth; the seven counts are copied unadjusted.
+    *reinterpret_cast<DWORD*>(pNew + 0x3BA) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x308) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3BE) = *reinterpret_cast<const DWORD*>(pOld + 0x30C);
+    *reinterpret_cast<DWORD*>(pNew + 0x3C2) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x310) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3C6) = *reinterpret_cast<const DWORD*>(pOld + 0x314);
+    *reinterpret_cast<DWORD*>(pNew + 0x3CA) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x318) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3CE) = *reinterpret_cast<const DWORD*>(pOld + 0x31C);
+    *reinterpret_cast<DWORD*>(pNew + 0x3D2) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x320) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3D6) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x324) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3DA) = *reinterpret_cast<const DWORD*>(pOld + 0x328);
+    *reinterpret_cast<DWORD*>(pNew + 0x3DE) =
+        *reinterpret_cast<const DWORD*>(pOld + 0x32C) + 0xB2;
+    *reinterpret_cast<DWORD*>(pNew + 0x3E2) = *reinterpret_cast<const DWORD*>(pOld + 0x330);
+    *reinterpret_cast<DWORD*>(pNew + 0x3E6) = *reinterpret_cast<const DWORD*>(pOld + 0x334);
+    *reinterpret_cast<DWORD*>(pNew + 0x3EA) = *reinterpret_cast<const DWORD*>(pOld + 0x338);
+
+    // 0x5A4D75-0x5A4DE0: memorization section, only when the three counts
+    // at 0x30C/0x314/0x31C sum positive (the exe's test is signed). Its
+    // byte size is recomputed from the counts — 12 per 0x30C entry, 12 per
+    // spell named by each 0x10-byte record at pOld+pOld[0x310]+0xC (whose
+    // first dword is itself a count), 16 per 0x314 record — and that many
+    // bytes are copied verbatim from 0x33C to 0x3EE (= 0x33C + 0xB2).
+    LONG nMemorizationCount = static_cast<LONG>(*reinterpret_cast<const DWORD*>(pOld + 0x30C)) +
+        static_cast<LONG>(*reinterpret_cast<const DWORD*>(pOld + 0x314)) +
+        static_cast<LONG>(*reinterpret_cast<const DWORD*>(pOld + 0x31C));
+    if (nMemorizationCount > 0) {
+        DWORD nRecords = *reinterpret_cast<const DWORD*>(pOld + 0x314);
+        const BYTE* pRecord = pOld + *reinterpret_cast<const DWORD*>(pOld + 0x310) + 0xC;
+        DWORD nBytes = 12 * *reinterpret_cast<const DWORD*>(pOld + 0x30C);
+        for (DWORD nRecord = 0; nRecord < nRecords; ++nRecord, pRecord += 0x10) {
+            nBytes += 12 * *reinterpret_cast<const DWORD*>(pRecord);
+        }
+        nBytes += 16 * nRecords;
+        memcpy(pNew + 0x3EE, pOld + 0x33C, nBytes);
+    }
+
+    // 0x5A4DE2-0x5A4E22: selected-spells section — 20 bytes per 0x328
+    // entry, copied verbatim from pOld+pOld[0x324] to
+    // pNew+pOld[0x324]+0xB2.
+    {
+        DWORD nSelected = *reinterpret_cast<const DWORD*>(pOld + 0x324);
+        memcpy(pNew + nSelected + 0xB2, pOld + nSelected,
+            20 * *reinterpret_cast<const DWORD*>(pOld + 0x328));
+    }
+
+    // 0x5A4E24-0x5A4E63: item-slots section, only when the 0x330 count is
+    // nonzero — 48 bytes per entry, or 264 when the flag at pNew[0x33]
+    // (copied from pOld[0x33]) is set; from pOld+pOld[0x32C] to
+    // pNew+pOld[0x32C]+0xB2.
+    if (*reinterpret_cast<const DWORD*>(pOld + 0x330) != 0) {
+        DWORD nSlots = *reinterpret_cast<const DWORD*>(pOld + 0x32C);
+        DWORD nBytes = (pNew[0x33] != 0 ? 264 : 48) *
+            *reinterpret_cast<const DWORD*>(pOld + 0x330);
+        memcpy(pNew + nSlots + 0xB2, pOld + nSlots, nBytes);
+    }
+
+    // 0x5A4E65-0x5A4EF8: effects header. The V2.0 header at
+    // pOld+pOld[0x320] is rebuilt into the V2.1 header at
+    // pNew+pOld[0x320]+0xB2: 0x68 bytes first filled with 0xFF (rep stosd
+    // of eax = -1, not zero), then the first 0x1A bytes copied 1:1, src
+    // 0x1A..0x4B shifted +8, and the two words at 0x4C/0x4E shifted +0x18.
+    {
+        DWORD nEffects = *reinterpret_cast<const DWORD*>(pOld + 0x320);
+        const BYTE* pEffects = pOld + nEffects;
+        BYTE* pEffectsNew = pNew + nEffects + 0xB2;
+        memset(pEffectsNew, 0xFF, 0x68);
+        memcpy(pEffectsNew, pEffects, 0x1A); // 0x5A4E75-0x5A4EC4
+        memcpy(pEffectsNew + 0x22, pEffects + 0x1A, 0x32); // +8, 0x5A4EC7-0x5A4EE6
+        memcpy(pEffectsNew + 0x64, pEffects + 0x4C, 4); // +0x18, 0x5A4EE8-0x5A4EF8
+    }
 
     memcpy(*ppCreature, pNew, *plSize);
     delete[] pNew;
