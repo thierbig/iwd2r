@@ -324,6 +324,40 @@ public:
     /* 0356 */ LONG m_wanderSeed;
 };
 
+// The Wall of Moonlight carrier (vtable 0x8514CC, sizeof 0x374):
+// DecodeProjectile's type 304 (WoMoonX, Moon Path's wall) builds one.
+// Exactly four vtable slots differ from the base CProjectileSingleTarget
+// (0x850CAC) over the family's 34 — slot 0x00's deleting dtor 0x5803C0
+// (its scalar body 0x5803E0 is the compiler's member teardown: the loop
+// sound's CSound dtor first at +0x310, then the wall tracker's map at
+// +0x2B4, spelled implicitly by ours), slot 0x0C AIUpdate 0x580550, slot
+// 0x6C Fire 0x580600, and slot 0x70 OnArrival 0x5820B0. Those three are
+// not ported and none of the four is declared — a declared-but-undefined
+// virtual would become the key function and leave the vtable unemitted —
+// so the class inherits the base virtuals for them.
+class CProjectileWallOfMoonlight : public CProjectileSingleTarget {
+public:
+    // 0x5802B0. Binds the WoMoonX wall through the base, constructs the
+    // wall tracker at +0x2B4 (the derived IcewindCProjectileWallTargetMap
+    // ctor 0x55AF40) and the loop sound's CSound at +0x310 (the implicit
+    // member inits), then arms the wall in one straight line: a 500-tick
+    // lifetime, the byte at +0x2B2 cleared, sixteen directions, speed
+    // tripled with a native WORD imul (20 -> 60), the tracker armed (owner
+    // this, one strike per victim, gather radius 70, service period 5,
+    // wall length 20), copy-from-back on the visual effect, both height
+    // gates cleared along with field_1DE and the byte at +0x2A0, and the
+    // AFT_P21 fire sound looped.
+    CProjectileWallOfMoonlight();
+
+    // The wall tracker the ctor arms (the derived wall map, not the base:
+    // owner +0x2B8, service period +0x2CC, per-victim cap +0x2D8, range
+    // +0x2E6, wall length +0x2EA, decoder allocation 0x374).
+    /* 02AE */ LONG m_nLifetime;
+    /* 02B2 */ BYTE field_2B2;
+    /* 02B4 */ IcewindCProjectileWallTargetMap m_targetMap;
+    /* 0310 */ CSound m_loopSound;
+};
+
 // The spell-school travel projectile (vtable 0x8511AC): DecodeProjectile's
 // types 227-234 build one of these per school of magic — AbjurT, AlterT,
 // InvocT, NecroT, ConjuT, EnchaT, IllusT, DivinT. Every vtable slot holds

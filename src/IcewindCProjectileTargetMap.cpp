@@ -127,6 +127,21 @@ IcewindCProjectileTargetMap::IcewindCProjectileTargetMap()
     m_bSkipSource = FALSE;
 }
 
+// 0x55AF40
+// The wall subclass's ctor: byte-for-byte the base stream above (the
+// inlined VC6 map construction stands for our m_targets the same way) plus
+// the one store the base lacks -- the wall byte at +0x3A cleared -- and its
+// own vtable stamp 0x84EEB0. m_pOwner, m_nRange, the wall length at +0x36
+// and the corner offsets all stay uninitialized here; both wall ctors fill
+// the first three right after (Wall of Moonlight 0x5802B0 and Wall of Fire
+// 0x581CA0 stamp the length to 20), and the corners are only read by the
+// wall's own gather 0x55B1B0, which arms them elsewhere.
+IcewindCProjectileWallTargetMap::IcewindCProjectileWallTargetMap()
+    : IcewindCProjectileTargetMap()
+{
+    field_3A = 0;
+}
+
 // 0x55AD90
 // The gather pass: every object of any type within m_nRange of the owner,
 // front list (from the owner's own vert-list position) and back list, with

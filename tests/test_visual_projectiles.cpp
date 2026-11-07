@@ -4235,6 +4235,57 @@ TEST_CASE("visual projectiles: the whirlwind decodes to its wander", "[visualpro
     CHECK(direct.m_targetMap.m_maxStrikesTotal == 8);
 }
 
+TEST_CASE("visual projectiles: the wall of moonlight decodes to its wall", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(304, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileWallOfMoonlight* pWall = dynamic_cast<CProjectileWallOfMoonlight*>(pProjectile);
+    REQUIRE(pWall != nullptr);
+    // The case body (0x526E9B) carries no stores of its own: everything
+    // below is the ctor's own, plus the shared tail's type stamp (304 - 1).
+    CHECK(pWall->m_projectileType == 303);
+    // WoMoonX IS in this install's CHITIN.KEY, so the cell binds for real.
+    CHECK(pWall->m_animation->GetResRef() == CResRef("WoMoonX"));
+    // The wall retune: a 500-tick lifetime, the byte at +0x2B2 cleared,
+    // sixteen directions, the base's speed tripled (20 -> 60, a native
+    // WORD imul in the exe), and both height gates cleared along with
+    // field_1DE and the byte at +0x2A0 so the wall sits on the ground.
+    CHECK(pWall->m_nLifetime == 500);
+    CHECK(pWall->field_2B2 == 0);
+    CHECK(pWall->field_1D8 == 16);
+    CHECK(pWall->m_speed == 60);
+    CHECK(pWall->m_bHasHeight == FALSE);
+    CHECK(pWall->field_1C2 == FALSE);
+    CHECK(pWall->field_1DE == FALSE);
+    CHECK(pWall->field_2A0 == 0);
+    CHECK(pWall->m_fireSoundRef == "AFT_P21");
+    CHECK(pWall->m_loopFireSound == TRUE);
+    // The wall tracker the ctor arms: this wall owns it, strikes each
+    // victim at most once within radius 70, serviced every 5 ticks, wall
+    // length 20 (the derived map's own field; the re-strike interval and
+    // the total cap stay the derived ctor's inherited defaults).
+    CHECK(pWall->m_targetMap.m_pOwner == pWall);
+    CHECK(pWall->m_targetMap.m_maxStrikesPerTarget == 1);
+    CHECK(pWall->m_targetMap.m_nRange == 70);
+    CHECK(pWall->m_targetMap.m_servicePeriod == 5);
+    CHECK(pWall->m_targetMap.m_strikeInterval == 10);
+    CHECK(pWall->m_targetMap.m_maxStrikesTotal == 100000);
+    CHECK(pWall->m_targetMap.m_bSkipSource == FALSE);
+    CHECK(pWall->m_targetMap.field_36 == 20);
+    delete pProjectile;
+    // The derived tracker's own ctor stamp on a directly built wall: the
+    // wall byte at +0x3A cleared where the base map leaves it dirty, over
+    // the base's full default set.
+    CProjectileWallOfMoonlight wallDirect;
+    CHECK(wallDirect.m_targetMap.field_3A == 0);
+    CHECK(wallDirect.m_targetMap.m_servicePeriod == 5);
+    CHECK(wallDirect.m_targetMap.m_strikeInterval == 10);
+    CHECK(wallDirect.m_targetMap.field_36 == 20);
+    CHECK(wallDirect.m_speed == 60);
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);

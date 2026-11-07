@@ -622,6 +622,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The corrosive fog.
         pProjectile = new CProjectileCorrosiveFog();
         break;
+    case 304:
+        // The wall of moonlight.
+        pProjectile = new CProjectileWallOfMoonlight();
+        break;
     case 305:
         // The wandering tornado (Whirlwind, Wing Buffet).
         pProjectile = new CProjectileWhirlwind();
@@ -2792,7 +2796,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 304: ctor 0x5802B0 not ported
         //   TODO: type 314: ctor 0x580C00 not ported
         //   TODO: type 346: ctor 0x581060 not ported
         //   TODO: type 370: ctor 0x581CA0 not ported
@@ -5092,6 +5095,37 @@ void CProjectileWhirlwind::Fire(CGameArea* pArea, LONG source, LONG target, CPoi
     m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
 
     CProjectileSingleTarget::Fire(pArea, source, CGameObjectArray::INVALID_INDEX, targetPos, nHeight, nType);
+}
+
+// 0x5802B0
+// The Wall of Moonlight's ctor: the WoMoonX wall goes through the base
+// (the char* argument folds through a CResRef temp), then the wall tracker
+// is constructed at +0x2B4 (the derived ctor 0x55AF40) and armed — this
+// wall owns it, strikes each victim at most once, gathers within 70 feet,
+// services every 5 ticks, wall length 20 — and the loop sound's CSound at
+// +0x310. The retune gives the wall sixteen directions, triples the
+// base's speed with a native WORD imul (20 -> 60), takes the back cells
+// of the visual effect, clears both height gates along with field_1DE
+// and the byte at +0x2A0, and loops the AFT_P21 fire sound.
+CProjectileWallOfMoonlight::CProjectileWallOfMoonlight()
+    : CProjectileSingleTarget(CResRef("WoMoonX"))
+{
+    m_nLifetime = 500;
+    field_2B2 = 0;
+    field_1D8 = 16;
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_maxStrikesPerTarget = 1;
+    m_targetMap.m_nRange = 70;
+    m_targetMap.field_36 = 20;
+    m_targetMap.m_servicePeriod = 5;
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    field_1DE = FALSE;
+    m_speed = static_cast<SHORT>(m_speed * 3);
+    m_bHasHeight = FALSE;
+    field_1C2 = FALSE;
+    field_2A0 = 0;
+    m_fireSoundRef = "AFT_P21";
+    m_loopFireSound = TRUE;
 }
 
 // 0x5806C0
