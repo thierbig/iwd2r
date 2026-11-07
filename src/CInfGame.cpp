@@ -12972,8 +12972,126 @@ BOOL CInfGame::ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCo
             INFINITE);
     }
 
-    // TODO(0x5AE76F-0x5AF14F): loop 4 — reconcile the active six, then the
-    // host/settings tail.
+    // Loop 4 (0x5AE76F-0x5AF04C): reconcile the active six. A slot whose
+    // current id already equals the desired id is left untouched (the
+    // advance at 0x5AF02D skips the write); every other outcome ends by
+    // overwriting the slot with the desired id (0x5AF025). A non-empty
+    // current id is removed from the party first; a non-empty desired id
+    // is then added over it (the add block, range 4).
+    for (INT i = 0; i < 6; i++) {
+        LONG nCurrentId = m_characters[i];
+        LONG nDesiredId = pDesiredPartyIds[i];
+
+        if (nCurrentId == nDesiredId) {
+            continue;
+        }
+
+        if (nCurrentId != 0xFFFFFFFF) {
+            BYTE rc;
+            do {
+                rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nCurrentId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+            if (rc != CGameObjectArray::SUCCESS) {
+                return FALSE; // 0x5AF14D
+            }
+
+            BOOL bOverflow = FALSE;
+            if (!RemoveCharacterFromParty(nCurrentId, bOverflow)) {
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+                // __LINE__: 10357 (0x2875)
+                UTIL_ASSERT_MSG(FALSE, "Failed to remove character from party");
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nCurrentId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return FALSE;
+            }
+
+            // The global creature list loses the id too (first match only,
+            // 0x5AE7F1-0x5AE815) — the same walk 0x751CD0 makes.
+            POSITION pos = m_lstGlobalCreatures.GetHeadPosition();
+            while (pos != NULL) {
+                POSITION posOld = pos;
+                if (static_cast<LONG>(reinterpret_cast<INT_PTR>(m_lstGlobalCreatures.GetNext(pos)))
+                    == nCurrentId) {
+                    m_lstGlobalCreatures.RemoveAt(posOld);
+                    break;
+                }
+            }
+
+            // The direction message is notify-gated; the area population
+            // count is not — it drops at 0x5AE87E even when the gate fails.
+            if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                if (!bOverflow) {
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                        new CMessageChangeDirection(0, nCurrentId, nCurrentId), FALSE);
+                }
+            }
+            if (!bOverflow && pSprite->m_pArea != NULL
+                && pSprite->m_pArea->m_nCharacters != 0xFF) {
+                pSprite->m_pArea->m_nCharacters--;
+            }
+
+            // All three type copies go neutral (0x5AE8A3-0x5AE987); as in
+            // loops 1 and 3, the start copy is rebuilt from the LIVE type.
+            CAIObjectType typeAI;
+            typeAI.Set(pSprite->GetAIType());
+            typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+
+            CAIObjectType typeAILive;
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAILive.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+
+            CAIObjectType typeAIStart;
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAIStart.m_nEnemyAlly = CAIOBJECTTYPE_EA_NEUTRAL;
+
+            pSprite->SetAIType(typeAI, FALSE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+
+            if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                CAITrigger trigger(CAITRIGGER_LEAVES, typeAI, 0);
+                for (INT j = 0; j < m_nCharacters; j++) {
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                        new CMessageSetTrigger(trigger, pSprite->m_id, m_characterPortraits[j]),
+                        FALSE);
+                }
+
+                if (pSprite->Animate() == 0) {
+                    pSprite->DropInventory(FALSE, CString(""));
+                    if ((pSprite->m_baseStats.m_flags & 0x2) != 0) {
+                        pSprite->m_expirationTime = GetWorldTimer()->m_gameTime;
+                    }
+                }
+            }
+
+            // The host mirrors the removal into the multiplayer settings
+            // (0x5AEB3C-0x5AEB86).
+            if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+                m_multiplayerSettings.SetCharacterControlledByPlayer(i, 0, FALSE, FALSE);
+                m_multiplayerSettings.SignalCharacterStatus(
+                    i, CMultiplayerSettings::CHARSTATUS_SIGNAL_DELETED, TRUE, FALSE);
+                m_multiplayerSettings.SetCharacterReady(i, FALSE, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nCurrentId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+
+        if (nDesiredId != 0xFFFFFFFF) {
+            // TODO(0x5AEBDF-0x5AF024): add path — range 4/4.
+        }
+
+        m_characters[i] = nDesiredId;
+    }
+
+    // TODO(0x5AF04D-0x5AF14F): host/settings tail.
     return TRUE;
 }
 
