@@ -2901,18 +2901,19 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         const char* sAnimation;
         const char* sSound;
         LONG nRadius;
-        BOOL bPin1D8;
+        LONG nField1D8;
     };
     const Spec kSpecs[] = {
-        { 98, "IStormX", "", 200, TRUE }, // 0x573460
-        { 211, "AStormX", "", 200, TRUE }, // 0x571170
-        { 214, "ICloudX", "EFF_M40", 100, TRUE }, // 0x573600
-        { 215, "PFireX", "EFF_P45", 60, TRUE }, // 0x574140
-        { 216, "IPlaguX", "RNG_P01", 250, TRUE }, // 0x573AF0
-        { 267, "DSpellX", "EFF_M42", 300, FALSE }, // 0x571930
-        { 279, "DFogX", "RNG_M01", 250, TRUE }, // 0x573CC0
-        { 306, "", "ARE_P27", 0x15E, FALSE }, // 0x575B90
-        { 383, "", "", 100, TRUE }, // 0x577590
+        { 98, "IStormX", "", 200, 1 }, // 0x573460
+        { 211, "AStormX", "", 200, 1 }, // 0x571170
+        { 214, "ICloudX", "EFF_M40", 100, 1 }, // 0x573600
+        { 215, "PFireX", "EFF_P45", 60, 1 }, // 0x574140
+        { 216, "IPlaguX", "RNG_P01", 250, 1 }, // 0x573AF0
+        { 217, "SSSwarX", "RNG_M02", 250, 16 }, // 0x5745E0
+        { 267, "DSpellX", "EFF_M42", 300, 0 }, // 0x571930
+        { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
+        { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
+        { 383, "", "", 100, 1 }, // 0x577590
     };
 
     for (const Spec& spec : kSpecs) {
@@ -2927,7 +2928,23 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         CHECK(pArea->m_explosion1.m_animation == spec.sAnimation);
         CHECK(pArea->m_explosion1.m_sound == spec.sSound);
         CHECK(pArea->m_nRadius == spec.nRadius);
-        CHECK(pArea->field_1D8 == (spec.bPin1D8 ? 1 : 0));
+        CHECK(pArea->field_1D8 == spec.nField1D8);
+        if (spec.nType == 217) {
+            // The swarm also flies on SSSwarT with its speed doubled, and
+            // throws up to 26 SSSwarR balls in a single hit-modulus-10 burst.
+            CHECK(pArea->m_bTravels == TRUE);
+            CHECK(pArea->field_1DE == TRUE);
+            CHECK(pArea->m_animation->GetResRef() == CResRef("SSSwarT"));
+            CHECK(pArea->m_fireSoundRef == CResRef("TRA_18"));
+            CHECK(pArea->m_explosion2.m_animation == "SSSwarR");
+            CHECK(pArea->m_explosion2.field_2C == TRUE);
+            CHECK(pArea->m_explosion2.field_2E == 26);
+            CHECK(pArea->m_nTriggerInterval == 10000);
+            CHECK(pArea->m_nHitModulus == 10);
+            CHECK(pArea->m_nDuration == 45);
+            CProjectileSnowballSwarm swarmDirect;
+            CHECK(pArea->m_speed == swarmDirect.m_speed);
+        }
         if (spec.nType == 383) {
             // The boulder also travels with its own sound pair.
             CHECK(pArea->m_bTravels == TRUE);

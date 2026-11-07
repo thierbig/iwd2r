@@ -304,6 +304,16 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// Snilloc's Snowball Swarm (SPWI220, projectile type 217, vtable 0x84FF40):
+// it flies as SSSwarT (TRA_18, its speed doubled) and bursts SSSwarX on
+// RNG_M02, throwing up to 26 SSSwarR balls; one burst with hit modulus 10,
+// for 45 ticks, 250 around. It adds no members of its own — the ctor writes
+// only inherited fields.
+class CProjectileSnowballSwarm : public CProjectileArea {
+public:
+    CProjectileSnowballSwarm();
+};
+
 // Spike Stones (projectile type 213, vtable 0x84FFDC): SStoneA spikes and
 // lingering SStoneA ones, 150 around, 1200 ticks.
 class CProjectileArea84FFDC : public CProjectileArea {

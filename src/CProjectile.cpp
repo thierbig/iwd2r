@@ -583,6 +583,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The insect plague.
         pProjectile = new CProjectileInsectPlague();
         break;
+    case 217:
+        // The snowball swarm.
+        pProjectile = new CProjectileSnowballSwarm();
+        break;
     case 267:
         // The circle of death.
         pProjectile = new CProjectileCircleOfDeath();
@@ -2739,7 +2743,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 217: ctor 0x5745E0 not ported
         //   TODO: type 274: ctor 0x574D50 not ported
         //   TODO: type 283: ctor 0x575090 not ported
         //   TODO: type 350: ctor 0x576080 not ported
@@ -3901,6 +3904,39 @@ CProjectileProduceFire::CProjectileProduceFire()
     m_nDuration = 100;
     field_1D8 = 1;
     m_nRadius = 60;
+}
+
+// 0x5745E0
+CProjectileSnowballSwarm::CProjectileSnowballSwarm()
+    : CProjectileArea(0x100)
+{
+    // NOTE: Inlined: the travel animation of a name that is not empty.
+    const char* szTravel = "SSSwarT";
+    if (strlen(szTravel) != 0) {
+        field_1DE = TRUE;
+        SetTravelAnimation(CResRef(szTravel));
+        m_bTravels = TRUE;
+    } else {
+        field_1DE = FALSE;
+        m_bTravels = FALSE;
+    }
+
+    m_fireSoundRef = "TRA_18";
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_explosion1.m_animation = "SSSwarX";
+    m_explosion1.m_sound = "RNG_M02";
+    m_explosion1.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_explosion2.m_animation = "SSSwarR";
+    m_explosion2.m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_explosion2.field_2C = TRUE;
+    m_explosion2.field_2E = 26;
+    m_speed <<= 1;
+    m_nTriggerCountdown = 0;
+    m_nTriggerInterval = 10000;
+    m_nHitModulus = 10;
+    m_nDuration = 45;
+    field_1D8 = 16;
+    m_nRadius = 250;
 }
 
 // 0x5756C0
