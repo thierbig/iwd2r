@@ -2914,6 +2914,7 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
         { 274, "", "", 150, 0 }, // 0x574D50
         { 283, "", "", 250, 0 }, // 0x575090
         { 350, "", "", 450, 0 }, // 0x576080
+        { 355, "", "", 450, 0 }, // 0x576770
         { 279, "DFogX", "RNG_M01", 250, 1 }, // 0x573CC0
         { 306, "", "ARE_P27", 0x15E, 0 }, // 0x575B90
         { 383, "", "", 100, 1 }, // 0x577590
@@ -2969,6 +2970,13 @@ TEST_CASE("the plain area effects decode straight to their ctors", "[visualproje
             // The one-shot strike lands with its hit bookkeeping empty —
             // everything else waits for the first update.
             CProjectileArea8507C8* pStrike = dynamic_cast<CProjectileArea8507C8*>(pProjectile);
+            REQUIRE(pStrike != nullptr);
+            CHECK(pStrike->m_targetHits.empty());
+        }
+        if (spec.nType == 355) {
+            // The warrior filter keeps no state of its own — the strike it
+            // gates is the parent's, with the same empty bookkeeping.
+            CProjectileArea850864* pStrike = dynamic_cast<CProjectileArea850864*>(pProjectile);
             REQUIRE(pStrike != nullptr);
             CHECK(pStrike->m_targetHits.empty());
         }

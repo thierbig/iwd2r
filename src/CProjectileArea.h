@@ -406,6 +406,18 @@ public:
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
+// The warrior-gated one-shot strike (projectile type 355, vtable
+// 0x850864): the one-shot area strike above with one vtable slot
+// different — before the strike runs, its filter erases every gathered
+// id that is not a sprite with at least one warrior class bit
+// (Barbarian/Fighter/Paladin/Ranger, mask 0xD1). Stringless and
+// memberless like its parent; address-named after its vtable.
+class CProjectileArea850864 : public CProjectileArea8507C8 {
+public:
+    CProjectileArea850864();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+};
+
 // Turn Undead (projectile type 376, vtable 0x850A38): 300 around; it turns
 // or destroys the undead the caster's turning check beats.
 class CProjectileArea850A38 : public CProjectileArea {

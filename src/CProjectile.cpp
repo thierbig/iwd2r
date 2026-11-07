@@ -601,6 +601,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         // The one-shot area strike.
         pProjectile = new CProjectileArea8507C8();
         break;
+    case 355:
+        // The warrior-gated one-shot strike.
+        pProjectile = new CProjectileArea850864();
+        break;
     case 267:
         // The circle of death.
         pProjectile = new CProjectileCircleOfDeath();
@@ -2757,7 +2761,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 355: ctor 0x576770 not ported
         //   TODO: type 356: ctor 0x576870 not ported
         //   TODO: type 360: ctor 0x576990 not ported
         //   TODO: type 207: ctor 0x57D390 not ported
@@ -4339,6 +4342,71 @@ void CProjectileArea8507C8::ApplyToTargets(std::list<LONG>& targets)
 
     // NOTE: List exhausted — the original never releases the source share
     // on this path either (0x57672d).
+}
+
+// 0x576770
+// The exe's bytes call the area base 0x56EDD0 directly and re-store the
+// radius 450 (the VC6-flattened ctor chain); chaining to the parent here
+// reaches the identical end state.
+CProjectileArea850864::CProjectileArea850864()
+    : CProjectileArea8507C8()
+{
+}
+
+// 0x5767A0
+// Vtable slot 0x94 of 0x850864: the warrior filter in front of the
+// parent's one-shot strike. Every gathered id that is not a sprite with
+// at least one warrior class bit (Barbarian/Fighter/Paladin/Ranger,
+// mask 0xD1) is erased before the strike sees the list.
+void CProjectileArea850864::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG>::iterator it = targets.begin();
+    while (it != targets.end()) {
+        CGameObject* pTarget;
+
+        BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pTarget,
+            INFINITE);
+        if (rc != CGameObjectArray::SUCCESS) {
+            // NOTE: The original returns here outright (0x576864) —
+            // nothing is released and the parent strike never runs.
+            return;
+        }
+
+        if (pTarget->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            // NOTE: The original jumps to the loop bottom without
+            // advancing (0x5767f6), so it releases this id and re-tests
+            // this node forever. Unreachable in practice: the gather it
+            // filters (0x576310) emits only sprite ids.
+        } else if ((pTarget->GetAIType().m_nClassMask
+                       & (CLASSMASK_BARBARIAN | CLASSMASK_FIGHTER | CLASSMASK_PALADIN
+                           | CLASSMASK_RANGER))
+            != 0) {
+            // A warrior: keep it.
+            ++it;
+        } else {
+            // Not a warrior: take it out of the list.
+            it = targets.erase(it);
+        }
+
+        // Loop bottom (0x57682c): the original releases the id at the
+        // NEW position — esi advanced in both sprite paths first — a
+        // share this iteration never took, while the just-taken one is
+        // never released; only the non-sprite path (no advance) releases
+        // the right id. At the end position the original still calls
+        // UndoShare with the head node's value slot — ours skips the
+        // call there, no real id to release. Kept faithfully.
+        if (it != targets.end()) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    // The original's empty-list entry jumps straight here (0x57685a): the
+    // direct call is the parent's strike on the filtered list.
+    CProjectileArea8507C8::ApplyToTargets(targets);
 }
 
 // 0x5768A0
