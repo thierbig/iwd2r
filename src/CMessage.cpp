@@ -16547,11 +16547,13 @@ void CMessageVisualEffect::Run()
                 pSprite->GetDerivedStats()->m_nStoneSkins = m_nEffectProperty;
 
                 if (m_nEffectProperty == 0) {
-                    // TODO: Probably should be 7, check for overrun in
-                    // debugger.
+                    // The exe's loop runs 8 iterations reading sprite bytes
+                    // 0x5C8..0x5CF (0x51157D); m_colors is BYTE[7] at 0x5C8
+                    // and 0x5CF is the adjacent m_effectVersion.
                     for (BYTE colorRange = 0; colorRange < 8; colorRange++) {
-                        pSprite->GetAnimation()->SetColorRange(colorRange,
-                            pSprite->GetBaseStats()->m_colors[colorRange]);
+                        BYTE color = (colorRange < 7) ? pSprite->GetBaseStats()->m_colors[colorRange]
+                                                      : pSprite->GetBaseStats()->m_effectVersion;
+                        pSprite->GetAnimation()->SetColorRange(colorRange, color);
                     }
                     pSprite->GetAnimation()->ClearColorEffectsAll();
                 } else {
