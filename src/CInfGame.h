@@ -94,6 +94,17 @@ public:
     /* 0048 */ UINT m_nHighestLevel;
 };
 
+// 0x5A5060
+// NOTE: __fastcall in the exe (ret 8): ECX = ppCreature, EDX = plSize, the
+// stack carries pOldCreature and a fourth word the caller fills with
+// &oldSize but the function never reads (ported as pUnused). `*plSize` is
+// read-only here: the caller (the "CRE V2.1" arm of CGameSprite::Unmarshal)
+// allocates the new buffer and stores the size before the call, and this
+// function only reads it back (allocation, the final size assert and the
+// copy-out memcpy). pOldCreature may be NULL, in which case *ppCreature is
+// the source (the caller's no-realloc path).
+BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, void* pUnused);
+
 // NOTE: The entries of `CInfGame::field_4BDC`, an IWD2 addition with no name
 // in the original: an area and an adjustment of the party level the area's
 // spawns use (`CGameArea::Unmarshal`). The game file stores each one as a

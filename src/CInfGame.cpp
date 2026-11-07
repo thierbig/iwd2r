@@ -11776,6 +11776,355 @@ void CGroupedSpellList::Load(const C2DArray& Table, const INT& nClassColumn, con
     }
 }
 
+// Raw "CRE V2.1" spell-block views read straight out of the old buffer.
+// Their offsets are literal V2.1 file offsets from the exe; the V2.2 layout
+// they are converted into is CCreatureFileOffsets (FileFormat.h).
+
+// V2.1 flat memorized-spell entry: resref + spell level + list type
+// (2 = song/shapeshift/innate). Stride 0xC.
+struct COldCreatureFileSpell {
+    BYTE m_resRef[8];
+    SHORT m_spellLevel;
+    SHORT m_type;
+};
+static_assert(sizeof(COldCreatureFileSpell) == 0xC, "V2.1 memorized-spell stride");
+
+// V2.1 grouped known-spell header. Stride 0x10; m_startIndex indexes the
+// shared known-spell pool (pool-wide, not per header).
+struct COldCreatureFileSpellHeader {
+    SHORT m_level;
+    SHORT field_2;
+    SHORT field_4;
+    SHORT m_type;
+    LONG m_startIndex;
+    LONG m_count;
+};
+static_assert(sizeof(COldCreatureFileSpellHeader) == 0x10, "V2.1 spell-header stride");
+
+// V2.1 known-spell pool entry: resref + flags (only bit 0 of m_flags is
+// read — memorized). Stride 0xC.
+struct COldCreatureFileKnownSpell {
+    BYTE m_resRef[8];
+    BYTE m_flags;
+    BYTE field_9[3];
+};
+static_assert(sizeof(COldCreatureFileKnownSpell) == 0xC, "V2.1 known-spell stride");
+
+// 0x5A5060
+BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, void* pUnused)
+{
+    BYTE* pOld = pOldCreature != NULL ? pOldCreature : *ppCreature;
+
+    // The V2.1 class byte (raw offset 0x387) is normalized in the OLD buffer
+    // before anything reads it: 0 or 0xFF (a raw byte compare) becomes 5.
+    if (pOld[0x387] == 0 || pOld[0x387] == 0xFF) {
+        pOld[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+    }
+
+    UINT nClassIndex = 0;
+    switch (pOld[0x387]) {
+    case CAIOBJECTTYPE_C_BARD:
+    case CAIOBJECTTYPE_C_CLERIC:
+    case CAIOBJECTTYPE_C_DRUID:
+    case CAIOBJECTTYPE_C_PALADIN:
+    case CAIOBJECTTYPE_C_RANGER:
+    case CAIOBJECTTYPE_C_SORCERER:
+    case CAIOBJECTTYPE_C_WIZARD:
+        nClassIndex = g_pBaldurChitin->GetObjectGame()->GetSpellcasterIndex(pOld[0x387]);
+        break;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSpriteSpells spells;
+    CGameSpriteGroupedSpellList domainSpells;
+    CGameSpriteSpellList innateSpells;
+    CGameSpriteSpellList songSpells;
+    CGameSpriteSpellList shapeSpells;
+
+    DWORD nOldSpellBytes = 0;
+
+    // Loop 1 — the V2.1 flat memorized list (list pointer dword @0x3BA,
+    // count dword @0x3BE).
+    {
+        COldCreatureFileSpell* pOldSpell = reinterpret_cast<COldCreatureFileSpell*>(pOld + *reinterpret_cast<DWORD*>(pOld + 0x3BA));
+        DWORD nCount = *reinterpret_cast<DWORD*>(pOld + 0x3BE);
+        nOldSpellBytes += nCount * sizeof(COldCreatureFileSpell);
+
+        for (DWORD i = 0; i < nCount; i++) {
+            COldCreatureFileSpell* tempOldSpell = pOldSpell + i;
+
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+            // __LINE__: 5905
+            UTIL_ASSERT(tempOldSpell->m_spellLevel >= 0 && tempOldSpell->m_spellLevel < CSPELLLIST_MAX_LEVELS);
+
+            CResRef resRef(tempOldSpell->m_resRef);
+            UINT nID = 0;
+            const unsigned int one = 1;
+            const unsigned int zero = 0;
+
+            if (tempOldSpell->m_type == 2) { // 2: .rdata byte @0x85BB63
+                // Song/shapeshift/innate spells are looked up in that order;
+                // a hit lands in the matching extra list.
+                if (pGame->m_songs.Find(resRef, nID)) {
+                    songSpells.Add(nID, one, one, zero);
+                } else if (pGame->m_shapeshifts.Find(resRef, nID)) {
+                    shapeSpells.Add(nID, one, one, zero);
+                } else if (pGame->m_innateSpells.Find(resRef, nID)) {
+                    innateSpells.Add(nID, one, one, zero);
+                } else {
+                    // The exe formats this into a temporary CString and
+                    // discards the result.
+                    char sResRef[9];
+                    memcpy(sResRef, tempOldSpell->m_resRef, 8);
+                    sResRef[8] = '\0';
+                    CString sObsolete(" ");
+                    sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                }
+            } else {
+                if (pGame->m_spells.Find(resRef, nID)) {
+                    const UINT nLevel = static_cast<UINT>(static_cast<unsigned short>(tempOldSpell->m_spellLevel));
+                    spells.Get(nClassIndex)->Add(nID, nLevel, one, one, zero);
+                } else {
+                    char sResRef[9];
+                    memcpy(sResRef, tempOldSpell->m_resRef, 8);
+                    sResRef[8] = '\0';
+                    CString sObsolete(" ");
+                    sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                }
+            }
+        }
+    }
+
+    // Loop 2 — the V2.1 grouped known list (header pointer dword @0x3C2,
+    // header count dword @0x3C6, shared entry pool dword @0x3CA).
+    {
+        COldCreatureFileSpellHeader* pHeader = reinterpret_cast<COldCreatureFileSpellHeader*>(pOld + *reinterpret_cast<DWORD*>(pOld + 0x3C2));
+        DWORD nHeaderCount = *reinterpret_cast<DWORD*>(pOld + 0x3C6);
+        COldCreatureFileKnownSpell* pPool = reinterpret_cast<COldCreatureFileKnownSpell*>(pOld + *reinterpret_cast<DWORD*>(pOld + 0x3CA));
+
+        for (DWORD i = 0; i < nHeaderCount; i++, pHeader++) {
+            nOldSpellBytes += sizeof(COldCreatureFileSpellHeader) + pHeader->m_count * sizeof(COldCreatureFileKnownSpell);
+
+            for (LONG j = 0; j < pHeader->m_count; j++) {
+                COldCreatureFileKnownSpell* pKnown = pPool + pHeader->m_startIndex + j;
+
+                CResRef resRef(pKnown->m_resRef);
+                UINT nID = 0;
+                const unsigned int one = 1;
+                const unsigned int zero = 0;
+                const unsigned int nFlags = pKnown->m_flags & 1; // (flag & 1) ? 1 : 0
+
+                if (pHeader->m_type == 2) { // 2: .rdata byte @0x85BB63
+                    if (pGame->m_songs.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (songSpells.Find(nID, nIndex)) {
+                            songSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else if (pGame->m_shapeshifts.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (shapeSpells.Find(nID, nIndex)) {
+                            shapeSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else if (pGame->m_innateSpells.Find(resRef, nID)) {
+                        UINT nIndex = 0;
+                        if (innateSpells.Find(nID, nIndex)) {
+                            innateSpells.Add(nID, one, nFlags, zero);
+                        }
+                    } else {
+                        char sResRef[9];
+                        memcpy(sResRef, pKnown->m_resRef, 8);
+                        sResRef[8] = '\0';
+                        CString sObsolete(" ");
+                        sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                    }
+                } else {
+                    if (pGame->m_spells.Find(resRef, nID)) {
+                        const UINT nLevel = static_cast<UINT>(static_cast<unsigned short>(pHeader->m_level));
+                        CGameSpriteGroupedSpellList* pClassSpells = spells.Get(nClassIndex);
+
+                        UINT nIndex = 0;
+                        if (pClassSpells->Find(nID, nLevel, nIndex)) {
+                            pClassSpells->Add(nID, nLevel, one, nFlags, zero);
+                        }
+
+                        // The domain lookup runs regardless of the class
+                        // lookup above. It cannot fire here (domainSpells
+                        // starts empty and only this arm could fill it), but
+                        // the exe performs it; ported as written.
+                        nIndex = 0;
+                        if (domainSpells.Find(nID, nLevel, nIndex)) {
+                            domainSpells.Add(nID, nLevel, one, nFlags, zero);
+                        }
+                    } else {
+                        char sResRef[9];
+                        memcpy(sResRef, pKnown->m_resRef, 8);
+                        sResRef[8] = '\0';
+                        CString sObsolete(" ");
+                        sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                    }
+                }
+            }
+        }
+    }
+
+    // Sizing — the V2.2 spell data is count x 0x10 + 8 per list (the +8 is
+    // the trailing field_14/field_18 pair). nDelta relocates the tail.
+    DWORD nTotalBytes = 0;
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+        for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+            nTotalBytes += static_cast<DWORD>(spells.Get(nClass)->GetSpellsAtLevel(nLevel)->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+        }
+    }
+    for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+        nTotalBytes += static_cast<DWORD>(domainSpells.GetSpellsAtLevel(nLevel)->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    }
+    nTotalBytes += static_cast<DWORD>(innateSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    nTotalBytes += static_cast<DWORD>(songSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    nTotalBytes += static_cast<DWORD>(shapeSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+
+    const DWORD nDelta = nTotalBytes - nOldSpellBytes;
+
+    // Build — the caller has already sized *plSize to fit the V2.2 image.
+    BYTE* pNew = new BYTE[*plSize];
+    memset(pNew, 0, *plSize);
+    memcpy(pNew, "CRE V2.2", 8);
+
+    // The V2.1 and V2.2 headers share 0xDF dwords past the signature (raw
+    // offsets 8..0x383); the CCreatureFileOffsets region behind them stays
+    // zero from the fill.
+    memcpy(pNew + 8, pOld + 8, 0xDF * sizeof(DWORD));
+
+    CCreatureFileOffsets* offsets = reinterpret_cast<CCreatureFileOffsets*>(pNew + 900);
+    offsets->m_enemyAlly = pOld[0x384];
+    offsets->m_general = pOld[0x385];
+    offsets->m_race = pOld[0x386];
+    // The exe re-checks the class byte here and this time normalizes 0/0xFF
+    // to 2 — dead, the prologue above already rewrote it to 5; ported as
+    // written.
+    if (pOld[0x387] == 0 || pOld[0x387] == 0xFF) {
+        pOld[0x387] = CAIOBJECTTYPE_C_BARD;
+    }
+    offsets->m_class = pOld[0x387];
+    offsets->m_specifics = pOld[0x388];
+    offsets->m_gender = pOld[0x389];
+    memcpy(offsets->m_specialCase, pOld + 0x38A, 5);
+    offsets->m_alignment = pOld[0x38F];
+    offsets->m_instance = *reinterpret_cast<LONG*>(pOld + 0x390);
+    memcpy(offsets->m_name, pOld + 0x394, SCRIPTNAME_SIZE);
+    offsets->m_avClass = pOld[0x3B4];
+    // (The exe stores zeroes at raw 0x3B6/0x3B8 before the classMask copy —
+    // already zero here.)
+    offsets->m_classMask = *reinterpret_cast<DWORD*>(pOld + 0x3B6);
+
+    // Offsets table — every spell list gets its slot, empty or not; the
+    // data cursor starts right behind the table.
+    DWORD nRunning = 900 + sizeof(CCreatureFileOffsets);
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+        for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+            CGameSpriteSpellList* pList = spells.Get(nClass)->GetSpellsAtLevel(nLevel);
+
+            offsets->m_spellListOffset[nClass][nLevel] = nRunning;
+            offsets->m_spellListCount[nClass][nLevel] = static_cast<DWORD>(pList->m_List.size());
+            nRunning += static_cast<DWORD>(pList->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+        }
+    }
+    for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+        CGameSpriteSpellList* pList = domainSpells.GetSpellsAtLevel(nLevel);
+
+        offsets->m_domainListOffset[nLevel] = nRunning;
+        offsets->m_domainListCount[nLevel] = static_cast<DWORD>(pList->m_List.size());
+        nRunning += static_cast<DWORD>(pList->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    }
+    offsets->m_innateListOffset = nRunning;
+    offsets->m_innateListCount = static_cast<DWORD>(innateSpells.m_List.size());
+    nRunning += static_cast<DWORD>(innateSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    offsets->m_songListOffset = nRunning;
+    offsets->m_songListCount = static_cast<DWORD>(songSpells.m_List.size());
+    nRunning += static_cast<DWORD>(songSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    offsets->m_shapeListOffset = nRunning;
+    offsets->m_shapeListCount = static_cast<DWORD>(shapeSpells.m_List.size());
+    nRunning += static_cast<DWORD>(shapeSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+
+    // The tail keeps its V2.1 offsets (item/equipment/effect pointers at raw
+    // 0x3D2/0x3D6/0x3DE, counts at 0x3DA/0x3E2, dialog at 0x3E6), moved past
+    // the grown spell data. Only the three offsets move; counts and the
+    // dialog resref are copied verbatim.
+    offsets->m_equipmentListOffset = *reinterpret_cast<DWORD*>(pOld + 0x3D2) + 0x240 + nDelta;
+    offsets->m_itemListOffset = *reinterpret_cast<DWORD*>(pOld + 0x3D6) + 0x240 + nDelta;
+    offsets->m_itemListCount = *reinterpret_cast<DWORD*>(pOld + 0x3DA);
+    offsets->m_effectListOffset = *reinterpret_cast<DWORD*>(pOld + 0x3DE) + 0x240 + nDelta;
+    offsets->m_effectListCount = *reinterpret_cast<DWORD*>(pOld + 0x3E2);
+    memcpy(offsets->m_dialog, pOld + 0x3E6, sizeof(RESREF));
+
+    // Copy — the lists land back to back from 0x62E; every list's entries
+    // are followed by the field_14/field_18 pair, always written even when
+    // the list is empty.
+    DWORD nSpellOffset = 900 + sizeof(CCreatureFileOffsets);
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+        for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+            CGameSpriteSpellList* pList = spells.Get(nClass)->GetSpellsAtLevel(nLevel);
+
+            for (UINT nIndex = 0; nIndex < offsets->m_spellListCount[nClass][nLevel]; nIndex++) {
+                memcpy(pNew + nSpellOffset, pList->Get(nIndex), sizeof(CCreatureFileSpell));
+                nSpellOffset += sizeof(CCreatureFileSpell);
+            }
+
+            *reinterpret_cast<unsigned int*>(pNew + nSpellOffset) = pList->field_14;
+            *reinterpret_cast<unsigned int*>(pNew + nSpellOffset + 4) = pList->field_18;
+            nSpellOffset += sizeof(unsigned int) + sizeof(unsigned int);
+        }
+    }
+    for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+        CGameSpriteSpellList* pList = domainSpells.GetSpellsAtLevel(nLevel);
+
+        for (UINT nIndex = 0; nIndex < offsets->m_domainListCount[nLevel]; nIndex++) {
+            memcpy(pNew + nSpellOffset, pList->Get(nIndex), sizeof(CCreatureFileSpell));
+            nSpellOffset += sizeof(CCreatureFileSpell);
+        }
+
+        *reinterpret_cast<unsigned int*>(pNew + nSpellOffset) = pList->field_14;
+        *reinterpret_cast<unsigned int*>(pNew + nSpellOffset + 4) = pList->field_18;
+        nSpellOffset += sizeof(unsigned int) + sizeof(unsigned int);
+    }
+    for (UINT nIndex = 0; nIndex < offsets->m_innateListCount; nIndex++) {
+        memcpy(pNew + nSpellOffset, innateSpells.Get(nIndex), sizeof(CCreatureFileSpell));
+        nSpellOffset += sizeof(CCreatureFileSpell);
+    }
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset) = innateSpells.field_14;
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset + 4) = innateSpells.field_18;
+    nSpellOffset += sizeof(unsigned int) + sizeof(unsigned int);
+    for (UINT nIndex = 0; nIndex < offsets->m_songListCount; nIndex++) {
+        memcpy(pNew + nSpellOffset, songSpells.Get(nIndex), sizeof(CCreatureFileSpell));
+        nSpellOffset += sizeof(CCreatureFileSpell);
+    }
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset) = songSpells.field_14;
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset + 4) = songSpells.field_18;
+    nSpellOffset += sizeof(unsigned int) + sizeof(unsigned int);
+    for (UINT nIndex = 0; nIndex < offsets->m_shapeListCount; nIndex++) {
+        memcpy(pNew + nSpellOffset, shapeSpells.Get(nIndex), sizeof(CCreatureFileSpell));
+        nSpellOffset += sizeof(CCreatureFileSpell);
+    }
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset) = shapeSpells.field_14;
+    *reinterpret_cast<unsigned int*>(pNew + nSpellOffset + 4) = shapeSpells.field_18;
+    nSpellOffset += sizeof(unsigned int) + sizeof(unsigned int);
+
+    // The tail (equipment + items + effects) moves as one block. Its V2.1
+    // size: 0x14 per item, 0x68 equipment, and 0x30 or 0x108 per effect
+    // depending on the effect-size flag byte at raw 0x33 (carried into the
+    // new header by the bulk copy above).
+    DWORD nLastBlockSize = *reinterpret_cast<DWORD*>(pOld + 0x3DA) * sizeof(CCreatureFileItem) + sizeof(CCreatureFileEquipment) + *reinterpret_cast<DWORD*>(pOld + 0x3E2) * (pNew[0x33] == 0 ? 0x30 : 0x108);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+    // __LINE__: 6423
+    UTIL_ASSERT((nSpellOffset + nLastBlockSize) == static_cast<DWORD>(*plSize));
+
+    memcpy(pNew + nSpellOffset, pOld + 0x3EE + nOldSpellBytes, nLastBlockSize);
+    memcpy(*ppCreature, pNew, *plSize);
+    delete[] pNew;
+
+    return TRUE;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x5C7AC0
