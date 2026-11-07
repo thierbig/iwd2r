@@ -12784,9 +12784,29 @@ LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature)
         }
     }
 
-    // TODO(range 4, 0x5A7461-0x5A7731): the sizing walk and the delta.
+    // Sizing walk (0x5A7461-0x5A75B5) — the V2.2 spell data is
+    // count x 0x10 + 8 per list (the +8 is the trailing field_14/field_18
+    // pair): 7 classes x 9 levels of grouped lists, then the 9 domain
+    // levels, then the three extras. The class/domain bounds asserts the
+    // exe inlines here (FileFormat.h 0xa0c / 0x9d9) live in-tree inside
+    // Get()/GetSpellsAtLevel().
+    DWORD nTotalBytes = 0;
+    for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+        for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+            nTotalBytes += static_cast<DWORD>(spells.Get(nClass)->GetSpellsAtLevel(nLevel)->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+        }
+    }
+    for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+        nTotalBytes += static_cast<DWORD>(domainSpells.GetSpellsAtLevel(nLevel)->m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    }
+    nTotalBytes += static_cast<DWORD>(innateSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    nTotalBytes += static_cast<DWORD>(songSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
+    nTotalBytes += static_cast<DWORD>(shapeSpells.m_List.size()) * sizeof(CCreatureFileSpell) + 8;
 
-    return 0;
+    // The delta the "CRE V2.1" arm of CGameSprite::Unmarshal adds to 0x240
+    // to size the new buffer (0x240 + this = the 0x62E header growth the
+    // V2.1->V2.2 converter's assert at 0x6423 checks).
+    return nTotalBytes - nOldSpellBytes;
 }
 
 // -----------------------------------------------------------------------------
