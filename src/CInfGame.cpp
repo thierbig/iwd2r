@@ -13085,13 +13085,101 @@ BOOL CInfGame::ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCo
         }
 
         if (nDesiredId != 0xFFFFFFFF) {
-            // TODO(0x5AEBDF-0x5AF024): add path — range 4/4.
+            BYTE rc;
+            do {
+                rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nDesiredId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+            if (rc != CGameObjectArray::SUCCESS) {
+                return FALSE; // 0x5AF14D
+            }
+
+            if (!AddCharacterToParty(nDesiredId, -1)) {
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+                // __LINE__: 10455 (0x28D7)
+                UTIL_ASSERT_MSG(FALSE, "Failed to add character to party");
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nDesiredId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return FALSE;
+            }
+
+            // The joining direction message is notify-gated (face = 1 this
+            // time); the area population count bumps whatever the gate
+            // says (0x5AEC97-0x5AECBD), with a saturated 0xFF count
+            // resetting to one instead of rolling over.
+            if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageChangeDirection(1, pSprite->m_id, pSprite->m_id), FALSE);
+            }
+            if (pSprite->m_pArea != NULL) {
+                if (pSprite->m_pArea->m_nCharacters == 0xFF) {
+                    pSprite->m_pArea->m_nCharacters = 1;
+                } else {
+                    pSprite->m_pArea->m_nCharacters++;
+                }
+            }
+
+            // All three type copies go PC (0x5AECC6-0x5AEDA5); as in loops
+            // 1 and 3, the start copy is rebuilt from the LIVE type.
+            CAIObjectType typeAI;
+            typeAI.Set(pSprite->GetAIType());
+            typeAI.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+            CAIObjectType typeAILive;
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAILive.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+            CAIObjectType typeAIStart;
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAIStart.m_nEnemyAlly = CAIOBJECTTYPE_EA_PC;
+
+            pSprite->SetAIType(typeAI, FALSE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+
+            pSprite->m_dialog = "";
+
+            // The second gate re-runs the same test for the JOINS
+            // notification; there is no Animate/death handling on this
+            // path — that arm is remove-only.
+            if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                CAITrigger trigger(CAITRIGGER_JOINS, typeAI, 0);
+                for (INT j = 0; j < m_nCharacters; j++) {
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                        new CMessageSetTrigger(trigger, pSprite->m_id, m_characterPortraits[j]),
+                        FALSE);
+                }
+            }
+
+            // The host mirrors the addition into the multiplayer settings
+            // (0x5AEF80-0x5AEFC2) — IMPORTED here, where the removal used
+            // DELETED, and ready set TRUE.
+            if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+                m_multiplayerSettings.SetCharacterControlledByPlayer(i, 0, FALSE, FALSE);
+                m_multiplayerSettings.SignalCharacterStatus(
+                    i, CMultiplayerSettings::CHARSTATUS_SIGNAL_IMPORTED, TRUE, FALSE);
+                m_multiplayerSettings.SetCharacterReady(i, TRUE, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nDesiredId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
         }
 
         m_characters[i] = nDesiredId;
     }
 
-    // TODO(0x5AF04D-0x5AF14F): host/settings tail.
+    // The host pushes the reconciled roster out to the clients (0x5AF04D).
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        // TODO: 0x432610 not ported (unidentified CBaldurMessage member).
+        g_pBaldurChitin->GetBaldurMessage()->SendFullSettingsToClients(CString(""));
+    }
+
     return TRUE;
 }
 
