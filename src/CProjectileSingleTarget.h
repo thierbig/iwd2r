@@ -358,6 +358,40 @@ public:
     /* 0310 */ CSound m_loopSound;
 };
 
+// The MFMissT wanderer (vtable 0x851554, sizeof 0x2E4):
+// DecodeProjectile's type 314 builds one — the last and leanest of the
+// base-map wanderer family (the rebounding bolt, the two 0x57F390/0x57F640
+// wanderers, the lightning bolt): a single-direction MFMissT traveler
+// that arms the base strike tracker with just its owner and gather
+// radius, leaving every cadence field at the map ctor's default. Only
+// two vtable slots differ from the base CProjectileSingleTarget
+// (0x850CAC) over the family's 34 — slot 0x00's deleting dtor 0x580CC0
+// (its scalar body 0x580CE0 is the compiler's member teardown walking
+// the base tracker map at +0x2AE, spelled implicitly by ours) and slot
+// 0x70 OnArrival 0x580E10 (the same base slot the two walls override;
+// not ported). Neither is declared — a declared-but-undefined virtual
+// would become the key function and leave the vtable unemitted — so the
+// class inherits the base virtuals for them.
+class CProjectile851554 : public CProjectileSingleTarget {
+public:
+    // 0x580C00. Binds the MFMissT travel cell through the base, then
+    // the retune: one direction at +0x1D8 (the walls seed sixteen, the
+    // whirlwind one), speed doubled with a native WORD shift (20 -> 40),
+    // the strike tracker armed with just two stores — owner this and
+    // gather radius 70; service period 10, strike interval 10, both
+    // caps 100000 and strikes allowed on the caster all keep the base
+    // map ctor's defaults, since this ctor stores none of them —
+    // copy-from-back on the visual effect, the height gate raised along
+    // with the +0x1C2 flag, and the TRA_55 fire sound.
+    CProjectile851554();
+
+    // The base strike tracker the ctor arms (the only added member — no
+    // loop sound's CSound in this class: owner +0x2B2, service period
+    // +0x2C6, strike interval +0x2CE, per-victim cap +0x2D2, range
+    // +0x2E0, decoder allocation 0x2E4).
+    /* 02AE */ IcewindCProjectileTargetMap m_targetMap;
+};
+
 // The short AScorcT beam (vtable 0x8515DC, sizeof 0x2B6): a ten-tick
 // sibling of the Scorcher above — the same base resref, fire sound and
 // first four tail members, but no struck-target set and no strike cadence

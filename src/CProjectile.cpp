@@ -1007,6 +1007,10 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pPuff->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
         pProjectile = pPuff;
         break;
+    case 314:
+        // The MFMissT wanderer (the strike-tracker traveler).
+        pProjectile = new CProjectile851554();
+        break;
     case 315:
         // Shout.
         pPuff = new CProjectile850DDC("", "ShoutT");
@@ -2803,8 +2807,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   with 0x84D838 - a CProjectile84E9C0-derived class whose
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
-        // - types whose constructor is not ported yet:
-        //   TODO: type 314: ctor 0x580C00 not ported
         // DEVIATION (temporary): unported type -> instant projectile. The
         // original reaches the fallback below only for types out of range
         // and for the assert entries listed above. Until the other cases
@@ -5167,6 +5169,20 @@ void CProjectileLightningBolt::Fire(CGameArea* pArea, LONG source, LONG target, 
             source, CGameObjectArray::THREAD_ASYNCH, INFINITE);
         CProjectileSingleTarget::Fire(pArea, source, target, endPoint, nHeight, nType);
     }
+}
+
+// 0x580C00
+CProjectile851554::CProjectile851554()
+    : CProjectileSingleTarget(CResRef("MFMissT"))
+{
+    field_1D8 = 1;
+    m_speed = static_cast<SHORT>(m_speed << 1);
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_nRange = 70;
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_bHasHeight = TRUE;
+    field_1C2 = TRUE;
+    m_fireSoundRef = "TRA_55";
 }
 
 // 0x581060

@@ -4389,6 +4389,56 @@ TEST_CASE("visual projectiles: the wall of fire decodes to its wall", "[visualpr
     CHECK(wallDirect.m_fireSoundRef == "AFT_P21");
 }
 
+// Type 314's case body (0x527330) is a bare news-and-calls: 0x2E4 bytes,
+// the ctor 0x580C00, no stores of its own, then the shared tail's stamp
+// (314 - 1). The ctor binds MFMissT through the base, seeds ONE direction
+// (the walls' sixteen), doubles the base speed with a native WORD shift,
+// and arms the base strike tracker with exactly two stores — owner and
+// gather radius 70; every cadence field keeps the map ctor's default.
+TEST_CASE("visual projectiles: the MFMissT wanderer decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(314, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectile851554* pWanderer = dynamic_cast<CProjectile851554*>(pProjectile);
+    REQUIRE(pWanderer != nullptr);
+    CHECK(pWanderer->m_projectileType == 313);
+    // MFMissT binds for real: type 344's plain case already binds the
+    // same cell through this install's CHITIN.KEY.
+    CHECK(pWanderer->m_animation->GetResRef() == CResRef("MFMissT"));
+    // One direction (the walls' sixteen), the base's speed doubled
+    // (20 -> 40, a native WORD shift in the exe), the height gate raised
+    // along with the +0x1C2 flag, and the TRA_55 fire sound. The ctor
+    // stores no loop-fire flag, so that byte keeps the base's value.
+    CHECK(pWanderer->field_1D8 == 1);
+    CHECK(pWanderer->m_speed == 40);
+    CHECK(pWanderer->m_bHasHeight == TRUE);
+    CHECK(pWanderer->field_1C2 == TRUE);
+    CHECK(pWanderer->m_fireSoundRef == "TRA_55");
+    // The base tracker the ctor arms with exactly two stores: this
+    // projectile owns it and gathers within 70. Service period 10,
+    // strike interval 10, both caps 100000 and the skip-source flag are
+    // all the base map ctor's defaults, since this ctor stores none of
+    // them (the whirlwind and both walls each override their own subset).
+    CHECK(pWanderer->m_targetMap.m_pOwner == pWanderer);
+    CHECK(pWanderer->m_targetMap.m_nRange == 70);
+    CHECK(pWanderer->m_targetMap.m_servicePeriod == 10);
+    CHECK(pWanderer->m_targetMap.m_strikeInterval == 10);
+    CHECK(pWanderer->m_targetMap.m_maxStrikesPerTarget == 100000);
+    CHECK(pWanderer->m_targetMap.m_maxStrikesTotal == 100000);
+    CHECK(pWanderer->m_targetMap.m_bSkipSource == FALSE);
+    delete pProjectile;
+    // A directly built wanderer pins the same tracker defaults, the
+    // doubled speed and the fire sound against the decode.
+    CProjectile851554 wandererDirect;
+    CHECK(wandererDirect.m_targetMap.m_pOwner == &wandererDirect);
+    CHECK(wandererDirect.m_targetMap.m_servicePeriod == 10);
+    CHECK(wandererDirect.m_targetMap.m_strikeInterval == 10);
+    CHECK(wandererDirect.m_speed == 40);
+    CHECK(wandererDirect.m_fireSoundRef == "TRA_55");
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);
