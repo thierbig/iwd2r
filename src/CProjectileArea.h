@@ -400,6 +400,8 @@ public:
 class CProjectileArea8507C8 : public CProjectileArea {
 public:
     CProjectileArea8507C8();
+    // 0x5768A0
+    /* 0000 */ ~CProjectileArea8507C8() override;
     /* 000C */ void AIUpdate() override;
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
     /* 0090 */ std::list<LONG> GetTargets() override;
@@ -415,6 +417,7 @@ public:
 class CProjectileArea850864 : public CProjectileArea8507C8 {
 public:
     CProjectileArea850864();
+    /* 0000 */ ~CProjectileArea850864() override;
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
@@ -426,6 +429,7 @@ public:
 class CProjectileArea850900 : public CProjectileArea8507C8 {
 public:
     CProjectileArea850900();
+    /* 0000 */ ~CProjectileArea850900() override;
     /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 

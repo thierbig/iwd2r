@@ -4133,6 +4133,14 @@ CProjectileArea8507C8::CProjectileArea8507C8()
     m_nRadius = 450;
 }
 
+// The 0x8507C8 slot-0 copy of the family-wide folded empty dtor (0x5768A0,
+// anchored on the Acid Fog row below): the class adds no members of its
+// own, so ours is the empty braces that chain to
+// CProjectileArea::~CProjectileArea.
+CProjectileArea8507C8::~CProjectileArea8507C8()
+{
+}
+
 // 0x5760B0
 // Vtable slot 0x0C of 0x8507C8: the whole life of the one-shot strike.
 // Unlike the family it does not check Time Stop and does not chain to the
@@ -4356,6 +4364,13 @@ CProjectileArea850864::CProjectileArea850864()
 {
 }
 
+// The 0x850864 slot-0 copy of the same fold (0x5768A0): memberless like
+// its parent, so unmarked empty braces — it exists so the class declares
+// every slot its vtable overrides.
+CProjectileArea850864::~CProjectileArea850864()
+{
+}
+
 // 0x5767A0
 // Vtable slot 0x94 of 0x850864: the warrior filter in front of the
 // parent's one-shot strike. Every gathered id that is not a sprite with
@@ -4418,6 +4433,12 @@ void CProjectileArea850864::ApplyToTargets(std::list<LONG>& targets)
 // reaches the identical end state.
 CProjectileArea850900::CProjectileArea850900()
     : CProjectileArea8507C8()
+{
+}
+
+// The 0x850900 slot-0 copy of the same fold (0x5768A0): memberless like
+// its parent, so unmarked empty braces.
+CProjectileArea850900::~CProjectileArea850900()
 {
 }
 
