@@ -8930,7 +8930,7 @@ void CGameSprite::Unmarshal(BYTE* pCreature, LONG creatureSize, WORD facing, int
             LONG nGrownSize = creatureSize + 0xCA;
 
             // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
-            // __LINE__: 12731
+            // __LINE__: 12763
             UTIL_ASSERT(nGrownSize > 0);
 
             BYTE* pGrown = new BYTE[nGrownSize];
