@@ -128,6 +128,7 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
     CProjectileExplodingWeapon* pWeapon;
     CProjectileExplodingFlame* pExplodingFlame;
     CProjectileLightningBolt* pBolt;
+    CProjectileReboundingBolt* pRebound;
     CProjectileSkullTrap* pSkull;
     CProjectile84DE0C* pJet;
     CProjectile84DE94* pLight;
@@ -1679,6 +1680,14 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pLight->m_nBounces = 1;
         pProjectile = pLight;
         break;
+    case 207:
+        // The rebounding bolt (the searing light's child carrier): the
+        // ctor starts it unbounced (-1); the decoder's only case-body
+        // store is the real count — the bolt stops at its first wall.
+        pRebound = new CProjectileReboundingBolt();
+        pRebound->m_nBounces = 1;
+        pProjectile = pRebound;
+        break;
     // The recursing bolt wrappers (six entries in the exe, one body each):
     // every type re-decodes an already-wired bolt as its carrier and most
     // then retarget it — the same two-armed pick as 158/159 (the guard
@@ -2769,7 +2778,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 207: ctor 0x57D390 not ported
         //   TODO: type 261: ctor 0x57E1B0 not ported
         //   TODO: type 312: ctor 0x57F210 not ported
         //   TODO: type 305: ctor 0x57F640 not ported
@@ -4919,6 +4927,50 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
     m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
     m_bHasHeight = FALSE;
     field_1C2 = FALSE;
+}
+
+// 0x57D390
+// The rebounding bolt: the older, wall-rebounding LightnT carrier. The
+// base binds the cell, the strike tracker's ctor 0x55ACC0 runs as the
+// implicit member init at +0x2B6, then the retune: the bolt starts
+// unbounced (-1 — the type-207 decode stamps 1, and the searing light's
+// parked Fire 0x530010 hands its own count down per rebound), sequence 0,
+// render flag 8, both height gates cleared, 16 directions, TRA_09b fire
+// sound, the speed doubled with a native WORD shift, a 60-tick duration,
+// and the tracker armed (strike interval 33, service period 2, range 50).
+CProjectileReboundingBolt::CProjectileReboundingBolt()
+    : CProjectileSingleTarget(CResRef("LightnT"))
+{
+    m_nBounces = -1;
+    m_animation->SequenceSet(0);
+    field_E6 |= 0x8;
+    field_1BE = FALSE;
+    field_1C2 = FALSE;
+    field_1D4 = 0;
+    field_1D8 = 16;
+    m_fireSoundRef = "TRA_09b";
+    m_speed = static_cast<SHORT>(static_cast<USHORT>(m_speed) << 1);
+    m_nDuration = 60;
+    m_callBackProjectile = CGameObjectArray::INVALID_INDEX;
+    m_sVisualEffect = "";
+    field_182 = CGameObjectArray::INVALID_INDEX;
+    m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    m_targetMap.m_pOwner = this;
+    m_targetMap.m_strikeInterval = 33;
+    m_targetMap.m_servicePeriod = 2;
+    m_targetMap.m_nRange = 50;
+}
+
+// 0x57D4C0
+// The rebounding bolt's slot-0 destructor: the body at 0x57D4C0 is the
+// deleting thunk (call the scalar body 0x57D5D0, free this when the
+// flag's bit 0 is set), and the scalar body is the compiler's member
+// teardown — the strike tracker's std::map at +0x2B6 (its _Myhead read
+// at +0x2C2 opens the body), then the CProjectileSingleTarget dtor.
+// Empty braces spell it: the members go down implicitly, exactly what
+// the exe runs.
+CProjectileReboundingBolt::~CProjectileReboundingBolt()
+{
 }
 
 // 0x57E370

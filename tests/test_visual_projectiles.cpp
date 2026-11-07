@@ -4146,6 +4146,49 @@ TEST_CASE("visual projectiles: the searing-light shots decode to their flights",
     CHECK(direct.m_animation->GetResRef() == "");
 }
 
+TEST_CASE("visual projectiles: the rebounding bolt decodes to its flight", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    iwd2r_srand(71);
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(207, world.pCharacter, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+    CProjectileReboundingBolt* pBolt = dynamic_cast<CProjectileReboundingBolt*>(pProjectile);
+    REQUIRE(pBolt != nullptr);
+    CHECK(pBolt->m_projectileType == 206);
+    // LightnT IS in this install's CHITIN.KEY (the type-40 row binds it),
+    // so the cell binds for real.
+    CHECK(pBolt->m_animation->GetResRef() == CResRef("LightnT"));
+    // The decoder's only case-body store: the real count over the ctor's
+    // unbounced -1.
+    CHECK(pBolt->m_nBounces == 1);
+    CHECK(pBolt->m_nDuration == 60);
+    CHECK(pBolt->m_fireSoundRef == "TRA_09b");
+    CHECK(pBolt->m_sVisualEffect == "");
+    CHECK(pBolt->field_1BE == FALSE);
+    CHECK(pBolt->field_1C2 == FALSE);
+    CHECK(pBolt->field_1D4 == 0);
+    CHECK(pBolt->field_1D8 == 0x10);
+    CHECK((pBolt->field_E6 & 0x8) != 0);
+    CHECK(pBolt->m_callBackProjectile == CGameObjectArray::INVALID_INDEX);
+    CHECK(pBolt->field_182 == CGameObjectArray::INVALID_INDEX);
+    // The doubled speed pinned against the type-40 bolt whose ctor leaves
+    // the base's 20 alone.
+    CProjectileLightningBolt plain("LightnT");
+    CHECK(pBolt->m_speed == plain.m_speed * 2);
+    // The strike tracker the ctor arms.
+    CHECK(pBolt->m_targetMap.m_pOwner == pBolt);
+    CHECK(pBolt->m_targetMap.m_strikeInterval == 33);
+    CHECK(pBolt->m_targetMap.m_servicePeriod == 2);
+    CHECK(pBolt->m_targetMap.m_nRange == 50);
+    delete pProjectile;
+    // The ctor's own stamps: unbounced, duration 60, and the same doubled
+    // speed on a directly built one.
+    CProjectileReboundingBolt direct;
+    CHECK(direct.m_nBounces == -1);
+    CHECK(direct.m_nDuration == 60);
+    CHECK(direct.m_speed == plain.m_speed * 2);
+}
+
 TEST_CASE("visual projectiles: the cow shot decodes to its flight", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);

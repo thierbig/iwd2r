@@ -189,6 +189,49 @@ public:
     /* 02AE */ std::set<LONG> m_struckTargets;
 };
 
+// The rebounding bolt (vtable 0x85101C, sizeof 0x2EC): the older,
+// wall-rebounding LightnT carrier. DecodeProjectile's type 207 stops it at
+// its first wall (the ctor starts it unbounced), and the searing light's
+// parked Fire 0x530010 spawns one of these per rebound with its own count in
+// m_nBounces. WillScarlettOhara models the family as CProjectileReboundingBolt
+// < IcewindCProjectileTravellingVFX < CProjectileTravelling; the exe ctor
+// 0x57D390 bases it on CProjectileSingleTarget (0x578110) with
+// CResRef("LightnT"), which is the anchor used here (the same substitution
+// as the classes above). The exported CProjectileBAM::MoveUpdate name at its
+// AIUpdate 0x57D9F0 is stale: slot 3 of this leaf is AIUpdate, and +0x2B6 is
+// a strike tracker, not a vid cell.
+class CProjectileReboundingBolt : public CProjectileSingleTarget {
+public:
+    // 0x57D390. Binds LightnT through the base, constructs the strike
+    // tracker at +0x2B6 (its ctor 0x55ACC0, the implicit member init), then
+    // retunes the carrier: unbounced (-1 — the decoder and the searing
+    // light's Fire stamp the real count), sequence 0, render flag 8, both
+    // height gates cleared, 16 directions, TRA_09b fire sound, speed doubled
+    // with a native WORD shift, a 60-tick duration, and the tracker armed:
+    // owner this, strike interval 33, service period 2, range 50.
+    CProjectileReboundingBolt();
+    // 0x57D4C0. The deleting thunk over the scalar body 0x57D5D0, which is
+    // the compiler's member teardown — the strike tracker's std::map at
+    // +0x2B6 (its _Myhead read at +0x2C2 opens the body), then the base.
+    // Empty braces spell it.
+    /* 0000 */ ~CProjectileReboundingBolt() override;
+    // Fire 0x57D700 and AIUpdate 0x57D9F0 stay parked
+    // (docs/wso/import-parked/57D700.json, 57D9F0.json): undeclared, the
+    // class inherits the base virtuals for those slots — a
+    // declared-but-undefined virtual would become the key function and
+    // leave the vtable unemitted.
+    // The flight's duration in ticks (the ctor stamps 60).
+    /* 02AE */ LONG m_nDuration;
+    // Walls left: the ctor starts it unbounced (-1); the type-207 decode
+    // stamps 1 and the searing light's Fire 0x530010 hands its own count
+    // (1 or 6) down per rebound.
+    /* 02B2 */ LONG m_nBounces;
+    // The strike tracker the ctor arms (the same embed as the bolt's at
+    // +0x2B2: owner +0x2BA, service period +0x2CE, strike interval +0x2D6,
+    // range +0x2E8, decoder allocation 0x2EC).
+    /* 02B6 */ IcewindCProjectileTargetMap m_targetMap;
+};
+
 // The lightning-bolt carrier (vtable 0x8513BC): pushes the picked target
 // point out past the target so the bolt rakes the whole line. WillScarlettOhara
 // models the family as CProjectileLightningBolt
