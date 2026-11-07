@@ -261,6 +261,7 @@ public:
     void UseMagicOnObject(LONG target);
     BOOL AddCharacterToParty(LONG id, SHORT nPortraitNumber);
     BOOL RemoveCharacterFromParty(LONG id, BOOL& overflow);
+    BOOL ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCount, LONG* pDesiredOverflowIds);
     BOOL SetCharacterSlot(INT nCharacterSlot, LONG nCharacterId);
     BOOL ClearCharacterSlot(INT nCharacterSlot);
     LONG GetCharacterSlot(INT nCharacterSlot);
