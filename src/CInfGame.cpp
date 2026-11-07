@@ -12602,6 +12602,69 @@ BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCrea
     return TRUE;
 }
 
+// 0x5A69B0
+LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+    // __LINE__: 6440
+    UTIL_ASSERT(pOldCreature != NULL);
+
+    // Version gate — two 2-dword compares, "CRE V2.0" then "CRE V2.1";
+    // either passes. The only caller (0x70D0FB, the "CRE V2.1" arm of
+    // CGameSprite::Unmarshal) always arrives with V2.1 — the V2.0 arm of
+    // that dispatch routes through UpgradeCreatureFileV20ToV21 first — so
+    // the V2.0 half is defensive. Anything else asserts with a literal
+    // FALSE and the delta is 0 (the caller then grows the buffer by exactly
+    // 0x240).
+    if (memcmp(pOldCreature, "CRE V2.0", 8) != 0 && memcmp(pOldCreature, "CRE V2.1", 8) != 0) {
+        // __LINE__: 6446
+        UTIL_ASSERT(FALSE);
+        return 0;
+    }
+
+    // The V2.1 class byte (raw offset 0x387) is normalized in the OLD buffer
+    // before anything reads it: 0 or 0xFF (a raw byte compare) becomes 5 —
+    // the same normalization UpgradeCreatureFileV21ToV22 performs on its
+    // source image.
+    if (pOldCreature[0x387] == 0 || pOldCreature[0x387] == 0xFF) {
+        pOldCreature[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+    }
+
+    UINT nClassIndex = 0;
+    switch (pOldCreature[0x387]) {
+    case CAIOBJECTTYPE_C_BARD:
+    case CAIOBJECTTYPE_C_CLERIC:
+    case CAIOBJECTTYPE_C_DRUID:
+    case CAIOBJECTTYPE_C_PALADIN:
+    case CAIOBJECTTYPE_C_RANGER:
+    case CAIOBJECTTYPE_C_SORCERER:
+    case CAIOBJECTTYPE_C_WIZARD:
+        nClassIndex = g_pBaldurChitin->GetObjectGame()->GetSpellcasterIndex(pOldCreature[0x387]);
+        break;
+    }
+
+    // The rebuild lists — the same locals UpgradeCreatureFileV21ToV22 fills:
+    // this helper duplicates the list-building walk to measure what the V2.2
+    // spell data will weigh (the exe carries the same duplication).
+    CGameSpriteSpells spells;
+    CGameSpriteGroupedSpellList domainSpells;
+    CGameSpriteSpellList innateSpells;
+    CGameSpriteSpellList songSpells;
+    CGameSpriteSpellList shapeSpells;
+
+    DWORD nOldSpellBytes = 0;
+
+    // TODO(range 2, 0x5A6B56-0x5A6ED1): loop 1 — the flat memorized list.
+    // TODO(range 3, 0x5A6ED1-0x5A7461): loop 2 — the known-spell headers.
+    // TODO(range 4, 0x5A7461-0x5A7731): the sizing walk and the delta.
+
+    // Interim (deleted by range 2): the loops below are the first consumers.
+    (void)nClassIndex;
+    (void)nOldSpellBytes;
+
+    return 0;
+}
+
 // -----------------------------------------------------------------------------
 
 // 0x5C7AC0

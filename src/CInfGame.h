@@ -114,6 +114,21 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize);
 // the source (the caller's no-realloc path).
 BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, void* pUnused);
 
+// 0x5A69B0
+// NOTE: __thiscall CInfGame method in the exe (ret 4): ECX = the CInfGame
+// (the caller loads it from the global at 0x8CF6DC + 0x1C54), one stack
+// argument = the old creature buffer. Ported as a free function like the
+// sibling converters — the only game state it touches is the singleton's
+// spell tables. The V2.1 sizing helper: it walks the V2.1 spell lists the
+// same way UpgradeCreatureFileV21ToV22 rebuilds them and returns the byte
+// delta between the V2.2 spell data and the old spell data, which the
+// "CRE V2.1" arm of CGameSprite::Unmarshal adds to 0x240 to size the new
+// buffer before calling the converter. The version gate accepts "CRE V2.0"
+// (defensively — that caller always arrives with V2.1, the V2.0 arm routes
+// through UpgradeCreatureFileV20ToV21 first) and "CRE V2.1"; anything else
+// asserts with a literal FALSE and returns 0.
+LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature);
+
 // NOTE: The entries of `CInfGame::field_4BDC`, an IWD2 addition with no name
 // in the original: an area and an adjustment of the party level the area's
 // spawns use (`CGameArea::Unmarshal`). The game file stores each one as a
