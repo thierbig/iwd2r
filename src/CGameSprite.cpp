@@ -2730,6 +2730,355 @@ void CGameSprite::AddBlood(SHORT nHeight, SHORT nDirection, SHORT nType)
     }
 }
 
+// 0x6FC260
+BOOLEAN CGameSprite::CompressTime(DWORD deltaTime)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CheckTimers(deltaTime / CTimerWorld::TIMESCALE_MSEC_PER_SEC);
+
+    // The exe computes this from the globals: TIMESCALE_MSEC_PER_SEC *
+    // TIMESCALE_SEC_PER_MIN = 900 (0x385), one in-game minute.
+    if (deltaTime <= CTimerWorld::TIMESCALE_MSEC_PER_SEC * CTimerWorld::TIMESCALE_SEC_PER_MIN) {
+        return TRUE;
+    }
+
+    if (m_expirationTime < pGame->GetWorldTimer()->m_gameTime) {
+        RemoveFromArea();
+        return FALSE;
+    }
+
+    INT nIntoxicationRate;
+    INT nRecoveryRate;
+    INT nIntoxicationCap;
+    pGame->GetRuleTables().GetIntoxicationInfo(static_cast<BYTE>(m_derivedStats.m_nCON),
+        nIntoxicationRate,
+        nRecoveryRate,
+        nIntoxicationCap);
+    INT nIntox = static_cast<INT>(static_cast<BYTE>(m_baseStats.m_intoxication))
+        - static_cast<INT>(deltaTime / CTimerWorld::TIMESCALE_MSEC_PER_HOUR) * nRecoveryRate;
+    // The exe clamps via sets/dec/and: a negative difference stores 0, a
+    // non-negative one keeps its value.
+    m_baseStats.m_intoxication = static_cast<BYTE>((nIntox < 0 ? 0 : -1) & nIntox);
+
+    HandlePersistantEffects(deltaTime);
+    field_562C = 1;
+    m_spriteEffectDuration = 0;
+
+    DWORD dwRate = m_derivedStats.m_nMoraleRecoveryTime;
+    if (dwRate == 0) {
+        m_baseStats.m_morale = 10;
+    } else {
+        DWORD dwStep = (deltaTime / 2) / (CTimerWorld::TIMESCALE_MSEC_PER_SEC * dwRate);
+        BYTE nMorale = m_baseStats.m_morale;
+        if (nMorale < 10) {
+            m_baseStats.m_morale = static_cast<BYTE>(dwStep < static_cast<BYTE>(10 - nMorale))
+                ? static_cast<BYTE>(nMorale + dwStep)
+                : 10;
+        } else if (nMorale > 10) {
+            m_baseStats.m_morale = static_cast<BYTE>(dwStep < static_cast<BYTE>(nMorale - 10))
+                ? static_cast<BYTE>(nMorale - dwStep)
+                : 10;
+        }
+    }
+
+    if (m_posZ < 0) {
+        m_posZ = 0;
+        m_doBounce = 0;
+        m_animationRunning = 0;
+    }
+    m_nDirection = m_nNewDirection;
+
+    // __FILE__: .\Include\ObjAnimation.h
+    // __LINE__: 2074
+    UTIL_ASSERT(m_animation.m_animation != NULL);
+    m_animation.ChangeDirection(m_nDirection);
+
+    SHORT nSequence = m_nSequence;
+    if (nSequence == SEQ_DIE || nSequence == SEQ_TWITCH) {
+        // 0x50FE: Ghidra smeared this as m_animation + 0x12.
+        m_nTwitches = 0;
+        SetSequence(SEQ_TWITCH);
+    } else if (nSequence != SEQ_SLEEP) {
+        SHORT nWant = SEQ_HEAD_TURN;
+        if (m_pArea != NULL
+            && m_pArea->m_bAreaLoaded != FALSE
+            && pGame->sub_5AC0A0(m_pArea) != 0) {
+            nWant = SEQ_READY;
+        }
+        // __FILE__: .\Include\ObjAnimation.h
+        // __LINE__: 2365
+        UTIL_ASSERT(m_animation.m_animation != NULL);
+        if (m_nSequence != nWant || m_animation.IsEndOfSequence()) {
+            SetSequence(nWant);
+        }
+    }
+
+    if (pGame->GetGameSave()->m_cutScene == FALSE
+        && (m_curAction.m_internalFlags & 1) == 0) {
+        CAITrigger trigger(0x93, 0); // trigger 147, unnamed in the house tables
+        if (m_curAction.m_actionID == 0) {
+            CAIAction action;
+            SetCurrAction(GetNextAction(action));
+        }
+        CAIAction action1 = m_curAction;
+        CAIAction action2;
+        if (m_queuedActions.GetCount() != 0) {
+            action2 = *m_queuedActions.GetHead();
+        }
+        ClearAI(TRUE);
+        if (m_pPath != NULL) {
+            delete m_pPath;
+            m_pPath = NULL;
+        }
+        DropSearchRequest();
+        if (action1.m_actionID == 0x60) { // action 96, unnamed in the house tables
+            AddAction(action1);
+            m_pendingTriggers.AddTail(new CAITrigger(trigger));
+        }
+        if (action2.m_actionID == 0x60) {
+            AddAction(action2);
+            m_pendingTriggers.AddTail(new CAITrigger(trigger));
+        }
+    }
+
+    if (m_active == 0 || m_activeAI == 0 || m_activeImprisonment == 0) {
+        if (((m_timeOfDayVisible >> pGame->GetWorldTimer()->GetCurrentHour()) & 0x1) != 0) {
+            m_active = TRUE;
+            switch (m_listType) {
+            case CGAMEOBJECT_LIST_FRONT:
+                // __FILE__: .\Include\ObjAnimation.h
+                // __LINE__: 951
+                UTIL_ASSERT(m_animation.m_animation != NULL);
+                m_pArea->m_search.AddObject(
+                    CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                        m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                    m_typeAI.GetEnemyAlly(),
+                    m_animation.GetPersonalSpace(),
+                    field_54A8,
+                    field_7430);
+                // NOTE: Uninline.
+                m_pArea->AddToMarkers(m_id);
+                JumpToPoint(m_pos, TRUE);
+                break;
+            case CGAMEOBJECT_LIST_BACK:
+                if ((m_derivedStats.m_generalState & STATE_SLEEPING) != 0) {
+                    // __FILE__: .\Include\ObjAnimation.h
+                    // __LINE__: 951
+                    UTIL_ASSERT(m_animation.m_animation != NULL);
+                    m_pArea->m_search.AddObject(
+                        CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                        m_typeAI.GetEnemyAlly(),
+                        m_animation.GetPersonalSpace(),
+                        field_54A8,
+                        field_7430);
+                    // NOTE: Uninline.
+                    m_pArea->AddToMarkers(m_id);
+                    JumpToPoint(m_pos, TRUE);
+                } else {
+                    m_pArea->IncrHeightDynamic(m_pos);
+                }
+                break;
+            case CGAMEOBJECT_LIST_FLIGHT:
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+                // __LINE__: 4935
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+        } else {
+            m_active = FALSE;
+            switch (m_listType) {
+            case CGAMEOBJECT_LIST_FRONT:
+                // NOTE: Uninline.
+                m_pArea->RemoveFromMarkers(m_id);
+                // __FILE__: .\Include\ObjAnimation.h
+                // __LINE__: 951
+                UTIL_ASSERT(m_animation.m_animation != NULL);
+                m_pArea->m_search.RemoveObject(
+                    CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                        m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                    m_typeAI.GetEnemyAlly(),
+                    m_animation.GetPersonalSpace(),
+                    field_54A8,
+                    field_7430);
+                break;
+            case CGAMEOBJECT_LIST_BACK:
+                if ((m_derivedStats.m_generalState & STATE_SLEEPING) == 0) {
+                    m_pArea->DecrHeightDynamic(m_pos);
+                } else {
+                    // NOTE: Uninline.
+                    m_pArea->RemoveFromMarkers(m_id);
+                    // __FILE__: .\Include\ObjAnimation.h
+                    // __LINE__: 951
+                    UTIL_ASSERT(m_animation.m_animation != NULL);
+                    m_pArea->m_search.RemoveObject(
+                        CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                        m_typeAI.GetEnemyAlly(),
+                        m_animation.GetPersonalSpace(),
+                        field_54A8,
+                        field_7430);
+                }
+                break;
+            case CGAMEOBJECT_LIST_FLIGHT:
+                break;
+            default:
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+                // __LINE__: 4897
+                UTIL_ASSERT(FALSE);
+                break;
+            }
+        }
+    }
+
+    if (m_bGlobal == 0) {
+        if (deltaTime > CTimerWorld::TIMESCALE_MSEC_PER_HOUR && Animate() == 0) {
+            if ((m_baseStats.m_flags & 4) != 0) {
+                return TRUE;
+            }
+            RemoveFromArea();
+            return FALSE;
+        }
+
+        if (deltaTime <= CRuleTables::TIME_RESTING) {
+            return TRUE;
+        }
+
+        if ((m_pos.x != m_posStart.x || m_pos.y != m_posStart.y)
+            && (~m_baseStats.m_flags & 0x100000) != 0) {
+            m_fCircleChange = 0.0;
+            m_fCurrCircleChange = 1.0;
+            JumpToPoint(m_posStart, TRUE);
+            m_canBeSeen = 0;
+            if (m_bVisibleMonster != FALSE) {
+                m_bVisibleMonster = FALSE;
+                m_pArea->m_nVisibleMonster--;
+            }
+            CheckIfVisible();
+        }
+
+        if (m_sName != "Ennelia" && m_sName != "Reig" && m_sName != "Gerbash"
+            && static_cast<SHORT>(m_derivedStats.m_nMaxHitPoints)
+                != static_cast<SHORT>(m_baseStats.m_hitPoints)) {
+            // The exe news the effect directly and set m_effectAmount; the
+            // constructor-default writes are omitted.
+            CGameEffectHeal* pHeal = new CGameEffectHeal();
+            pHeal->m_effectAmount = 10000;
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                new CMessageAddEffect(pHeal, m_id, m_id), FALSE);
+        }
+
+        for (UINT nClass = 0; nClass < CSPELLLIST_NUM_CLASSES; nClass++) {
+            CGameSpriteGroupedSpellList& spells = m_spells.m_spellsByClass[nClass];
+            for (UINT nLevel = 0; nLevel < spells.m_nHighestLevel; nLevel++) {
+                CGameSpriteSpellList& levelList = spells.m_lists[nLevel];
+                if (nClass == 0 || nClass == 5) {
+                    spells.sub_726150(nLevel, 0, TRUE);
+                } else {
+                    for (UINT j = 0; j < levelList.m_List.size(); j++) {
+                        spells.sub_726060(levelList.m_List[j].m_nID, nLevel, 0, TRUE);
+                    }
+                }
+            }
+        }
+        for (UINT nLevel = 0; nLevel < m_domainSpells.m_nHighestLevel; nLevel++) {
+            CGameSpriteSpellList& levelList = m_domainSpells.m_lists[nLevel];
+            for (UINT j = 0; j < levelList.m_List.size(); j++) {
+                m_domainSpells.sub_726060(levelList.m_List[j].m_nID, nLevel, 0, TRUE);
+            }
+        }
+        for (UINT j = 0; j < m_innateSpells.m_List.size(); j++) {
+            m_innateSpells.sub_725C50(m_innateSpells.m_List[j].m_nID, 0, TRUE);
+        }
+        for (UINT j = 0; j < m_shapeshifts.m_List.size(); j++) {
+            m_shapeshifts.sub_725C50(m_shapeshifts.m_List[j].m_nID, 0, TRUE);
+        }
+        return TRUE;
+    }
+
+    // Party member (m_bGlobal != 0): keep the character screens in step and
+    // replant the sprite in formation around the leader.
+    BOOL bConnectionEstablished = g_pChitin->cNetwork.m_bConnectionEstablished;
+    LONG nLeaderId = bConnectionEstablished
+        ? pGame->GetProtagonist()
+        : (pGame->m_nCharacters < 1 ? -1 : pGame->m_characterPortraits[0]);
+    SHORT nPortrait = bConnectionEstablished
+        ? pGame->GetFixedOrderCharacterPortraitNum(m_id)
+        : pGame->GetCharacterPortraitNum(m_id);
+    if (nPortrait == -1) {
+        return TRUE;
+    }
+
+    ProcessEffectList();
+    g_pBaldurChitin->GetActiveEngine()->UpdateCharacterStatus(m_id);
+
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE
+        && (g_pChitin->cNetwork.m_nServiceProvider == 0
+            || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
+        m_cLastSpriteUpdate.Initialize(TRUE);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSpriteUpdate(this, m_id, m_id), FALSE);
+    }
+
+    if (m_id == nLeaderId) {
+        return TRUE;
+    }
+    if (m_pArea == NULL) {
+        return TRUE;
+    }
+    if (!Orderable(FALSE)) {
+        return TRUE;
+    }
+
+    CGameObject* pLeader;
+    if (pGame->GetObjectArray()->GetShare(nLeaderId, CGameObjectArray::THREAD_ASYNCH, &pLeader, INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        return TRUE;
+    }
+
+    if (pLeader->m_pArea == m_pArea
+        && (*(BYTE*)((BYTE*)m_pArea + 0x40) & 1) != 0) { // +0x40: m_randomCreatureString[8], bit 0
+        CGameSprite* pLeaderSprite = static_cast<CGameSprite*>(pLeader);
+        SHORT nDirection = static_cast<SHORT>((pLeaderSprite->m_nNewDirection + 8) * 360 / 16 % 360);
+        SHORT nFormation = bConnectionEstablished
+            ? 6
+            : pGame->GetGameSave()->m_curFormation;
+        CPoint* offsets = pGame->m_group.GetOffsets(nFormation, nDirection, TRUE);
+        CPoint pos = pLeader->GetPos();
+        LONG tx = pos.x / 0x10 + offsets[nPortrait].x / 1000;
+        LONG ty = pos.y / 0xC + offsets[nPortrait].y / 1000;
+        delete[] offsets;
+
+        // __FILE__: .\Include\ObjAnimation.h
+        // __LINE__: 951
+        UTIL_ASSERT(m_animation.m_animation != NULL);
+        BYTE nPersonalSpace = m_animation.GetPersonalSpace();
+        CPoint nearest = m_pArea->m_search.GetNearestOpenSquare(
+            CPoint(tx, ty), GetTerrainTable(), nPersonalSpace, -1);
+        CPoint pt(nearest.x * 0x10 + 8, nearest.y * 0xC + 6);
+        if (!m_pArea->CheckWalkable(
+                pLeader->GetPos(), pt, GetVisibleTerrainTable(), static_cast<BYTE>(nPersonalSpace + 2), TRUE)) {
+            tx = pos.x / 0x10;
+            ty = pos.y / 0xC;
+            nearest = m_pArea->m_search.GetNearestOpenSquare(
+                CPoint(tx, ty), GetTerrainTable(), nPersonalSpace, -1);
+            pt = CPoint(nearest.x * 0x10 + 8, nearest.y * 0xC + 6);
+            if (!m_pArea->CheckWalkable(
+                    pLeader->GetPos(), pt, GetVisibleTerrainTable(), static_cast<BYTE>(nPersonalSpace + 2), TRUE)) {
+                pGame->GetObjectArray()->ReleaseShare(nLeaderId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+                return TRUE;
+            }
+        }
+        JumpToPoint(pt, TRUE);
+    }
+
+    pGame->GetObjectArray()->ReleaseShare(nLeaderId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    return TRUE;
+}
+
 // 0x6F9040
 void CGameSprite::AIUpdateWalk()
 {
