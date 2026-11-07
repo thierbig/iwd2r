@@ -9815,8 +9815,105 @@ void CInfGame::LeaveAreaLUA(LONG nCharacterId, LONG nX, LONG nY, SHORT nDirectio
 
     g_pBaldurChitin->m_pEngineWorld->m_weather.OnAreaChange(TRUE);
 
-    // TODO: The remainder of the 4,001-byte body (the broadcast/progress
-    // screen block onward) ports below, range by range.
+    // The host tells the other players of the transition: CBaldurMessage
+    // 0x425CA0 (with the character, the position, the direction and both
+    // strings) builds the LEAVEAREALUA 88/65 broadcast and 0x437D70 sends
+    // it. Not ported: there is no other player
+    // (docs/adr/0002-single-player-only.md).
+
+    sub_59FA00(TRUE);
+
+    // The travel screen: a caller-supplied parchment resource names the
+    // screen to show (image 5, the resource kept for the world map);
+    // without one the engine picks one of the five at random.
+    if (strcmp(sParchment, "") != 0) {
+        pGame->m_nTravelScreenImageToUse = 5;
+        CResRef cRes(sParchment);
+        // The original stores the image twice — once from the immediate,
+        // once from the travel-screen-count byte at 0x8518BC (also 5).
+        pGame->m_nTravelScreenImageToUse = 5;
+        pGame->m_cTravelScreenArea = cRes;
+    } else {
+        pGame->m_nTravelScreenImageToUse = static_cast<BYTE>(rand() % 5);
+    }
+
+    STRREF nTravelStrref = pGame->sub_5C3770(sParchment);
+
+    field_1B86 = sAreaName;
+
+    // The travel progress screen; its target is the 6,000,000-byte area
+    // load ahead (the trigger sibling gives the host 11,000,000 instead).
+    g_pChitin->SetProgressBar(TRUE, 9891, 0, 0, TRUE, nTravelStrref, FALSE, 0, FALSE, FALSE, 255);
+    g_pChitin->cProgressBar.m_nActionProgress = 0;
+    g_pChitin->cProgressBar.m_nActionTarget = 6000000;
+    g_pChitin->cProgressBar.m_bDisableMinibars = FALSE;
+
+    BOOLEAN bListenToJoin = FALSE;
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        bListenToJoin = pGame->GetMultiplayerSettings()->GetListenToJoinOption();
+        pGame->GetMultiplayerSettings()->SetListenToJoinOption(FALSE, FALSE);
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        // The host waits up to 40 rounds of 60 ms for the clients' resource
+        // demands (one per other player). Alone, it does not wait.
+        SHORT nPlayers = 0;
+        for (INT nPlayer = 0; nPlayer < 6; nPlayer++) {
+            if (g_pChitin->cNetwork.GetPlayerID(nPlayer) != 0) {
+                nPlayers++;
+            }
+        }
+
+        if (g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
+            g_pChitin->cProgressBar.m_nWaitingReason = 19715;
+            g_pChitin->cProgressBar.m_bWaiting = TRUE;
+        }
+
+        SHORT nRounds = 40;
+        SHORT nDemands = 0;
+        do {
+            if (nDemands >= nPlayers - 1) {
+                break;
+            }
+
+            INT nMsgFrom;
+            DWORD dwSize;
+            BYTE* pData = pMessage->PollSpecificMessageType(CBaldurMessage::MSG_TYPE_RESOURCE,
+                CBaldurMessage::MSG_SUBTYPE_RESOURCE_DEMAND,
+                nMsgFrom,
+                dwSize);
+            if (pData != NULL) {
+                pMessage->OnResourceDemanded(nMsgFrom, pData, dwSize);
+                delete pData;
+                nDemands++;
+            }
+
+            g_pChitin->m_bDisplayStale = TRUE;
+            SleepEx(60, FALSE);
+            nRounds--;
+
+            nPlayers = 0;
+            for (INT nPlayer = 0; nPlayer < 6; nPlayer++) {
+                if (g_pChitin->cNetwork.GetPlayerID(nPlayer) != 0) {
+                    nPlayers++;
+                }
+            }
+        } while (nRounds > 0);
+
+        if (nPlayers > 1 && nRounds > 0) {
+            for (SHORT n = nRounds; n != 0; n--) {
+                g_pChitin->m_bDisplayStale = TRUE;
+                SleepEx(60, FALSE);
+            }
+        }
+
+        g_pChitin->cProgressBar.m_bWaiting = FALSE;
+        g_pBaldurChitin->m_cCachingStatus.InvalidateScreen();
+    }
+
+    // TODO: The remainder of the 4,001-byte body (the destination area load,
+    // the party/familiar move and the client panic data) ports below, range
+    // by range.
 }
 
 // The host's transition of the whole party through a party required travel
