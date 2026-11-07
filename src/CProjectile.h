@@ -113,4 +113,19 @@ public:
     CProjectile85112C();
 };
 
+// Type 312's projectile (vtable 0x85133C): a memberless direct CProjectile
+// subclass — the decoder news exactly sizeof(CProjectile) (0x192) and calls
+// the constructor and nothing else. Its ctor has the base CProjectile
+// constructor (0x529490) inlined whole, stamping the base vtable 0x84D7B8
+// mid-construction before installing its own (the 0x530790 / 0x529CE0
+// shape). Against CProjectile's 32-entry vtable 0x84D7B8 it overrides only
+// the deleting dtor (0x57F360 — the ICF fold shares this thunk with
+// CProjectile85112C's; the scalar half 0x57F380 is a jmp straight to
+// CProjectile's 0x51E9B0; ours implicit, the CProjectile84DAD4 precedent)
+// and Fire (0x57F390, not in tree, left undeclared per the same precedent).
+class CProjectile85133C : public CProjectile {
+public:
+    CProjectile85133C();
+};
+
 #endif /* CPROJECTILE_H_ */

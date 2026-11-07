@@ -701,6 +701,11 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pArea->m_nDuration = 0xC8;
         pProjectile = pArea;
         break;
+    case 312:
+        // A memberless leaf straight on CProjectile; its only real
+        // override is Fire (0x57F390, not in tree).
+        pProjectile = new CProjectile85133C();
+        break;
     case 313:
         // Lance of Disruption: the 600-long rake.
         pBolt = new CProjectileLightningBolt("LoDisrT");
@@ -2783,7 +2788,6 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   constructor is fully inlined at the call site; the class is not
         //   ported;
         // - types whose constructor is not ported yet:
-        //   TODO: type 312: ctor 0x57F210 not ported
         //   TODO: type 305: ctor 0x57F640 not ported
         //   TODO: type 304: ctor 0x5802B0 not ported
         //   TODO: type 314: ctor 0x580C00 not ported
@@ -5008,6 +5012,20 @@ CProjectile8511AC::CProjectile8511AC(const char* szResRef)
     m_bHasHeight = TRUE;
     m_fireSoundRef = "TRA_02";
     m_arrivalSoundRef = "";
+}
+
+// 0x57F210
+CProjectile85133C::CProjectile85133C()
+{
+    // The exe inlines the base CProjectile constructor (0x529490) whole —
+    // the CGameObject base call (0x4C7B30), the m_effectList container
+    // (0x5371A0), the CSound member (0x7A8BB0), the three CResRef members
+    // (0x78A960) and the base's own "" assigns (0x78AD40) — stamping the
+    // base vtable 0x84D7B8 mid-construction (0x57F2A5) before installing
+    // 0x85133C (0x57F33E); the implicit CProjectile() performs the same
+    // stores — the instruction-level match of this same inlined body is
+    // recorded in docs/evidence/530790.md for ctor 0x530790. The class
+    // adds no members, so there is nothing further to construct.
 }
 
 // 0x57F760
