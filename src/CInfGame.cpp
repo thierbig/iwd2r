@@ -12654,13 +12654,63 @@ LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature)
 
     DWORD nOldSpellBytes = 0;
 
-    // TODO(range 2, 0x5A6B56-0x5A6ED1): loop 1 — the flat memorized list.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // Loop 1 — the V2.1 flat memorized list (list pointer dword @0x3BA,
+    // count dword @0x3BE). The exe adds the flat block's 0xC-per-entry
+    // bytes after the loop (0x5A6ED1); same sum here.
+    {
+        COldCreatureFileSpell* pOldSpell = reinterpret_cast<COldCreatureFileSpell*>(pOldCreature + *reinterpret_cast<DWORD*>(pOldCreature + 0x3BA));
+        DWORD nCount = *reinterpret_cast<DWORD*>(pOldCreature + 0x3BE);
+        nOldSpellBytes += nCount * sizeof(COldCreatureFileSpell);
+
+        for (DWORD i = 0; i < nCount; i++) {
+            COldCreatureFileSpell* tempOldSpell = pOldSpell + i;
+
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+            // __LINE__: 6486
+            UTIL_ASSERT(tempOldSpell->m_spellLevel >= 0 && tempOldSpell->m_spellLevel < CSPELLLIST_MAX_LEVELS);
+
+            CResRef resRef(tempOldSpell->m_resRef);
+            UINT nID = 0;
+            const unsigned int one = 1;
+            const unsigned int zero = 0;
+
+            if (tempOldSpell->m_type == 2) { // 2: .rdata byte @0x85BB63
+                // Song/shapeshift/innate spells are looked up in that order;
+                // a hit lands in the matching extra list.
+                if (pGame->m_songs.Find(resRef, nID)) {
+                    songSpells.Add(nID, one, one, zero);
+                } else if (pGame->m_shapeshifts.Find(resRef, nID)) {
+                    shapeSpells.Add(nID, one, one, zero);
+                } else if (pGame->m_innateSpells.Find(resRef, nID)) {
+                    innateSpells.Add(nID, one, one, zero);
+                } else {
+                    // The exe formats this into a temporary CString and
+                    // discards the result.
+                    char sResRef[9];
+                    memcpy(sResRef, tempOldSpell->m_resRef, 8);
+                    sResRef[8] = '\0';
+                    CString sObsolete(" ");
+                    sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                }
+            } else {
+                if (pGame->m_spells.Find(resRef, nID)) {
+                    const UINT nLevel = static_cast<UINT>(static_cast<unsigned short>(tempOldSpell->m_spellLevel));
+                    spells.Get(nClassIndex)->Add(nID, nLevel, one, one, zero);
+                } else {
+                    char sResRef[9];
+                    memcpy(sResRef, tempOldSpell->m_resRef, 8);
+                    sResRef[8] = '\0';
+                    CString sObsolete(" ");
+                    sObsolete.Format("*** OBSOLETE SPELL FILE: %s", sResRef);
+                }
+            }
+        }
+    }
+
     // TODO(range 3, 0x5A6ED1-0x5A7461): loop 2 — the known-spell headers.
     // TODO(range 4, 0x5A7461-0x5A7731): the sizing walk and the delta.
-
-    // Interim (deleted by range 2): the loops below are the first consumers.
-    (void)nClassIndex;
-    (void)nOldSpellBytes;
 
     return 0;
 }
