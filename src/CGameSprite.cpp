@@ -8921,15 +8921,60 @@ void CGameSprite::Unmarshal(BYTE* pCreature, LONG creatureSize, WORD facing, int
     }
 
     if (bNeedUpgrade) {
-        // TODO: Incomplete. The original upgrades older creature files in
-        // place (0x70D013-0x70D1B6): a "CRE V2.0" or "CRE V9.2" file is
-        // copied into a buffer 0xCA bytes larger (bAlloced) and converted to
-        // V2.1 by 0x5A7740; a "CRE V2.1" file then grows by 0x240 plus what
-        // 0x5A69B0 returns for it and is converted to V2.2 by 0x5A7940
-        // (through 0x5A3DB0 and 0x5A5060). Those converters are InfGame.cpp
-        // functions src/ does not define yet. Every CRE of the vanilla data
-        // (1655 in CHITIN.KEY and Override) is V2.2, apart from four V9.1
-        // files the original rejects as corrupt.
+        // The "CRE V2.0"/"CRE V9.2" arm (0x70D019): the file image is
+        // copied into a buffer 0xCA bytes larger and brought to V2.1 in
+        // place (a V9.2 image is normalized onto the V2.0 layout first,
+        // inside the callee). The min() clamp on the copy is the exe's own
+        // inline (a signed compare against the grown size).
+        if (memcmp(pCreature, "CRE V2.0", 8) == 0 || memcmp(pCreature, "CRE V9.2", 8) == 0) {
+            LONG nGrownSize = creatureSize + 0xCA;
+
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+            // __LINE__: 12731
+            UTIL_ASSERT(nGrownSize > 0);
+
+            BYTE* pGrown = new BYTE[nGrownSize];
+            memcpy(pGrown, pCreature, creatureSize < nGrownSize ? creatureSize : nGrownSize);
+            pCreature = pGrown;
+            creatureSize = nGrownSize;
+            bAlloced = TRUE;
+
+            // 0x5A7740
+            UpgradeCreatureFileToV21(&pCreature, &creatureSize);
+        }
+
+        // The "CRE V2.1" arm (0x70D0CF): the destination is sized here —
+        // 0x240 plus the converter's spell-data delta — and allocated
+        // before the call; a zero total growth (0x70D105) skips the
+        // allocation and passes a NULL old buffer, which the callee's null
+        // assert rejects exactly as the original does.
+        if (memcmp(pCreature, "CRE V2.1", 8) == 0) {
+            LONG nOldSize = creatureSize;
+            LONG nGrow = ComputeCreatureFileV21ToV22Delta(pCreature) + 0x240;
+
+            BYTE* pOld = NULL;
+            if (nGrow != 0) {
+                LONG nNewSize = nOldSize + nGrow;
+
+                // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+                // __LINE__: 12786
+                UTIL_ASSERT(nNewSize > 0);
+
+                pOld = pCreature;
+                pCreature = new BYTE[nNewSize];
+                creatureSize = nNewSize;
+            }
+
+            // 0x5A7940
+            UpgradeCreatureFileToV22(&pCreature, &creatureSize, pOld, &nOldSize);
+
+            // The intermediate V2.1 buffer is freed only when this
+            // function allocated it (the V2.0 arm above); a native V2.1
+            // file stays owned by the caller.
+            if (bAlloced && pOld != NULL) {
+                delete[] pOld;
+            }
+        }
     }
 
     ClearMarshal(TRUE);
@@ -9326,7 +9371,7 @@ void CGameSprite::Unmarshal(BYTE* pCreature, LONG creatureSize, WORD facing, int
     m_bonusStats.BonusInit();
 
     if (bAlloced) {
-        delete pCreature;
+        delete[] pCreature;
     }
 }
 

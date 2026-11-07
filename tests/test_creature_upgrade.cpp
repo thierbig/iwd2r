@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
+#include "CGameSprite.h"
 #include "CInfGame.h"
 #include "CResRef.h"
 #include "engine_world.h"
@@ -844,4 +846,153 @@ TEST_CASE("upgrade: the V2.0 effects stride follows the last-block flag", "[crea
     CHECK(std::memcmp(out + 0x3EE, oldBytes + 0x33C, 52) == 0);
     CHECK(std::memcmp(out + 0x422, oldBytes + 0x370, 0x1A) == 0);
     CHECK(out[0x5A6] == 0); // past the widened section: still the zero fill
+}
+
+// ---------------------------------------------------------------------------
+// CGameSprite::Unmarshal's upgrade ladder (0x70CF90): a "CRE V2.0" (or the
+// V9.2 image 0x5A7740 normalizes to one) is grown by 0xCA and brought to
+// V2.1; a "CRE V2.1" image is re-sized by ComputeCreatureFileV21ToV22Delta
+// + 0x240 and rewritten by 0x5A7940; the sprite then parses the result
+// exactly as a native V2.2 file. These tests drive the ladder through the
+// real CGameSprite constructor, the way a saved-game or area load does.
+
+namespace {
+
+// CHARBASE.CRE's bytes through the engine's resource system: a known-good
+// V2.2 image whose header supplies real stats (name strref, animation,
+// colors, portraits) for the band Unmarshal memcpys into m_baseStats.
+std::vector<BYTE> LoadCharBaseBytes()
+{
+    CCreatureFile file;
+    file.SetResRef(CResRef("CHARBASE"), TRUE, TRUE);
+    BYTE* data = file.GetData();
+    std::vector<BYTE> bytes;
+    if (data != NULL) {
+        bytes.assign(data, data + file.GetDataSize());
+    }
+    file.Release();
+    return bytes;
+}
+
+// A sprite made the way StartCreateChar makes one (0x610540): the ctor's
+// Unmarshal call is the ladder's caller.
+CGameSprite* MakeSprite(std::vector<BYTE>& bytes)
+{
+    return new CGameSprite(bytes.data(),
+        static_cast<LONG>(bytes.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+}
+
+} // namespace
+
+TEST_CASE("unmarshal: a V2.0 and a V2.1 creature load as V2.2", "[creature-upgrade][data]")
+{
+    GameOrSkip();
+
+    const std::vector<BYTE> real = LoadCharBaseBytes();
+    REQUIRE(real.size() > 0x384);
+    REQUIRE(std::memcmp(real.data(), "CRE V2.2", 8) == 0);
+    WORD nRealAnimationWord = 0;
+    std::memcpy(&nRealAnimationWord, real.data() + 0x28, sizeof(nRealAnimationWord));
+    const short nRealAnimation = static_cast<short>(nRealAnimationWord);
+
+    SECTION("a V2.1 image runs the 0x5A7940 arm")
+    {
+        std::vector<BYTE> v21(0x456);
+        // Every section empty: the rebuilt equipment header at 0x3EE is
+        // the only tail block, so the spellbook tables are never consulted.
+        PutV21Skeleton(v21.data(), v21.size(), 2, 0x3EE, 0x456, 0, 0x456, 0, "DLGTST01");
+        // Real stats for the whole +8..+0x384 band, which the converter
+        // copies verbatim and Unmarshal memcpys into m_baseStats. The
+        // equipment header stays zeroed: Unmarshal re-equips from its
+        // selected-weapon fields after the parse, so garbage there would
+        // index weapon sets the creature does not have.
+        std::memset(v21.data() + 0x3EE, 0, 0x68);
+        std::memcpy(v21.data() + 8, real.data() + 8, 0x37C);
+        // Spellbook pointers into the empty equipment header with zero
+        // counts, so the upgrade chain's delta walks no entries (the
+        // skeleton helper leaves these dwords as fill pattern).
+        PutDword(v21.data(), 0x3BA, 0x3EE);
+        PutDword(v21.data(), 0x3BE, 0);
+        PutDword(v21.data(), 0x3C2, 0x3EE);
+        PutDword(v21.data(), 0x3C6, 0);
+        PutDword(v21.data(), 0x3CA, 0x3EE);
+
+        CGameSprite* pSprite = MakeSprite(v21);
+        REQUIRE(pSprite != NULL);
+
+        // The parse ran on the upgraded V2.2 buffer: the grafted header
+        // landed in m_baseStats and the derived abilities followed it —
+        // the same observables the native-V2.2 CHARBASE test checks.
+        CCreatureFileHeader* pBStats = pSprite->GetBaseStats();
+        CHECK(pBStats->m_animationType == nRealAnimation);
+        CHECK(pBStats->m_STRBase == real[0x266]);
+        CHECK(pSprite->m_derivedStats.m_nSTR == real[0x266]);
+        CHECK(pSprite->m_derivedStats.m_nCHR == real[0x26B]);
+    }
+
+    SECTION("a V2.0 image runs the 0x5A7740 arm then the 0x5A7940 arm")
+    {
+        // The V2.0 image tiles exactly: 0x33C bytes of header plus the
+        // 0x50-byte V2.0 equipment header (the only tail block). The
+        // tiling is load-bearing — the Unmarshal ladder grows the buffer
+        // by 0xCA (0xB2 header growth + 0x18 equipment growth) and
+        // 0x5A3DB0 writes every section at +0xB2, so a tiled V2.0 file
+        // lands exactly at the grown size and 0x5A5060's final
+        // size assertion holds.
+        std::vector<BYTE> v20(0x38C);
+        FillPattern(v20.data(), v20.size());
+        std::memcpy(v20.data(), "CRE V2.0", 8);
+        PutByte(v20.data(), 0x2DB, 2); // BG1 class.ids: FIGHTER
+        PutByte(v20.data(), 0x234, 1);
+        PutByte(v20.data(), 0x235, 0);
+        PutByte(v20.data(), 0x236, 0);
+        // The empty V2.0 spellbook sub-header, exactly as
+        // UpgradeMinimalV20Class builds it: the equipment header at 0x33C
+        // is the only tail block.
+        PutDword(v20.data(), 0x308, 0x33C);
+        PutDword(v20.data(), 0x30C, 0);
+        PutDword(v20.data(), 0x310, 0x33C);
+        PutDword(v20.data(), 0x314, 0);
+        PutDword(v20.data(), 0x318, 0x33C);
+        PutDword(v20.data(), 0x31C, 0);
+        PutDword(v20.data(), 0x320, 0x33C);
+        PutDword(v20.data(), 0x324, 0x33C);
+        PutDword(v20.data(), 0x328, 0);
+        PutDword(v20.data(), 0x32C, 0x33C);
+        PutDword(v20.data(), 0x330, 0);
+        PutResref(v20.data(), 0x334, "DLGTEST");
+        // A zeroed V2.0 equipment header (0x50 bytes at 0x33C, the only
+        // tail block): 0x5A3DB0 rebuilds it into the 0x68-byte V2.1 form
+        // (0xFF fill plus the source's 0x50 bytes re-based), and Unmarshal
+        // re-equips from its selected-weapon fields, so zero keeps the
+        // parse benign.
+        std::memset(v20.data() + 0x33C, 0, 0x50);
+        // Real stats for the +8..+0x45 band — the header band both
+        // converters copy verbatim. Beyond it the pattern fill stands in
+        // for old-creature data and survives both in-place conversions.
+        std::memcpy(v20.data() + 8, real.data() + 8, 0x3D);
+
+        CGameSprite* pSprite = MakeSprite(v20);
+        REQUIRE(pSprite != NULL);
+
+        // Same proof, split by source: the grafted band carries the real
+        // animation, and 0x5A3DB0's move list pins each ability to its
+        // V2.0 source byte — STRBase@0x266 <- 0x238, INTBase@0x267 <-
+        // 0x23A, CHRBase@0x26B <- 0x23E (inside the 0x267<-0x23A
+        // seven-byte move) — before 0x5A5060 copies the header band
+        // verbatim into the V2.2 image.
+        CCreatureFileHeader* pBStats = pSprite->GetBaseStats();
+        CHECK(pBStats->m_animationType == nRealAnimation);
+        CHECK(pBStats->m_STRBase == PatternByte(0x238));
+        CHECK(pBStats->m_INTBase == PatternByte(0x23A));
+        CHECK(pBStats->m_CHRBase == PatternByte(0x23E));
+    }
 }

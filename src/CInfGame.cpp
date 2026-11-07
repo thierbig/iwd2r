@@ -12809,6 +12809,125 @@ LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature)
     return nTotalBytes - nOldSpellBytes;
 }
 
+// 0x5A7740
+void UpgradeCreatureFileToV21(BYTE** ppCreature, LONG* plSize)
+{
+    BYTE* pCreature = *ppCreature;
+
+    // Already V2.1 — nothing to do.
+    if (memcmp(pCreature, "CRE V2.1", 8) == 0) {
+        return;
+    }
+
+    // Version gate — "CRE V9.2" or "CRE V2.0"; anything else asserts. The
+    // assert does not stop the walk: both version checks below it then
+    // miss too and the function is a no-op (the buffer passes through
+    // unconverted, exactly as the original leaves it).
+    if (memcmp(pCreature, "CRE V9.2", 8) != 0 && memcmp(pCreature, "CRE V2.0", 8) != 0) {
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+        // __LINE__: 6768
+        UTIL_ASSERT(FALSE);
+    }
+
+    pCreature = *ppCreature;
+
+    // The V9.2 image is normalized in place onto the V2.0 layout first:
+    // the legacy class byte shifted down by 6, two always-zero bytes, a
+    // tier byte derived from the XP total, two 20-minus stat flips, and
+    // the difficulty default — then the signature is rewritten "CRE V2.0"
+    // so the shared V2.0 arm below converts it.
+    if (memcmp(pCreature, "CRE V9.2", 8) == 0) {
+        BYTE nClass = pCreature[0x53];
+        if (nClass > 5) {
+            pCreature[0x53] = static_cast<BYTE>(nClass - 6);
+        }
+        pCreature[0x220] = 0;
+        pCreature[0x221] = 0;
+
+        // The XP total (raw offset 0x14) maps onto the tier byte at 0x222
+        // over the original's thresholds (each strictly greater, unsigned
+        // compares, so the ladder's floor is tier 1).
+        DWORD nXp = *reinterpret_cast<const DWORD*>(pCreature + 0x14);
+        BYTE nTier;
+        if (nXp > 0xC350) {
+            nTier = 15;
+        } else if (nXp > 0x7530) {
+            nTier = 14;
+        } else if (nXp > 0x4E20) {
+            nTier = 13;
+        } else if (nXp > 0x3A98) {
+            nTier = 12;
+        } else if (nXp > 0x2EE0) {
+            nTier = 11;
+        } else if (nXp > 0x2710) {
+            nTier = 10;
+        } else if (nXp > 0x1F40) {
+            nTier = 9;
+        } else if (nXp > 0x1770) {
+            nTier = 8;
+        } else if (nXp > 0xFA0) {
+            nTier = 7;
+        } else if (nXp > 0x7D0) {
+            nTier = 6;
+        } else if (nXp > 0x578) {
+            nTier = 5;
+        } else if (nXp > 0x1A4) {
+            nTier = 4;
+        } else if (nXp > 0xAF) {
+            nTier = 3;
+        } else if (nXp > 0x78) {
+            nTier = 2;
+        } else {
+            nTier = 1;
+        }
+        pCreature[0x222] = nTier;
+
+        pCreature[0x52] = static_cast<BYTE>(0x14 - pCreature[0x52]);
+        *reinterpret_cast<WORD*>(pCreature + 0x48)
+            = static_cast<WORD>(0x14 - *reinterpret_cast<const WORD*>(pCreature + 0x48));
+
+        if (pCreature[0x2DB] == 0xFF) {
+            pCreature[0x2DB] = 2;
+        }
+
+        memcpy(pCreature, "CRE V2.0", 8);
+    }
+
+    pCreature = *ppCreature;
+
+    if (memcmp(pCreature, "CRE V2.0", 8) == 0) {
+        UpgradeCreatureFileV20ToV21(ppCreature, plSize);
+    }
+}
+
+// 0x5A7940
+void UpgradeCreatureFileToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, LONG* plOldSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+    // __LINE__: 6876
+    UTIL_ASSERT(pOldCreature != NULL);
+
+    // Already V2.2 — nothing to do (defensive: the Unmarshal arm only
+    // reaches this call for a non-V2.2 buffer).
+    if (memcmp(pOldCreature, "CRE V2.2", 8) == 0) {
+        return;
+    }
+
+    if (memcmp(pOldCreature, "CRE V2.1", 8) != 0) {
+        // __LINE__: 6885
+        UTIL_ASSERT(FALSE);
+        return;
+    }
+
+    // The exe re-runs the V2.1 compare before dispatching (0x5A79A9); the
+    // branch is unreachable and ported as written.
+    if (memcmp(pOldCreature, "CRE V2.1", 8) != 0) {
+        return;
+    }
+
+    UpgradeCreatureFileV21ToV22(ppCreature, plSize, pOldCreature, plOldSize);
+}
+
 // 0x5AE020
 BOOL CInfGame::ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCount,
     LONG* pDesiredOverflowIds)

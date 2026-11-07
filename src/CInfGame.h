@@ -129,6 +129,32 @@ BOOL UpgradeCreatureFileV21ToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCrea
 // asserts with a literal FALSE and returns 0.
 LONG ComputeCreatureFileV21ToV22Delta(BYTE* pOldCreature);
 
+// 0x5A7740
+// NOTE: __thiscall CInfGame method in the exe (ret 8): ECX = the CInfGame
+// (the caller loads it from the global at 0x8CF6DC + 0x1C54), two stack
+// arguments; `this` is never read — ported as a free function like the
+// sibling converters. The "bring it to V2.1" half of CGameSprite::Unmarshal's
+// upgrade dispatch: a "CRE V2.1" buffer passes through untouched; a
+// "CRE V9.2" buffer is first normalized in place onto the V2.0 layout (the
+// legacy class byte shift, the XP-derived tier byte, the two 20-minus stat
+// flips) and re-labeled "CRE V2.0"; any "CRE V2.0" image (native or
+// normalized) is handed to UpgradeCreatureFileV20ToV21. Anything else
+// asserts and leaves the buffer unconverted.
+void UpgradeCreatureFileToV21(BYTE** ppCreature, LONG* plSize);
+
+// 0x5A7940
+// NOTE: __thiscall CInfGame method in the exe (ret 0x10): ECX = the CInfGame
+// (the caller loads it from the global at 0x8CF6DC + 0x1C54), four stack
+// arguments; `this` is never read — ported as a free function like the
+// sibling converters. The "bring it to V2.2" half of CGameSprite::Unmarshal's
+// upgrade dispatch: the caller has already sized and allocated the new
+// buffer (old size + 0x240 + ComputeCreatureFileV21ToV22Delta) and passes
+// both sides in. A "CRE V2.2" old buffer passes through untouched; a
+// "CRE V2.1" old buffer is handed to UpgradeCreatureFileV21ToV22 (whose
+// unused fourth word is this function's plOldSize); anything else —
+// including a NULL old buffer — asserts and returns without converting.
+void UpgradeCreatureFileToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreature, LONG* plOldSize);
+
 // NOTE: The entries of `CInfGame::field_4BDC`, an IWD2 addition with no name
 // in the original: an area and an adjustment of the party level the area's
 // spawns use (`CGameArea::Unmarshal`). The game file stores each one as a
