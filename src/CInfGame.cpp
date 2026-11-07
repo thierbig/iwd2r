@@ -11915,7 +11915,258 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
     // from the fill, kept literal.
     memset(pNew + 0x218, 0, 6);
 
-    // TODO(range 3, 0x5A41BA-0x5A4B9B): stat-block conversions and tables.
+    // --- 0x5A41BA-0x5A4B9B: stat block and BG1 class conversion ---
+
+    // Opening stat divides (0x5A41BA-0x5A427D): all unsigned /10 — each byte
+    // loads into a zeroed cl (the xor ecx,ecx is scheduler-hoisted upstream:
+    // 0x5A41D4 for src 0x68, 0x5A41EF for 0x67, 0x5A420A for 0x6A, 0x5A4216
+    // for 0x69, 0x5A4247 for 0x231, 0x5A4256 for 0x83).
+    pNew[0x21E] = pOld[0x45] / 10;
+    pNew[0x220] = pOld[0x66]; // plain byte, no divide
+    pNew[0x221] = pOld[0x68] / 10;
+    pNew[0x222] = pOld[0x67] / 10;
+    pNew[0x223] = pOld[0x6A] / 10;
+    pNew[0x224] = pOld[0x69] / 10;
+    pNew[0x225] = 0; // literal (0x5A422F)
+    pNew[0x226] = pOld[0x231] / 10;
+    pNew[0x227] = pOld[0x83] / 10;
+    *reinterpret_cast<DWORD*>(pNew + 0x270) = 0; // xor edx,edx (0x5A4283)
+
+    // Skills block (0x5A428B-0x5A4407): 0x2B bytes from 0x248 (ten dwords +
+    // three bytes), 0x4A bytes from 0x274 (ten bytes + two rep movsd of
+    // eight dwords), byte 0x2BE alone, then 0x18 bytes from 0x2C0. Src bytes
+    // 0x273 and 0x2BF are dropped by the exe.
+    memcpy(pNew + 0x274, pOld + 0x248, 0x2B);
+    memcpy(pNew + 0x2A0, pOld + 0x274, 0x4A);
+    pNew[0x2EA] = pOld[0x2BE];
+    memcpy(pNew + 0x2EC, pOld + 0x2C0, 0x18);
+
+    // Zero the V2.1 class/level block 0x384..0x3ED (rep stosd 0x1a + stosw,
+    // 0x5A4415-0x5A441E; the mask dword at 0x3B6 is zeroed a second time at
+    // 0x5A443A with the same edx still 0), then seed its first three bytes.
+    memset(pNew + 0x384, 0, 0x6A);
+    pNew[0x384] = pOld[0x2D8];
+    pNew[0x385] = pOld[0x2D9];
+    pNew[0x386] = pOld[0x2DA];
+
+    // Normalize before dispatch (0x5A443D-0x5A446C): the V2.0 class byte at
+    // 0x2DB is a BG1-era class.ids value; a blank 0/0xFF becomes FIGHTER(2),
+    // and the level at 0x234 floors at 1. Both write back to the source.
+    if (pOld[0x2DB] == 0 || pOld[0x2DB] == 0xFF) {
+        pOld[0x2DB] = 2;
+    }
+    if (pOld[0x234] <= 1) {
+        pOld[0x234] = 1;
+    }
+
+    // Dual-class arms halve the source levels and triple-class arms take
+    // max(v/3,1); both write back before the level slots are read (the
+    // and ecx,~1 / shr 1 and imul 0x55555556 idioms, unsigned byte loads
+    // throughout — e.g. 0x5A4B32 and 0x5A4760).
+    auto halveLevel = [&pOld](int nOffset) {
+        pOld[nOffset] = pOld[nOffset] <= 3 ? 1 : pOld[nOffset] / 2;
+    };
+    auto splitLevelThirds = [&pOld](int nOffset) {
+        BYTE nThirds = pOld[nOffset] / 3;
+        pOld[nOffset] = nThirds > 1 ? nThirds : 1;
+    };
+
+    // Class dispatch (0x5A446A-0x5A448F) through the exe's jump tables at
+    // 0x5A4F30/0x5A4F84. Case labels are BG1 class.ids values (1 MAGE,
+    // 2 FIGHTER, 3 CLERIC, 4 THIEF, 5 BARD, 6 PALADIN, 7 F/M, 8 F/C, 9 F/T,
+    // 10 F/M/T, 11 DRUID, 12 RANGER, 13 M/T, 14 C/M, 15 C/T, 16 F/D,
+    // 17 F/M/C, 18 C/R); 202-209 are IWD2-beta ids aliasing the same arms.
+    // Each arm sets the class-mask dword at 0x3B6 (CLASSMASK_*), the
+    // primary-class byte at 0x387 (CAIOBJECTTYPE_C_*), and the per-class
+    // level slots at 0x8B..0x95 — alphabetical: 0x8B barbarian, 0x8C bard,
+    // 0x8D cleric, 0x8E druid, 0x8F fighter, 0x90 monk, 0x91 paladin,
+    // 0x92 ranger, 0x93 rogue, 0x94 sorcerer, 0x95 wizard; 0x8A is the
+    // combined level. The trailing comments name each arm's continuation
+    // into range 4.
+    BYTE levelSum = 0; // triple-class arms only; stored at 0x5A4C46 (range 4)
+    switch (pOld[0x2DB]) {
+    case 1: // MAGE
+    case 202:
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_WIZARD; // 0x5A4496
+        pNew[0x95] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_WIZARD;
+        pNew[0x8A] = pOld[0x234];
+        *reinterpret_cast<DWORD*>(pNew + 0x270) = 0x4000; // kept literal
+        break; // -> 0x5A4C4C
+
+    case 2: // FIGHTER
+    case 203: {
+        // 0x5A44D4: tests the zero-extended WORD at 0x246 against
+        // 0x40000000 — a bit a word load can never carry, so the barbarian
+        // arm is dead in the exe; both paths ported as written.
+        if ((*reinterpret_cast<const WORD*>(pOld + 0x246) & 0x40000000) != 0) {
+            *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_BARBARIAN;
+            pNew[0x8B] = pOld[0x234];
+            pNew[0x387] = CAIOBJECTTYPE_C_BARBARIAN;
+            pNew[0x8A] = pOld[0x234];
+        } else {
+            *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER;
+            pNew[0x8F] = pOld[0x234];
+            pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+            pNew[0x8A] = pOld[0x234];
+        }
+        break; // -> 0x5A4C4C
+    }
+
+    case 3: // CLERIC
+    case 204:
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC; // 0x5A453E
+        pNew[0x8D] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_CLERIC;
+        pNew[0x8A] = pOld[0x234];
+        break; // -> 0x5A4C4C
+
+    case 4: // THIEF
+    case 205:
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_ROGUE; // 0x5A4570
+        pNew[0x93] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_ROGUE;
+        pNew[0x8A] = pOld[0x234];
+        break; // -> 0x5A4C4C
+
+    case 5: // BARD
+    case 206:
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_BARD; // 0x5A45A2
+        pNew[0x8C] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_BARD;
+        pNew[0x8A] = pOld[0x234];
+        break; // -> 0x5A4C4C
+
+    case 6: // PALADIN
+    case 207:
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_PALADIN; // 0x5A45D4
+        pNew[0x91] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_PALADIN;
+        pNew[0x8A] = pOld[0x234];
+        *reinterpret_cast<DWORD*>(pNew + 0x270) = 1; // kept literal
+        break; // -> 0x5A4C4C
+
+    case 7: // FIGHTER/MAGE
+        halveLevel(0x234); // 0x5A4610
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER | CLASSMASK_WIZARD;
+        pNew[0x8F] = pOld[0x234]; // 0x5A4665...
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+        pNew[0x8F] = pOld[0x235]; // ...overwritten at 0x5A4675, kept literal
+        break; // -> 0x5A4BA0
+
+    case 8: // FIGHTER/CLERIC
+        halveLevel(0x234); // 0x5A4680
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER | CLASSMASK_CLERIC;
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x8D] = pOld[0x235];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+        break; // -> 0x5A4BA0
+
+    case 9: // FIGHTER/THIEF
+        halveLevel(0x234); // 0x5A46F0
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER | CLASSMASK_ROGUE;
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x93] = pOld[0x235];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+        break; // -> 0x5A4BA0
+
+    case 10: // FIGHTER/MAGE/THIEF
+        splitLevelThirds(0x234); // 0x5A4760
+        splitLevelThirds(0x235);
+        splitLevelThirds(0x236);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) =
+            CLASSMASK_FIGHTER | CLASSMASK_WIZARD | CLASSMASK_ROGUE;
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x95] = pOld[0x235];
+        pNew[0x93] = pOld[0x236];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER; // shared tail 0x5A4B13
+        levelSum = static_cast<BYTE>(pOld[0x234] + pOld[0x236] + pOld[0x235]);
+        break; // -> 0x5A4C46 stores levelSum
+
+    case 11: // DRUID
+    case 208:
+        halveLevel(0x234); // 0x5A480E
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_DRUID;
+        pNew[0x8E] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_DRUID;
+        break; // -> 0x5A4C40
+
+    case 12: // RANGER
+    case 209:
+        // 0x5A4872: no level math — the clamped level stays whole.
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_RANGER;
+        pNew[0x92] = pOld[0x234];
+        pNew[0x387] = CAIOBJECTTYPE_C_RANGER;
+        break; // -> 0x5A4C40
+
+    case 13: // MAGE/THIEF
+        halveLevel(0x234); // 0x5A4897
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_WIZARD | CLASSMASK_ROGUE;
+        pNew[0x95] = pOld[0x234];
+        pNew[0x93] = pOld[0x235];
+        pNew[0x387] = CAIOBJECTTYPE_C_WIZARD;
+        break; // -> 0x5A4BA0
+
+    case 14: // CLERIC/MAGE
+        halveLevel(0x234); // 0x5A4907
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_WIZARD;
+        pNew[0x8D] = pOld[0x234];
+        pNew[0x95] = pOld[0x235];
+        break; // -> 0x5A4B9C (no primary-class byte)
+
+    case 15: // CLERIC/THIEF
+        halveLevel(0x234); // 0x5A4976
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_ROGUE;
+        pNew[0x8D] = pOld[0x234];
+        pNew[0x93] = pOld[0x235];
+        break; // -> 0x5A4B9C (no primary-class byte)
+
+    case 16: // FIGHTER/DRUID
+        halveLevel(0x234); // 0x5A49E5
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_FIGHTER | CLASSMASK_DRUID;
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x8E] = pOld[0x235];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER;
+        pNew[0x8A] = static_cast<BYTE>(pOld[0x234] + pOld[0x235]);
+        break; // -> 0x5A4C4C
+
+    case 17: // FIGHTER/MAGE/CLERIC
+        splitLevelThirds(0x234); // 0x5A4A6A
+        splitLevelThirds(0x235);
+        splitLevelThirds(0x236);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) =
+            CLASSMASK_FIGHTER | CLASSMASK_WIZARD | CLASSMASK_CLERIC;
+        pNew[0x8F] = pOld[0x234];
+        pNew[0x95] = pOld[0x235];
+        pNew[0x8D] = pOld[0x236];
+        pNew[0x387] = CAIOBJECTTYPE_C_FIGHTER; // shared tail 0x5A4B13
+        levelSum = static_cast<BYTE>(pOld[0x234] + pOld[0x236] + pOld[0x235]);
+        break; // -> 0x5A4C46 stores levelSum
+
+    case 18: // CLERIC/RANGER
+        halveLevel(0x234); // 0x5A4B32
+        halveLevel(0x235);
+        *reinterpret_cast<DWORD*>(pNew + 0x3B6) = CLASSMASK_CLERIC | CLASSMASK_RANGER;
+        pNew[0x8D] = pOld[0x234];
+        pNew[0x92] = pOld[0x235];
+        break; // -> 0x5A4B9C (no primary-class byte)
+
+    case 19: // 0x5A4BB7
+    case 20: // 0x5A4BE6
+    default: // 21..201 and 210..255 -> 0x5A4C1F
+        break;
+    }
+
+    (void)levelSum; // consumed by the 0x5A4C46 store in range 4
+
     // TODO(range 4, 0x5A4B9C-0x5A4F2D): variable-length sections, copy-out.
 
     memcpy(*ppCreature, pNew, *plSize);
