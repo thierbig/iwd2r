@@ -12262,8 +12262,7 @@ BOOL UpgradeCreatureFileV20ToV21(BYTE** ppCreature, LONG* plSize)
     // pNew+pOld[0x32C]+0xB2 (V2.1 slot pair 0x3DE/0x3E2).
     if (*reinterpret_cast<const DWORD*>(pOld + 0x330) != 0) {
         DWORD nEffects = *reinterpret_cast<const DWORD*>(pOld + 0x32C);
-        DWORD nBytes = (pNew[0x33] != 0 ? 264 : 48) *
-            *reinterpret_cast<const DWORD*>(pOld + 0x330);
+        DWORD nBytes = (pNew[0x33] != 0 ? 264 : 48) * *reinterpret_cast<const DWORD*>(pOld + 0x330);
         memcpy(pNew + nEffects + 0xB2, pOld + nEffects, nBytes);
     }
 
