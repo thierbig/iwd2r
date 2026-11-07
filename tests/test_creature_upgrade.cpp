@@ -390,6 +390,101 @@ TEST_CASE("upgrade: a cleric's spells land in the cleric block", "[creature-upgr
     delete[] pCreature;
 }
 
+// ComputeCreatureFileV21ToV22Delta (0x5A69B0): the sizing helper the
+// "CRE V2.1" arm of CGameSprite::Unmarshal calls before
+// UpgradeCreatureFileV21ToV22. The delta must reproduce the destination
+// sizes the three converter tests above already upgrade into
+// (0x966 / 0x8EE / 0x8FE). The version-gate reject arm is not drivable
+// here: its UTIL_ASSERT(FALSE) shuts the engine down and aborts
+// (CUtil::UtilAssert, src/CUtil.cpp:43).
+TEST_CASE("upgrade: the V2.1 sizing delta matches the converter's caller contract", "[creature-upgrade][data]")
+{
+    CInfGame* pGame = GameOrSkip();
+
+    // The TEST A layout: 63 grouped lists of which one is populated (1
+    // entry), one populated song list, 9 empty domain levels — nTotal
+    // 0x278 against 0x80 old spell bytes.
+    {
+        TableGuard spellsGuard(pGame->m_spells, { CResRef("ZZTSTAA1"), CResRef("ZZTSTFF6") });
+        TableGuard songsGuard(pGame->m_songs, { CResRef("ZZTSTBB2"), CResRef("ZZTSTEE5") });
+
+        std::vector<BYTE> oldBuf(0x52E);
+        PutV21Skeleton(oldBuf.data(), oldBuf.size(), 5, 0x46E, 0x4D6, 2, 0x4FE, 1, "DLGTST01");
+        PutDword(oldBuf.data(), 0x3BA, 0x3EE);
+        PutDword(oldBuf.data(), 0x3BE, 3);
+        PutFlatEntry(oldBuf.data(), 0x3EE, "ZZTSTAA1", 1, 0);
+        PutFlatEntry(oldBuf.data(), 0x3FA, "ZZTSTBB2", 0, 2);
+        PutFlatEntry(oldBuf.data(), 0x406, "ZZTSTCC3", 2, 0);
+        PutDword(oldBuf.data(), 0x3C2, 0x412);
+        PutDword(oldBuf.data(), 0x3C6, 2);
+        PutKnownHeader(oldBuf.data(), 0x412, 1, 0, 0, 3);
+        PutKnownHeader(oldBuf.data(), 0x422, 3, 2, 3, 2);
+        PutDword(oldBuf.data(), 0x3CA, 0x432);
+        PutKnownEntry(oldBuf.data(), 0x432, "ZZTSTAA1", 1);
+        PutKnownEntry(oldBuf.data(), 0x43E, "ZZTSTD44", 0);
+        PutKnownEntry(oldBuf.data(), 0x44A, "ZZTSTFF6", 1);
+        PutKnownEntry(oldBuf.data(), 0x456, "ZZTSTBB2", 1);
+        PutKnownEntry(oldBuf.data(), 0x462, "ZZTSTEE5", 0);
+
+        LONG nDelta = ComputeCreatureFileV21ToV22Delta(oldBuf.data());
+        CHECK(nDelta == 0x1F8);
+
+        // The caller contract: newSize = oldSize + 0x240 + delta, the size
+        // TEST A upgrades into. Drive the converter with the helper-derived
+        // size to prove the delta is exactly what 0x5A5060 needs.
+        DWORD nNewSize = static_cast<DWORD>(oldBuf.size()) + 0x240 + static_cast<DWORD>(nDelta);
+        CHECK(nNewSize == 0x966);
+
+        BYTE* pCreature = new BYTE[nNewSize];
+        std::memset(pCreature, 0xAA, nNewSize);
+        LONG size = static_cast<LONG>(nNewSize);
+        LONG unusedWord = 0x12345678;
+        CHECK(UpgradeCreatureFileV21ToV22(&pCreature, &size, oldBuf.data(), &unusedWord) == TRUE);
+        CHECK(std::memcmp(pCreature, "CRE V2.2", 8) == 0);
+        delete[] pCreature;
+    }
+
+    // The TEST B layout: an empty spellbook. Class 0 is normalized to 5
+    // in the old buffer; nTotal 0x258 with no old spell bytes.
+    {
+        TableGuard spellsGuard(pGame->m_spells, std::vector<CResRef>());
+
+        std::vector<BYTE> oldBuf(0x456);
+        PutV21Skeleton(oldBuf.data(), oldBuf.size(), 0, 0x3EE, 0x456, 0, 0x456, 0, "DLGEMP01");
+        PutDword(oldBuf.data(), 0x3BA, 0x3EE);
+        PutDword(oldBuf.data(), 0x3BE, 0);
+        PutDword(oldBuf.data(), 0x3C2, 0x3EE);
+        PutDword(oldBuf.data(), 0x3C6, 0);
+        PutDword(oldBuf.data(), 0x3CA, 0x3EE);
+
+        CHECK(oldBuf[0x387] == 0); // blank class before the call
+        LONG nDelta = ComputeCreatureFileV21ToV22Delta(oldBuf.data());
+        CHECK(nDelta == 0x258);
+        CHECK(oldBuf[0x387] == 5); // normalized in the old buffer, as written
+        CHECK(static_cast<DWORD>(oldBuf.size()) + 0x240 + static_cast<DWORD>(nDelta) == 0x8EE);
+    }
+
+    // The TEST C layout: one cleric spell at level 2. nTotal 0x268 against
+    // 0xC old spell bytes; a real class byte is left alone.
+    {
+        TableGuard spellsGuard(pGame->m_spells, { CResRef("ZZTSTGG7") });
+
+        std::vector<BYTE> oldBuf(0x462);
+        PutV21Skeleton(oldBuf.data(), oldBuf.size(), 3, 0x3FA, 0x462, 0, 0x462, 0, "DLGCLR01");
+        PutDword(oldBuf.data(), 0x3BA, 0x3EE);
+        PutDword(oldBuf.data(), 0x3BE, 1);
+        PutFlatEntry(oldBuf.data(), 0x3EE, "ZZTSTGG7", 2, 0);
+        PutDword(oldBuf.data(), 0x3C2, 0x3FA);
+        PutDword(oldBuf.data(), 0x3C6, 0);
+        PutDword(oldBuf.data(), 0x3CA, 0x3FA);
+
+        LONG nDelta = ComputeCreatureFileV21ToV22Delta(oldBuf.data());
+        CHECK(nDelta == 0x25C);
+        CHECK(oldBuf[0x387] == 3); // a set class byte is untouched
+        CHECK(static_cast<DWORD>(oldBuf.size()) + 0x240 + static_cast<DWORD>(nDelta) == 0x8FE);
+    }
+}
+
 // UpgradeCreatureFileV20ToV21 (0x5A3DB0): the "CRE V2.0" -> "CRE V2.1"
 // step of the same upgrade chain (0x5A7740 dispatches on the signature and
 // hands "CRE V2.0" here first; the converter above then takes it to V2.2).
