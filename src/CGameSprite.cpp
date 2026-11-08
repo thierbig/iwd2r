@@ -26842,8 +26842,118 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
         pLoop->m_nChannel = 4;
         g_pBaldurChitin->GetMessageHandler()->AddMessage(pLoop, FALSE);
 
-        // TODO: 0x761F75-0x762487 not ported (the effect decode, the arming
-        // of the expiry and the polled tail).
+        // The cast time: the delay over the sprite's mental speed, clamped
+        // at zero and scaled to ticks.
+        INT nCastTime = nID2 - m_derivedStats.m_nMentalSpeed;
+        if (nCastTime < 0) {
+            nCastTime = 0;
+        }
+        nCastTime = nCastTime * 100 / 10;
+
+        // nID1 picks the effect from a 26-entry table at 0x762488: 9-16 a
+        // casting glow in one of eight flags, 17-25 a sparkle in one of nine
+        // amounts, 26-34 the same sparkles again.
+        ITEM_EFFECT effect;
+        CGameEffect::ClearItemEffect(&effect, 0);
+        if (nID1 >= 9 && nID1 <= 34) {
+            switch (nID1) {
+            case 9:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 7;
+                break;
+            case 10:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 8;
+                break;
+            case 11:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 4;
+                break;
+            case 12:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 1;
+                break;
+            case 13:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 5;
+                break;
+            case 14:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 2;
+                break;
+            case 15:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 6;
+                break;
+            case 16:
+                effect.effectID = ICEWIND_CGAMEEFFECT_CASTINGGLOW;
+                effect.dwFlags = 3;
+                break;
+            case 17:
+            case 26:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 2;
+                effect.dwFlags = 3;
+                break;
+            case 18:
+            case 27:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 1;
+                effect.dwFlags = 3;
+                break;
+            case 19:
+            case 28:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 2;
+                effect.dwFlags = 3;
+                break;
+            case 20:
+            case 29:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 4;
+                effect.dwFlags = 3;
+                break;
+            case 21:
+            case 30:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 5;
+                effect.dwFlags = 3;
+                break;
+            case 22:
+            case 31:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 0xB;
+                effect.dwFlags = 3;
+                break;
+            case 23:
+            case 32:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 6;
+                effect.dwFlags = 3;
+                break;
+            case 24:
+            case 33:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 7;
+                effect.dwFlags = 3;
+                break;
+            case 25:
+            case 34:
+                effect.effectID = CGAMEEFFECT_SPARKLE;
+                effect.effectAmount = 8;
+                effect.dwFlags = 3;
+                break;
+            }
+
+            // NOTE: The duration type is the WORD constant at 0x8491BC
+            // (0x1000: the duration is absolute).
+            effect.durationType = 0x1000;
+            effect.duration = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime + nCastTime;
+        }
+
+        // The join at 0x7621EF adds a four-tick release margin to every path
+        // through the table, and to the default's still-zero duration.
+        effect.duration += 4;
     }
 
     // TODO: 0x76227A-0x762487 not ported (the polled tail).
