@@ -11512,6 +11512,40 @@ INT CGameSprite::GetNumQuickWeaponSlots()
     return g_pBaldurChitin->GetObjectGame()->GetRuleTables().GetNumQuickWeaponSlots(m_typeAI.m_nClass);
 }
 
+// 0x71C0C0
+void CGameSprite::CheckStatsChange()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CheckReputation();
+
+    for (UINT nClassIndex = 0; nClassIndex < CSPELLLIST_NUM_CLASSES; nClassIndex++) {
+        for (UINT nLevel = 0; nLevel < CSPELLLIST_MAX_LEVELS; nLevel++) {
+            BYTE nClass = pGame->GetSpellcasterClass(nClassIndex);
+
+            INT nBonus;
+            INT nMaxSpells = pGame->GetRuleTables().GetMaxKnownSpells(nClass,
+                m_startTypeAI,
+                m_derivedStats,
+                m_baseStats.m_specialization,
+                nLevel + 1,
+                nBonus);
+
+            CGameSpriteSpellList* pList = m_spells.GetSpellsAtLevel(nClassIndex, nLevel);
+
+            pList->field_14 = nMaxSpells + nBonus;
+
+            // NOTE: Unsigned compare.
+            if (pList->field_18 > pList->field_14) {
+                pList->field_18 = pList->field_14;
+            }
+        }
+    }
+
+    // TODO: 0x71C221-0x71CC8C not ported yet (innate SPIN970 adjustment,
+    // HPCON/saves/divine grace, level-up check, 0x71CC90).
+}
+
 // 0x71CFF0
 BOOL CGameSprite::sub_71CFF0()
 {
