@@ -11658,7 +11658,7 @@ void CGameSprite::CheckStatsChange()
         m_bLevelUp = bLevelChanged;
     }
 
-    sub_71CC90();
+    sub_71CC90(); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 }
 
 // 0x71CC90
