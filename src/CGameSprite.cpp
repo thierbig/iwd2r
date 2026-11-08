@@ -11586,8 +11586,61 @@ void CGameSprite::CheckStatsChange()
         }
     }
 
-    // TODO: 0x71C481-0x71CC8C not ported yet (HPCON/saves/divine grace,
-    // level-up check, 0x71CC90).
+    // CON hit-point bonus delta. NOTE: The decrease arm differs from the
+    // sibling at the load-time site (src/CGameSprite.cpp:1091): a dead,
+    // frozen or stoned sprite's hit points are left untouched here (not
+    // zeroed), and the unmasked path floors hit points at 1.
+    INT nBonusNew = pGame->GetRuleTables().GetHPCONBonusTotal(m_typeAI,
+        m_derivedStats,
+        static_cast<BYTE>(m_derivedStats.m_nCON));
+    if (nBonusNew > m_nHPCONBonusTotalOld) {
+        if ((m_derivedStats.m_generalState & (STATE_DEAD | STATE_FROZEN_DEATH | STATE_STONE_DEATH)) == 0) {
+            m_baseStats.m_hitPoints += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+        } else {
+            m_baseStats.m_hitPoints = 0;
+        }
+        m_derivedStats.m_nMaxHitPoints += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+        m_baseStats.m_maxHitPointsBase += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+    } else if (nBonusNew < m_nHPCONBonusTotalOld) {
+        if ((m_derivedStats.m_generalState & (STATE_DEAD | STATE_FROZEN_DEATH | STATE_STONE_DEATH)) == 0) {
+            m_baseStats.m_hitPoints += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+            if (m_baseStats.m_hitPoints <= 0) {
+                m_baseStats.m_hitPoints = 1;
+            }
+        }
+        m_derivedStats.m_nMaxHitPoints += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+        m_baseStats.m_maxHitPointsBase += static_cast<SHORT>(nBonusNew) - static_cast<SHORT>(m_nHPCONBonusTotalOld);
+    }
+
+    m_derivedStats.m_nMaxHitPoints = max(m_derivedStats.m_nMaxHitPoints, m_derivedStats.m_nLevel);
+
+    m_derivedStats.m_nSaveVSFortitude += pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nCON);
+    m_derivedStats.m_nSaveVSReflex += pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nDEX);
+    m_derivedStats.m_nSaveVSWill += pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nWIS);
+
+    // Divine grace: paladins add their charisma modifier to all three saves.
+    if (m_typeAI.IsClassValid(CAIObjectType::C_PALADIN)) {
+        INT nChrMod = pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nCHR);
+        if (nChrMod > 0) {
+            m_derivedStats.m_nSaveVSFortitude += nChrMod;
+            m_derivedStats.m_nSaveVSReflex += nChrMod;
+            m_derivedStats.m_nSaveVSWill += nChrMod;
+        }
+    }
+
+    // NOTE: The hit-point compare at 0x71C5EF precedes these two stores; the
+    // flags survive them, so the clamp below reads the pre-store comparison.
+    m_nHPCONBonusTotalOld = nBonusNew;
+    m_bHPCONBonusTotalUpdate = FALSE;
+    if (m_baseStats.m_hitPoints > m_derivedStats.m_nMaxHitPoints) {
+        m_baseStats.m_hitPoints = m_derivedStats.m_nMaxHitPoints;
+    }
+    if (field_7110 < m_baseStats.m_hitPoints) {
+        field_7110 = m_baseStats.m_hitPoints;
+    }
+
+    // TODO: 0x71C620-0x71CC8C not ported yet (portrait gate, XP cap,
+    // GetNextLevel, FeedBack(21), 0x71CC90 tail).
 }
 
 // 0x71CFF0
