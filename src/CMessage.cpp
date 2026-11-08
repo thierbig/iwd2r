@@ -141,6 +141,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXT = 16;
 // 0x84CEE8
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXTREF = 17;
 
+// 0x84CEE9
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DOOR_OPEN = 18;
+
 // 0x84CEEA
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DOOR_STATUS = 19;
 
@@ -10611,6 +10614,94 @@ void CMessageDisplayTextRef::Run()
         m_textColor,
         m_marker,
         m_moveToTop);
+}
+
+// -----------------------------------------------------------------------------
+
+// The constructor is inlined in the exe (the KNOCK arm of
+// CGameDoor::AddEffect, 0x486860, constructs the message inline); no
+// standalone constructor address exists.
+CMessageDoorOpen::CMessageDoorOpen(BOOLEAN bOpen, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_bOpen = bOpen;
+}
+
+// 0x40A0D0
+SHORT CMessageDoorOpen::GetCommType()
+{
+    return SEND;
+}
+
+// 0x40A0E0
+BYTE CMessageDoorOpen::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x466470
+BYTE CMessageDoorOpen::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DOOR_OPEN;
+}
+
+// 0x4FCF00
+void CMessageDoorOpen::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // TODO: 0x4FCF00 not ported
+}
+
+// 0x4FD0E0
+BOOL CMessageDoorOpen::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 9293
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+        return FALSE;
+    }
+    m_targetId = localObjectID;
+
+    remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) == TRUE) {
+        m_sourceId = localObjectID;
+    } else {
+        m_sourceId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    // The original stores the open flag as one byte and advances the
+    // cursor by one (0x4FD185-0x4FD18F), leaving the high byte of the
+    // two-byte BOOLEAN member untouched.
+    m_bOpen = *reinterpret_cast<BYTE*>(pData + cnt);
+    cnt += sizeof(BYTE);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 9339
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
+}
+
+// 0x4FD1D0
+void CMessageDoorOpen::Run()
+{
+    // TODO: 0x4FD1D0 not ported
 }
 
 // -----------------------------------------------------------------------------

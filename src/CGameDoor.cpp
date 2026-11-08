@@ -4,6 +4,7 @@
 #include "CBaldurChitin.h"
 #include "CAIGroup.h"
 #include "CGameArea.h"
+#include "CGameEffect.h"
 #include "CGameSprite.h"
 #include "CInfCursor.h"
 #include "CInfGame.h"
@@ -331,6 +332,29 @@ CGameDoor::~CGameDoor()
         }
     }
     field_6F2.SetSize(0);
+}
+
+// 0x486860
+void CGameDoor::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL immediateApply)
+{
+    switch (pEffect->m_effectID) {
+    case CGAMEEFFECT_KNOCK:
+        if (m_lockDifficulty == 100) {
+            g_pBaldurChitin->GetBaldurMessage()->DisplayTextRef(
+                (STRREF)-1, 0x5A81, 0, 0xD7C8A0, (LONG)-1, m_id, m_id);
+            break;
+        }
+        m_dwFlags &= ~0x2U;
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageDoorOpen(TRUE, m_id, m_id), FALSE);
+        break;
+
+    default:
+        // TODO: 0x486929-0x48746A (ranges 2-4) not ported
+        break;
+    }
+
+    delete pEffect;
 }
 
 // 0x47C830

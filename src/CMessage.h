@@ -51,6 +51,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_CUT_SCENE_MODE_STATUS;
     static const BYTE MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXTREF;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_DOOR_OPEN;
     static const BYTE MSG_SUBTYPE_CMESSAGE_DOOR_STATUS;
     static const BYTE MSG_SUBTYPE_CMESSAGE_DROP_PATH;
     static const BYTE MSG_SUBTYPE_CMESSAGE_ENTER_DIALOG;
@@ -769,6 +770,19 @@ public:
     /* 0018 */ COLORREF m_textColor;
     /* 001C */ LONG m_marker;
     /* 0020 */ BOOLEAN m_moveToTop;
+};
+
+class CMessageDoorOpen : public CMessage {
+public:
+    CMessageDoorOpen(BOOLEAN bOpen, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ BOOLEAN m_bOpen;
 };
 
 class CMessageDoorStatus : public CMessage {

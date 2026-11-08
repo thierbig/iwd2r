@@ -22,6 +22,7 @@ public:
     /* 0048 */ void RemoveFromArea() override;
     /* 004C */ void Render(CGameArea* pArea, CVidMode* pVidMode, INT nSurface) override;
     /* 0058 */ void SetCursor(LONG nToolTip) override;
+    /* 0078 */ void AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL immediateApply) override;
     /* 00B8 */ virtual void FillClosedPoly(CGameArea* pArea, CVidMode* pVidMode, INT nSurface, DWORD dwColor);
     /* 00BC */ virtual void FillOpenPoly(CGameArea* pArea, CVidMode* pVidMode, INT nSurface, DWORD dwColor);
 
