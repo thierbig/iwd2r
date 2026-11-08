@@ -11663,14 +11663,14 @@ void CGameSprite::CheckStatsChange()
 }
 
 // 0x71CC90
-void CGameSprite::sub_71CC90()
+void CGameSprite::sub_71CC90() // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
     // TODO: 0x71CC90-0x71CE9F not ported yet (weapon/offhand proficiency
     // and fighting-style bonuses; tail-called by CheckStatsChange).
 }
 
 // 0x71CEA0
-void CGameSprite::sub_71CEA0(CItem* pItem, int bLeftHand)
+void CGameSprite::sub_71CEA0(CItem* pItem, int bLeftHand) // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
     SHORT nBonus = 0;
     if (pItem != NULL) {
@@ -11692,13 +11692,23 @@ void CGameSprite::sub_71CEA0(CItem* pItem, int bLeftHand)
                 pLauncher->Release();
             }
 
-            // TODO: 0x71CF37-0x71CFA8 not ported yet (type-0x1c proficiency
-            // clamp, weaponSpecialization column-1 lookup).
+            // Type 0x1c (club-class) keeps a minimum proficiency of 1.
+            if (pItem->GetItemType() == 28 && nProficiency <= 1) {
+                nProficiency = 1;
+            }
+            if (nProficiency > 0) {
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+                nBonus = static_cast<SHORT>(atol(pGame->GetRuleTables().m_tWeaponSpecialization.GetAt(CPoint(1, nProficiency))));
+            }
         }
-        // TODO: 0x71CFA9-0x71CFE6 not ported yet (Release, the
-        // DamageBonusRight/Left add).
+        pItem->Release();
     }
-    (void)nBonus; // interim until range 2 reads it
+    if (bLeftHand == 0) {
+        m_derivedStats.m_DamageBonusRight += nBonus;
+    } else {
+        m_derivedStats.m_DamageBonusLeft += nBonus;
+    }
 }
 
 // 0x71CFF0
