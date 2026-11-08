@@ -10701,7 +10701,41 @@ BOOL CMessageDoorOpen::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 // 0x4FD1D0
 void CMessageDoorOpen::Run()
 {
-    // TODO: 0x4FD1D0 not ported
+    CAIObjectType type;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CGameDoor* pDoor;
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pDoor),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if ((pDoor->m_dwFlags & 0x1) != m_bOpen) {
+            CGameObject* pSource;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(m_sourceId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pSource,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                type.Set(pSource->GetAIType());
+                pDoor->ToggleDoor(type, FALSE);
+                pGame->GetObjectArray()->ReleaseShare(m_sourceId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+        pGame->GetObjectArray()->ReleaseDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
 }
 
 // -----------------------------------------------------------------------------
