@@ -15,6 +15,7 @@
 #include "CGameEffect.h"
 #include "CGameObjectArray.h"
 #include "CGameSprite.h"
+#include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CPathSearch.h"
@@ -511,6 +512,50 @@ TEST_CASE("ai: detect traps marks a trapped door detected and redraws its outlin
     ClearMessages();
     pDoor->CGameDoor::AddEffect(MakeDoorEffect(CGAMEEFFECT_DETECTTRAPS), 0, TRUE, TRUE);
     CHECK(handler.m_messageList.GetCount() == 0);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: a trigger hit by a cast-spell effect forces the spell on the effect's source", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    // The trigger: raw storage with the CGameAIBase base placement-constructed.
+    // The CASTSPELL arm calls GetAIType() virtually (exe 0x4CD97C, vtable slot
+    // 0x10); the base's vtable serves it, since neither CGameAIBase nor
+    // CGameTrigger overrides GetAIType. AddEffect itself is called qualified,
+    // as the door tests do (0x4CD650).
+    auto* storage = static_cast<unsigned char*>(::operator new(sizeof(CGameTrigger)));
+    std::memset(storage, 0, sizeof(CGameTrigger));
+    new (storage) CGameAIBase();
+    CGameTrigger* pTrigger = reinterpret_cast<CGameTrigger*>(storage);
+    // The CMessageAddAction is SEND-routed, so it needs a live target; the
+    // trigger borrows a live AI object's id for its own, so the caller and
+    // target ids in the message are distinct live values.
+    CGameAIBase* pProxy = AddAIObject();
+    pTrigger->m_id = pProxy->m_id;
+
+    // The effect: a CASTSPELL from a second live object, the caster.
+    CGameAIBase* pSource = AddAIObject();
+    CGameEffect* pEffect = MakeDoorEffect(CGAMEEFFECT_CASTSPELL);
+    pEffect->m_sourceID = pSource->m_id;
+    pEffect->m_effectAmount = 7;
+    pEffect->m_res = CResRef("SPWI123");
+
+    pTrigger->CGameTrigger::AddEffect(pEffect, 0, TRUE, TRUE);
+
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    REQUIRE(handler.m_messageList.GetCount() == 1);
+    auto* message = dynamic_cast<CMessageAddAction*>(handler.m_messageList.GetHead());
+    REQUIRE(message != nullptr);
+    CHECK(message->m_action.m_actionID == CAIAction::FORCESPELL);
+    CHECK(message->m_action.m_acteeID.Equal(pTrigger->m_typeAI));
+    CHECK(message->m_action.m_string1 == "SPWI123");
+    CHECK(message->m_action.m_specificID == 7);
+    // The trigger is the caller; the effect's source is the target (the exe's
+    // stores at 0x4CDAE6-0x4CDAF8: m_id@0x5c -> +0x8, m_sourceID@0x10c -> +0x4).
+    CHECK(message->m_sourceId == pProxy->m_id);
+    CHECK(message->m_targetId == pSource->m_id);
 
     ClearMessages();
 }

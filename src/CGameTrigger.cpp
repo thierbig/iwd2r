@@ -991,8 +991,9 @@ void CGameTrigger::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL 
                     new CMessageSetTrigger(trigger, m_id, m_id), FALSE);
                 m_trapDetected = 1;
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(
-                    new CMessageTriggerStatus(m_dwFlags, m_trapDetected,
-                        m_trapActivated != 0 && (m_dwFlags & 0x100) == 0, m_id, m_id), FALSE);
+                    new CMessageTriggerStatus(m_dwFlags,
+                        m_trapActivated != 0 && (m_dwFlags & 0x100) == 0, m_trapDetected, m_id, m_id),
+                    FALSE);
                 CGameObject* pObject = m_typeAI.sub_40CCA0(reinterpret_cast<CGameAIBase*>(m_id), FALSE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
                 if (pObject != NULL) {
                     CAIObjectType spriteType(CGameObject::TYPE_SPRITE, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
@@ -1021,7 +1022,7 @@ void CGameTrigger::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL 
         forceSpell.SetString1(spellRes);
         forceSpell.m_specificID = pEffect->m_effectAmount;
         g_pBaldurChitin->GetMessageHandler()->AddMessage(
-            new CMessageAddAction(forceSpell, pEffect->m_sourceID, m_id), FALSE);
+            new CMessageAddAction(forceSpell, m_id, pEffect->m_sourceID), FALSE);
         break;
     }
     case CGAMEEFFECT_SUMMON: {
