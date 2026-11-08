@@ -26809,6 +26809,47 @@ void CGameSprite::sub_755A70(CSpell* pSpell, const SPELL_ABILITY* pAbility, cons
     }
 }
 
+// 0x761C50
+// The SpellCastEffect (289) executor, run on the target sprite: a two-phase
+// scripted cast.  The first call (the flag at 0x753A clear) plays the caster's
+// voice and the casting loop sound, decodes the casting-glow or sparkle
+// effect and arms the expiry; every later call polls the world timer until
+// the cast expires, then plays the release sound and finishes the action.
+// nID1 picks the effect (9-16 a casting glow, 17-34 a sparkle), nID2 the
+// delay in ticks over the sprite's mental speed, nID3 is unused.
+SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, LONG nID1, LONG nID2, LONG nID3)
+{
+    INT nIdx = sCast.FindOneOf(":");
+
+    if (field_753A == 0) {
+        CString sLeft = sCast.Left(nIdx);
+
+        // The voice: the whole of string1, channel 2.
+        m_sndVoice.SetChannel(2, reinterpret_cast<DWORD_PTR>(m_pArea));
+        m_sndVoice.SetResRef(CResRef(sVoice), TRUE, TRUE);
+        m_sndVoice.Play(m_pos.x, m_pos.y, m_posZ, FALSE);
+
+        CMessagePlaySoundRef* pVoice = new CMessagePlaySoundRef(CResRef(sVoice), m_id, m_id);
+        pVoice->m_nChannel = 2;
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pVoice, FALSE);
+
+        // The casting loop: the part of string2 before the ':', channel 4.
+        field_4EC8.SetChannel(4, reinterpret_cast<DWORD_PTR>(m_pArea));
+        field_4EC8.SetResRef(CResRef(sLeft), TRUE, TRUE);
+        field_4EC8.Play(m_pos.x, m_pos.y, m_posZ, FALSE);
+
+        CMessagePlaySoundRef* pLoop = new CMessagePlaySoundRef(CResRef(sLeft), m_id, m_id);
+        pLoop->m_nChannel = 4;
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pLoop, FALSE);
+
+        // TODO: 0x761F75-0x762487 not ported (the effect decode, the arming
+        // of the expiry and the polled tail).
+    }
+
+    // TODO: 0x76227A-0x762487 not ported (the polled tail).
+    return ACTION_NORMAL;
+}
+
 // 0x7473E0
 // The UseItemPoint (97) executor: resolve the item from the action (slot
 // index when string1 is empty, otherwise an equipment scan for the named

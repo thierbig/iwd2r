@@ -470,6 +470,7 @@ public:
     BOOL CanSpeak(BOOL ignoreDeath, BOOL ignoreSilence);
     void PlaySound(BYTE soundID, BOOL showText, BOOL showCircle, BOOL overrideOption);
     void VerbalConstant(LONG verbalConstant);
+    SHORT SpellCastEffect(const CString& sVoice, const CString& sCast, LONG nID1, LONG nID2, LONG nID3);
     LONG GetLength(LONG verbalConstant);
     BOOL IsSpellSchool(BYTE spellSchool);
     void SetFootstepChannel();
