@@ -15,7 +15,8 @@
 // decrease arm floors hit points at 1 and leaves a dead sprite's hit
 // points untouched), adds the ability modifiers to the three saves
 // (paladins add a positive charisma modifier on top), caps XP and sets the
-// level-up flag from GetNextLevel.
+// level-up flag from GetNextLevel, then tail-calls the per-hand fighting
+// pass (0x71CC90) that adds each hand's weapon specialization damage.
 
 namespace {
 
@@ -66,6 +67,44 @@ INT ConBonus(CGameSprite* pSprite)
 {
     return g_pBaldurChitin->GetObjectGame()->GetRuleTables().GetHPCONBonusTotal(
         pSprite->m_typeAI, pSprite->m_derivedStats, static_cast<BYTE>(pSprite->m_derivedStats.m_nCON));
+}
+
+// The specialization damage one hand's item contributes through the
+// 0x71CC90 tail (sub_71CEA0's wspec.2da column-1 lookup): the row at the
+// weapon's proficiency, or its launcher's when that is higher, with the
+// club-class minimum of 1. No item or no ability adds 0. The Demand/Release
+// pairs mirror the port (CItem::GetAbility asserts on an undemanded item).
+SHORT WspecDamage(CGameSprite* pSprite, CItem* pItem)
+{
+    if (pItem == NULL) {
+        return 0;
+    }
+    pItem->Demand();
+    ITEM_ABILITY* pAbility = pItem->GetAbility(pSprite->m_equipment.m_selectedWeaponAbility);
+    SHORT nBonus = 0;
+    if (pAbility != NULL) {
+        SHORT nLauncherSlot;
+        CItem* pLauncher = pSprite->GetLauncher(pAbility, nLauncherSlot);
+        if (pLauncher != NULL) {
+            pLauncher->Demand();
+        }
+        SHORT nProficiency = pSprite->sub_73D440(pItem);
+        if (pLauncher != NULL && nProficiency < pSprite->sub_73D440(pLauncher)) {
+            nProficiency = pSprite->sub_73D440(pLauncher);
+        }
+        if (pLauncher != NULL) {
+            pLauncher->Release();
+        }
+        if (pItem->GetItemType() == 28 && nProficiency <= 1) {
+            nProficiency = 1;
+        }
+        if (nProficiency > 0) {
+            const CRuleTables& rules = g_pBaldurChitin->GetObjectGame()->GetRuleTables();
+            nBonus = static_cast<SHORT>(atol(rules.m_tWeaponSpecialization.GetAt(CPoint(1, nProficiency))));
+        }
+    }
+    pItem->Release();
+    return nBonus;
 }
 
 } // namespace
@@ -199,4 +238,46 @@ TEST_CASE("stats change: slot maxima clamp, saves, the XP cap and the level-up f
     const BOOL bExpectedLevelUp = statsNext.m_nLevel != pSprite->m_derivedStats.m_nLevel;
     pSprite->CheckStatsChange();
     CHECK(pSprite->m_bLevelUp == bExpectedLevelUp);
+}
+
+TEST_CASE("stats change: the tail adds each hand's weapon specialization damage", "[stats][data]")
+{
+    CGameSprite* pSprite = ProbeOrSkip();
+
+    // Resolve the hands the way the 0x71CC90 tail does: the selected weapon
+    // (fist fallback when the slot is empty -- SelectWeaponAbility can move
+    // the selection, so the weapon is re-read after it) and the current
+    // weapon set's offhand slot, dropped for slot 42 or the ammunition and
+    // launcher item types.
+    CItem* pWeapon = pSprite->m_equipment.m_items[pSprite->m_equipment.m_selectedWeapon];
+    BYTE nOffhandSlot = static_cast<BYTE>((pSprite->m_nWeaponSet + 22) * 2);
+    CItem* pOffhand = pSprite->m_equipment.m_items[nOffhandSlot];
+    if (pSprite->m_equipment.m_selectedWeapon == 42) {
+        pOffhand = NULL;
+    } else if (pOffhand != NULL
+        && (pOffhand->GetItemType() == 47 || pOffhand->GetItemType() == 53
+            || pOffhand->GetItemType() == 49 || pOffhand->GetItemType() == 41)) {
+        pOffhand = NULL;
+    }
+    if (pWeapon == NULL) {
+        pSprite->SelectWeaponAbility(10, 0, 0, 1);
+        pWeapon = pSprite->m_equipment.m_items[pSprite->m_equipment.m_selectedWeapon];
+    }
+
+    const SHORT nExpectedRight = WspecDamage(pSprite, pWeapon);
+    const SHORT nExpectedLeft = WspecDamage(pSprite, pOffhand);
+
+    // One call adds exactly the specialization rows to the per-hand damage
+    // bonuses; the fighting-style arms behind them are dead in the shipping
+    // stub (sub_75E930 always returns 0), so nothing else moves these.
+    const LONG nRightBefore = pSprite->m_derivedStats.m_DamageBonusRight;
+    const LONG nLeftBefore = pSprite->m_derivedStats.m_DamageBonusLeft;
+    pSprite->CheckStatsChange();
+    CHECK(pSprite->m_derivedStats.m_DamageBonusRight == nRightBefore + nExpectedRight);
+    CHECK(pSprite->m_derivedStats.m_DamageBonusLeft == nLeftBefore + nExpectedLeft);
+
+    // A second call adds them again: the add is per recompute.
+    pSprite->CheckStatsChange();
+    CHECK(pSprite->m_derivedStats.m_DamageBonusRight == nRightBefore + 2 * nExpectedRight);
+    CHECK(pSprite->m_derivedStats.m_DamageBonusLeft == nLeftBefore + 2 * nExpectedLeft);
 }
