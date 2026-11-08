@@ -11639,8 +11639,27 @@ void CGameSprite::CheckStatsChange()
         field_7110 = m_baseStats.m_hitPoints;
     }
 
-    // TODO: 0x71C620-0x71CC8C not ported yet (portrait gate, XP cap,
-    // GetNextLevel, FeedBack(21), 0x71CC90 tail).
+    // Portrait-bearing sprites only: cap XP and check for the next level.
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        CDerivedStats statsNext;
+        DWORD nXPCap = pGame->GetRuleTables().GetXPCap();
+        if (m_derivedStats.m_nXP > nXPCap) {
+            m_derivedStats.m_nXP = nXPCap;
+        }
+        statsNext = m_derivedStats;
+        pGame->GetRuleTables().GetNextLevel(m_startTypeAI.m_nClass, statsNext, this);
+
+        BOOL bLevelChanged = statsNext.m_nLevel != m_derivedStats.m_nLevel;
+        if (bLevelChanged && !m_bLevelUp
+            && (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
+            FeedBack(21, 0, 0, 0, -1, 0, 0);
+        }
+        m_bLevelUp = bLevelChanged;
+    }
+
+    // TODO: 0x71CC6D tail-calls the CGameSprite member at 0x71CC90 (not
+    // ported; 528 bytes, over the callee budget -- listed in the report).
 }
 
 // 0x71CFF0
