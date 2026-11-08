@@ -34,6 +34,7 @@
 #include "CScreenWorld.h"
 #include "CSpell.h"
 #include "CStore.h"
+#include "CUIControlTextDisplay.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
 #include "CWorldMap.h"
@@ -21719,6 +21720,49 @@ void CMessageEnterDialogMode::Run()
     g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
     g_pBaldurChitin->m_pEngineWorld->sub_695650(TRUE);
     g_pBaldurChitin->m_pEngineWorld->sub_695570(FALSE, FALSE);
+
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(9)->SetActive(TRUE);
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(9)->GetControl(0)->SetActive(FALSE);
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(9)->InvalidateRect(NULL);
+
+    if (g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_21_7())->m_bActive == TRUE) {
+        g_pBaldurChitin->m_pEngineWorld->field_114C = g_pBaldurChitin->m_pEngineWorld->GetPanel_21_7();
+    } else if (g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_22_0())->m_bActive == TRUE) {
+        g_pBaldurChitin->m_pEngineWorld->field_114C = g_pBaldurChitin->m_pEngineWorld->GetPanel_22_0();
+    } else {
+        g_pBaldurChitin->m_pEngineWorld->field_114C = g_pBaldurChitin->m_pEngineWorld->GetPanel_21_7();
+    }
+
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_21_7())->SetActive(FALSE);
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_19_0())->SetActive(FALSE);
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_21_0())->SetActive(FALSE);
+    g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_22_0())->SetActive(FALSE);
+
+    CUIPanel* pDialogPanel = g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(g_pBaldurChitin->m_pEngineWorld->GetPanel_21_0());
+    pDialogPanel->SetActive(TRUE);
+
+    CUIControlTextDisplay* pOldDialogDisplay = g_pBaldurChitin->m_pEngineWorld->m_pActiveDialogDisplay;
+    g_pBaldurChitin->m_pEngineWorld->m_pActiveDialogDisplay = static_cast<CUIControlTextDisplay*>(pDialogPanel->GetControl(1));
+    static_cast<CUIControlTextDisplay*>(pDialogPanel->GetControl(1))->CopyDisplay(pOldDialogDisplay);
+    g_pBaldurChitin->m_pEngineWorld->m_pActiveChatDisplay = static_cast<CUIControlTextDisplay*>(pDialogPanel->GetControl(3));
+
+    g_pBaldurChitin->m_pEngineWorld->CopyChatEditBox(pOldDialogDisplay->m_pPanel, pDialogPanel);
+
+    CBaldurEngine::UpdateLabel(pDialogPanel, 0x10000009, "%d", m_nPartyGold);
+
+    if (pSprite != NULL && pSprite->GetObjectType() == CGameObject::TYPE_SPRITE) {
+        CResRef portraitResRef;
+
+        CUIControlButtonSinglePlayerPortrait* pPortrait = static_cast<CUIControlButtonSinglePlayerPortrait*>(pDialogPanel->GetControl(11));
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 10583
+        UTIL_ASSERT(pPortrait != NULL);
+
+        pPortrait->SetEnabled(FALSE);
+        portraitResRef = pSprite->GetBaseStats()->m_portraitSmall;
+        pPortrait->SetPortrait(portraitResRef);
+    }
 }
 
 // -----------------------------------------------------------------------------
