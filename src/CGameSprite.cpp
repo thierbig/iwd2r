@@ -11665,8 +11665,29 @@ void CGameSprite::CheckStatsChange()
 // 0x71CC90
 void CGameSprite::sub_71CC90() // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 {
-    // TODO: 0x71CC90-0x71CE9F not ported yet (weapon/offhand proficiency
-    // and fighting-style bonuses; tail-called by CheckStatsChange).
+    CItem* pWeapon = m_equipment.m_items[m_equipment.m_selectedWeapon];
+    BYTE nOffhandSlot = static_cast<BYTE>((m_nWeaponSet + 22) * 2);
+    CItem* pOffhand = m_equipment.m_items[nOffhandSlot];
+    if (m_equipment.m_selectedWeapon == 42) {
+        pOffhand = NULL;
+    } else if (pOffhand != NULL) {
+        // FIXME: Calls `GetItemType` four times.
+        if (pOffhand->GetItemType() == 47
+            || pOffhand->GetItemType() == 53
+            || pOffhand->GetItemType() == 49
+            || pOffhand->GetItemType() == 41) {
+            pOffhand = NULL;
+        }
+    }
+    if (pWeapon == NULL) {
+        // No weapon selected: fall back to the fist slot (0xa) and re-read.
+        SelectWeaponAbility(10, 0, 0, 1);
+        pWeapon = m_equipment.m_items[m_equipment.m_selectedWeapon];
+    }
+    sub_71CEA0(pWeapon, 0);
+    sub_71CEA0(pOffhand, 1);
+    // TODO: 0x71CD4F-0x71CE9F not ported yet (unchanged-weapon flag, Demand,
+    // ability/flags gates, fighting-style feat arms, Release).
 }
 
 // 0x71CEA0

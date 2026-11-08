@@ -40,6 +40,7 @@ public:
     /* 00CC */ BYTE m_selectedWeapon;
     /* 00CE */ WORD m_selectedWeaponAbility;
     /* 00D0 */ CGameSprite* m_pSprite;
+    /* 0128 */ CItem* field_128;
 };
 
 #endif /* CGAMESPRITEEQUIPMENT_H_ */
