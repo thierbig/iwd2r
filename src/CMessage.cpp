@@ -21662,6 +21662,65 @@ BYTE CMessageEnterDialogMode::GetMsgSubType()
 // NOTE: Run (0x4FE5B0) is the other players' side of StartDialog; the
 // message is BROADCAST_FORCED_OTHERS, so single player never runs it.
 
+// 0x4FE5B0
+void CMessageEnterDialogMode::Run()
+{
+    PLAYER_ID idRemotePlayer = 0;
+
+    if (g_pChitin->cNetwork.m_bIsHost == FALSE
+        && g_pChitin->cNetwork.m_nServiceProvider != CNetwork::SERV_PROV_NULL) {
+        // NOTE: A client of a multiplayer game sends the server its chatter
+        // name here (0x436C00). Multiplayer is removed (ADR 0002).
+    }
+
+    g_pBaldurChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    g_pBaldurChitin->m_pEngineWorld->m_bInControlOfDialog = FALSE;
+
+    CGameSprite* pSprite = NULL;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pSprite->GetAIType().m_nGender == CAIObjectType::SEX_FEMALE) {
+            g_pBaldurChitin->GetTlkTable().field_58 = byte_8BA28C;
+        } else {
+            g_pBaldurChitin->GetTlkTable().field_58 = byte_8FB954;
+        }
+
+        if (pSprite->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->m_pEngineWorld->SetDialogTokens(pSprite);
+        }
+
+        idRemotePlayer = pSprite->m_remotePlayerID;
+
+        if (g_pChitin->cNetwork.GetServiceProvider() == 0
+            || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+            g_pBaldurChitin->m_pEngineWorld->m_bInControlOfDialog = TRUE;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        g_pBaldurChitin->GetObjectGame()->GetMultiplayerSettings()->m_nHostPermittedDialogDelay = 0;
+        g_pBaldurChitin->GetObjectGame()->GetMultiplayerSettings()->m_bHostPermittedDialog = TRUE;
+        g_pBaldurChitin->GetObjectGame()->GetMultiplayerSettings()->m_idHostPermittedDialog = idRemotePlayer;
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->StopTime();
+    g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
+    g_pBaldurChitin->m_pEngineWorld->sub_695650(TRUE);
+    g_pBaldurChitin->m_pEngineWorld->sub_695570(FALSE, FALSE);
+}
+
 // -----------------------------------------------------------------------------
 
 // NOTE: Inlined in `CScreenWorld::StartDialog` (0x68F4EB).
