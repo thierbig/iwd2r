@@ -12,6 +12,7 @@
 #include "CGameAIBase.h"
 #include "CGameArea.h"
 #include "CGameDoor.h"
+#include "CGameEffect.h"
 #include "CGameObjectArray.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
@@ -181,6 +182,19 @@ void ClearMessages()
     while (!handler.m_messageList.IsEmpty()) {
         delete handler.m_messageList.RemoveHead();
     }
+}
+
+// An effect the way CMessageAddEffect decodes one: the AddEffect arms own
+// and delete it.
+CGameEffect* MakeDoorEffect(WORD effectID)
+{
+    ITEM_EFFECT effect;
+    std::memset(&effect, 0, sizeof(effect));
+    CGameEffect::ClearItemEffect(&effect, effectID);
+    return CGameEffect::DecodeEffect(&effect,
+        CPoint(-1, -1),
+        CGameObjectArray::INVALID_INDEX,
+        CPoint(-1, -1));
 }
 
 }
@@ -397,6 +411,106 @@ TEST_CASE("ai: a forced toggle opens a locked door, unlocks it, and closes it ag
     CHECK((pDoor->m_dwFlags & 0x1) == 0);
     CHECK(pDoor->m_pos == CPoint(10, 20));
     CHECK(pDoor->m_tiledObject.m_wAIState == CTiledObject::STATE_SECONDARY_TILE);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: knock unlocks a normally locked door and posts a door-open message", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameDoor* pDoor = MakeDoor(0x2);
+    // The door-open message is SEND-routed, so the door needs a real id for
+    // CMessageHandler::Send to find its target. The raw-storage door cannot
+    // go into the object array itself (it has no vtable for later scans), so
+    // it borrows a live AI object's id: Send reads only the target's
+    // m_remotePlayerID from the slot. AddEffect is virtual, so the calls
+    // below are qualified: the zeroed storage has no vfptr to dispatch
+    // through, and the qualified name lands in the ported body directly.
+    CGameAIBase* pProxy = AddAIObject();
+    pDoor->m_id = pProxy->m_id;
+    LONG id = pProxy->m_id;
+
+    pDoor->CGameDoor::AddEffect(MakeDoorEffect(CGAMEEFFECT_KNOCK), 0, TRUE, TRUE);
+
+    CHECK((pDoor->m_dwFlags & 0x2) == 0);
+
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    REQUIRE(handler.m_messageList.GetCount() == 1);
+    auto* message = dynamic_cast<CMessageDoorOpen*>(handler.m_messageList.GetHead());
+    REQUIRE(message != nullptr);
+    CHECK(message->m_bOpen == TRUE);
+    CHECK(message->m_targetId == id);
+    CHECK(message->m_sourceId == id);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: knock on a magically locked door says the spell failed", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameDoor* pDoor = MakeDoor(0x2);
+    pDoor->m_lockDifficulty = 100;
+    pDoor->CGameDoor::AddEffect(MakeDoorEffect(CGAMEEFFECT_KNOCK), 0, TRUE, TRUE);
+
+    // Still locked.
+    CHECK((pDoor->m_dwFlags & 0x2) != 0);
+
+    // "The lock is held by magic and cannot be picked" (23169) in the
+    // original's colors. Broadcast-forced, so it lands on the list even
+    // though the door's id is INVALID_INDEX.
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    REQUIRE(handler.m_messageList.GetCount() == 1);
+    auto* message = dynamic_cast<CMessageDisplayTextRef*>(handler.m_messageList.GetHead());
+    REQUIRE(message != nullptr);
+    CHECK(message->m_text == 0x5A81);
+    CHECK(message->m_name == static_cast<STRREF>(-1));
+    CHECK(message->m_nameColor == 0);
+    CHECK(message->m_textColor == static_cast<COLORREF>(0xD7C8A0));
+    CHECK(message->m_marker == -1);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: detect traps marks a trapped door detected and redraws its outline", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameDoor* pDoor = MakeDoor(0x8);
+    pDoor->m_trapActivated = 1;
+    pDoor->m_trapDetectionDifficulty = 50;
+    // The sprite-autopause lookup short-circuits on a NOONE type.
+    pDoor->m_typeAI.Set(CAIObjectType::NOONE);
+    // The set-trigger message is SEND-routed; borrow a live AI object's id
+    // (the raw-storage door has no vtable to sit in the object array).
+    CGameAIBase* pProxy = AddAIObject();
+    pDoor->m_id = pProxy->m_id;
+
+    pDoor->CGameDoor::AddEffect(MakeDoorEffect(CGAMEEFFECT_DETECTTRAPS), 0, TRUE, TRUE);
+
+    CHECK(pDoor->m_trapDetected == 1);
+    CHECK(pDoor->m_drawPoly == 400);
+
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    REQUIRE(handler.m_messageList.GetCount() == 3);
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    auto* pSet = dynamic_cast<CMessageSetTrigger*>(handler.m_messageList.GetNext(pos));
+    REQUIRE(pSet != nullptr);
+    CHECK(pSet->m_trigger.m_triggerID == CAITRIGGER_DETECTED);
+    auto* pStatus = dynamic_cast<CMessageTriggerStatus*>(handler.m_messageList.GetNext(pos));
+    REQUIRE(pStatus != nullptr);
+    CHECK(pStatus->m_dwFlags == 0x8);
+    CHECK(pStatus->m_trapActivated == 1);
+    CHECK(pStatus->m_trapDetected == 1);
+    auto* pDraw = dynamic_cast<CMessageSetDrawPoly*>(handler.m_messageList.GetNext(pos));
+    REQUIRE(pDraw != nullptr);
+    CHECK(pDraw->m_time == 400);
+
+    // Already detected: the second pass touches no message list.
+    ClearMessages();
+    pDoor->CGameDoor::AddEffect(MakeDoorEffect(CGAMEEFFECT_DETECTTRAPS), 0, TRUE, TRUE);
+    CHECK(handler.m_messageList.GetCount() == 0);
 
     ClearMessages();
 }
