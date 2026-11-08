@@ -11653,7 +11653,7 @@ void CGameSprite::CheckStatsChange()
         if (bLevelChanged && !m_bLevelUp
             && (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
                 || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
-            FeedBack(21, 0, 0, 0, -1, 0, 0);
+            FeedBack(FEEDBACK_LEVELUP, 0, 0, 0, -1, 0, 0);
         }
         m_bLevelUp = bLevelChanged;
     }
