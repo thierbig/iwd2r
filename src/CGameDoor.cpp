@@ -386,8 +386,26 @@ void CGameDoor::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL imm
         }
         break;
 
+    case CGAMEEFFECT_CASTSPELL: {
+        CAIObjectType acteeType;
+        acteeType.Set(GetAIType());
+        // The exe constructs and immediately destroys a throwaway CAIAction
+        // at 0x486CE7/0x486CFB; same unused pair as the trigger twin and the
+        // note on 0x593D70.
+        CAIAction forceSpell;
+        forceSpell.m_actionID = CAIAction::FORCESPELL;
+        forceSpell.m_acteeID.Set(acteeType);
+        CString spellRes;
+        pEffect->m_res.CopyToString(spellRes);
+        forceSpell.SetString1(spellRes);
+        forceSpell.m_specificID = pEffect->m_effectAmount;
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageAddAction(forceSpell, m_id, pEffect->m_sourceID), FALSE);
+        break;
+    }
+
     default:
-        // TODO: 0x486C37-0x48746A (ranges 3-4) not ported
+        // TODO: 0x486E98-0x48746A (range 4) not ported
         break;
     }
 
