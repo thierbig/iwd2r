@@ -18,6 +18,8 @@
 #include "CNetwork.h"
 #include "CScreenWorld.h"
 
+#include "engine_world.h"
+
 #include <cstring>
 #include <memory>
 
@@ -50,6 +52,19 @@ private:
     CChitin* m_previous;
     TestChitin m_chitin;
 };
+
+// tests/test_derived_spell.cpp's guard: the booted-engine tests need the
+// install (IWD2_DATA); without it they skip rather than fail.
+#define REQUIRE_ENGINE()                            \
+    do {                                            \
+        const char* env = std::getenv("IWD2_DATA"); \
+        if (env == nullptr || *env == '\0') {       \
+            SKIP("[iwd2r-skip] IWD2_DATA unset");   \
+        }                                           \
+        std::string error;                          \
+        INFO(error);                                \
+        REQUIRE(engine_world::StartEngine(error));  \
+    } while (0)
 
 }
 
@@ -535,7 +550,6 @@ TEST_CASE("CBaldurMessage::OnResourceDemanded answers only the host and echoes a
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
-// CBaldurMessage::OnLeaveAreaLuaRequestToServer (0x437950): the host-side
 // LEAVEAREALUA 88/82 permit handler. The two entry guards need no game state.
 TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a session or a host", "[msg][network]")
 {
@@ -560,11 +574,21 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a sessi
     network.m_bIsHost = FALSE;
 }
 
-// The handler's response computation and the 1-byte LEAVEAREALUA 88/114 reply
-// on a zeroed game: the remote object always misses (so no feedback sprite
-// and no transition), the area is never loaded and the settings are the only
-// variable. Codes seen in the original: 1 allow, 0 deny, 3 busy/blocking,
-// 4 paused.
+// The handler's response computation and the 1-byte LEAVEAREALUA 88/114
+// reply on a zeroed game: the remote object always misses (so no feedback
+// sprite), the area is never loaded and the settings are the only variable.
+// Codes seen in the original: 0 deny, 3 busy/blocking, 4 paused. The allow
+// code 1 lives in the booted-engine test below: the reply and the transition
+// are one — the handler calls CInfGame::LeaveAreaLUA straight after
+// marshalling reply 1 — and the transition's LoadArea resolves the
+// destination through the key table (CResHelper::SetResRef,
+// src/CRes.h -> CDimm::GetResObject -> CDimmKeyTable::Hash, whose modulo
+// divides by the table's entry count, src/CDimmKeyTable.cpp), which a
+// ChitinScope chitin never loads: m_nEntries is 0 and the hash divides by
+// zero. The original divides just as unguarded — an area load always runs
+// on a built engine — so this is the test's to route around, not the
+// port's. Every other code stops the handler before the call, which is
+// exactly why the zeroed game can take these arms.
 TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit request", "[msg][network]")
 {
     ChitinScope scope;
@@ -578,31 +602,12 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit requ
     g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
     g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(world.get());
 
-    // The allow arm drives the handler into CInfGame::LeaveAreaLUA, whose
-    // head switches to the world engine when the active engine is the map
-    // engine or, on an established host, anything else — the original
-    // dereferences pActiveEngine there unguarded (0x5C3BDF: mov edx,[ecx]).
-    // The real game always has an engine active; the zeroed CBaldurChitin
-    // left pActiveEngine (NULL from the untouched ChitinScope) equal to the
-    // zeroed m_pEngineMap, and the NULL==NULL switch crashed exactly where
-    // the original would. Pin the active engine to the world engine — the
-    // steady in-game state, in which both compares skip the switch.
-    CWarp* pSavedActiveEngine = g_pChitin->pActiveEngine;
-    g_pChitin->pActiveEngine = g_pBaldurChitin->m_pEngineWorld;
-
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
     for (INT i = 0; i < 6; i++) {
         pSettings->field_AC[i] = 0xFF;
         pSettings->field_B2[i] = FALSE;
     }
-
-    // field_1B86 receives the area name through CString::operator=, which
-    // the original also calls unguarded (0x5C3D9E -> 0x7FCD07): a zeroed
-    // CString is not a constructed one (the empty-string sentinel is not
-    // all-bits-zero), so construct the member the way the real game's
-    // CInfGame constructor would have.
-    new (&pGame->field_1B86) CString();
 
     network.m_psPlayerName[0] = "sender";
     network.m_pbPlayerVisible[0] = TRUE;
@@ -645,22 +650,17 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit requ
     memcpy(packet + nSize, "AR1000", 6);
     nSize += 6;
 
-    // Allow: no player is in a character screen, the game is not paused, not
-    // in a save/load mode, no dialog is pending and the area is not loaded.
+    // A remote player in the inventory (field_AC) or the level-up screen
+    // (field_B2) denies with 0. The reply is the LEAVEAREALUA 88/114 header
+    // plus the one code byte.
+    pSettings->field_AC[0] = 0;
     memset(pBuffer, 0xCD, 4 + 1);
     CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
     CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
     CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_LEAVEAREALUA);
     CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REPLY);
-    CHECK(pBuffer[3] == 1);
-    CHECK(pBuffer[4] == 0xCD);
-
-    // A remote player in the inventory (field_AC) or the level-up screen
-    // (field_B2) denies with 0.
-    pSettings->field_AC[0] = 0;
-    memset(pBuffer, 0xCD, 4 + 1);
-    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
     CHECK(pBuffer[3] == 0);
+    CHECK(pBuffer[4] == 0xCD);
 
     pSettings->field_AC[0] = 0xFF;
     pSettings->field_B2[0] = TRUE;
@@ -698,13 +698,128 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer answers the permit requ
     pSettings->m_bHostPermittedDialog = FALSE;
 
     g_pBaldurChitin = pSavedBaldur;
-    g_pChitin->pActiveEngine = pSavedActiveEngine;
 
     // Leave the embedded CNetwork closed before the ChitinScope restores
     // g_pChitin (its destructor would otherwise call OnCloseSession).
     network.m_bConnectionEstablished = FALSE;
     network.m_bIsHost = FALSE;
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+// The allow arm — reply 1 — on the booted engine: the grant and the
+// transition it inseparably performs. A new game stands in its start area;
+// asking to travel to the unloaded AR1001 is granted and LeaveAreaLUA's
+// LoadArea brings AR1001 in. The session is the zeroed test's fake host on
+// the real cNetwork: a real HostSession would force the null provider under
+// which SendSpecificMessage marshals nothing, while the TCP/IP provider
+// keeps the static-message-buffer seam and its send failure is ignored.
+// The in-play fixture is tests/test_combat.cpp's NewGameInStartArea: bare
+// NewGame loads no area, so m_gameAreas[m_visibleArea] holds no live area,
+// and the head's host SelectEngine(world) — which fires while the create-char
+// screen is still active — runs WorldEngineActivated (0x5AF7F0), whose
+// m_gameAreas[m_visibleArea]->OnActivation() the original equally never
+// guards; it is the test's to set up, not the port's. Seating the party
+// member creates AR1000 in slot 0 and pinning pActiveEngine to the world
+// screen holds the steady in-play state both SelectEngine conditions skip.
+// The remote object misses (no client ever joined), so the move half of the
+// transition is skipped exactly as it is for a host alone: GetDeny of the
+// invalid index answers BAD_INDEX, not SHARED, the retry loop falls through
+// with no leader to move, and ReleaseDeny of the invalid index is a no-op.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer grants the permit and performs the transition", "[msg][network][data]")
+{
+    REQUIRE_ENGINE();
+
+    // The main loop's drawn frames (tests/test_gam.cpp's FramePump): the
+    // area load and the progress-bar bumps wait for m_bDisplayStale to
+    // clear.
+    engine_world::FramePump pump;
+
+    std::vector<BYTE> cre = engine_world::FinishedCharacter();
+    REQUIRE(!cre.empty());
+    engine_world::NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CNetwork& network = g_pChitin->cNetwork;
+    const CString sSavedName = network.m_psPlayerName[0];
+    const BOOL bSavedVisible = network.m_pbPlayerVisible[0];
+    const auto nSavedPlayerID = network.m_pPlayerID[0];
+    const auto nSavedProvider = network.m_nServiceProvider;
+    const BOOL bSavedEstablished = network.m_bConnectionEstablished;
+    const BOOL bSavedHost = network.m_bIsHost;
+    const auto nSavedLocalPlayer = network.m_idLocalPlayer;
+    const auto nSavedHostPlayer = network.m_nHostPlayer;
+
+    network.m_psPlayerName[0] = "sender";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    // The fake session is coherent: the host is the local player, seated at
+    // player location 0. A real session hands every player a nonzero id and
+    // marks the host's location; the defaults (local 0, host -1) are the
+    // "no session" values, under which LoadArea's ChangeControlOnLoadGame
+    // resolves the party member's controller to no player and asserts
+    // (CGameRemoteObjectArray.cpp:742) — the original asserts identically,
+    // it just never loads an area sessionless.
+    network.m_idLocalPlayer = 1;
+    network.m_nHostPlayer = 0;
+
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREALUA 88, permit request 82;
+    //  DWORD remotePlayerID 1; DWORD remoteObjectID 0;
+    //  LONG x 10; LONG y 20; SHORT direction 3;
+    //  BYTE 3 "abc"; BYTE 6 "AR1001"}
+    BYTE packet[64];
+    DWORD nSize = 0;
+    packet[nSize++] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[nSize++] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[nSize++] = CBaldurMessage::MSG_SUBTYPE_LEAVEAREALUA_PERMIT_REQUEST;
+    DWORD nRemotePlayerID = 1;
+    DWORD nRemoteObjectID = 0;
+    LONG nX = 10;
+    LONG nY = 20;
+    SHORT nDirection = 3;
+    memcpy(packet + nSize, &nRemotePlayerID, sizeof(nRemotePlayerID));
+    nSize += sizeof(nRemotePlayerID);
+    memcpy(packet + nSize, &nRemoteObjectID, sizeof(nRemoteObjectID));
+    nSize += sizeof(nRemoteObjectID);
+    memcpy(packet + nSize, &nX, sizeof(nX));
+    nSize += sizeof(nX);
+    memcpy(packet + nSize, &nY, sizeof(nY));
+    nSize += sizeof(nY);
+    memcpy(packet + nSize, &nDirection, sizeof(nDirection));
+    nSize += sizeof(nDirection);
+    packet[nSize++] = 3;
+    memcpy(packet + nSize, "abc", 3);
+    nSize += 3;
+    packet[nSize++] = 6;
+    memcpy(packet + nSize, "AR1001", 6);
+    nSize += 6;
+
+    // Granted: no player is in a character screen, the game is not paused,
+    // not in a save/load mode, no dialog is pending and AR1001 is not
+    // loaded. Only the grant reaches LeaveAreaLUA — the handler gates the
+    // call on the reply — and only the transition loads the destination.
+    CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, nSize) == TRUE);
+    CHECK(pGame->GetArea(CString("AR1001")) != NULL);
+
+    // The transition's own status sends (progress bar, the all-clear
+    // signal) reuse the static buffer after the reply; the loaded area is
+    // the stronger fact, this only notes that the seam stayed live.
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+
+    // Leave the embedded CNetwork closed before the process tears the
+    // engine down (its destructor would otherwise call OnCloseSession).
+    network.m_psPlayerName[0] = sSavedName;
+    network.m_pbPlayerVisible[0] = bSavedVisible;
+    network.m_pPlayerID[0] = nSavedPlayerID;
+    network.m_nServiceProvider = nSavedProvider;
+    network.m_bConnectionEstablished = bSavedEstablished;
+    network.m_bIsHost = bSavedHost;
+    network.m_idLocalPlayer = nSavedLocalPlayer;
+    network.m_nHostPlayer = nSavedHostPlayer;
 }
 
 // CBaldurMessage::SendChatMessage (0x432C50): the chat formatting and the
