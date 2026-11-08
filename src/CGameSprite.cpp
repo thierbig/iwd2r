@@ -11542,8 +11542,52 @@ void CGameSprite::CheckStatsChange()
         }
     }
 
-    // TODO: 0x71C221-0x71CC8C not ported yet (innate SPIN970 adjustment,
-    // HPCON/saves/divine grace, level-up check, 0x71CC90).
+    // Innate ability granted for high charisma (SPIN970): reconcile the
+    // entry's max uses with the charisma modifier.
+    UINT nID = 0;
+    if (pGame->m_innateSpells.Find(SPIN970, nID)
+        && m_innateSpells.m_List.begin() != m_innateSpells.m_List.end()) {
+        UINT nIdx = 0;
+        if (m_innateSpells.Find(nID, nIdx)) {
+            INT nTarget = pGame->GetRuleTables().GetAbilityScoreModifier(m_derivedStats.m_nCHR) + 3;
+            if (nTarget < 1) {
+                nTarget = 1;
+            }
+
+            // NOTE: The feat number (0x17) has no FEAT_ define in our tree.
+            if (sub_763150(0x17) == 1) { // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                nTarget += GetFeatValue(0x17);
+            }
+
+            INT nDelta = nTarget - m_innateSpells.Get(nIdx)->field_4;
+
+            if (nDelta > 0) {
+                UINT nFound = 0;
+                if (pGame->m_innateSpells.Find(SPIN970, nFound)) {
+                    m_innateSpells.Add(nFound, nDelta, 0, 0);
+                }
+
+                nFound = 0;
+                if (pGame->m_innateSpells.Find(SPIN970, nFound)) {
+                    m_innateSpells.sub_725C50(nFound, nDelta, FALSE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                }
+            } else if (nDelta < 0) {
+                INT nToRemove = -nDelta;
+                UINT nFound = 0;
+                if (pGame->m_innateSpells.Find(SPIN970, nFound)) {
+                    m_innateSpells.sub_725CC0(nFound, nToRemove, FALSE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                }
+
+                nFound = 0;
+                if (pGame->m_innateSpells.Find(SPIN970, nFound)) {
+                    m_innateSpells.Remove(nFound, FALSE, nToRemove, 0);
+                }
+            }
+        }
+    }
+
+    // TODO: 0x71C481-0x71CC8C not ported yet (HPCON/saves/divine grace,
+    // level-up check, 0x71CC90).
 }
 
 // 0x71CFF0
