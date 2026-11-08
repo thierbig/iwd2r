@@ -21763,6 +21763,35 @@ void CMessageEnterDialogMode::Run()
         portraitResRef = pSprite->GetBaseStats()->m_portraitSmall;
         pPortrait->SetPortrait(portraitResRef);
     }
+
+    // NOTE: Uninline.
+    g_pBaldurChitin->m_pEngineWorld->SetNewViewSize(CInfinity::stru_8E7958, FALSE);
+
+    INT x;
+    INT y;
+    g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->GetInfinity()->GetViewPosition(x, y);
+    g_pBaldurChitin->m_pEngineWorld->field_F12 = CPoint(x, y);
+
+    g_pBaldurChitin->GetObjectCursor()->SetCursor(0, FALSE);
+    g_pBaldurChitin->GetObjectGame()->m_tempCursor = 4;
+    g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->m_nScrollState = 0;
+
+    if (g_pBaldurChitin->m_pEngineWorld->m_bInControlOfDialog) {
+        g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_mode = 0x502;
+    } else {
+        g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_mode = 0x182;
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->GetInfinity()->GetViewPosition(x, y);
+    g_pBaldurChitin->m_pEngineWorld->field_F12 = CPoint(x, y);
+
+    CResRef resRefArea;
+    resRefArea = g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->m_resRef;
+    g_pBaldurChitin->m_pEngineWorld->field_F1A = resRefArea;
+
+    g_pBaldurChitin->m_pEngineWorld->DisplayText(CString(""), CString(""), RGB(0, 0, 0), RGB(0, 0, 0), -1, TRUE);
+
+    g_pBaldurChitin->m_pEngineWorld->m_internalLoadedDialog.field_54 = TRUE;
 }
 
 // -----------------------------------------------------------------------------
