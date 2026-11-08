@@ -21718,8 +21718,8 @@ void CMessageEnterDialogMode::Run()
 
     g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->StopTime();
     g_pBaldurChitin->m_pEngineWorld->m_bPaused = TRUE;
-    g_pBaldurChitin->m_pEngineWorld->sub_695650(TRUE);
-    g_pBaldurChitin->m_pEngineWorld->sub_695570(FALSE, FALSE);
+    g_pBaldurChitin->m_pEngineWorld->sub_695650(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+    g_pBaldurChitin->m_pEngineWorld->sub_695570(FALSE, FALSE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 
     g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(9)->SetActive(TRUE);
     g_pBaldurChitin->m_pEngineWorld->GetManager()->GetPanel(9)->GetControl(0)->SetActive(FALSE);
@@ -21789,7 +21789,7 @@ void CMessageEnterDialogMode::Run()
     resRefArea = g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->m_resRef;
     g_pBaldurChitin->m_pEngineWorld->field_F1A = resRefArea;
 
-    g_pBaldurChitin->m_pEngineWorld->DisplayText(CString(""), CString(""), RGB(0, 0, 0), RGB(0, 0, 0), -1, TRUE);
+    g_pBaldurChitin->m_pEngineWorld->DisplayText(CString(""), CString(""), RGB(0, 0, 0), RGB(0, 0, 0), -1, TRUE); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
 
     g_pBaldurChitin->m_pEngineWorld->m_internalLoadedDialog.field_54 = TRUE;
 }
