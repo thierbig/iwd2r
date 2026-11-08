@@ -3,6 +3,7 @@
 #include "CAIGroup.h"
 #include "CAIScript.h"
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
 #include "CGameArea.h"
 #include "CGameEffect.h"
 #include "CGameSprite.h"
@@ -10,6 +11,7 @@
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CPathSearch.h"
+#include "CProjectile.h"
 #include "CScreenWorld.h"
 #include "CTiledObject.h"
 #include "CTimerWorld.h"
@@ -404,8 +406,58 @@ void CGameDoor::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL imm
         break;
     }
 
+    case CGAMEEFFECT_SUMMON: {
+        ITEM_EFFECT removal;
+        CGameEffect::ClearItemEffect(&removal, 68);
+        removal.durationType = 4;
+        removal.duration = (pEffect->m_duration - g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime) / 15;
+        removal.effectAmount = 1;
+        CGameEffect* pRemoval = CGameEffect::DecodeEffect(&removal, CPoint(-1, -1), -1, CPoint(-1, -1));
+        LONG x = pEffect->m_target.x / CPathSearch::GRID_SQUARE_SIZEX;
+        LONG y = pEffect->m_target.y / CPathSearch::GRID_SQUARE_SIZEY;
+        CCreatureFile creature;
+        creature.SetResRef(pEffect->m_res, TRUE, TRUE);
+        DWORD size = creature.GetDataSize();
+        BYTE* data = creature.GetData();
+        CGameSprite* pSprite = new CGameSprite(data, size, 0, 0, static_cast<DWORD>(-1), 0, 0, 0x7FFFFFFF, CPoint(-1, -1), 0);
+        pSprite->SetResRef(CResRef(creature.GetResRef().GetResRefStr()));
+        creature.ReleaseData();
+        if (pSprite != NULL) {
+            LONG id = pSprite->GetId();
+            CString res;
+            pEffect->m_res.CopyToString(res);
+            pSprite->SetResRef(CResRef(res));
+            BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(id,
+                CGameObjectArray::THREAD_ASYNCH, reinterpret_cast<CGameObject**>(&pSprite), INFINITE);
+            if (rc == CGameObjectArray::SUCCESS) {
+                CPoint grid = m_pArea->m_search.GetNearestOpenSquare(CPoint(x, y), GetTerrainTable(),
+                    pSprite->GetAnimation()->GetPersonalSpace(), -1);
+                CPoint pos(grid.x * CPathSearch::GRID_SQUARE_SIZEX, grid.y * CPathSearch::GRID_SQUARE_SIZEY);
+                pSprite->AddToArea(m_pArea, pos, 0, pSprite->GetAnimation()->GetListType());
+                CProjectile* pProjectile = CProjectile::DecodeProjectile(144, pSprite, 0);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageFireProjectile(pProjectile->m_projectileType, id, CPoint(0, 0), 30, id, id, 0), FALSE);
+                pProjectile->Fire(m_pArea, id, id, CPoint(0, 0), 0, 0);
+                CAIObjectType type;
+                type.Set(pSprite->GetAIType());
+                CAIObjectType live;
+                live.Set(pSprite->m_liveTypeAI);
+                CAIObjectType start;
+                start.Set(pSprite->m_liveTypeAI);
+                if (pEffect->m_durationType != 1) {
+                    pRemoval->m_casterLevel = pEffect->m_casterLevel;
+                    pSprite->AddEffect(pRemoval, 1, TRUE, TRUE);
+                }
+                pSprite->SetSequence(1);
+                pSprite->SetFacing(rand() % 16);
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(id,
+                    CGameObjectArray::THREAD_ASYNCH, INFINITE);
+            }
+        }
+        break;
+    }
+
     default:
-        // TODO: 0x486E98-0x48746A (range 4) not ported
         break;
     }
 
