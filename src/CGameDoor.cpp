@@ -1,18 +1,18 @@
 #include "CGameDoor.h"
 
+#include "CAIGroup.h"
 #include "CAIScript.h"
 #include "CBaldurChitin.h"
-#include "CAIGroup.h"
 #include "CGameArea.h"
 #include "CGameEffect.h"
 #include "CGameSprite.h"
 #include "CInfCursor.h"
 #include "CInfGame.h"
 #include "CMessage.h"
-#include "CTiledObject.h"
-#include "CTimerWorld.h"
 #include "CPathSearch.h"
 #include "CScreenWorld.h"
+#include "CTiledObject.h"
+#include "CTimerWorld.h"
 #include "CUtil.h"
 #include "CVidInf.h"
 #include "CVidPoly.h"
@@ -337,6 +337,11 @@ CGameDoor::~CGameDoor()
 // 0x486860
 void CGameDoor::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL immediateApply)
 {
+    // 0x48688E: zeroed once for the whole function; this compile never
+    // stores TRUE anywhere, so the CMessageDoorStatus post at 0x486C04 is
+    // unreachable in the shipping exe (the container twin does set its flag).
+    BOOL bTrapTriggered = FALSE;
+
     switch (pEffect->m_effectID) {
     case CGAMEEFFECT_KNOCK:
         if (m_lockDifficulty == 100) {
@@ -349,8 +354,40 @@ void CGameDoor::AddEffect(CGameEffect* pEffect, BYTE list, BOOL noSave, BOOL imm
             new CMessageDoorOpen(TRUE, m_id, m_id), FALSE);
         break;
 
+    case CGAMEEFFECT_DETECTTRAPS:
+        if (m_trapActivated != 0) {
+            if (m_trapDetected == 0 && m_trapDetectionDifficulty < 100 && (m_dwFlags & 0x8) != 0) {
+                CAITrigger trigger(CAITRIGGER_DETECTED, m_typeAI, 0);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageSetTrigger(trigger, m_id, m_id), FALSE);
+                m_trapDetected = 1;
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageTriggerStatus(m_dwFlags, m_trapActivated, m_trapDetected, m_id, m_id),
+                    FALSE);
+                CGameObject* pObject = m_typeAI.sub_40CCA0(reinterpret_cast<CGameAIBase*>(m_id), FALSE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+                if (pObject != NULL) {
+                    CAIObjectType spriteType(CGameObject::TYPE_SPRITE, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                    if (pObject->GetAIType().Equal(spriteType)) {
+                        static_cast<CGameAIBase*>(pObject)->AutoPause(0x80);
+                    }
+                }
+            }
+            if (m_trapDetected != 0) {
+                if (m_drawPoly != 400 && !g_pBaldurChitin->GetBaldurMessage()->m_bInMessageSetDrawPoly) {
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                        new CMessageSetDrawPoly(400, m_id, m_id), FALSE);
+                }
+                m_drawPoly = 400;
+            }
+            if (bTrapTriggered) {
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                    new CMessageDoorStatus(this, m_id, m_id), FALSE);
+            }
+        }
+        break;
+
     default:
-        // TODO: 0x486929-0x48746A (ranges 2-4) not ported
+        // TODO: 0x486C37-0x48746A (ranges 3-4) not ported
         break;
     }
 
