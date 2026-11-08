@@ -11658,8 +11658,7 @@ void CGameSprite::CheckStatsChange()
         m_bLevelUp = bLevelChanged;
     }
 
-    // TODO: 0x71CC6D tail-calls the CGameSprite member at 0x71CC90 (not
-    // ported; 528 bytes, over the callee budget -- listed in the report).
+    sub_71CC90();
 }
 
 // 0x71CC90
@@ -11686,8 +11685,54 @@ void CGameSprite::sub_71CC90() // re-lint: disable RE004 (address-named in this 
     }
     sub_71CEA0(pWeapon, 0);
     sub_71CEA0(pOffhand, 1);
-    // TODO: 0x71CD4F-0x71CE9F not ported yet (unchanged-weapon flag, Demand,
-    // ability/flags gates, fighting-style feat arms, Release).
+    BOOL bUnchanged = (pWeapon == m_equipment.field_128);
+    // The exe default-constructs a nil CString local here (0x71CD5C) that is
+    // never read and destructs as a no-op (0x71CE88); the port omits it.
+    pWeapon->Demand();
+    ITEM_ABILITY* pAbility = pWeapon->GetAbility(m_equipment.m_selectedWeaponAbility);
+    if (pAbility != NULL && static_cast<BYTE>(pAbility->type) != 2) {
+        if (pWeapon->GetFlagsFile() & 2) {
+            // Ranged weapon: Dirty Fighting. Dead arms in the shipping exe --
+            // sub_75E930 is a stub that always returns 0.
+            if (!bUnchanged) {
+                int nRank = sub_75E930(CGAMESPRITE_FEAT_DIRTY_FIGHTING);
+                if (nRank == 1) {
+                    m_derivedStats.m_nPhysicalSpeed += 2;
+                    m_derivedStats.m_DamageBonusRight += 1;
+                    m_derivedStats.m_nCriticalHitBonus += 1;
+                } else if (nRank == 2) {
+                    m_derivedStats.m_nPhysicalSpeed += 4;
+                    m_derivedStats.m_DamageBonusRight += 1;
+                    m_derivedStats.m_nCriticalHitBonus += 1;
+                }
+            }
+        } else if (pOffhand == NULL) {
+            if (m_equipment.m_items[nOffhandSlot] == NULL) {
+                // Nothing in the offhand slot: Dodge. Dead arms, see above.
+                if (!bUnchanged) {
+                    int nRank = sub_75E930(CGAMESPRITE_FEAT_DODGE);
+                    if (nRank == 1) {
+                        m_derivedStats.field_6 += 1;
+                        m_derivedStats.m_nCriticalHitBonus += 1;
+                    } else if (nRank == 2) {
+                        m_derivedStats.field_6 += 2;
+                        m_derivedStats.m_nCriticalHitBonus += 1;
+                    }
+                }
+            } else {
+                // Item still occupies the offhand slot: Discipline.
+                if (!bUnchanged) {
+                    int nRank = sub_75E930(CGAMESPRITE_FEAT_DISCIPLINE);
+                    if (nRank == 1) {
+                        m_derivedStats.m_nACMissileMod += -2;
+                    } else if (nRank == 2) {
+                        m_derivedStats.m_nACMissileMod += -4;
+                    }
+                }
+            }
+        }
+    }
+    pWeapon->Release();
 }
 
 // 0x71CEA0
