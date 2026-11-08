@@ -204,8 +204,7 @@ TEST_CASE("enter dialog mode: Run moves the world screen into dialog", "[dialog]
 
     // The portrait button is disabled and shows the speaker's small
     // portrait (SetPortrait, 0x64F930).
-    CUIControlButtonSinglePlayerPortrait* pPortrait =
-        static_cast<CUIControlButtonSinglePlayerPortrait*>(pDialogPanel->GetControl(11));
+    CUIControlButtonSinglePlayerPortrait* pPortrait = static_cast<CUIControlButtonSinglePlayerPortrait*>(pDialogPanel->GetControl(11));
     CHECK(pPortrait->m_bEnabled == FALSE);
     CHECK(std::memcmp(pPortrait->m_portraitResRef.GetResRef(),
               pSprite->GetBaseStats()->m_portraitSmall,
