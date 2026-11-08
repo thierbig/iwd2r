@@ -944,7 +944,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 248:
         // GlobalBitGlobal
-        // TODO: 0x4506A2-0x4506B0 calls 0x469040 (not ported).
+        returnValue = GlobalBitGlobal();
         goto done;
     case 251:
         // DropInventoryEX
@@ -4433,6 +4433,30 @@ SHORT CGameAIBase::IncrementGlobal()
     return ACTION_DONE;
 }
 
+namespace {
+
+// 0x469040's op dispatch, reached once per destination arm: m_specificID 1
+// AND, 2 OR, 3 XOR. FALSE for any other value, which every caller turns
+// into ACTION_ERROR before writing anything.
+BOOL CombineGlobalBit(LONG& nDest, LONG nSrc, LONG nOp)
+{
+    switch (nOp) {
+    case 1:
+        nDest &= nSrc;
+        return TRUE;
+    case 2:
+        nDest |= nSrc;
+        return TRUE;
+    case 3:
+        nDest ^= nSrc;
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+} // namespace
+
 // 0x469040
 SHORT CGameAIBase::GlobalBitGlobal()
 {
@@ -4442,6 +4466,7 @@ SHORT CGameAIBase::GlobalBitGlobal()
     // m_specificID picks the op: 1 AND, 2 OR, 3 XOR.
 
     LONG nSrc = 0;
+    CMessage* message;
 
     CString sString = m_curAction.GetString1();
     sString.MakeUpper();
@@ -4487,7 +4512,82 @@ SHORT CGameAIBase::GlobalBitGlobal()
         }
     }
 
-    // TODO: 0x46931B-0x4699D9 (the destination write) not ported.
+    if (strcmp(sDestScope, "GLOBAL") == 0) {
+        CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sDestName);
+        if (pVariable != NULL) {
+            if (!CombineGlobalBit(pVariable->m_intValue, nSrc, m_curAction.m_specificID)) {
+                return ACTION_ERROR;
+            }
+
+            message = new CMessageSetVariable(sDestScope, sDestName, pVariable->m_intValue, m_id, m_id);
+        } else {
+            // The original news the variable here and leaks it; a stack
+            // variable outlives the AddKey copy the same way.
+            CVariable var;
+            var.SetName(sDestName);
+            if (!CombineGlobalBit(var.m_intValue, nSrc, m_curAction.m_specificID)) {
+                return ACTION_ERROR;
+            }
+            g_pBaldurChitin->GetObjectGame()->m_variables.AddKey(var);
+
+            message = new CMessageSetVariable(sDestScope, sDestName, var.m_intValue, m_id, m_id);
+        }
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    } else if (strcmp(sDestScope, "LOCALS") == 0) {
+        if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(this);
+            CString sLocalName(sDestName);
+            CVariable* pVariable = pSprite->GetLocalVariables()->FindKey(sLocalName);
+            if (pVariable != NULL) {
+                if (!CombineGlobalBit(pVariable->m_intValue, nSrc, m_curAction.m_specificID)) {
+                    return ACTION_ERROR;
+                }
+            } else {
+                CVariable var;
+                var.SetName(sLocalName);
+                if (!CombineGlobalBit(var.m_intValue, nSrc, m_curAction.m_specificID)) {
+                    return ACTION_ERROR;
+                }
+                pSprite->GetLocalVariables()->AddKey(var);
+                pVariable = &var;
+            }
+
+            message = new CMessageSetVariable(sDestScope, sLocalName, pVariable->m_intValue, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    } else {
+        if (strcmp(sDestScope, "MYAREA") == 0) {
+            // NOTE: the destination scope itself is replaced with the area's
+            // name here, so the message below carries the area name. The
+            // name is read as a C string from the start of the area (its
+            // header's RESREF), as the original does.
+            sDestScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+        }
+
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sDestScope);
+        if (pArea != NULL) {
+            CVariable* pVariable = pArea->GetVariables()->FindKey(sDestName);
+            if (pVariable != NULL) {
+                if (!CombineGlobalBit(pVariable->m_intValue, nSrc, m_curAction.m_specificID)) {
+                    return ACTION_ERROR;
+                }
+            } else {
+                // The original news the variable here and deletes it after
+                // the AddKey copy; a stack variable does the same.
+                CVariable var;
+                var.SetName(sDestName);
+                if (!CombineGlobalBit(var.m_intValue, nSrc, m_curAction.m_specificID)) {
+                    return ACTION_ERROR;
+                }
+                pArea->m_variables.AddKey(var);
+                pVariable = &var;
+            }
+
+            message = new CMessageSetVariable(sDestScope, sDestName, pVariable->m_intValue, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    }
+
     return ACTION_DONE;
 }
 
