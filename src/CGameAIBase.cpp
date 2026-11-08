@@ -4433,6 +4433,64 @@ SHORT CGameAIBase::IncrementGlobal()
     return ACTION_DONE;
 }
 
+// 0x469040
+SHORT CGameAIBase::GlobalBitGlobal()
+{
+    // Action 248 (GlobalBitGlobal): combine a source variable into a
+    // destination variable with a bitwise op. String1 names the
+    // destination and string2 the source, both "SCOPE:NAME" (uppercased);
+    // m_specificID picks the op: 1 AND, 2 OR, 3 XOR.
+
+    LONG nSrc = 0;
+
+    CString sString = m_curAction.GetString1();
+    sString.MakeUpper();
+    int nColon = sString.Find(":");
+    CString sDestScope = sString.Left(nColon);
+    CString sDestName = sString.Right(sString.GetLength() - nColon - 1);
+
+    sString = m_curAction.GetString2();
+    sString.MakeUpper();
+    nColon = sString.Find(":");
+    CString sSrcScope = sString.Left(nColon);
+    CString sSrcName = sString.Right(sString.GetLength() - nColon - 1);
+
+    if (strcmp(sSrcScope, "GLOBAL") == 0) {
+        CVariable* pSrc = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sSrcName);
+        if (pSrc != NULL) {
+            nSrc = pSrc->m_intValue;
+        }
+    } else if (strcmp(sSrcScope, "LOCALS") == 0) {
+        // NOTE: unlike the LOCALS write below, the original reaches the
+        // local variables through CGameSprite::GetLocalVariables() without
+        // a sprite-type check on the source side.
+        CVariable* pSrc = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sSrcName);
+        if (pSrc != NULL) {
+            nSrc = pSrc->m_intValue;
+        }
+    } else {
+        // NOTE: the original tests the DESTINATION scope against "MYAREA"
+        // here, not the source scope: a MYAREA destination also redirects
+        // the source lookup into the acting area.
+        if (strcmp(sDestScope, "MYAREA") == 0) {
+            // The area's name is read as a C string from the start of the
+            // area (its header's RESREF), as the original does.
+            sSrcScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+        }
+
+        CGameArea* pSrcArea = g_pBaldurChitin->GetObjectGame()->GetArea(sSrcScope);
+        if (pSrcArea != NULL) {
+            CVariable* pSrc = pSrcArea->GetVariables()->FindKey(sSrcName);
+            if (pSrc != NULL) {
+                nSrc = pSrc->m_intValue;
+            }
+        }
+    }
+
+    // TODO: 0x46931B-0x4699D9 (the destination write) not ported.
+    return ACTION_DONE;
+}
+
 // 0x462910
 SHORT CGameAIBase::SetGlobalTimer()
 {
