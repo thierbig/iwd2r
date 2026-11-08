@@ -26954,10 +26954,44 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
         // The join at 0x7621EF adds a four-tick release margin to every path
         // through the table, and to the default's still-zero duration.
         effect.duration += 4;
+
+        CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+        CMessageAddEffect* message = new CMessageAddEffect(pEffect, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+        // The sprite is now mid-cast, until the world time armed from the
+        // effect's own duration.
+        field_753A = 1;
+        field_753C = effect.duration;
     }
 
-    // TODO: 0x76227A-0x762487 not ported (the polled tail).
-    return ACTION_NORMAL;
+    // The tail (0x76227D): every later call of the action re-enters here.
+    if (field_753A != 1) {
+        return ACTION_ERROR;
+    }
+
+    // Still casting: hold the action until the expiry passes.
+    if (g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime < (ULONG)field_753C) {
+        return ACTION_NORMAL;
+    }
+
+    // (The exe re-tests the flag at 0x7622B0; it reads the same unchanged
+    // byte, so the test can never fail.)
+
+    // The release: the part of string2 after the ':'.
+    CString sRight = sCast.Right(sCast.GetLength() - nIdx - 1);
+
+    field_4EC8.Stop();
+    field_4EC8.SetChannel(4, reinterpret_cast<DWORD_PTR>(m_pArea));
+    field_4EC8.SetResRef(CResRef(sRight), TRUE, TRUE);
+    field_4EC8.Play(m_pos.x, m_pos.y, m_posZ, FALSE);
+
+    CMessagePlaySoundRef* pRelease = new CMessagePlaySoundRef(CResRef(sRight), m_id, m_id);
+    pRelease->m_nChannel = 4;
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pRelease, FALSE);
+
+    field_753A = 0;
+    return ACTION_DONE;
 }
 
 // 0x7473E0
