@@ -1074,8 +1074,17 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 289:
         // SpellCastEffect
-        // TODO: 0x4516C3-0x45176D not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            returnValue = ACTION_ERROR;
+        } else {
+            returnValue = static_cast<CGameSprite*>(pTarget)->SpellCastEffect(m_curAction.GetString1(),
+                m_curAction.GetString2(),
+                m_curAction.GetSpecifics(),
+                m_curAction.GetSpecifics2(),
+                m_curAction.GetSpecifics3());
+        }
+        goto release;
     case 290:
         // SpellHitEffectPoint
         // TODO: 0x45176D-0x451805 not ported.
