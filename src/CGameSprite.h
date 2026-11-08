@@ -713,6 +713,8 @@ public:
     INT GetEffectiveCharacterLevel();
     void CheckReputation();
     void CheckStatsChange();
+    void sub_71CC90();
+    void sub_71CEA0(CItem* pItem, int bLeftHand);
     INT GetRacialFavoredClass(DWORD& nSpecialization);
     INT GetMulticlassingPenalty();
     void SetColorRange(BYTE rangeValue);

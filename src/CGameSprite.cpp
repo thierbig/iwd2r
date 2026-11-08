@@ -11662,6 +11662,45 @@ void CGameSprite::CheckStatsChange()
     // ported; 528 bytes, over the callee budget -- listed in the report).
 }
 
+// 0x71CC90
+void CGameSprite::sub_71CC90()
+{
+    // TODO: 0x71CC90-0x71CE9F not ported yet (weapon/offhand proficiency
+    // and fighting-style bonuses; tail-called by CheckStatsChange).
+}
+
+// 0x71CEA0
+void CGameSprite::sub_71CEA0(CItem* pItem, int bLeftHand)
+{
+    SHORT nBonus = 0;
+    if (pItem != NULL) {
+        pItem->Demand();
+        ITEM_ABILITY* pAbility = pItem->GetAbility(m_equipment.m_selectedWeaponAbility);
+        if (pAbility != NULL) {
+            SHORT launcherSlot;
+            CItem* pLauncher = GetLauncher(pAbility, launcherSlot);
+            if (pLauncher != NULL) {
+                pLauncher->Demand();
+                pLauncher->GetAbility(0);
+            }
+
+            SHORT nProficiency = sub_73D440(pItem);
+            if (pLauncher != NULL) {
+                if (nProficiency < sub_73D440(pLauncher)) {
+                    nProficiency = sub_73D440(pLauncher);
+                }
+                pLauncher->Release();
+            }
+
+            // TODO: 0x71CF37-0x71CFA8 not ported yet (type-0x1c proficiency
+            // clamp, weaponSpecialization column-1 lookup).
+        }
+        // TODO: 0x71CFA9-0x71CFE6 not ported yet (Release, the
+        // DamageBonusRight/Left add).
+    }
+    (void)nBonus; // interim until range 2 reads it
+}
+
 // 0x71CFF0
 BOOL CGameSprite::sub_71CFF0()
 {
