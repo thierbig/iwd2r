@@ -1730,6 +1730,14 @@ TEST_CASE("sprite: PickPockets resolves guards, rolls, gold and item transfers i
     const DWORD nPartyGold = pGame->GetGameSave()->m_nPartyGold;
     const signed char nHedronSkill = pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET];
     pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+    // The seeds were picked for a zero target modifier (WIS modifier plus
+    // level, 0x758902-0x758921); the party member's own level and wisdom depend on the
+    // game data, so pin them while the NPC picks the party member's pocket.
+    const BYTE nCharacterLevel = pCharacter->m_derivedStats.m_nLevel;
+    const SHORT nCharacterWisdom = pCharacter->m_derivedStats.m_nWIS;
+    pCharacter->m_derivedStats.m_nLevel = 0;
+    pCharacter->m_derivedStats.m_nWIS = 10;
+    REQUIRE(pGame->GetRuleTables().GetAbilityScoreModifier(pCharacter->m_derivedStats.m_nWIS) == 0);
     {
         CItem* pSaved[51];
         isolateItem(pCharacter, pSaved, pTestItem);
@@ -1817,6 +1825,8 @@ TEST_CASE("sprite: PickPockets resolves guards, rolls, gold and item transfers i
     delete pTestItem;
     pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nCharacterSkill;
     pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nHedronSkill;
+    pCharacter->m_derivedStats.m_nLevel = nCharacterLevel;
+    pCharacter->m_derivedStats.m_nWIS = nCharacterWisdom;
     pHedron->m_derivedStats.m_nWIS = nHedronWis;
     pHedron->m_derivedStats.m_nLevel = nHedronLevel;
     pGame->GetGameSave()->m_nPartyGold = nPartyGold;
