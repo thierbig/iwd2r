@@ -658,15 +658,45 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = DisplayString(static_cast<CGameAIBase*>(pTarget));
         goto release;
     case 153:
+        // ChangeEnemyAlly
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_startTypeAI);
+            typeAI.SetEnemyAlly(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetEnemyAlly(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetEnemyAlly(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            } else if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE
+                && g_pBaldurChitin->GetObjectGame()->m_gameSave.m_cutScene == TRUE) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE,
+                    CMessage::BROADCAST_FORCED_OTHERS);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 154:
     case 155:
     case 156:
     case 157:
     case 158:
     case 159:
-        // ChangeEnemyAlly, ChangeGeneral, ChangeRace, ChangeClass,
-        // ChangeSpecifics, ChangeGender, ChangeAlignment
-        // TODO: 0x44EF89-0x44FB82 not ported.
+        // ChangeGeneral, ChangeRace, ChangeClass, ChangeSpecifics,
+        // ChangeGender, ChangeAlignment
+        // TODO: 0x44F1CC-0x44FB82 not ported.
         goto done;
     case 160:
         // ApplySpell
