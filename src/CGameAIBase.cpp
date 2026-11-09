@@ -4531,8 +4531,39 @@ SHORT CGameAIBase::BitGlobal()
             message = new CMessageSetVariable(sScope, sLocalName, pVariable->m_intValue, m_id, m_id);
             g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
         }
+    } else {
+        if (strcmp(sScope, "MYAREA") == 0) {
+            // NOTE: the scope itself is replaced with the area's name
+            // here, so the lookup and the message below carry the area
+            // name. The name is read as a C string from the start of the
+            // area (its header's RESREF), as the original does.
+            sScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+        }
+
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+        if (pArea != NULL) {
+            CVariable* pVariable = pArea->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                if (!CombineGlobalBit(pVariable->m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                    return ACTION_ERROR;
+                }
+            } else {
+                // The original news the variable here and deletes it
+                // after the AddKey copy; a stack variable does the same.
+                CVariable var;
+                var.SetName(sName);
+                if (!CombineGlobalBit(var.m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                    return ACTION_ERROR;
+                }
+                pArea->m_variables.AddKey(var);
+                pVariable = &var;
+            }
+
+            message = new CMessageSetVariable(sScope, sName, pVariable->m_intValue, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        // An unknown area name ends the action silently.
     }
-    // TODO: 0x468DEF-0x469037 (MYAREA and area arms) not ported yet.
 
     return ACTION_DONE;
 }
