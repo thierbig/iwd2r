@@ -1,6 +1,7 @@
 """Run every structural parity check on the functions a change touches.
 
     python3 tools/parity/run.py --base iwd2r/main [--all] [--repo DIR]
+                                [--worktree] [--require-complete]
 
 A touched function is a labelled function (a `// 0xADDR` comment above a
 definition) in src/**/*.cpp whose lines changed since --base -- the same rule
@@ -39,7 +40,15 @@ fails the run.
 
 Skips (exit 0, never a failure): no vanilla exe at oracle.VANILLA_EXE, a
 base that cannot be diffed, or missing exports (run
-tools/ghidra/ExportCallGraph.java once to produce them).
+tools/ghidra/ExportCallGraph.java once to produce them). --require-complete
+turns each of those three into an explicit failure (exit 1): a
+maintainer-bound pre-push run must not read a silent skip as a pass. The
+per-column skips (a check that needs pefile/capstone without the venv)
+still skip. --worktree audits the working tree through the same diff
+tools/check_evidence.py --worktree uses -- staged and unstaged edits and
+untracked src/*.cpp count, and no local commit is needed for coverage;
+without it the changed-function list is the committed base...HEAD diff
+(the spans and evidence waivers were always read from the working tree).
 
 Needs no third-party packages for asm/markers/lints; vtable/layout/offsets/
 strings additionally use pefile and capstone (tools/parity/setup.sh).
@@ -410,10 +419,11 @@ def locate(lines, address):
     return None, None
 
 
-def collect(repo, base_ref):
+def collect(repo, base_ref, worktree=False):
     """Work items for every labelled function changed since base_ref."""
     work = []
-    for rel, address, name in sorted(touched(repo, base_ref)):
+    for rel, address, name in sorted(touched(repo, base_ref,
+                                             worktree=worktree)):
         try:
             lines = read_lines(repo, rel)
         except OSError:
@@ -674,7 +684,7 @@ SHORT = {GREEN: 'green', YELLOW: 'yellow', RED: 'red', SKIP: 'skip',
          WARNING: 'warning', ERROR: 'error'}
 
 
-def print_table(base_ref, exe, rows):
+def print_table(base_ref, exe, rows, worktree=False):
     widths = [len(c) for c in ('address', 'name', *COLUMNS)]
     cells = [[f'0x{a:X}', name] + [SHORT[v] for v, _ in row.values()]
              for a, name, row in rows]
@@ -682,8 +692,8 @@ def print_table(base_ref, exe, rows):
         for i, text in enumerate(c):
             widths[i] = max(widths[i], len(text))
     header = ('address', 'name', *COLUMNS)
-    print(f'structural parity: {len(rows)} function(s) since {base_ref} '
-          f'(exe: {exe})')
+    print(f'structural parity: {len(rows)} function(s) since {base_ref}'
+          + (' (worktree)' if worktree else '') + f' (exe: {exe})')
     print('  '.join(h.ljust(widths[i]) for i, h in enumerate(header)))
     for c in cells:
         print('  '.join(t.ljust(widths[i]) for i, t in enumerate(c)))
@@ -697,24 +707,46 @@ def print_table(base_ref, exe, rows):
                 print(f'    {note}')
 
 
-def main(base_ref, changed_only=True, repo=None):
+def main(base_ref, changed_only=True, repo=None, worktree=False,
+         require_complete=False):
+    """Run the checks; exits 1 on RED/ERROR, or with require_complete on
+    any of the three conditions that otherwise skip the whole run (no
+    vanilla exe, an undiffable base, missing exports)."""
     repo = os.path.abspath(repo or ROOT)
     exe = oracle.VANILLA_EXE
     if not os.path.isfile(exe):
+        if require_complete:
+            print(f'structural parity: FAILED -- no vanilla exe at {exe} '
+                  '(--require-complete: the skip is a failure)')
+            return 1
         print('structural parity: skipped (no vanilla exe)')
         return 0
     if not check_evidence.diffable(repo, base_ref):
+        if require_complete:
+            print(f'structural parity: FAILED -- cannot diff against '
+                  f'{base_ref} (--require-complete: the skip is a failure)')
+            return 1
         print(f'structural parity: skipped (cannot diff against {base_ref})')
         return 0
     exports = load_exports()
     if exports is None:
+        if require_complete:
+            print('structural parity: FAILED -- no functions.tsv/'
+                  f'callgraph.tsv under {exports_dir()} (run '
+                  'tools/ghidra/ExportCallGraph.java; --require-complete: '
+                  'the skip is a failure)')
+            return 1
         print('structural parity: skipped (no functions.tsv/callgraph.tsv '
               f'under {exports_dir()}; run tools/ghidra/ExportCallGraph.java)')
         return 0
 
-    work = collect(repo, base_ref) if changed_only else all_functions(repo)
+    if changed_only:
+        work = collect(repo, base_ref, worktree=worktree)
+    else:
+        work = all_functions(repo)
     if not work:
-        print(f'structural parity: 0 functions changed since {base_ref}')
+        print(f'structural parity: 0 functions changed since {base_ref}'
+              + (' (worktree)' if worktree else ''))
         return 0
 
     lints = load_lints()
@@ -722,7 +754,7 @@ def main(base_ref, changed_only=True, repo=None):
     rows = [run_row(item, repo, exports, exe, lints, lint_cache)
             for item in work]
     downgrade_preexisting(rows, work, repo, base_ref, exports, exe, lints)
-    print_table(base_ref, exe, rows)
+    print_table(base_ref, exe, rows, worktree=worktree)
 
     counts = Counter(v for _, _, row in rows for v, _ in row.values())
     print(f"structural parity: {counts[RED]} RED, {counts[ERROR]} error, "
@@ -740,10 +772,19 @@ def cli(argv=None):
                     help='every labelled function, not just changed ones')
     ap.add_argument('--repo', help='repository root (default: this repo)')
     ap.add_argument('--exports', help='ghidra-exports dir (default $IWD2R_HOME)')
+    ap.add_argument('--worktree', action='store_true',
+                    help='audit the working tree (staged, unstaged and '
+                         'untracked src files), not just committed changes')
+    ap.add_argument('--require-complete', action='store_true',
+                    help='fail instead of skipping when the run cannot be '
+                         'complete: no vanilla exe, a base that cannot be '
+                         'diffed, or missing functions.tsv/callgraph.tsv')
     args = ap.parse_args(argv)
     global EXPORTS_DIR
     EXPORTS_DIR = args.exports
-    return main(args.base, changed_only=args.changed_only, repo=args.repo)
+    return main(args.base, changed_only=args.changed_only, repo=args.repo,
+                worktree=args.worktree,
+                require_complete=args.require_complete)
 
 
 if __name__ == '__main__':

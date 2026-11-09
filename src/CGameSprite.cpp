@@ -3805,8 +3805,12 @@ void CGameSprite::AIUpdateFly()
         double fCurrCircleChange = min(m_fCircleChange, m_fCurrCircleChange + 1.0);
 
         if (m_circleFacing != 0) {
+            // The side is a signed BYTE in the original (movsx at
+            // 0x6FB6E4 and 0x6FB7A0), so FLY_RIGHT is -1, not 255.
+            const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
             double fAngle = static_cast<double>(m_animation.GetMoveScale())
-                    * static_cast<double>(m_circleFacing)
+                    * static_cast<double>(nCircleFacing)
                     * fCurrCircleChange
                     / static_cast<double>(m_radius)
                 + m_fDirectionOffset;
@@ -3814,7 +3818,7 @@ void CGameSprite::AIUpdateFly()
             m_pos.x = m_posOld.x + static_cast<LONG>(cos(fAngle) * static_cast<double>(m_radius));
             m_pos.y = m_posOld.y - static_cast<LONG>(sin(fAngle) * static_cast<double>(m_radius) * 3.0 / 4.0);
 
-            if (m_circleFacing == FLY_LEFT) {
+            if (nCircleFacing == FLY_LEFT) {
                 if (m_pos != m_posOld) {
                     SetDirection((GetDirection(CPoint(m_pos.x, 4 * m_pos.y / 3),
                                       CPoint(m_posOld.x, 4 * m_posOld.y / 3))
@@ -7023,20 +7027,25 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         m_circleFacing = 0;
         m_fCircleChange = static_cast<double>(m_radius / m_animation.GetMoveScale());
     } else {
+        // The side is a signed BYTE in the original: FLY_RIGHT is 0xFF and
+        // every use sign-extends it (movsx at 0x70815E, 0x708178, 0x708192,
+        // 0x7081A9 and 0x7081F9).
+        const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
         m_fCircleChange = static_cast<double>(m_radius) * static_cast<double>(circleType) * 3.1415926535 / static_cast<double>(m_animation.GetMoveScale()) / 2.0;
 
         switch (abs(4 * ((m_nDirection + 2) / 4))) {
         case 0:
-            m_posOld.x += m_radius * m_circleFacing;
+            m_posOld.x += m_radius * nCircleFacing;
             break;
         case 4:
-            m_posOld.y += 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y += 3 * m_radius * nCircleFacing / 4;
             break;
         case 8:
-            m_posOld.x -= m_radius * m_circleFacing;
+            m_posOld.x -= m_radius * nCircleFacing;
             break;
         case 12:
-            m_posOld.y -= 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y -= 3 * m_radius * nCircleFacing / 4;
             break;
         default:
             // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
@@ -7045,7 +7054,7 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         }
 
         m_fDirectionOffset = static_cast<double>(8 - m_nDirection) * 3.1415926535 / 8.0;
-        if (m_circleFacing == FLY_RIGHT) {
+        if (nCircleFacing == FLY_RIGHT) {
             m_fDirectionOffset += 3.1415926535;
         }
     }
@@ -13189,6 +13198,26 @@ SHORT CGameSprite::TakeItemBags(const CString& sName, LONG number, SHORT slotNum
     return numTaken;
 }
 
+// 0x722740
+CItem* CGameSprite::DropItemFromBag(CString sName)
+{
+    sName.MakeUpper();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = m_equipment.m_items[nSlot];
+        if (pItem != NULL && pItem->GetItemType() == 58) {
+            CItem* pDroppedItem = pGame->RemoveItemFromBag(pItem->cResRef, CResRef(sName));
+            if (pDroppedItem != NULL) {
+                return pDroppedItem;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 // 0x722820
 void CGameSprite::sub_722820()
 {
@@ -14575,20 +14604,37 @@ SHORT CGameSprite::ExecuteAction()
         }
         goto release;
     case 9:
-        // DropItem
-        // TODO: 0x7293C4-0x72944E not ported (FindItemPersonal,
-        // CGameSprite_DropItemFromBag 0x722740, DropItem 0x7618E0,
-        // 0x754D70).
-        returnValue = ACTION_ERROR;
+        // DropItem (0x7293C4-0x72944E): an item in a bag is removed first;
+        // both forms use the item's resref in string1.
+        {
+            SHORT nSlot = FindItemPersonal(m_curAction.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                returnValue = DropItem(DropItemFromBag(m_curAction.GetString1()));
+            } else {
+                returnValue = DropItem(nSlot);
+            }
+        }
         goto done;
     case 10:
         // Enemy (0x72944E-0x72945E)
         returnValue = Enemy();
         goto done;
     case 11:
-        // EquipItem
-        // TODO: 0x72945E-0x7294F6 not ported (CItem::Equip/Unequip).
-        returnValue = ACTION_ERROR;
+        // EquipItem (0x72945E-0x7294F6)
+        {
+            SHORT nSlot = FindItemPersonal(m_curAction.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                returnValue = ACTION_ERROR;
+                goto done;
+            }
+
+            if (m_curAction.m_specificID == 0) {
+                m_equipment.m_items[nSlot]->Unequip(this, nSlot, TRUE, FALSE);
+            } else {
+                m_equipment.m_items[nSlot]->Equip(this, nSlot, FALSE);
+            }
+            returnValue = ACTION_DONE;
+        }
         goto done;
     case 12:
         // (0x7294F6-0x72951F)
@@ -14686,16 +14732,15 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = Panic();
         goto done;
     case 25:
-        // PickPockets
-        // TODO: 0x729664-0x72968C not ported (CGameSprite_PickPockets
-        // 0x7586E0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // PickPockets (0x729664-0x72968C): the target is shared and released.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = PickPockets(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 27:
-        // ProtectPoint
-        // TODO: 0x72968C-0x7296AB not ported (CGameSprite_ProtectPoint
-        // 0x7496E0).
-        returnValue = ACTION_ERROR;
+        // ProtectPoint (0x72968C-0x7296AB).
+        ResolveTargetPoint(&m_curAction, m_queuedActions.GetHeadPosition());
+        returnValue = ProtectPoint();
         goto done;
     case 28:
         // RemoveTraps
@@ -14720,11 +14765,12 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = Turn();
         goto done;
     case 34:
-        // UseItem
-        // TODO: 0x729ABC-0x729AE4 not ported (CGameSprite_UseItem
-        // 0x746480).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // UseItem (0x729ABC-0x729AE4): the target is an AI object, shared
+        // while the handler runs and released by the common tail.
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = UseItem(static_cast<CGameAIBase*>(pTarget));
+        goto release;
     case 38:
         // Swing (0x729AF4-0x729B0D)
         m_attackFrame = 0;
@@ -14772,11 +14818,12 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 87:
-        // ProtectObject
-        // TODO: 0x729D26-0x729D4E not ported (CGameSprite_ProtectObject
-        // 0x749FC0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // ProtectObject (0x729D26-0x729D4E): the protected object is shared as
+        // an AI object, passed to the handler, and released by the common tail.
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = ProtectObject(static_cast<CGameAIBase*>(pTarget));
+        goto release;
     case 88:
         // Leader (0x729C18-0x729CE3)
         m_followLeader = TRUE;
@@ -14841,16 +14888,51 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = RandomFly();
         goto done;
     case 101:
-        // TODO: 0x729048-0x7290BB not ported (SetTargetFly).
-        returnValue = ACTION_ERROR;
+        // SetTargetFly (0x729048-0x7290BB): start the arc once, then wait for
+        // the ready sequence.
+        if (m_actionCount == 0) {
+            SetTargetFly(m_curAction.m_acteeID.m_nGeneral,
+                m_curAction.m_acteeID.m_nEnemyAlly,
+                m_curAction.m_specificID);
+        }
+        if (m_actionCount > 0 && m_nSequence == CGAMESPRITE_SEQ_READY) {
+            m_baseStats.m_flags &= ~0x80000000;
+            returnValue = ACTION_DONE;
+        } else {
+            returnValue = ACTION_NORMAL;
+        }
         goto done;
     case 102:
     case 103:
     case 104:
-        // MoraleSet, MoraleInc, MoraleDec
-        // TODO: 0x729EE8-0x72A094 not ported (the morale effects).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // MoraleSet, MoraleInc, MoraleDec (0x729EE8-0x72A094)
+        {
+            ITEM_EFFECT* pItemEffect = new ITEM_EFFECT;
+            CGameEffect::ClearItemEffect(pItemEffect, CGAMEEFFECT_MORALE);
+            if (m_curAction.m_actionID == 102) {
+                pItemEffect->dwFlags = 1;
+                pItemEffect->effectAmount = m_curAction.m_specificID;
+            } else if (m_curAction.m_actionID == 103) {
+                pItemEffect->dwFlags = 0;
+                pItemEffect->effectAmount = m_curAction.m_specificID;
+            } else {
+                pItemEffect->effectID = CGAMEEFFECT_MORALE;
+                pItemEffect->dwFlags = 0;
+                pItemEffect->effectAmount = -m_curAction.m_specificID;
+            }
+            pItemEffect->durationType = 1;
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(pItemEffect, m_pos, m_id, CPoint(-1, -1));
+
+            pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+            if (pTarget != NULL) {
+                bShare = TRUE;
+                CMessage* message = new CMessageAddEffect(pEffect, m_id, pTarget->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+            delete pItemEffect;
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 105:
         // AttackOneRound (0x72A094-0x72A0E7): Attack's case without its
         // timing counters and without a party member's fallback target;
@@ -14881,10 +14963,8 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 108:
     case 176:
-        // EscapeArea, EscapeAreaDestroy
-        // TODO: 0x72A3F3-0x72A403 not ported (CGameSprite_EscapeArea
-        // 0x75B280).
-        returnValue = ACTION_ERROR;
+        // EscapeArea, EscapeAreaDestroy (0x72A3F3-0x72A403)
+        returnValue = EscapeArea();
         goto done;
     case 110:
         // LeaveAreaLUA
@@ -14916,10 +14996,28 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 128:
+        // AnkhegEmerge (0x72A1C9-0x72A28A)
+        if (m_animation.GetAboveGround()) {
+            returnValue = ACTION_DONE;
+            goto done;
+        }
+        if (m_nSequence != SEQ_EMERGE) {
+            CMessage* message = new CMessageSetSequence(SEQ_EMERGE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_NORMAL;
+        goto done;
     case 129:
-        // AnkhegEmerge, AnkhegHide
-        // TODO: 0x72A1C9-0x72A33E not ported.
-        returnValue = ACTION_ERROR;
+        // AnkhegHide (0x72A28A-0x72A33E)
+        if (!m_animation.GetAboveGround()) {
+            returnValue = ACTION_DONE;
+            goto done;
+        }
+        if (m_nSequence != SEQ_HIDE) {
+            CMessage* message = new CMessageSetSequence(SEQ_HIDE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_NORMAL;
         goto done;
     case 134:
         // AttackReevaluate (0x72A33E-0x72A34E)
@@ -14958,9 +15056,24 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = PickLock(pTarget);
         goto release;
     case 146:
-        // Polymorph
-        // TODO: 0x72A42B-0x72A4FE not ported (the polymorph effect).
-        returnValue = ACTION_ERROR;
+        // Polymorph (0x72A42B-0x72A4FE): an animation-change effect, not
+        // opcode 135's creature-resource polymorph.
+        {
+            ITEM_EFFECT* effect = new ITEM_EFFECT;
+            CGameEffect::ClearItemEffect(effect, CGAMEEFFECT_ANIMATIONCHANGE);
+            effect->effectAmount = m_curAction.m_specificID;
+            // NOTE: The duration type is the WORD constant at 0x8491AA (1).
+            effect->durationType = 1;
+
+            CGameEffect* pEffect = new CGameEffectAnimationChange(effect,
+                CPoint(-1, -1),
+                -1,
+                CPoint(-1, -1));
+            CMessage* message = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            delete effect;
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 147:
         // RemoveSpell
@@ -14993,9 +15106,11 @@ SHORT CGameSprite::ExecuteAction()
         }
         goto done;
     case 152:
-        // ChangeAIType
-        // TODO: 0x72A56E-0x72A5AC not ported.
-        returnValue = ACTION_ERROR;
+        // ChangeAIType (0x72A56E-0x72A5AC)
+        SetAIType(m_curAction.m_acteeID, FALSE, FALSE);
+        m_liveTypeAI.Set(m_curAction.m_acteeID);
+        m_startTypeAI.Set(m_curAction.m_acteeID);
+        returnValue = ACTION_DONE;
         goto done;
     case 166:
         // SetNumTimesTalkedTo (0x72A5AC-0x72A5DE)
@@ -15016,9 +15131,17 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = EquipRanged();
         goto done;
     case 175:
-        // SetLeavePartyDialogFile
-        // TODO: 0x72A606-0x72A747 not ported.
-        returnValue = ACTION_ERROR;
+        // SetLeavePartyDialogFile (0x72A606-0x72A747)
+        m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::POST_DIALOG_FILE,
+            CString(m_scriptName));
+        if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+            m_dialog = "multig";
+        }
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            CMessage* message = new CMessageSetDialogResRef(m_dialog, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 179:
         // DialogInterrupt (0x72A747-0x72A764)
@@ -15080,8 +15203,30 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 223:
-        // TODO: 0x72A83D-0x72A976 not ported (the quick list check).
-        returnValue = ACTION_ERROR;
+        // Clear every occupied equipment slot except the fist, together with
+        // its quick-list buttons (0x72A83D-0x72A976).
+        for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            if (m_equipment.m_items[nSlot] == NULL || nSlot == CGameSpriteEquipment::SLOT_FIST) {
+                continue;
+            }
+
+            CMessage* message = new CMessageRemoveItem(static_cast<SHORT>(nSlot), m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            // NOTE: 0x72A90A-0x72A945 sets the ability number, not the item
+            // type: 2/slot/0, then 2/slot/1, then 2/slot/2.
+            CAbilityId ability;
+            ability.m_res = "";
+            ability.m_itemType = 2;
+            ability.m_itemNum = static_cast<SHORT>(nSlot);
+            ability.m_abilityNum = 0;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+            ability.m_abilityNum = 1;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+            ability.m_abilityNum = 2;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 224:
         // Engine-internal action 224 (0x72A9A7-0x72A9B7), no ACTION.IDS
@@ -15135,10 +15280,26 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 239:
     case 240:
-        // SetInternal, IncrementInternal
-        // TODO: 0x72AAA8-0x72AB5C not ported.
-        returnValue = ACTION_ERROR;
-        goto done;
+        // SetInternal, IncrementInternal (0x72AAA8-0x72AB5C): the five
+        // signed words at creature-header offset 0x298.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            goto done;
+        }
+        bShare = TRUE;
+        if (m_curAction.m_specificID >= 0 && m_curAction.m_specificID < 5) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            SHORT* pInternal = reinterpret_cast<SHORT*>(pSprite->m_baseStats.field_295 + 3);
+            const LONG nIndex = m_curAction.m_specificID;
+            if (m_curAction.m_actionID == 239) {
+                pInternal[nIndex] = static_cast<SHORT>(m_curAction.m_specificID2);
+            } else {
+                pInternal[nIndex] = static_cast<SHORT>(pInternal[nIndex]
+                    + static_cast<SHORT>(m_curAction.m_specificID2));
+            }
+            returnValue = ACTION_DONE;
+        }
+        goto release;
     case 249:
         // SetSavedLocationPoint (0x72AA71-0x72AAA8)
         m_baseStats.field_2E4 = static_cast<SHORT>(m_curAction.m_specificID);
@@ -15237,9 +15398,16 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = PlayBardSong();
         goto done;
     case 277:
-        // TurnAMT
-        // TODO: 0x72AD6D-0x72AE1F not ported.
-        returnValue = ACTION_ERROR;
+        // TurnAMT (0x72AD6D-0x72AE1F): turn relative to the pending facing
+        // (m_nNewDirection, +0x537E; the word SetDirection writes).
+        SetDirection(static_cast<SHORT>((m_nNewDirection + m_curAction.m_specificID) % NUM_DIR));
+        if ((m_pos != CPoint(-1, -1) || m_pArea != NULL)
+            && (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
+            CMessage* message = new CMessageSpriteUpdate(this, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 299:
         // EquipWeapon (0x72AE1F-0x72AE43): a sprite holding nothing or its
@@ -15260,9 +15428,19 @@ SHORT CGameSprite::ExecuteAction()
             TRUE);
         goto done;
     case 301:
-        // SetExtendedNight
-        // TODO: 0x72AE64-0x72AEE4 not ported.
-        returnValue = ACTION_ERROR;
+        // SetExtendedNight (0x72AE64-0x72AEE4). Unlike the base action, a
+        // sprite clears the whole area type when the argument is zero.
+        if (m_curAction.m_specificID == 0) {
+            m_pArea->m_header.m_areaType = 0;
+        } else {
+            *reinterpret_cast<BYTE*>(&m_pArea->m_header.m_areaType) |= 0x40;
+        }
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID) {
+            CMessage* message = new CMessageSetAreaType(m_pArea->m_header.m_areaType, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 309:
         // SetMarkedSpell
@@ -23989,6 +24167,343 @@ noTarget: {
     return ACTION_DONE;
 }
 
+// 0x749FC0
+SHORT CGameSprite::ProtectObject(CGameAIBase* pTarget)
+{
+    SHORT nProtectRange = static_cast<SHORT>(m_curAction.m_specificID / CPathSearch::GRID_SQUARE_SIZEX);
+    if (nProtectRange == 0) {
+        nProtectRange = 5000;
+    }
+
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CItem* pWeapon = m_equipment.m_items[m_equipment.m_selectedWeapon];
+    if (pWeapon == NULL) {
+        EquipMostDamagingMelee();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    pWeapon->Demand();
+    const ITEM_ABILITY* pAbility = pWeapon->GetAbility(m_equipment.m_selectedWeaponAbility);
+    if (pAbility == NULL) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    // The original compares only the low byte of the ability type.
+    if (static_cast<BYTE>(pAbility->type) == 4) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if (pAbility->usageFlags == 3
+        && pWeapon->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+        && pAbility->maxUsageCount > 0) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    // The original constructs three default types, then fills them with Set.
+    // `type` receives the selected attacker type but is otherwise unread.
+    CAIObjectType type;
+    CAIObjectType targetAttacker;
+    CAIObjectType selfAttacker;
+    type.Set(pTarget->m_lAttacker);
+    targetAttacker.Set(pTarget->m_lAttacker);
+    selfAttacker.Set(m_lAttacker);
+
+    CGameSprite* pTargetAttacker = NULL;
+    CGameSprite* pSelfAttacker = NULL;
+    CGameSprite* pEnemy;
+
+    // NOTE: The original inlines CAIObjectType::Equal for both checks of each
+    // attacker type (NOONE at 0x8C7708, NOT_SPRITE at 0x8C76C8).
+    if (targetAttacker.Equal(CAIObjectType::NOONE)
+        || targetAttacker.Equal(CAIObjectType::NOT_SPRITE)) {
+        type.Set(pTarget->m_lAttacker);
+        pSelfAttacker = static_cast<CGameSprite*>(selfAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pEnemy = pSelfAttacker;
+    } else {
+        pTargetAttacker = static_cast<CGameSprite*>(targetAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pEnemy = pTargetAttacker;
+
+        if (!selfAttacker.Equal(CAIObjectType::NOONE)
+            && !selfAttacker.Equal(CAIObjectType::NOT_SPRITE)) {
+            pSelfAttacker = static_cast<CGameSprite*>(selfAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        }
+
+        if (pEnemy == NULL) {
+            type.Set(selfAttacker);
+            pEnemy = pSelfAttacker;
+        } else if (pSelfAttacker == NULL) {
+            type.Set(targetAttacker);
+        } else {
+            switch (m_typeAI.m_nAlignment) {
+            case CAIOBJECTTYPE_LAWFUL_EVIL:
+            case CAIOBJECTTYPE_NEUTRAL_EVIL:
+            case CAIOBJECTTYPE_CHAOTIC_EVIL:
+                type.Set(selfAttacker);
+                pEnemy = pSelfAttacker;
+                break;
+            case CAIOBJECTTYPE_LAWFUL_NEUTRAL:
+            case CAIOBJECTTYPE_NEUTRAL:
+            case CAIOBJECTTYPE_CHAOTIC_NEUTRAL:
+                if (rand() % 2 == 0) {
+                    type.Set(selfAttacker);
+                    pEnemy = pSelfAttacker;
+                } else {
+                    type.Set(targetAttacker);
+                }
+                break;
+            default:
+                type.Set(targetAttacker);
+                break;
+            }
+        }
+    }
+
+    if (pEnemy != NULL) {
+        const BYTE nSelfSpace = m_animation.GetPersonalSpace();
+        const BYTE nEnemySpace = pEnemy->m_animation.GetPersonalSpace();
+        const BYTE nSpace = static_cast<BYTE>(((nEnemySpace - 1) >> 1) + ((nSelfSpace - 1) >> 1) - 1);
+        const LONG nNearRange = static_cast<LONG>(pAbility->range) + nSpace + 1;
+        const LONG nFarRange = nNearRange + nProtectRange;
+        const LONG nNearDistance = nNearRange * nNearRange;
+        const LONG nFarDistance = nFarRange * nFarRange;
+
+        // NOTE: These two returned references are discarded in the original
+        // too (0x74A4C9-0x74A4DF), before it fetches the positions it uses.
+        (void)pTarget->GetPos();
+        (void)GetPos();
+
+        LONG nDistance;
+        if (static_cast<BYTE>(pAbility->type) == 2) {
+            const CPoint& ptEnemy = pEnemy->GetPos();
+            const LONG nEnemyX = ptEnemy.x / CPathSearch::GRID_SQUARE_SIZEX;
+            const LONG nEnemyY = ptEnemy.y / CPathSearch::GRID_SQUARE_SIZEY;
+            const CPoint& ptSelf = GetPos();
+            const LONG nSelfX = ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX;
+            const LONG nSelfY = ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY;
+            const LONG dx = nSelfX - nEnemyX;
+            const LONG dy = nSelfY - nEnemyY;
+            nDistance = dx * dx + dy * dy;
+        } else {
+            const CPoint& ptEnemy = pEnemy->GetPos();
+            const CPoint ptEnemySquare(ptEnemy.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptEnemy.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptSelf = GetPos();
+            const CPoint ptSelfSquare(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+            nDistance = CAIUtil::CountSquares(ptSelfSquare, ptEnemySquare);
+            nDistance *= nDistance;
+        }
+
+        if (nDistance <= nFarDistance) {
+            if (nDistance <= nNearDistance) {
+                if (m_pPath != NULL) {
+                    CMessage* message = new CMessageDropPath(m_id, m_id);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                }
+
+                if (m_attackFrame == -2) {
+                    m_attackFrame = -1;
+                }
+                Swing(pEnemy);
+            } else {
+                MoveToObject(pEnemy);
+            }
+        }
+    } else {
+        const CPoint& ptTarget = pTarget->GetPos();
+        const CPoint ptTargetSquare(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+        const CPoint& ptSelf = GetPos();
+        const CPoint ptSelfSquare(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+        const LONG nDistance = CAIUtil::CountSquares(ptSelfSquare, ptTargetSquare);
+        const SHORT nFollowRange = nProtectRange > 6 ? 6 : nProtectRange;
+        if (nDistance > nFollowRange) {
+            MoveToObject(pTarget);
+        }
+    }
+
+    if (pTargetAttacker != NULL) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pTargetAttacker->m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+    if (pSelfAttacker != NULL) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pSelfAttacker->m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    pWeapon->Release();
+    return ACTION_INTERRUPTABLE;
+}
+
+// 0x7496E0
+SHORT CGameSprite::ProtectPoint()
+{
+    INT nProtectRange = static_cast<SHORT>(m_curAction.m_specificID / CPathSearch::GRID_SQUARE_SIZEX);
+    INT nProtectRangeSquared = nProtectRange * nProtectRange;
+    CAIObjectType enemy;
+    enemy.Set(m_typeAI.GetEnemyOf());
+
+    SHORT returnValue = ACTION_INTERRUPTABLE;
+    CGameObject* pTarget = NULL;
+    BYTE nWeaponSlot = m_equipment.m_selectedWeapon;
+    CItem* curWeapon = m_equipment.m_items[nWeaponSlot];
+    if (curWeapon == NULL) {
+        EquipMostDamagingMelee();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    curWeapon->Demand();
+    const ITEM_ABILITY* curAttack = curWeapon->GetAbility(m_equipment.m_selectedWeaponAbility);
+    if (curAttack == NULL) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if ((curAttack->type & 0xFF) == 4) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if (curAttack->usageFlags == 3
+        && curWeapon->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+        && curAttack->maxUsageCount != 0) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    CPoint ptProtectGrid(m_curAction.m_dest.x / CPathSearch::GRID_SQUARE_SIZEX,
+        m_curAction.m_dest.y / CPathSearch::GRID_SQUARE_SIZEY);
+    const CPoint& ptSelf = GetPos();
+    CPoint ptSelfGrid(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+        ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+    INT dx = ptSelfGrid.x - ptProtectGrid.x;
+    INT dy = ptSelfGrid.y - ptProtectGrid.y;
+    if (dx * dx + dy * dy > nProtectRangeSquared) {
+        if (m_derivedStats.m_nEncumberance == 2) {
+            FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 1, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        AddAction(m_curAction);
+        CAIAction action(CAIAction::MOVETOPOINT, m_curAction.m_dest, 0, -1);
+        action.m_specificID3 = 1;
+        AddAction(action);
+        curWeapon->Release();
+        return ACTION_DONE;
+    }
+
+    BYTE rc;
+    LONG nNearest = m_pArea->GetNearest(m_id,
+        enemy,
+        GetVisualRange(),
+        GetVisibleTerrainTable(),
+        TRUE,
+        GetCanSeeInvisible(),
+        FALSE,
+        0,
+        FALSE);
+    if (nNearest == CGameObjectArray::INVALID_INDEX) {
+        // With nobody to attack, only a guard more than two CountSquares away
+        // from the protected point walks back to it.
+        CPoint ptGuardGrid(m_curAction.m_dest.x / CPathSearch::GRID_SQUARE_SIZEX,
+            m_curAction.m_dest.y / CPathSearch::GRID_SQUARE_SIZEY);
+        CPoint ptGuardSelfGrid(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+        if (CAIUtil::CountSquares(ptGuardSelfGrid, ptGuardGrid) <= 2) {
+            goto done;
+        }
+
+        if (m_derivedStats.m_nEncumberance == 2) {
+            FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 1, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        AddAction(m_curAction);
+        CAIAction action(CAIAction::MOVETOPOINT, m_curAction.m_dest, 0, -1);
+        action.m_specificID3 = 1;
+        AddAction(action);
+        curWeapon->Release();
+        return ACTION_DONE;
+    }
+
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nNearest,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pTarget,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        BYTE nSpace = static_cast<BYTE>((m_animation.GetPersonalSpace() - 1) >> 1);
+        INT nAttackRange = nSpace + curAttack->range + 1;
+        INT nPursuitRange = nProtectRange + nSpace + curAttack->range + 1;
+        INT nAttackDistance = nAttackRange * nAttackRange;
+        INT nPursuitDistance = nPursuitRange * nPursuitRange;
+
+        INT nTargetDistance;
+        if ((curAttack->type & 0xFF) == 2) {
+            const CPoint& ptTarget = pTarget->GetPos();
+            CPoint ptTargetGrid(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptNow = GetPos();
+            CPoint ptNowGrid(ptNow.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptNow.y / CPathSearch::GRID_SQUARE_SIZEY);
+            dx = ptNowGrid.x - ptTargetGrid.x;
+            dy = ptNowGrid.y - ptTargetGrid.y;
+            nTargetDistance = dx * dx + dy * dy;
+        } else {
+            const CPoint& ptTarget = pTarget->GetPos();
+            CPoint ptTargetGrid(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptNow = GetPos();
+            CPoint ptNowGrid(ptNow.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptNow.y / CPathSearch::GRID_SQUARE_SIZEY);
+            nTargetDistance = CAIUtil::CountSquares(ptNowGrid, ptTargetGrid);
+            nTargetDistance *= nTargetDistance;
+        }
+
+        if (nTargetDistance <= nPursuitDistance) {
+            if (nTargetDistance <= nAttackDistance) {
+                if (m_pPath != NULL) {
+                    CMessage* message = new CMessageDropPath(m_id, m_id);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                }
+
+                if (m_attackFrame == -2) {
+                    m_attackFrame = -1;
+                }
+                returnValue = Swing(static_cast<CGameSprite*>(pTarget));
+            } else {
+                returnValue = MoveToObject(pTarget);
+                if (returnValue == ACTION_DONE || returnValue == ACTION_ERROR) {
+                    returnValue = ACTION_INTERRUPTABLE;
+                }
+            }
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nNearest,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+done:
+    // Movement can change the equipment slot. The original releases its
+    // demand only when the item is still in the slot it came from.
+    if (curWeapon == m_equipment.m_items[nWeaponSlot]) {
+        curWeapon->Release();
+    }
+    return returnValue;
+}
+
 // 0x74A7C0
 SHORT CGameSprite::Follow()
 {
@@ -26997,6 +27512,384 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
     return ACTION_DONE;
 }
 
+// 0x746480
+// The UseItem (34) executor: use an equipped item on an AI object. Unlike
+// UseItemPoint, a live sprite's reach includes both sprites' personal space,
+// the approach is MoveToObject, potions (and item type 71) skip the 20-tick
+// delay, and case-7 effects select the target's specific rather than being
+// discarded. The target itself is shared and released by ExecuteAction.
+SHORT CGameSprite::UseItem(CGameAIBase* pTarget)
+{
+    field_55A0 = 0;
+    ITEM_ABILITY* pAbility = NULL;
+
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (pTarget->GetObjectType() == CGameObject::TYPE_SPRITE) {
+        CGameSprite* pSpriteTarget = static_cast<CGameSprite*>(pTarget);
+        if (!pSpriteTarget->m_active
+            || !pSpriteTarget->m_activeAI
+            || !pSpriteTarget->m_activeImprisonment) {
+            return ACTION_ERROR;
+        }
+    }
+
+    if (m_actionCount == 0) {
+        m_curItem = NULL;
+    }
+
+    if (m_curItem == NULL) {
+        if (m_curAction.GetString1().CompareNoCase("") == 0) {
+            // String1 empty: the action carries the slot and ability.
+            if (m_curAction.m_specificID == -1) {
+                return ACTION_ERROR;
+            }
+            m_curItem = m_equipment.m_items[m_curAction.m_specificID];
+            if (m_curItem == NULL) {
+                return ACTION_ERROR;
+            }
+            field_559E = static_cast<SHORT>(m_curAction.m_specificID);
+            m_curItem->Demand();
+            pAbility = m_curItem->GetAbility(m_curAction.m_specificID2);
+            field_55A0 = static_cast<SHORT>(m_curAction.m_specificID2);
+            if (pAbility == NULL) {
+                m_curItem->Release();
+                return ACTION_ERROR;
+            }
+        } else {
+            // String1 names a resref: the first matching equipment slot wins.
+            for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; ++nSlot) {
+                if (m_equipment.m_items[nSlot] == NULL) {
+                    continue;
+                }
+                if (m_equipment.m_items[nSlot]->cResRef == m_curAction.GetString1()) {
+                    m_curItem = m_equipment.m_items[nSlot];
+                    field_559E = static_cast<SHORT>(nSlot);
+                    if (m_curItem == NULL) {
+                        return ACTION_ERROR;
+                    }
+                    m_curItem->Demand();
+                    pAbility = m_curItem->GetAbility(m_curAction.m_specificID2);
+                    field_55A0 = static_cast<SHORT>(m_curAction.m_specificID2);
+                    if (pAbility == NULL) {
+                        m_curItem->Release();
+                        return ACTION_ERROR;
+                    }
+                    break;
+                }
+            }
+        }
+    } else {
+        m_curItem->Demand();
+    }
+
+    if (m_curItem == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (pAbility == NULL) {
+        pAbility = m_curItem->GetAbility(m_curAction.m_specificID2);
+        field_55A0 = static_cast<SHORT>(m_curAction.m_specificID2);
+        if (pAbility == NULL) {
+            m_curItem->Release();
+            return ACTION_ERROR;
+        }
+    }
+
+    if (pAbility->usageFlags == 3
+        && m_curItem->GetUsageCount(field_55A0) == 0
+        && pAbility->maxUsageCount > 0) {
+        CString sItemRes;
+        m_curItem->cResRef.CopyToString(sItemRes);
+        CAITrigger trigger(CAITRIGGER_UNUSABLE, 0);
+        trigger.m_string1 = sItemRes;
+        CMessage* message = new CMessageSetTrigger(trigger, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        m_curItem->Release();
+        return ACTION_ERROR;
+    }
+
+    // A dead target bypasses the reach and LOS checks (0x746856). The
+    // original tests STATE_DEAD of the dword at target+0x5BC on every AI
+    // object with no sprite gate -- on a door that lands on the closed
+    // bounding rect's bottom edge, and on the other AI types on pointer or
+    // list internals, so for non-sprites the vanilla read is type-confused
+    // bytes. The port's own layout cannot reproduce those cross-type bytes,
+    // so it applies the dead test where it is meaningful (sprites, whose
+    // m_baseStats' general state is the original's field) and treats every
+    // non-sprite target as live. The arm drops the path only when this
+    // action already committed (field_7118, +0x7118 -- the same flag as the
+    // reach and facing arms, not m_pPath at +0x5382 as in UseItemPoint's
+    // drop paths). The ordinary in-range arm joins at the facing section
+    // without any message. Every live non-sprite target uses only the
+    // caster's personal space; a live sprite adds both.
+    BOOL targetDead = pTarget->GetObjectType() == CGameObject::TYPE_SPRITE
+        && (static_cast<CGameSprite*>(pTarget)->m_baseStats.m_generalState & STATE_DEAD) != 0;
+    if (targetDead) {
+        if (field_7118 != 0) {
+            CMessage* message = new CMessageDropPath(m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    } else {
+        const CPoint& targetPos = pTarget->GetPos();
+        LONG gridTargetX = targetPos.x / CPathSearch::GRID_SQUARE_SIZEX;
+        LONG gridTargetY = targetPos.y / CPathSearch::GRID_SQUARE_SIZEY;
+        const CPoint& pos = GetPos();
+        LONG dx = pos.x / CPathSearch::GRID_SQUARE_SIZEX - gridTargetX;
+        LONG dy = pos.y / CPathSearch::GRID_SQUARE_SIZEY - gridTargetY;
+        LONG distance = dx * dx + dy * dy;
+        LONG range = static_cast<LONG>(pAbility->range) + 1;
+
+        BYTE personalHalf;
+        if (pTarget->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            BYTE sourceHalf = static_cast<BYTE>((m_animation.GetPersonalSpace() - 1) >> 1);
+            BYTE targetHalf = static_cast<BYTE>((static_cast<CGameSprite*>(pTarget)->m_animation.GetPersonalSpace() - 1) >> 1);
+            personalHalf = static_cast<BYTE>(sourceHalf + targetHalf - 1);
+        } else {
+            personalHalf = static_cast<BYTE>((m_animation.GetPersonalSpace() - 1) >> 1);
+        }
+
+        LONG nearLimit = personalHalf + range;
+        LONG farLimit = range + personalHalf + 1;
+        BOOL move = (nearLimit * nearLimit < distance && !field_7118)
+            || farLimit * farLimit < distance;
+        if (!move && pTarget->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSpriteTarget = static_cast<CGameSprite*>(pTarget);
+            move = !m_pArea->CheckLOS(pTarget->GetPos(),
+                GetPos(),
+                GetVisibleTerrainTable(),
+                static_cast<BOOLEAN>(pSpriteTarget->Orderable(FALSE)));
+        }
+        if (move) {
+            SHORT moveResult = MoveToObject(pTarget);
+            if (moveResult == ACTION_DONE) {
+                moveResult = ACTION_INTERRUPTABLE;
+            }
+            m_curItem->Release();
+            return moveResult;
+        }
+    }
+
+    // A direction mismatch returns before field_7118 is set. Once the facing
+    // matches (and on every later call), the original still sends the set-
+    // direction message.
+    if (!field_7118) {
+        SHORT oldDirection = m_nDirection;
+        if (oldDirection != GetDirection(pTarget->GetPos())) {
+            CMessage* message = new CMessageSetDirection(pTarget->GetPos(), m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            m_curItem->Release();
+            return ACTION_NORMAL;
+        }
+    }
+
+    {
+        CMessage* message = new CMessageSetDirection(pTarget->GetPos(), m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+    field_7118 = 1;
+
+    if (m_actionCount == 0 && m_castCounter != -1) {
+        m_bStartedCasting = FALSE;
+    }
+    if (m_castCounter == -1) {
+        m_castCounter = 0;
+        m_bStartedCasting = TRUE;
+    }
+
+    BYTE nUseTime = 2;
+    if (m_curItem->GetItemType() == 9 || m_curItem->GetItemType() == 0x47) {
+        nUseTime = 0;
+    }
+    if (m_actionCount < nUseTime * 100 / 10 || !m_bStartedCasting) {
+        m_curItem->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    if (pGame->CheckItemUsable(this, m_curItem) == 2) {
+        if (pGame->m_ruleTables.CheckUseMagicDevice(this, m_curItem)) {
+            FeedBack(FEEDBACK_USEMAGICDEVICESUCCEEDED, 0, 0, 0, -1, 0, 0);
+        } else {
+            FeedBack(FEEDBACK_USEMAGICDEVICEFAILED, 0, 0, 0, -1, 0, 0);
+            // Unlike UseItemPoint, the backfire's die count is one per level,
+            // not two. The original asks for the level twice or three times.
+            INT backfireDice = 1;
+            if (m_curItem->GetMaxEffectSpellLevel() >= 1) {
+                backfireDice = m_curItem->GetMaxEffectSpellLevel();
+            }
+            CGameEffect* backfireEffect = IcewindMisc::sub_585380(
+                this,
+                backfireDice,
+                6,
+                0,
+                static_cast<BYTE>(m_curItem->GetMaxEffectSpellLevel()),
+                0);
+            backfireEffect->m_flags |= 2;
+            CMessage* backfireMessage = new CMessageAddEffect(backfireEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(backfireMessage, FALSE);
+            goto consumeCharge;
+        }
+    }
+
+    ITEM_EFFECT effect;
+    // Using an item on another target breaks plain invisibility; using it on
+    // oneself does not. Sanctuary is dispelled in either case.
+    if (!IsVisibleToCaller(FALSE) && pTarget->m_id != m_id) {
+        CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_FORCEVISIBLE);
+        effect.durationType = 1;
+        CGameEffect* visibleEffect
+            = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+        CMessage* message = new CMessageAddEffect(visibleEffect, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    if (m_derivedStats.m_spellStates[SPLSTATE_SANCTUARY]) {
+        CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_DISPELSANCTUARY);
+        effect.durationType = 1;
+        CGameEffect* sanctuaryEffect
+            = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+        CMessage* message = new CMessageAddEffect(sanctuaryEffect, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    // Re-resolve the action's item after the dispel effects. On a named item,
+    // the original releases the old item only after a match is found.
+    if (m_curAction.GetString1().CompareNoCase("") == 0) {
+        m_curItem->Release();
+        if (m_curAction.m_specificID == -1) {
+            return ACTION_ERROR;
+        }
+        m_curItem = m_equipment.m_items[m_curAction.m_specificID];
+        if (m_curItem == NULL) {
+            return ACTION_ERROR;
+        }
+        field_559E = static_cast<SHORT>(m_curAction.m_specificID);
+        m_curItem->Demand();
+        pAbility = m_curItem->GetAbility(m_curAction.m_specificID2);
+        field_55A0 = static_cast<SHORT>(m_curAction.m_specificID2);
+        if (pAbility == NULL) {
+            m_curItem->Release();
+            return ACTION_ERROR;
+        }
+    } else {
+        for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; ++nSlot) {
+            if (m_equipment.m_items[nSlot] == NULL) {
+                continue;
+            }
+            if (m_equipment.m_items[nSlot]->cResRef == m_curAction.GetString1()) {
+                m_curItem->Release();
+                m_curItem = m_equipment.m_items[nSlot];
+                field_559E = static_cast<SHORT>(nSlot);
+                if (m_curItem == NULL) {
+                    return ACTION_ERROR;
+                }
+                m_curItem->Demand();
+                pAbility = m_curItem->GetAbility(m_curAction.m_specificID2);
+                field_55A0 = static_cast<SHORT>(m_curAction.m_specificID2);
+                if (pAbility == NULL) {
+                    // 0x746F4C: this path returns without the release the
+                    // empty-string re-resolution performs.
+                    return ACTION_ERROR;
+                }
+                break;
+            }
+        }
+    }
+
+    m_curProjectile = CProjectile::DecodeProjectile(pAbility->missileType, this, 0);
+    m_curProjectile->m_sourceRes = m_curItem->cResRef;
+    m_curProjectile->m_nSpellLevel = 0;
+
+    for (INT effectIndex = 0; effectIndex < pAbility->effectCount; ++effectIndex) {
+        CGameEffect* itemEffect = m_curItem->GetAbilityEffect(field_55A0, effectIndex, this);
+        itemEffect->m_source = m_pos;
+        itemEffect->m_sourceID = m_id;
+        itemEffect->m_target = pTarget->m_pos;
+        IcewindMisc::sub_5860F0(this, itemEffect);
+        switch (itemEffect->m_targetType) {
+        case 1:
+            itemEffect->m_flags |= 2;
+            {
+                CMessage* selfMessage = new CMessageAddEffect(itemEffect, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
+            }
+            continue;
+        case 2:
+            m_curProjectile->AddEffect(itemEffect);
+            continue;
+        case 3:
+            ApplyEffectToParty(itemEffect);
+            break;
+        case 4:
+            m_pArea->ApplyEffectToSprites(itemEffect, FALSE, FALSE, 0, NULL);
+            break;
+        case 5:
+            m_pArea->ApplyEffectToSprites(itemEffect, TRUE, FALSE, 0, NULL);
+            break;
+        case 6:
+            m_pArea->ApplyEffectToSprites(itemEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
+            break;
+        case 7:
+            m_pArea->ApplyEffectToSprites(itemEffect, FALSE, TRUE, pTarget->GetAIType().m_nSpecific, NULL);
+            break;
+        case 8:
+            m_pArea->ApplyEffectToSprites(itemEffect, FALSE, FALSE, 0, this);
+            break;
+        default:
+            break;
+        }
+        delete itemEffect;
+    }
+
+    {
+        CMessageFireProjectile* message = new CMessageFireProjectile(
+            m_curProjectile->m_projectileType,
+            pTarget->m_id,
+            pTarget->m_pos,
+            m_curProjectile->DetermineHeight(this),
+            m_id,
+            m_id,
+            0);
+        if (m_curProjectile->m_projectileType == 0x130) {
+            LONG wanderSeed = rand() % 1000000;
+            static_cast<CProjectileWhirlwind*>(m_curProjectile)->m_wanderSeed = wanderSeed;
+            message->field_20 = wanderSeed;
+        }
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    m_curProjectile->Fire(
+        m_pArea, m_id, pTarget->m_id, pTarget->m_pos,
+        m_curProjectile->DetermineHeight(this), 0);
+    m_curProjectile = NULL;
+
+consumeCharge:
+    m_curItem->SetUsageCount(field_55A0, m_curItem->GetUsageCount(field_55A0) - 1);
+    m_curItem->Release();
+
+    // Both operands are always evaluated: CheckIfUsedUp still runs (and can
+    // consume the item and emit Unusable) when usageFlags is not 1.
+    BOOL removeAbility = (pAbility->usageFlags == 1) & CheckIfUsedUp(field_559E, field_55A0);
+    if (pAbility->maxUsageCount > 0) {
+        CAbilityId buttonAbility;
+        buttonAbility.m_itemType = 2;
+        buttonAbility.m_itemNum = field_559E;
+        buttonAbility.m_abilityNum = field_55A0;
+        CheckQuickLists(&buttonAbility, -1, removeAbility, FALSE);
+
+        if (pGame->GetCharacterPortraitNum(m_id)
+            == g_pBaldurChitin->m_pEngineWorld->GetSelectedCharacter()) {
+            pGame->m_cButtonArray.UpdateButtons();
+        }
+    }
+
+    AutoPause(0x40);
+    return ACTION_DONE;
+}
+
 // 0x7473E0
 // The UseItemPoint (97) executor: resolve the item from the action (slot
 // index when string1 is empty, otherwise an equipment scan for the named
@@ -27848,6 +28741,204 @@ SHORT CGameSprite::Panic()
     return ACTION_DONE;
 }
 
+// 0x7586E0
+SHORT CGameSprite::PickPockets(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (m_derivedStats.m_disabledButtons[1] != 0) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_ARMOR, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    if (pTarget->GetAIType().OfType(m_typeAI.GetEnemyOf(), FALSE, FALSE)) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_HOSTILE, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    CPoint targetPos = pTarget->GetPos();
+    CPoint ptTarget(targetPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        targetPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    const CPoint& selfPos = GetPos();
+    CPoint ptSelf(selfPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        selfPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    LONG nDistance = CAIUtil::CountSquares(ptSelf, ptTarget);
+    if (nDistance * nDistance > 4
+        || !m_pArea->CheckLOS(pTarget->GetPos(), GetPos(), m_visibleTerrainTable, pTarget->Orderable(FALSE))) {
+        SHORT returnValue = MoveToObject(pTarget);
+        if (returnValue == ACTION_DONE) {
+            return ACTION_INTERRUPTABLE;
+        }
+        return returnValue;
+    }
+
+    if (pTarget->field_70F2 == 1) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_SKILL, 0, 0, 0, -1, 0, 0);
+        return ACTION_DONE;
+    }
+
+    if (!IsVisibleToCaller(FALSE)) {
+        ITEM_EFFECT effect;
+        CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_FORCEVISIBLE);
+        effect.durationType = 1;
+        CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+        CMessage* message = new CMessageAddEffect(pEffect, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    INT nWisdomModifier = pGame->GetRuleTables().GetAbilityScoreModifier(pTarget->m_derivedStats.m_nWIS);
+    INT nTargetModifier = nWisdomModifier + pTarget->m_derivedStats.m_nLevel;
+    if (nTargetModifier < 0) {
+        nTargetModifier = 0;
+    }
+
+    INT nRoll = rand() % 20 + nTargetModifier + 1;
+    if (pTarget->GetObjectType() != CGameObject::TYPE_SPRITE) {
+        nRoll = rand() % 20 + 1;
+    }
+    INT nSkill = static_cast<signed char>(m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET]) + 10;
+    FeedBack(FEEDBACK_ROLL, nSkill, nRoll, nWisdomModifier, 0x9986, 0, 0);
+
+    if (nRoll >= 20 || nRoll > nSkill) {
+        CAITrigger trigger(CAITRIGGER_PICKPOCKETFAILED, m_typeAI, 0);
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_SKILL, 0, 0, 0, -1, 0, 0);
+        CMessage* message = new CMessageSetTrigger(trigger, m_id, pTarget->m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        return ACTION_DONE;
+    }
+
+    // NUM_SLOT (0x85BD87) is 51; its out-of-line definition makes it a VLA to C++.
+    BOOL bSkipSlot[51] = { FALSE };
+    bSkipSlot[CGameSpriteEquipment::SLOT_FIST] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_ARMOR] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_BELT] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_BOOTS] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_CLOAK] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_GAUNTLETS] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_HELMET] = TRUE;
+    bSkipSlot[pTarget->m_equipment.m_selectedWeapon] = TRUE;
+    SHORT nLauncherSlot = pTarget->GetLauncherSlot(pTarget->m_equipment.m_selectedWeapon,
+        pTarget->m_equipment.m_selectedWeaponAbility);
+    if (nLauncherSlot != -1) {
+        bSkipSlot[nLauncherSlot] = TRUE;
+    }
+
+    // The original protects seven weapon slots and three ammunition slots:
+    // 43-49 and 11-13, respectively (0x758A2B-0x758A4E).
+    for (SHORT nSlot = CGameSpriteEquipment::SLOT_WEAPON;
+         nSlot < CGameSpriteEquipment::SLOT_WEAPON + 7;
+         nSlot++) {
+        bSkipSlot[nSlot] = TRUE;
+    }
+    for (SHORT nSlot = CGameSpriteEquipment::SLOT_AMMO;
+         nSlot < CGameSpriteEquipment::SLOT_AMMO + 3;
+         nSlot++) {
+        bSkipSlot[nSlot] = TRUE;
+    }
+    if (pTarget->GetAIType().m_nEnemyAlly == CAIObjectType::EA_PC) {
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 1] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 2] = TRUE;
+    } else {
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 6] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 7] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 8] = TRUE;
+    }
+
+    CString sTargetName(pTarget->m_scriptName);
+    SHORT nStartSlot = static_cast<SHORT>(rand() % CGameSpriteEquipment::NUM_SLOT);
+    SHORT nSlot = nStartSlot;
+    CItem* pItem = NULL;
+    while (pItem == NULL) {
+        CItem* pCandidate = pTarget->m_equipment.m_items[nSlot];
+        if (!bSkipSlot[nSlot]
+            && pCandidate != NULL
+            && (pCandidate->m_flags & 0x2) == 0
+            && (pCandidate->GetFlagsFile() & 0x4) != 0) {
+            pItem = pCandidate;
+            break;
+        }
+
+        // Even starting slots scan forward, odd slots backward (0x758AF6).
+        if ((nStartSlot % 2) == 0) {
+            nSlot++;
+            if (nSlot >= CGameSpriteEquipment::NUM_SLOT) {
+                nSlot = 0;
+            }
+        } else {
+            nSlot--;
+            if (nSlot < 0) {
+                nSlot = CGameSpriteEquipment::NUM_SLOT - 1;
+            }
+        }
+        if (nSlot == nStartSlot) {
+            FeedBack(FEEDBACK_PICKPOCKETFAILED_NOITEMS, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+    }
+
+    // The constants at 0x85BD14 and 0x85BD18 make one successful item choice
+    // in three steal 1-5 gold instead; any other result steals the item.
+    if (rand() % 3 == 0) {
+        LONG nGold = rand() % 5 + 1;
+        if (pGame->GetCharacterPortraitNum(pTarget->m_id) == -1) {
+            CMessage* message = new CMessagePartyGold(TRUE, TRUE, nGold, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        if (pGame->GetGameSave()->m_nPartyGold > static_cast<DWORD>(nGold)) {
+            CMessage* message = new CMessagePartyGold(TRUE, TRUE, -nGold, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            CAIAction action;
+            // CreateItem (action 82; the SHORT at 0x847818).
+            action.m_actionID = 82;
+            action.m_specificID = nGold;
+            action.m_specificID2 = 0;
+            action.m_specificID3 = 0;
+            action.SetString1(CString("MISC07")); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+            action.SetString2(sTargetName);
+            message = new CMessageAddAction(action, pTarget->m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+        // Not enough party gold: retain the selected slot and steal its item.
+    }
+
+    SHORT nInventorySlot = -1;
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        for (SHORT nIndex = 0; nIndex < CScreenInventory::PERSONAL_INVENTORY_SIZE; nIndex++) {
+            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_MISC + 3 + nIndex] == NULL) {
+                nInventorySlot = CGameSpriteEquipment::SLOT_MISC + 3 + nIndex;
+                break;
+            }
+        }
+    } else {
+        for (SHORT nIndex = 0; nIndex < 28; nIndex++) {
+            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_MISC + nIndex] == NULL) {
+                nInventorySlot = CGameSpriteEquipment::SLOT_MISC + nIndex;
+                break;
+            }
+        }
+    }
+    if (nInventorySlot == -1) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_INVENTORYFULL, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    m_equipment.m_items[nInventorySlot] = new CItem(*pItem);
+    CMessage* message = new CMessageRemoveItem(nSlot, m_id, pTarget->m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
+    return ACTION_DONE;
+}
+
 // 0x759240
 SHORT CGameSprite::RemoveTraps(CGameAIBase* pTarget)
 {
@@ -28184,6 +29275,259 @@ SHORT CGameSprite::UseDoor()
     delete pGroupList;
 
     return ACTION_DONE;
+}
+
+// 0x75B280
+SHORT CGameSprite::EscapeArea()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CRect rView;
+    rView.CopyRect(m_pArea->m_cInfinity.rViewPort);
+    INT nViewX;
+    INT nViewY;
+    m_pArea->m_cInfinity.GetViewPosition(nViewX, nViewY);
+    rView.OffsetRect(nViewX, nViewY);
+
+    // NOTE: The original reads string1 with this comparison and discards the
+    // answer (0x75B2E2-0x75B308); kept.
+    (void)strcmp(m_curAction.GetString1(), "");
+
+    CMessage* pMessage = new CMessageEscapeArea(m_id, m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+    m_bEscapingArea = TRUE;
+
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        LeaveParty();
+    }
+
+    if (m_curAction.m_actionID == 176) {
+        if (m_actionCount >= m_curAction.m_specificID * 15) {
+            m_removeFromArea = TRUE;
+            return ACTION_DONE;
+        }
+    } else if (m_actionCount >= 120) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (m_canBeSeen <= 0) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (strcmp(m_curAction.GetString1(), "") == 0) {
+        m_expirationTime = pGame->GetWorldTimer()->m_gameTime;
+    }
+
+    CRect rFx;
+    CPoint ptReference;
+    m_animation.CalculateFxRect(rFx, ptReference, m_posZ);
+
+    // NOTE: The original calls this and discards the height (0x75B44B-0x75B45D).
+    m_pArea->GetHeightOffset(m_pos, m_listType);
+
+    if (!rView.PtInRect(m_pos)
+        || m_pos.x < rView.left
+        || m_pos.x >= rView.right
+        || m_pos.y < rView.top
+        || m_pos.y >= rView.bottom) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    // NOTE: The edge-search state lives in specificID2 (+0x530), not the
+    // action's delay parameter; the original writes 0x530 at 0x75B4DF.
+    if (m_pPath == NULL && strcmp(m_curAction.GetString1(), "") == 0) {
+        m_curAction.m_specificID2 = 0;
+    }
+
+    BOOL bFindEdge = m_actionCount % 16 == 0 ? TRUE : FALSE;
+    // The seed destination is the action's own dest (+0x540/+0x544), not the
+    // sprite's current destination; 0x75B4FD/0x75B507 read m_curAction.m_dest.
+    CPoint ptDest = m_curAction.m_dest;
+    CPoint ptSearch;
+    if (ptDest.x < rView.left
+        || ptDest.x >= rView.right
+        || ptDest.y < rView.top
+        || ptDest.y >= rView.bottom) {
+        bFindEdge = FALSE;
+    }
+
+    LONG nTargetId = m_pArea->GetNearestTravelTrigger(m_id, GetVisualRange(), m_terrainTable, FALSE);
+    if (nTargetId != CGameObjectArray::INVALID_INDEX) {
+        CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+        type.m_nInstance = nTargetId;
+        CGameObject* pTarget = GetTargetShareAIType(type, CGameObject::TYPE_AIBASE);
+        SHORT rc = MoveToObject(pTarget);
+        if (pTarget != NULL) {
+            pGame->GetObjectArray()->ReleaseShare(nTargetId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+
+        if (rc != ACTION_DONE && rc != ACTION_ERROR) {
+            return ACTION_NORMAL;
+        }
+
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (!bFindEdge && (m_pPath != NULL || m_currentSearchRequest != NULL)) {
+        return ACTION_NORMAL;
+    }
+
+    auto AdjustTarget = [this](CPoint& dest, CPoint& search) -> BOOL {
+        return m_pArea->AdjustTarget(CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                                         m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+            &search,
+            m_animation.GetPersonalSpace(),
+            10);
+    };
+
+    // NOTE: specificID2 (+0x530) is the edge-search state tested at 0x75B644
+    // (and again, redundantly, at 0x75B802): zero runs the two edge attempts.
+    if (m_curAction.m_specificID2 == 0) {
+        // First try the nearest horizontal and vertical view edges, allowing
+        // for the sprite's width and height at the destination.
+        if (m_pos.x < ((rView.right - rView.left) >> 1) + rView.left) {
+            ptDest.x = rView.left + rFx.left - rFx.right - 1;
+        } else {
+            ptDest.x = rView.right + rFx.right - rFx.left + 1;
+        }
+        if (m_pos.y < ((rView.bottom - rView.top) >> 1) + rView.top) {
+            ptDest.y = rView.top + rFx.top - rFx.bottom - 1;
+        } else {
+            ptDest.y = rView.bottom + rFx.bottom - rFx.top + 1;
+        }
+
+        const LONG nMaxX = static_cast<SHORT>(m_pArea->m_cInfinity.nAreaX) / CPathSearch::GRID_SQUARE_SIZEX;
+        const LONG nMaxY = static_cast<SHORT>(m_pArea->m_cInfinity.nAreaY) / CPathSearch::GRID_SQUARE_SIZEY;
+        ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+
+        // These tests read the first quotient, even after a previous arm has
+        // changed the point (0x75B6FB-0x75B775).
+        if (ptSearch.x <= 0) {
+            ptDest.x = rView.right + rFx.right - rFx.left + 1;
+        }
+        if (ptSearch.y <= 0) {
+            ptDest.y = rView.bottom + rFx.bottom - rFx.top + 1;
+        }
+        if (ptSearch.x >= nMaxX) {
+            ptDest.x = rView.left + rFx.left - rFx.right - 1;
+        }
+        if (ptSearch.y >= nMaxY) {
+            ptDest.y = rView.top + rFx.top - rFx.bottom - 1;
+        }
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (AdjustTarget(ptDest, ptSearch)) {
+            goto move;
+        }
+
+        // Then try the opposite sides. The bounds use equality here and the
+        // same saved first quotient as above.
+        ptDest.x = m_pos.x < ((rView.right - rView.left) >> 1) + rView.left
+            ? rView.right
+            : rView.left;
+        ptDest.y = m_pos.y < ((rView.bottom - rView.top) >> 1) + rView.top
+            ? rView.bottom
+            : rView.top;
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (ptSearch.x == 0) {
+            ptDest.x = rView.right;
+        }
+        if (ptSearch.y == 0) {
+            ptDest.y = rView.bottom;
+        }
+        if (ptSearch.x == nMaxX) {
+            ptDest.x = rView.left;
+        }
+        if (ptSearch.y == nMaxY) {
+            ptDest.y = rView.top;
+        }
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (AdjustTarget(ptDest, ptSearch)) {
+            goto move;
+        }
+    }
+
+    if (m_pPath != NULL) {
+        return ACTION_NORMAL;
+    }
+
+    // Last resort: scan the top and bottom rows, then the left and right
+    // columns of the view for an adjusted square.
+    {
+        BOOLEAN bFound = FALSE;
+        for (LONG x = 0; x <= rView.Width() && !bFound; x += CPathSearch::GRID_SQUARE_SIZEX) {
+            for (LONG y = 0; y <= rView.Height(); y += rView.Height()) {
+                ptDest.x = rView.left + x;
+                ptDest.y = rView.top + y;
+                ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+                    ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+                if (AdjustTarget(ptDest, ptSearch)) {
+                    bFound = TRUE;
+                    break;
+                }
+            }
+            if (bFound) {
+                break;
+            }
+        }
+
+        for (LONG x = 0; x <= rView.Width() && !bFound; x += rView.Width()) {
+            for (LONG y = 0; y <= rView.Height(); y += CPathSearch::GRID_SQUARE_SIZEY) {
+                ptDest.x = rView.left + x;
+                ptDest.y = rView.top + y;
+                ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+                    ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+                if (AdjustTarget(ptDest, ptSearch)) {
+                    bFound = TRUE;
+                    break;
+                }
+            }
+            if (bFound) {
+                break;
+            }
+        }
+
+        if (!bFound) {
+            m_removeFromArea = TRUE;
+            return ACTION_DONE;
+        }
+
+        if (strcmp(m_curAction.GetString1(), "") == 0) {
+            // NOTE: The state marker is specificID2 (+0x530), as at 0x75BBC0.
+            m_curAction.m_specificID2 = 1;
+        }
+    }
+
+move: {
+    const CPoint ptStart(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    if (ptSearch == ptStart) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    // The candidate is saved in the action's dest (+0x540/+0x544,
+    // 0x75BC0D/0x75BC15) and passed by reference to MoveToPoint; the
+    // sprite's m_curDest is only written by MoveToPoint itself.
+    m_curAction.m_dest = ptDest;
+    SHORT rc = MoveToPoint(ptDest, 0);
+    if (rc == ACTION_DONE || rc == ACTION_INTERRUPTABLE) {
+        return ACTION_NORMAL;
+    }
+    return rc;
+}
 }
 
 // 0x75CBD0
@@ -34879,6 +36223,57 @@ CString CGameSprite::GetRaceString(BYTE nRace)
     return sRace;
 }
 
+// 0x754D70
+SHORT CGameSprite::DropItem(SHORT nSlot)
+{
+    if (nSlot == -1) {
+        return ACTION_ERROR;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    LONG nGroundPile = pGame->GetGroundPile(m_id);
+    if (nGroundPile == CGameObjectArray::INVALID_INDEX) {
+        return ACTION_ERROR;
+    }
+
+    CGameContainer* pGroundPile;
+    BYTE rc = pGame->GetObjectArray()->GetDeny(nGroundPile,
+        CGameObjectArray::THREAD_ASYNCH,
+        reinterpret_cast<CGameObject**>(&pGroundPile),
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        return ACTION_ERROR;
+    }
+
+    if (nSlot != CGameSpriteEquipment::SLOT_FIST) {
+        CItem** ppItem = &m_equipment.m_items[nSlot];
+        if (*ppItem != NULL && ((*ppItem)->GetFlagsFile() & 0x4) != 0) {
+            CItem* pItem = *ppItem;
+            pGroundPile->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+            pItem->Demand();
+
+            // The original's second arm covers only the first three ammo
+            // slots and reads ability zero without a NULL check.
+            if (nSlot == m_equipment.m_selectedWeapon
+                || (m_equipment.m_selectedWeapon >= CGameSpriteEquipment::SLOT_AMMO
+                    && m_equipment.m_selectedWeapon < CGameSpriteEquipment::SLOT_AMMO + 3
+                    && static_cast<BYTE>(pItem->GetAbility(0)->type) == 4)) {
+                SelectWeaponAbility(CGameSpriteEquipment::SLOT_FIST, 0, 0, 1);
+            }
+
+            pItem->ReleaseAll();
+            Unequip(nSlot);
+            *ppItem = NULL;
+        }
+    }
+
+    pGame->GetObjectArray()->ReleaseDeny(nGroundPile,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    return ACTION_DONE;
+}
+
 // The creature's droppable items (file flag 0x4) and its gold (as MISC07)
 // go onto its ground pile, except an item whose resref is sException; with
 // bCriticalOnly only the droppable items with file flag 0x1 drop, and every
@@ -34997,8 +36392,8 @@ SHORT CGameSprite::DropInventory(BOOLEAN bCriticalOnly, CString sException)
     return ACTION_DONE;
 }
 
-// GiveItem: the item named by the action's string1 (carried, else in a bag)
-// leaves this creature; a creature target gets a copy through
+// GiveItem: the item named by the action's string1 (carried, not yet one in
+// a bag) leaves this creature; a creature target gets a copy through
 // CMessageAddItem and the item itself is disposed of.
 //
 // 0x757540
@@ -35012,10 +36407,13 @@ SHORT CGameSprite::GiveItem(CGameAIBase* pTarget)
 
     CItem* pItem;
     if (nSlot == -1) {
-        // TODO: Incomplete. The original takes the item out of a bag
-        // (DropItemFromBag 0x722740 through CInfGame 0x5C8C30, not ported),
-        // then unequips slot -1 and clears the DWORD before m_items (the
-        // field at +0x4AD4). Without it an item in a bag is not given.
+        // TODO: Incomplete. The original's arm for a name not carried calls
+        // DropItemFromBag (0x722740, now ported, through CInfGame 0x5C8C30)
+        // and a miss is ACTION_ERROR, but a hit still runs Unequip(-1) and
+        // clears m_items[-1]: the write lands on +0x4AD4, the tail (field_18)
+        // of m_shapeshifts, an out-of-bounds original write whose target's
+        // meaning is unclear. Until that is understood the arm stays unwired,
+        // so an item in a bag is not given.
         return ACTION_ERROR;
     } else {
         pItem = m_equipment.m_items[nSlot];

@@ -11162,6 +11162,105 @@ SHORT CInfGame::TakeItemFromStore(const CResRef& cResStore, const CResRef& cResI
     }
 }
 
+// 0x5C8C30
+CItem* CInfGame::RemoveItemFromBag(const CResRef& cResBag, const CResRef& cResItem)
+{
+    CItem tempItem;
+
+    if (g_pChitin->cNetwork.GetSessionOpen()) {
+        BOOL bStoreDemanded = FALSE;
+        CStore cStore;
+
+        if (g_pChitin->cNetwork.GetSessionHosting()) {
+            DemandServerStore(cResBag, TRUE);
+            cStore.SetResRef(cResBag);
+        } else {
+            cStore.SetResRef(cResBag);
+            if (!cStore.m_bLocalCopy || memcmp(cStore.m_pVersion, "STORV9.0", 8) != 0) {
+                if (!g_pBaldurChitin->GetBaldurMessage()->DemandResourceFromServer(cResBag.GetResRefStr(), 1014, TRUE, TRUE, TRUE)) {
+                    g_pChitin->cNetwork.CloseSession(TRUE);
+                    return NULL;
+                }
+
+                cStore.SetResRef(cResBag);
+                bStoreDemanded = TRUE;
+            }
+        }
+
+        CResRef curItemRef;
+        for (INT nIndex = 0; nIndex < cStore.GetNumItems(); nIndex++) {
+            curItemRef = cStore.GetItemId(nIndex);
+            cStore.GetItem(nIndex, tempItem);
+            if (curItemRef == cResItem) {
+                CItem* pItem = new CItem();
+                cStore.GetItem(nIndex, *pItem);
+
+                if (!g_pChitin->cNetwork.GetSessionHosting() && !bStoreDemanded) {
+                    bStoreDemanded = TRUE;
+                    CMessage* pMessage = new CMessageStoreDemand(cResBag, -1, -1);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+                }
+
+                CMessage* pMessage = new CMessageStoreRemoveItem(cResBag,
+                    cResItem,
+                    pItem->m_flags,
+                    -1,
+                    1,
+                    -1,
+                    -1);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+                if (g_pChitin->cNetwork.GetSessionHosting()) {
+                    CStore* pStore = g_pBaldurChitin->GetObjectGame()->GetServerStore(cResBag);
+
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+                    // __LINE__: 22577
+                    UTIL_ASSERT(pStore != NULL);
+
+                    pStore->RemoveItemExt(cResItem, pItem->m_flags, -1, 1, NULL);
+                } else {
+                    CStore::InvalidateStore(cResBag);
+                }
+
+                if (g_pChitin->cNetwork.GetSessionHosting()) {
+                    g_pBaldurChitin->GetObjectGame()->ReleaseServerStore(cResBag);
+                } else if (bStoreDemanded) {
+                    CMessage* pReleaseMessage = new CMessageStoreRelease(cResBag, -1, -1);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(pReleaseMessage, FALSE);
+                }
+
+                return pItem;
+            }
+        }
+
+        if (g_pChitin->cNetwork.GetSessionHosting()) {
+            g_pBaldurChitin->GetObjectGame()->ReleaseServerStore(cResBag);
+        } else if (bStoreDemanded) {
+            CMessage* pMessage = new CMessageStoreRelease(cResBag, -1, -1);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+        }
+
+        return NULL;
+    } else {
+        CStore cStore(cResBag);
+        CResRef curItemRef;
+
+        for (INT nIndex = 0; nIndex < cStore.GetNumItems(); nIndex++) {
+            curItemRef = cStore.GetItemId(nIndex);
+            cStore.GetItem(nIndex, tempItem);
+            if (curItemRef == cResItem) {
+                CItem* pItem = new CItem();
+                cStore.GetItem(nIndex, *pItem);
+                cStore.RemoveItemExt(cResItem, pItem->m_flags, -1, 1, NULL);
+                cStore.Marshal(m_sTempDir);
+                return pItem;
+            }
+        }
+
+        return NULL;
+    }
+}
+
 // 0x5C93E0
 INT CInfGame::sub_5C93E0()
 {

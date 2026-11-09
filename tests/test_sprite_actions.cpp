@@ -6,7 +6,9 @@
 #include "CAIScript.h"
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
 #include "CGameAnimationTypeCharacter.h"
+#include "CGameAnimationTypeMonsterAnkheg.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDialog.h"
@@ -244,6 +246,30 @@ CGameSprite* NewGameInStartArea(std::vector<BYTE>& bytes)
     // test does not switch engines: EngineActivated starts the sound).
     g_pBaldurChitin->pActiveEngine = pWorld;
     pGame->m_bGameLoaded = TRUE;
+    return pSprite;
+}
+
+// A creature of the game's files put on the area's front list at `pos`.
+CGameSprite* AddCreature(CGameArea* pArea, const char* resRef, const CPoint& pos)
+{
+    CCreatureFile creatureData;
+    creatureData.SetResRef(CResRef(resRef), TRUE, TRUE);
+    if (creatureData.GetDataSize() == 0) {
+        return NULL;
+    }
+    CGameSprite* pSprite = new CGameSprite(creatureData.GetData(),
+        creatureData.GetDataSize(),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        pos,
+        0);
+    pSprite->SetResRef(CResRef(resRef));
+    creatureData.ReleaseData();
+    pSprite->AddToArea(pArea, pos, 0, CGameObject::LIST_FRONT);
     return pSprite;
 }
 
@@ -519,6 +545,73 @@ TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its a
     CAIAction next;
     pCharacter->SetCurrAction(pCharacter->GetNextAction(next));
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::NO_ACTION);
+}
+
+TEST_CASE("sprite: ProtectPoint queues its return path and swings at a nearby enemy", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre); // One NewGame fixture.
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    auto clearQueue = [pCharacter]() {
+        while (!pCharacter->m_queuedActions.IsEmpty()) {
+            delete pCharacter->m_queuedActions.RemoveHead();
+        }
+    };
+    const CPoint guard = pCharacter->GetPos();
+
+    // Outside the one-square protect radius, the current action is copied
+    // first and its MoveToPoint second; AddAction puts the move at the head.
+    const CPoint away(guard.x + 4 * CPathSearch::GRID_SQUARE_SIZEX, guard.y);
+    pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, away,
+        CPathSearch::GRID_SQUARE_SIZEX, -1));
+    clearQueue();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+    CAIAction* pMove = pCharacter->m_queuedActions.GetHead();
+    CAIAction* pAgain = pCharacter->m_queuedActions.GetTail();
+    CHECK(pMove->m_actionID == CAIAction::MOVETOPOINT);
+    CHECK(pMove->m_dest == away);
+    CHECK(pMove->m_specificID == 0);
+    CHECK(pMove->m_specificID2 == -1);
+    CHECK(pMove->m_specificID3 == 1);
+    CHECK(pMove->m_internalFlags == 0);
+    CHECK(pAgain->m_actionID == CAIAction::PROTECTPOINT);
+    CHECK(pAgain->m_dest == away);
+    CHECK(pAgain->m_specificID == CPathSearch::GRID_SQUARE_SIZEX);
+    CHECK(pAgain->m_specificID2 == -1);
+    CHECK(pCharacter->m_targetPoint == away);
+
+    // A goblin on the adjacent square is found through the live area and
+    // shared object array. The -2 attack frame is re-armed before Swing.
+    CGameSprite* pGoblin = AddCreature(pArea, "10GOB",
+        CPoint(guard.x + CPathSearch::GRID_SQUARE_SIZEX, guard.y));
+    REQUIRE(pGoblin != NULL);
+    REQUIRE(pGoblin->GetAIType().m_nEnemyAlly > CAIObjectType::EA_GOODCUTOFF);
+    pArea->SortLists();
+    clearQueue();
+    ClearMessages();
+    pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, guard,
+        8 * CPathSearch::GRID_SQUARE_SIZEX, -1));
+    pCharacter->m_attackFrame = -2;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_attackFrame == 0);
+    CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PROTECTPOINT);
+    CHECK(pCharacter->m_queuedActions.IsEmpty());
+    clearQueue();
 }
 
 TEST_CASE("sprite: action 215 asks for a formation slot around the target sprite", "[ai][data]")
@@ -1233,6 +1326,520 @@ std::vector<CGameObject*> ObjectsOfType(CGameArea* pArea, BYTE type)
     return objects;
 }
 
+}
+
+// CGameSprite::ProtectObject (0x749FC0, action 87): with no attacker it stays
+// near the protected object; otherwise it walks to the attacker it selects.
+TEST_CASE("sprite: ProtectObject follows its object and selects an attacker", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    CGameSprite* pOther = NULL;
+    for (CGameObject* pObject : ObjectsOfType(pArea, CGameObject::TYPE_SPRITE)) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+        if (pSprite != pCharacter && pSprite != pHedron && pSprite->m_animation.m_animation != NULL) {
+            pOther = pSprite;
+            break;
+        }
+    }
+    REQUIRE(pOther != NULL);
+    // Use the game's real fist item for the ability/range checks.
+    CItem* pFist = new CItem(CResRef("00FIST"), 0, 0, 0, 0, 0);
+    pHedron->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] = pFist;
+    pHedron->m_equipment.m_selectedWeapon = CGameSpriteEquipment::SLOT_FIST;
+    pHedron->m_equipment.m_selectedWeaponAbility = 0;
+    REQUIRE(pHedron->m_equipment.m_selectedWeapon < CGameSpriteEquipment::NUM_SLOT);
+    pFist->Demand();
+    REQUIRE(pFist->GetAbility(0) != NULL);
+    pFist->Release();
+
+    auto objectType = [](CGameSprite* pSprite) {
+        return CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, pSprite->GetId(), 0, 0);
+    };
+    auto resetMovement = [pHedron]() {
+        pHedron->DropSearchRequest();
+        pHedron->DropPath();
+        pHedron->m_currentSearchRequest = NULL;
+        pHedron->field_5618 = 0;
+        pHedron->field_5616 = 0;
+        pHedron->m_curDest = CPoint(-1, -1);
+    };
+    auto requireWalk = [pHedron](CGameSprite* pExpected) {
+        REQUIRE(pHedron->m_currentSearchRequest != NULL);
+        REQUIRE(pHedron->m_currentSearchRequest->m_nTargetIds == 1);
+        REQUIRE(pHedron->m_currentSearchRequest->m_targetIds != NULL);
+        CHECK(pHedron->m_currentSearchRequest->m_targetIds[0] == pExpected->GetId());
+        CHECK(pHedron->m_curDest == pExpected->GetPos());
+    };
+
+    const CPoint origin = pHedron->GetPos();
+    const CAIObjectType character = objectType(pCharacter);
+    const CAIObjectType other = objectType(pOther);
+    pHedron->m_lAttacker.Set(CAIObjectType::NOONE);
+    pCharacter->m_lAttacker.Set(CAIObjectType::NOONE);
+    pHedron->m_curAction = CAIAction(87, character, 0, 0, 0);
+
+    // No protected object is an error; a valid one runs through action 87 and
+    // stores the handler's interruptable result as the last action result.
+    CHECK(pHedron->ProtectObject(NULL) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_pos = origin;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+
+    // Beyond min(specificID / 16, 6) squares, follow the protected object. The
+    // default specificID 0 becomes 5000, so this also exercises the fallback.
+    pCharacter->m_pos = origin + CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX, 0);
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pCharacter);
+
+    // A target's real attacker takes over from the no-attacker follow branch.
+    // The self attacker is NOONE here, so there is no priority contest.
+    pCharacter->m_lAttacker.Set(other);
+    pOther->m_pos = origin + CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX, 0);
+    pHedron->m_attackFrame = -2;
+
+    // A nonzero specificID is divided by the horizontal grid size. Outside
+    // ability range + personal space + that radius, the attacker is ignored:
+    // there is neither a walk nor a swing.
+    pHedron->m_curAction.m_specificID = CPathSearch::GRID_SQUARE_SIZEX;
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    CHECK(pHedron->m_attackFrame == -2);
+
+    // The default range is large enough to walk toward this attacker.
+    pHedron->m_curAction.m_specificID = 0;
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pOther);
+
+    // If the target has no attacker but the protector does, use the
+    // protector's attacker without an alignment check or a random draw.
+    pCharacter->m_lAttacker.Set(CAIObjectType::NOONE);
+    pHedron->m_lAttacker.Set(other);
+    resetMovement();
+    srand(1);
+    const unsigned int beforeOnlySelf = iwd2r_rand_state();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pOther);
+    CHECK(iwd2r_rand_state() == beforeOnlySelf);
+
+    // Both attackers exist. Evil protectors always take their own attacker;
+    // neutral ones take it on an even rand() % 2 and the target's on an odd
+    // one; other alignments take the target's. Every attacker is deliberately
+    // out of melee reach, so the selected object's search request identifies
+    // the choice without starting a combat round.
+    pCharacter->m_lAttacker.Set(other);
+    pHedron->m_lAttacker.Set(character);
+    pCharacter->m_pos = origin + CPoint(0, 10 * CPathSearch::GRID_SQUARE_SIZEY);
+    const struct {
+        BYTE alignment;
+        unsigned int seed;
+        bool ownAttacker;
+    } choices[] = {
+        { CAIOBJECTTYPE_NEUTRAL, 1, false },
+        { CAIOBJECTTYPE_NEUTRAL, 3, true },
+        { CAIOBJECTTYPE_LAWFUL_EVIL, 1, true },
+        { CAIOBJECTTYPE_LAWFUL_GOOD, 1, false },
+    };
+    for (const auto& choice : choices) {
+        INFO("alignment " << static_cast<int>(choice.alignment) << " seed " << choice.seed);
+        pHedron->m_typeAI.m_nAlignment = choice.alignment;
+        resetMovement();
+        srand(choice.seed);
+        CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+        requireWalk(choice.ownAttacker ? pCharacter : pOther);
+    }
+
+    // In weapon reach, the handler starts a round instead and ignores Swing's
+    // result: the action remains interruptable.
+    pHedron->m_lAttacker.Set(CAIObjectType::NOONE);
+    pOther->m_pos = origin;
+    pHedron->m_attackFrame = -2;
+    resetMovement();
+    srand(12);
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    CHECK(pHedron->m_attackFrame == 0);
+
+    resetMovement();
+    ClearMessages();
+}
+
+TEST_CASE("sprite: PickPockets resolves guards, rolls, gold and item transfers in one game", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const CPoint ptCharacter = pCharacter->m_pos;
+    const CPoint ptHedron = pHedron->m_pos;
+    pCharacter->m_pos = ptHedron;
+    pHedron->field_70F2 = 0;
+
+    auto runPick = [](CGameSprite* pActor, CGameSprite* pTarget, unsigned int nSeed) {
+        CAIObjectType target(0, 0, 0, 0, 0, 0, 0, 0, pTarget->GetId(), 0, 0);
+        pActor->SetCurrAction(CAIAction(CAIAction::PICKPOCKETS, target, 0, 0, 0));
+        pActor->m_actionCount = 0;
+        iwd2r_srand(nSeed);
+        return pActor->ExecuteAction();
+    };
+    auto isolateItem = [](CGameSprite* pTarget, CItem** pSaved, CItem* pItem) {
+        memcpy(pSaved, pTarget->m_equipment.m_items, sizeof(CItem*) * 51);
+        for (int nSlot = 0; nSlot < 51; nSlot++) {
+            pTarget->m_equipment.m_items[nSlot] = NULL;
+        }
+        // Slot 18 is stealable for both a PC and an NPC target.
+        pTarget->m_equipment.m_items[18] = pItem;
+    };
+    auto restoreItems = [](CGameSprite* pTarget, CItem* const* pSaved) {
+        memcpy(pTarget->m_equipment.m_items, pSaved, sizeof(CItem*) * 51);
+    };
+
+    // Null, disabled-by-armour, hostile and hidden-target guards consume no
+    // random numbers. Run these through action 25 as well, so the dispatcher's
+    // share/release path is exercised before any item changes.
+    iwd2r_srand(37);
+    const unsigned int nGuardSeed = iwd2r_rand_state();
+    CHECK(pCharacter->PickPockets(NULL) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+
+    const BOOL bPickDisabled = pCharacter->m_derivedStats.m_disabledButtons[1];
+    pCharacter->m_derivedStats.m_disabledButtons[1] = TRUE;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pCharacter->m_derivedStats.m_disabledButtons[1] = bPickDisabled;
+
+    const BYTE nHedronEA = pHedron->m_typeAI.m_nEnemyAlly;
+    pHedron->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_ENEMY;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pHedron->m_typeAI.m_nEnemyAlly = nHedronEA;
+
+    pHedron->field_70F2 = 1;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_DONE);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pHedron->field_70F2 = 0;
+
+    // A failed check is one draw and one PickPocketFailed trigger from the
+    // actor to the target. WIS 10 and level zero make the target modifier zero.
+    const signed char nCharacterSkill = pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET];
+    const SHORT nHedronWis = pHedron->m_derivedStats.m_nWIS;
+    const BYTE nHedronLevel = pHedron->m_derivedStats.m_nLevel;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+    pHedron->m_derivedStats.m_nWIS = 10;
+    pHedron->m_derivedStats.m_nLevel = 0;
+    unsigned int nFailureSeed = 0;
+    for (unsigned int n = 1; n < 1000; n++) {
+        if (RandValues(RandSeed(n), 1)[0] % 20 == 19) {
+            nFailureSeed = RandSeed(n);
+            break;
+        }
+    }
+    REQUIRE(nFailureSeed != 0);
+    ClearMessages();
+    const unsigned int nBeforeFailure = nFailureSeed;
+    CHECK(runPick(pCharacter, pHedron, nFailureSeed) == CGameAIBase::ACTION_DONE);
+    CHECK(RandDraws(nBeforeFailure, iwd2r_rand_state()) == 1);
+    const std::vector<CMessageSetTrigger*> failed = Queued<CMessageSetTrigger>();
+    REQUIRE(failed.size() == 1);
+    CHECK(failed[0]->m_trigger.m_triggerID == CAITRIGGER_PICKPOCKETFAILED);
+    CHECK(failed[0]->GetSource() == pCharacter->GetId());
+    CHECK(failed[0]->GetTarget() == pHedron->GetId());
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    ClearMessages();
+
+    // Find a real, droppable area item for the controlled transfer cases. Gold
+    // itself is avoided because its copy constructor can make another draw.
+    CItem* pSource = NULL;
+    const std::vector<CGameObject*> sprites = ObjectsOfType(pArea, CGameObject::TYPE_SPRITE);
+    for (CGameObject* pObject : sprites) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+        for (int nSlot = 0; nSlot < 51 && pSource == NULL; nSlot++) {
+            CItem* pItem = pSprite->m_equipment.m_items[nSlot];
+            if (pItem != NULL && (pItem->m_flags & 0x2) == 0
+                && (pItem->GetFlagsFile() & 0x4) != 0 && pItem->cResRef != "MISC07") {
+                pSource = pItem;
+            }
+        }
+        if (pSource != NULL) {
+            break;
+        }
+    }
+    REQUIRE(pSource != NULL);
+    CItem* pTestItem = new CItem(*pSource);
+    REQUIRE(pTestItem != NULL);
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+
+    unsigned int nGoldSeed = 0;
+    unsigned int nItemSeed = 0;
+    for (unsigned int n = 1; n < 1000 && (nGoldSeed == 0 || nItemSeed == 0); n++) {
+        const unsigned int nSeed = RandSeed(n);
+        const std::vector<int> values = RandValues(nSeed, 3);
+        // Keep these checks in 1..10: skill + 10 succeeds, while total 20+
+        // automatically fails in the original's high-roll-fails comparison.
+        if (values[0] % 20 >= 10) {
+            continue;
+        }
+        if (values[2] % 3 == 0) {
+            nGoldSeed = nSeed;
+        } else if (nItemSeed == 0) {
+            nItemSeed = nSeed;
+        }
+    }
+    REQUIRE(nGoldSeed != 0);
+    REQUIRE(nItemSeed != 0);
+
+    // From an NPC, the one-in-three gold choice adds 1-5 party gold and does
+    // not copy or remove the item. Exactly four draws: check, starting slot,
+    // gold/item choice and gold amount.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, pTestItem);
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        const std::vector<CMessagePartyGold*> gold = Queued<CMessagePartyGold>();
+        REQUIRE(gold.size() == 1);
+        CHECK(gold[0]->m_gold == RandValues(nGoldSeed, 4)[3] % 5 + 1);
+        CHECK(gold[0]->m_bAdjustment == TRUE);
+        CHECK(gold[0]->m_bFeedback == TRUE);
+        CHECK(gold[0]->GetSource() == pCharacter->GetId());
+        CHECK(gold[0]->GetTarget() == pCharacter->GetId());
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessageAddAction>().empty());
+        ClearMessages();
+    }
+
+    // The item choice copies it into the character's first free personal slot
+    // and queues removal of the target's slot. An invisible actor first queues
+    // ForceVisible, without disturbing the check/starting-slot/choice draws.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, pTestItem);
+        SHORT nFree = -1;
+        for (SHORT nSlot = 18; nSlot < 42 && nFree == -1; nSlot++) {
+            if (pCharacter->m_equipment.m_items[nSlot] == NULL) {
+                nFree = nSlot;
+            }
+        }
+        REQUIRE(nFree != -1);
+        const DWORD nState = pCharacter->m_derivedStats.m_generalState;
+        const BYTE nField2FC = pCharacter->m_baseStats.field_2FC;
+        pCharacter->m_derivedStats.m_generalState |= STATE_INVISIBLE;
+        pCharacter->m_baseStats.field_2FC &= ~0x1;
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_DONE);
+        pCharacter->m_derivedStats.m_generalState = nState;
+        pCharacter->m_baseStats.field_2FC = nField2FC;
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 3);
+        CItem* pStolen = pCharacter->m_equipment.m_items[nFree];
+        REQUIRE(pStolen != NULL);
+        CHECK(pStolen != pTestItem);
+        CHECK(pStolen->cResRef == pTestItem->cResRef);
+        delete pStolen;
+        pCharacter->m_equipment.m_items[nFree] = NULL;
+        CHECK(Queued<CMessageAddEffect>().size() == 1);
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pCharacter->GetId());
+        CHECK(removed[0]->GetTarget() == pHedron->GetId());
+        CHECK(removed[0]->GetCommType() == CMessage::SEND);
+        CHECK(removed[0]->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(removed[0]->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM);
+        BYTE packed[10] = {};
+        BYTE* pPacked = packed;
+        DWORD packedSize = 0;
+        removed[0]->MarshalMessage(&pPacked, &packedSize);
+        CHECK(packedSize == sizeof(packed));
+        PLAYER_ID packedPlayer = 0;
+        LONG packedRemoteId = 0;
+        SHORT packedSlot = -1;
+        memcpy(&packedPlayer, packed, sizeof(packedPlayer));
+        memcpy(&packedRemoteId, packed + sizeof(packedPlayer), sizeof(packedRemoteId));
+        memcpy(&packedSlot, packed + sizeof(packedPlayer) + sizeof(packedRemoteId), sizeof(packedSlot));
+        CHECK(packedPlayer == pHedron->m_remotePlayerID);
+        CHECK(packedRemoteId == pHedron->m_remoteObjectID);
+        CHECK(packedSlot == 18);
+        CHECK(Queued<CMessagePartyGold>().empty());
+        CGameObject* pShared = NULL;
+        const BYTE rc = pGame->GetObjectArray()->GetShare(pHedron->GetId(), CGameObjectArray::THREAD_ASYNCH, &pShared, INFINITE);
+        CHECK(rc == CGameObjectArray::SUCCESS);
+        if (rc == CGameObjectArray::SUCCESS) {
+            pGame->GetObjectArray()->ReleaseShare(pHedron->GetId(), CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+        ClearMessages();
+    }
+
+    // With no stealable slot at all the successful check draws only the check
+    // and starting slot, and reports that the target had nothing to steal.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, NULL);
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 2);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessagePartyGold>().empty());
+        ClearMessages();
+    }
+
+    // An NPC stealing gold from a PC removes exactly the rolled amount from
+    // party gold and queues the actor's CreateItem("MISC07", amount) action.
+    const DWORD nPartyGold = pGame->GetGameSave()->m_nPartyGold;
+    const signed char nHedronSkill = pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET];
+    pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+    // The seeds were picked for a zero target modifier (WIS modifier plus
+    // level, 0x758902-0x758921); the party member's own level and wisdom depend on the
+    // game data, so pin them while the NPC picks the party member's pocket.
+    const BYTE nCharacterLevel = pCharacter->m_derivedStats.m_nLevel;
+    const SHORT nCharacterWisdom = pCharacter->m_derivedStats.m_nWIS;
+    pCharacter->m_derivedStats.m_nLevel = 0;
+    pCharacter->m_derivedStats.m_nWIS = 10;
+    REQUIRE(pGame->GetRuleTables().GetAbilityScoreModifier(pCharacter->m_derivedStats.m_nWIS) == 0);
+    {
+        CItem* pSaved[51];
+        isolateItem(pCharacter, pSaved, pTestItem);
+        pGame->GetGameSave()->m_nPartyGold = 100000;
+        ClearMessages();
+        CHECK(runPick(pHedron, pCharacter, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pCharacter, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        const LONG nGold = RandValues(nGoldSeed, 4)[3] % 5 + 1;
+        const std::vector<CMessagePartyGold*> gold = Queued<CMessagePartyGold>();
+        REQUIRE(gold.size() == 1);
+        CHECK(gold[0]->m_gold == -nGold);
+        CHECK(gold[0]->GetSource() == pHedron->GetId());
+        CHECK(gold[0]->GetTarget() == pHedron->GetId());
+        const std::vector<CMessageAddAction*> added = Queued<CMessageAddAction>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->m_action.m_actionID == 82);
+        CHECK(added[0]->m_action.m_specificID == nGold);
+        CHECK(added[0]->m_action.m_string1 == CString("MISC07"));
+        CHECK(added[0]->m_action.m_string2 == CString(pCharacter->m_scriptName));
+        CHECK(added[0]->GetSource() == pCharacter->GetId());
+        CHECK(added[0]->GetTarget() == pHedron->GetId());
+        ClearMessages();
+    }
+
+    // Too little party gold falls through to the already selected item. The
+    // non-party thief uses its first free slot in 15-42, not the PC inventory.
+    {
+        SHORT nFree = -1;
+        for (SHORT nSlot = 15; nSlot < 43 && nFree == -1; nSlot++) {
+            if (pHedron->m_equipment.m_items[nSlot] == NULL) {
+                nFree = nSlot;
+            }
+        }
+        REQUIRE(nFree != -1);
+        CItem* pSaved[51];
+        isolateItem(pCharacter, pSaved, pTestItem);
+        pGame->GetGameSave()->m_nPartyGold = 0;
+        ClearMessages();
+        CHECK(runPick(pHedron, pCharacter, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pCharacter, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        CHECK(Queued<CMessagePartyGold>().empty());
+        CHECK(Queued<CMessageAddAction>().empty());
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pHedron->GetId());
+        CHECK(removed[0]->GetTarget() == pCharacter->GetId());
+        CItem* pStolen = pHedron->m_equipment.m_items[nFree];
+        REQUIRE(pStolen != NULL);
+        CHECK(pStolen != pTestItem);
+        CHECK(pStolen->cResRef == pTestItem->cResRef);
+        delete pStolen;
+        pHedron->m_equipment.m_items[nFree] = NULL;
+        ClearMessages();
+    }
+
+    // A full personal inventory reports ACTION_ERROR without queuing removal.
+    {
+        CItem* pSavedTarget[51];
+        CItem* pSavedActor[51];
+        isolateItem(pHedron, pSavedTarget, pTestItem);
+        memcpy(pSavedActor, pCharacter->m_equipment.m_items, sizeof(pSavedActor));
+        std::vector<CItem*> added;
+        for (int nSlot = 18; nSlot < 42; nSlot++) {
+            if (pCharacter->m_equipment.m_items[nSlot] == NULL) {
+                CItem* pFill = new CItem(*pTestItem);
+                pCharacter->m_equipment.m_items[nSlot] = pFill;
+                added.push_back(pFill);
+            }
+        }
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_ERROR);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 3);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        restoreItems(pHedron, pSavedTarget);
+        for (CItem* pFill : added) {
+            delete pFill;
+        }
+        memcpy(pCharacter->m_equipment.m_items, pSavedActor, sizeof(pSavedActor));
+        ClearMessages();
+    }
+
+    delete pTestItem;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nCharacterSkill;
+    pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nHedronSkill;
+    pCharacter->m_derivedStats.m_nLevel = nCharacterLevel;
+    pCharacter->m_derivedStats.m_nWIS = nCharacterWisdom;
+    pHedron->m_derivedStats.m_nWIS = nHedronWis;
+    pHedron->m_derivedStats.m_nLevel = nHedronLevel;
+    pGame->GetGameSave()->m_nPartyGold = nPartyGold;
+
+    // Out of reach, action 25 walks first instead of rolling or taking anything.
+    pCharacter->m_pos = ptCharacter;
+    pHedron->m_pos = ptHedron;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_targetId == pHedron->GetId());
+    CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PICKPOCKETS);
+    CHECK(Queued<CMessageRemoveItem>().empty());
+    ClearMessages();
 }
 
 TEST_CASE("sprite: PickLock unlocks a picked door, and reports a failed or unpickable one", "[ai][data]")
@@ -2345,6 +2952,115 @@ TEST_CASE("trigger: SubRace and Kit and CheckSkillGT/LT and PartyHasItem (0x40CD
     pEquipment->m_items[bagSlot] = NULL;
 }
 
+TEST_CASE("sprite: DropItem (9) drops personal and bagged items onto the ground pile", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter->GetArea() != NULL);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+    CMessageHandler* pHandler = g_pBaldurChitin->GetMessageHandler();
+
+    auto pileContains = [&](const CResRef& cResItem) {
+        LONG nPile = pGame->GetGroundPile(pCharacter->GetId());
+        REQUIRE(nPile != CGameObjectArray::INVALID_INDEX);
+        CGameContainer* pPile = NULL;
+        REQUIRE(pGame->GetObjectArray()->GetShare(nPile,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pPile),
+                    INFINITE)
+            == CGameObjectArray::SUCCESS);
+        BOOL found = FALSE;
+        for (SHORT nSlot = 0; nSlot < pPile->GetNumItems(); nSlot++) {
+            CItem* pItem = pPile->GetItem(nSlot);
+            if (pItem != NULL && pItem->GetResRef() == cResItem) {
+                found = TRUE;
+                break;
+            }
+        }
+        pGame->GetObjectArray()->ReleaseShare(nPile, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return found;
+    };
+
+    // The slot helper rejects -1, and deliberately leaves the fist alone.
+    CHECK(pCharacter->DropItem(static_cast<SHORT>(-1)) == CGameAIBase::ACTION_ERROR);
+    CItem* pFist = pEquipment->m_items[CGameSpriteEquipment::SLOT_FIST];
+    REQUIRE(pFist != NULL);
+    CHECK(pCharacter->DropItem(CGameSpriteEquipment::SLOT_FIST) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[CGameSpriteEquipment::SLOT_FIST] == pFist);
+
+    SHORT nGemSlot = -1;
+    SHORT nBagSlot = -1;
+    for (SHORT nSlot = 18; nSlot < CGameSpriteEquipment::NUM_SLOT && nBagSlot == -1; nSlot++) {
+        if (pEquipment->m_items[nSlot] == NULL) {
+            if (nGemSlot == -1) {
+                nGemSlot = nSlot;
+            } else {
+                nBagSlot = nSlot;
+            }
+        }
+    }
+    REQUIRE(nBagSlot != -1);
+
+    // Personal inventory takes the 0x754D70 arm of the dispatcher.
+    pEquipment->m_items[nGemSlot] = new CItem(CResRef("00GEM02"), 1, 0, 0, 0, 0);
+    REQUIRE((pEquipment->m_items[nGemSlot]->GetFlagsFile() & 0x4) != 0);
+    REQUIRE(pCharacter->FindItemPersonal(CString("00gem02"), 0, FALSE) == nGemSlot);
+    ClearMessages();
+    pCharacter->m_curAction = CAIAction();
+    pCharacter->m_curAction.m_actionID = 9;
+    pCharacter->m_curAction.SetString1(CString("00gem02"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[nGemSlot] == NULL);
+    pHandler->AsynchronousUpdate();
+    CHECK(pileContains(CResRef("00GEM02")));
+
+    // The bag has one gem. It is removed from the store and the returned
+    // CItem goes through the existing 0x7618E0 helper.
+    pEquipment->m_items[nBagSlot] = new CItem(CResRef("00GBGA01"), 0, 0, 0, 0, 0);
+    REQUIRE(pEquipment->m_items[nBagSlot]->GetItemType() == 58);
+    {
+        CStore bag(CResRef("00GBGA01"));
+        while (bag.m_lInventory.GetCount() > 0) {
+            delete bag.m_lInventory.RemoveHead();
+        }
+        CItem gem(CResRef("00GEM03"), 1, 0, 0, 0, 0);
+        REQUIRE(bag.AddItemExt(gem, 1) == 0);
+        bag.Marshal(pGame->m_sTempDir);
+    }
+    CHECK(pCharacter->DropItemFromBag(CString("NOSUCHIT")) == NULL);
+    pCharacter->m_curAction.SetString1(CString("00gem03"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[nBagSlot] != NULL);
+    CHECK(pEquipment->m_items[nBagSlot]->GetResRef() == CResRef("00GBGA01"));
+    pHandler->AsynchronousUpdate();
+    CHECK(pileContains(CResRef("00GEM03")));
+    {
+        CStore bag(CResRef("00GBGA01"));
+        CHECK(bag.GetItemIndex(CResRef("00GEM03")) == INT_MAX);
+    }
+
+    // A name absent from both places produces no item and an error.
+    pCharacter->m_curAction.SetString1(CString("NOSUCHIT"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    CStore::InvalidateStore(CResRef("00GBGA01"));
+    delete pEquipment->m_items[nBagSlot];
+    pEquipment->m_items[nBagSlot] = NULL;
+    ClearMessages();
+}
+
 TEST_CASE("sprite: ResolveInstants sends the idle sequence after 60 no-action ticks (0x728BC0)", "[ai][data]")
 {
     if (DataDir() == nullptr) {
@@ -3391,6 +4107,193 @@ TEST_CASE("sprite: RandomFly queues the fly arc, rounds the facing and jumps aft
     CHECK(pCharacter->m_pos.x < nAreaX);
     CHECK(pCharacter->m_pos.y >= 0);
     CHECK(pCharacter->m_pos.y < nAreaY);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: the inline item and state actions update the current sprite", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // EquipItem finds the item without case and accepts both specific values.
+    // These are scopes, not Catch2 SECTIONs: every SECTION would call NewGame
+    // again on the same long-lived engine with the previous party still present.
+    {
+        SHORT nSlot = -1;
+        for (SHORT n = 18; n < 51; n++) {
+            if (pCharacter->m_equipment.m_items[n] == NULL) {
+                nSlot = n;
+                break;
+            }
+        }
+        REQUIRE(nSlot != -1);
+        CItem* pItem = new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+        pCharacter->m_equipment.m_items[nSlot] = pItem;
+
+        CAIAction action;
+        action.m_actionID = 11;
+        action.m_string1 = "00gem01";
+        action.m_specificID = 0;
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        action.m_specificID = 1;
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        action.m_string1 = "NOSUCHIT";
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+        pCharacter->m_equipment.m_items[nSlot] = NULL;
+        delete pItem;
+    }
+
+    // SetTargetFly starts once and finishes when the ready sequence is reached.
+    {
+        CAIAction action;
+        action.m_actionID = CAIAction::SETTARGETFLY;
+        action.m_acteeID.m_nGeneral = 2;
+        action.m_acteeID.m_nEnemyAlly = CGameSprite::FLY_LEFT;
+        action.m_specificID = 512;
+        pCharacter->SetCurrAction(action);
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_nDirection = 0;
+        pCharacter->m_pos = CPoint(1000, 1000);
+        pCharacter->m_baseStats.m_flags |= 0x80000000;
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+        CHECK(pCharacter->m_radius == 512);
+        CHECK(pCharacter->m_circleFacing == CGameSprite::FLY_LEFT);
+        CHECK(pCharacter->m_posOld == CPoint(1512, 1000));
+        CHECK(pCharacter->m_nSequence == CGAMESPRITE_SEQ_WALK);
+        CHECK((pCharacter->m_baseStats.m_flags & 0x80000000) != 0);
+
+        const CPoint posOld = pCharacter->m_posOld;
+        pCharacter->m_actionCount = 1;
+        pCharacter->m_nSequence = CGAMESPRITE_SEQ_READY;
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_posOld == posOld);
+        CHECK((pCharacter->m_baseStats.m_flags & 0x80000000) == 0);
+    }
+
+    // ChangeAIType copies the action's type to the current, live and starting types.
+    {
+        CAIAction action;
+        action.m_actionID = 152;
+        action.m_acteeID.m_nEnemyAlly = 201;
+        action.m_acteeID.m_nGeneral = CAIOBJECTTYPE_G_UNDEAD;
+        action.m_acteeID.m_nRace = CAIOBJECTTYPE_R_GOBLIN;
+        action.m_acteeID.m_nClass = CAIObjectType::C_ROGUE;
+        action.m_acteeID.m_nSpecific = 7;
+        action.m_acteeID.m_sName = "ChangedType";
+        pCharacter->SetCurrAction(action);
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        for (const CAIObjectType* type : { &pCharacter->m_typeAI, &pCharacter->m_liveTypeAI, &pCharacter->m_startTypeAI }) {
+            CHECK(type->m_nEnemyAlly == 201);
+            CHECK(type->m_nGeneral == CAIOBJECTTYPE_G_UNDEAD);
+            CHECK(type->m_nRace == CAIOBJECTTYPE_R_GOBLIN);
+            CHECK(type->m_nClass == CAIObjectType::C_ROGUE);
+            CHECK(type->m_nSpecific == 7);
+            CHECK(type->m_sName == "ChangedType");
+        }
+    }
+
+    // SetLeavePartyDialogFile uses the table's MULTIG fallback.
+    {
+        std::memset(pCharacter->m_scriptName, 0, SCRIPTNAME_SIZE);
+        strcpy(pCharacter->m_scriptName, "NO_SUCH_POST_DIALOG");
+        const BOOLEAN connected = g_pChitin->cNetwork.m_bConnectionEstablished;
+        g_pChitin->cNetwork.m_bConnectionEstablished = FALSE;
+        pCharacter->m_dialog = CResRef("");
+        CAIAction action;
+        action.m_actionID = 175;
+        pCharacter->SetCurrAction(action);
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_dialog == CResRef("multig"));
+        g_pChitin->cNetwork.m_bConnectionEstablished = connected;
+    }
+
+    ClearMessages();
+}
+
+TEST_CASE("sprite: the fly side is signed in SetTargetFly and AIUpdateFly", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // FLY_RIGHT is -1 (0xFF in m_circleFacing). The original sign-extends it
+    // for the initial hop (SetTargetFly) and for the arc (AIUpdateFly); an
+    // unsigned read turns 0xFF into 255.
+    struct FlyRun {
+        CPoint posOld;
+        CPoint pos;
+        double directionOffset;
+        signed char facing;
+    };
+    auto run = [&](SHORT side) {
+        CAIAction action;
+        action.m_actionID = CAIAction::SETTARGETFLY;
+        action.m_acteeID.m_nGeneral = 2;
+        action.m_acteeID.m_nEnemyAlly = static_cast<BYTE>(side);
+        action.m_specificID = 512;
+        pCharacter->SetCurrAction(action);
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_nDirection = 0;
+        pCharacter->m_pos = CPoint(1000, 1000);
+        pCharacter->m_baseStats.m_flags |= 0x80000000;
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+        CHECK(pCharacter->m_radius == 512);
+        CHECK(pCharacter->m_nSequence == CGAMESPRITE_SEQ_WALK);
+
+        FlyRun result;
+        result.posOld = pCharacter->m_posOld;
+        result.directionOffset = pCharacter->m_fDirectionOffset;
+        result.facing = static_cast<signed char>(pCharacter->m_circleFacing);
+        pCharacter->AIUpdateFly();
+        result.pos = pCharacter->m_pos;
+        return result;
+    };
+
+    const FlyRun left = run(CGameSprite::FLY_LEFT);
+    const FlyRun right = run(static_cast<BYTE>(CGameSprite::FLY_RIGHT));
+
+    CHECK(left.facing == CGameSprite::FLY_LEFT);
+    CHECK(right.facing == CGameSprite::FLY_RIGHT);
+    CHECK(left.posOld == CPoint(1512, 1000));
+    CHECK(right.posOld == CPoint(488, 1000));
+    CHECK(left.directionOffset == 3.1415926535);
+    CHECK(right.directionOffset == 2 * 3.1415926535);
+    CHECK(left.pos != left.posOld);
+    CHECK(right.pos != right.posOld);
+    CHECK(left.pos.x > 1000);
+    CHECK(right.pos.x < 1000);
+    CHECK(std::abs(left.pos.x + right.pos.x - 2000) <= 1);
+    CHECK(std::abs(left.pos.y - right.pos.y) <= 1);
+
     ClearMessages();
 }
 
@@ -4624,5 +5527,751 @@ TEST_CASE("sprite: action 224 loses the first item when the amulet slot is occup
     }
     CHECK(nBagAfter == nBagBefore);
     INFO("lost resref " << static_cast<const char*>(sLost));
+    ClearMessages();
+}
+
+// AnkhegEmerge and AnkhegHide (128/129, 0x72A1C9-0x72A33E) gate on the
+// animation's burrow state and queue, rather than directly apply, a sequence.
+TEST_CASE("sprite: AnkhegEmerge and AnkhegHide respect the burrow state", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    pCharacter->GetAnimation()->SetAnimationType(0x3000,
+        pCharacter->m_baseStats.m_colors,
+        static_cast<WORD>(pCharacter->m_nDirection));
+    auto* pAnkheg = dynamic_cast<CGameAnimationTypeMonsterAnkheg*>(pCharacter->GetAnimation()->m_animation);
+    REQUIRE(pAnkheg != NULL);
+
+    CAIAction action;
+    action.m_actionID = 128;
+    pCharacter->SetCurrAction(action);
+    pAnkheg->m_bAboveGround = FALSE;
+    pCharacter->m_nSequence = CGameSprite::SEQ_READY;
+    ClearMessages();
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_NORMAL);
+    std::vector<CMessageSetSequence*> sequences = Queued<CMessageSetSequence>();
+    REQUIRE(sequences.size() == 1);
+    CHECK(sequences[0]->m_sequence == CGameSprite::SEQ_EMERGE);
+    CHECK(sequences[0]->m_sourceId == pCharacter->GetId());
+    CHECK(sequences[0]->m_targetId == pCharacter->GetId());
+    CHECK(pCharacter->m_nSequence == CGameSprite::SEQ_READY);
+
+    ClearMessages();
+    pCharacter->m_nSequence = CGameSprite::SEQ_EMERGE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    pAnkheg->m_bAboveGround = TRUE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    action.m_actionID = 129;
+    pCharacter->SetCurrAction(action);
+    pCharacter->m_nSequence = CGameSprite::SEQ_READY;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    sequences = Queued<CMessageSetSequence>();
+    REQUIRE(sequences.size() == 1);
+    CHECK(sequences[0]->m_sequence == CGameSprite::SEQ_HIDE);
+    CHECK(pCharacter->m_nSequence == CGameSprite::SEQ_READY);
+
+    ClearMessages();
+    pCharacter->m_nSequence = CGameSprite::SEQ_HIDE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    pAnkheg->m_bAboveGround = FALSE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetSequence>().empty());
+    ClearMessages();
+}
+
+// Polymorph (146, 0x72A42B-0x72A4FE) is the action that changes an
+// animation id: it builds opcode 53 directly, with no creature resource.
+TEST_CASE("sprite: Polymorph queues a permanent animation-change effect", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CAIAction action;
+    action.m_actionID = 146;
+    action.m_specificID = 0x3000;
+    pCharacter->SetCurrAction(action);
+    ClearMessages();
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    std::vector<CMessageAddEffect*> messages = Queued<CMessageAddEffect>();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages[0]->m_sourceId == pCharacter->GetId());
+    CHECK(messages[0]->m_targetId == pCharacter->GetId());
+    auto* pEffect = dynamic_cast<CGameEffectAnimationChange*>(messages[0]->m_effect);
+    REQUIRE(pEffect != NULL);
+    CHECK(pEffect->m_effectID == CGAMEEFFECT_ANIMATIONCHANGE);
+    CHECK(pEffect->m_effectAmount == action.m_specificID);
+    CHECK(pEffect->m_durationType == 1);
+    CHECK(pEffect->m_duration == 0);
+    CHECK(pEffect->m_source == CPoint(-1, -1));
+    CHECK(pEffect->m_sourceID == -1);
+    CHECK(pEffect->m_target == CPoint(-1, -1));
+    CHECK(pEffect->field_18C == -1);
+    ClearMessages();
+}
+
+// Action 223 (0x72A83D-0x72A976) emits a removal for every occupied slot
+// except the fist and clears the quick weapon/item buttons for abilities 0-2.
+TEST_CASE("sprite: action 223 removes equipped items and their quick buttons except the fist", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    std::vector<SHORT> occupied;
+    SHORT nEmpty = -1;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        if (pCharacter->m_equipment.m_items[nSlot] != NULL) {
+            occupied.push_back(nSlot);
+        } else if (nEmpty == -1) {
+            nEmpty = nSlot;
+        }
+    }
+    REQUIRE(!occupied.empty());
+    REQUIRE(nEmpty != -1);
+    REQUIRE(pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] != NULL);
+    const SHORT nSlot = occupied.front();
+
+    auto button = [](SHORT itemType, SHORT itemNum, SHORT abilityNum) {
+        CButtonData value;
+        value.m_icon = "PROBE";
+        value.m_name = 1;
+        value.m_count = 5;
+        value.m_abilityId.m_itemType = itemType;
+        value.m_abilityId.m_itemNum = itemNum;
+        value.m_abilityId.m_abilityNum = abilityNum;
+        value.m_abilityId.m_res = "";
+        return value;
+    };
+    // The original clears itemType 2, itemNum slot, ability 0 then 1 then 2.
+    pCharacter->m_quickWeapons[0] = button(2, nSlot, 0);
+    pCharacter->m_quickWeapons[1] = button(2, nSlot, 1);
+    pCharacter->m_quickWeapons[2] = button(2, nSlot, 2);
+    pCharacter->m_quickWeapons[3] = button(2, nSlot, 3);
+    pCharacter->field_3D3A[0] = 7;
+    pCharacter->m_quickItems[0] = button(2, nSlot, 0);
+    pCharacter->m_quickItems[1] = button(2, nSlot, 1);
+    pCharacter->m_quickItems[2] = button(2, nSlot, 2);
+    pCharacter->m_quickSpells[0] = button(1, nSlot, 0);
+    pCharacter->m_quickInnates[0] = button(1, nSlot, 0);
+    pCharacter->m_quickSongs[0] = button(1, nSlot, 0);
+    pCharacter->m_quickSpells[1] = button(1, nEmpty, 0);
+    pCharacter->m_quickSpells[2] = button(1, CGameSpriteEquipment::SLOT_FIST, 0);
+
+    CAIAction action;
+    action.m_actionID = 223;
+    pCharacter->SetCurrAction(action);
+    ClearMessages();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+
+    std::vector<CMessageRemoveItem*> messages = Queued<CMessageRemoveItem>();
+    REQUIRE(messages.size() == occupied.size());
+    for (size_t n = 0; n < occupied.size(); n++) {
+        CHECK(messages[n]->m_slot == occupied[n]);
+        CHECK(messages[n]->m_sourceId == pCharacter->GetId());
+        CHECK(messages[n]->m_targetId == pCharacter->GetId());
+    }
+    CHECK(messages[0]->GetCommType() == CMessage::SEND);
+    CHECK(messages[0]->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(messages[0]->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM);
+
+    BYTE packed[16] = {};
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    messages[0]->MarshalMessage(&pPacked, &packedSize);
+    REQUIRE(packedSize == sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(SHORT));
+    CHECK(*reinterpret_cast<PLAYER_ID*>(packed) == pCharacter->m_remotePlayerID);
+    CHECK(*reinterpret_cast<LONG*>(packed + sizeof(PLAYER_ID)) == pCharacter->m_remoteObjectID);
+    CHECK(*reinterpret_cast<SHORT*>(packed + sizeof(PLAYER_ID) + sizeof(LONG)) == nSlot);
+
+    CHECK(pCharacter->m_quickWeapons[0].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[1].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[2].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->field_3D3A[0] == 0);
+    CHECK(pCharacter->m_quickItems[0].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickItems[1].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickItems[2].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[0].m_icon == "");
+    // Ability 3 and every spell-side button are outside the three calls.
+    CHECK(pCharacter->m_quickWeapons[3].m_abilityId.m_abilityNum == 3);
+    CHECK(pCharacter->m_quickWeapons[3].m_icon == "PROBE");
+    CHECK(pCharacter->m_quickSpells[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickInnates[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickSongs[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickSpells[1].m_abilityId.m_itemNum == nEmpty);
+    CHECK(pCharacter->m_quickSpells[2].m_abilityId.m_itemNum == CGameSpriteEquipment::SLOT_FIST);
+
+    CItem* pFist = pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST];
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    for (SHORT nRemoved : occupied) {
+        CHECK(pCharacter->m_equipment.m_items[nRemoved] == NULL);
+    }
+    CHECK(pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] == pFist);
+    ClearMessages();
+}
+
+// CGameSprite::EscapeArea (0x75B280), shared by actions 108 and 176.
+TEST_CASE("sprite: EscapeArea and EscapeAreaDestroy honor removal guards and post their message", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    const CPoint pt = pHedron->m_pos;
+    const CRect savedView = pArea->m_cInfinity.rViewPort;
+    const int savedNewX = pArea->m_cInfinity.nNewX;
+    const int savedNewY = pArea->m_cInfinity.nNewY;
+    const SHORT savedSeen = pHedron->m_canBeSeen;
+    const SHORT savedVisualRange = pArea->m_visibility.field_E;
+    const DWORD savedExpiration = pHedron->m_expirationTime;
+    const bool savedEscaping = pHedron->m_bEscapingArea != FALSE;
+
+    // A known visible NPC in a centered view. Only this NPC runs the actions;
+    // the party member is deliberately left alone (EscapeArea calls
+    // LeaveParty on a party sprite).
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 640, 480);
+    pArea->m_cInfinity.nNewX = pt.x - 320;
+    pArea->m_cInfinity.nNewY = pt.y - 240;
+    pHedron->m_canBeSeen = 1;
+
+    // Action 108's ordinary limit is 120 calls. This also isolates the common
+    // message: both participants are the escaping sprite and the return value
+    // is installed by ExecuteAction's shared tail.
+    CAIAction escape;
+    escape.m_actionID = 108;
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+    pHedron->m_actionCount = 120;
+    pHedron->m_removeFromArea = FALSE;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(pHedron->m_bEscapingArea);
+    // BROADCAST_FORCED_OTHERS consumes the message rather than queueing it
+    // for this single-player recipient. Verify its exact identity separately;
+    // the escaping flag above is the local effect and the message list stays
+    // free of a locally replayed escape message.
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    CMessageEscapeArea escapeMessage(pHedron->GetId(), pHedron->GetId());
+    CHECK(escapeMessage.GetSource() == pHedron->GetId());
+    CHECK(escapeMessage.GetTarget() == pHedron->GetId());
+    CHECK(escapeMessage.GetCommType() == CMessage::BROADCAST_FORCED_OTHERS);
+    CHECK(escapeMessage.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ESCAPE_AREA);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(pHedron->m_bEscapingArea);
+    ClearMessages();
+
+    // EscapeAreaDestroy uses the action's delay in 15-call units. With an
+    // outstanding path and no target in range, one call before the limit is
+    // still running and does not queue removal.
+    CAIAction destroy;
+    destroy.m_actionID = 176;
+    destroy.m_specificID = 2;
+    pHedron->SetCurrAction(destroy);
+    pHedron->m_actionCount = 29;
+    pHedron->m_removeFromArea = FALSE;
+    pHedron->m_expirationTime = savedExpiration;
+    pArea->m_visibility.field_E = 0; // zero visual range: no transition target
+    LONG* oldPath = pHedron->m_pPath;
+    LONG* path = new LONG[1];
+    path[0] = 0;
+    pHedron->m_pPath = path;
+    ClearMessages();
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(!pHedron->m_removeFromArea);
+    CHECK(pHedron->m_expirationTime == g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    pHedron->m_pPath = oldPath;
+    delete[] path;
+    pArea->m_visibility.field_E = savedVisualRange;
+    ClearMessages();
+
+    // At the exact delay boundary the same action is done and removed.
+    pHedron->m_actionCount = 30;
+    pHedron->m_removeFromArea = FALSE;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    ClearMessages();
+
+    // An unseen creature is removed immediately, before the duration and
+    // routing work. This is the same guard for action 108.
+    pHedron->SetCurrAction(escape);
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    pHedron->m_expirationTime = savedExpiration;
+    pHedron->m_canBeSeen = 0;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(pHedron->m_expirationTime == savedExpiration);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    ClearMessages();
+
+    pHedron->m_canBeSeen = savedSeen;
+    pHedron->m_expirationTime = savedExpiration;
+    pHedron->m_bEscapingArea = savedEscaping ? TRUE : FALSE;
+    pArea->m_cInfinity.rViewPort = savedView;
+    pArea->m_cInfinity.nNewX = savedNewX;
+    pArea->m_cInfinity.nNewY = savedNewY;
+    pArea->m_visibility.field_E = savedVisualRange;
+}
+
+TEST_CASE("sprite: EscapeArea selects an adjusted edge destination when no transition target exists", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    const CPoint pt = pHedron->m_pos;
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 640, 480);
+    pArea->m_cInfinity.nNewX = pt.x - 320;
+    pArea->m_cInfinity.nNewY = pt.y - 240;
+    pHedron->m_canBeSeen = 1;
+    pArea->m_visibility.field_E = 0;
+    pHedron->m_curDest = pt;
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+
+    CAIAction escape;
+    escape.m_actionID = 108;
+    // The saved destination seeds the edge-hunt flag: start it outside the
+    // view so the flag is cleared for certain (m_curAction.m_dest is the
+    // seed, 0x75B4FD).
+    escape.m_dest = CPoint(pt.x + 640, pt.y);
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+
+    INFO("position " << pt.x << "," << pt.y << " destination " << pHedron->m_curDest.x << ","
+                     << pHedron->m_curDest.y);
+    CHECK(pArea->GetNearestTravelTrigger(pHedron->GetId(), 0, pHedron->m_terrainTable, FALSE)
+        == CGameObjectArray::INVALID_INDEX);
+    const SHORT rc = pHedron->ExecuteAction();
+    INFO("return " << rc << " destination " << pHedron->m_curDest.x << "," << pHedron->m_curDest.y
+                   << " path " << pHedron->m_pPath << " request " << pHedron->m_currentSearchRequest
+                   << " action " << pHedron->m_curAction.m_actionID << " count " << pHedron->m_actionCount
+                   << " specific " << pHedron->m_curAction.m_specificID);
+    CHECK(rc == CGameAIBase::ACTION_NORMAL);
+    CHECK(!pHedron->m_removeFromArea);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_NORMAL);
+    // This fixture is deterministic on AR1000: the top-left candidate fails
+    // and the bottom-left one adjusts. EscapeArea keeps the retained world
+    // candidate in m_curAction.m_dest and calls MoveToPoint with it; it
+    // differs from m_curDest, so MoveToPoint adopts it as the current
+    // destination and starts a search request, answering INTERRUPTABLE,
+    // which the common tail converts to NORMAL.
+    CHECK(pHedron->m_curAction.m_dest == CPoint(pt.x - 320, pt.y + 240));
+    CHECK(pHedron->m_curDest == CPoint(pt.x - 320, pt.y + 240));
+    // The scan found the edge, so the action's state marker is set.
+    CHECK(pHedron->m_curAction.m_specificID2 == 1);
+    CHECK(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest != NULL);
+    CHECK(pHedron->m_currentSearchRequest->m_nTargetPoints == 1);
+    REQUIRE(pHedron->m_currentSearchRequest->m_targetPoints != NULL);
+    CHECK(pHedron->m_currentSearchRequest->m_targetPoints[0].x == pt.x - 320);
+    CHECK(pHedron->m_currentSearchRequest->m_targetPoints[0].y == pt.y + 240);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: EscapeArea propagates an invalid edge destination", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    // Find the bottommost open square. Put the actor one row above it and the
+    // view's bottom edge just outside the area: the top candidate is the actor
+    // itself (rejected), while AdjustTarget walks the outside candidate back
+    // to that open square. The retained world point is still outside and
+    // MoveToPoint rejects it.
+    CPoint open(-1, -1);
+    const CSize dimensions = pArea->m_search.m_GridSquareDimensions;
+    for (int y = 0; y < dimensions.cy; y++) {
+        for (int x = 0; x < dimensions.cx; x++) {
+            if (OpenSquare(pHedron, CPoint(x, y))) {
+                open = CPoint(x, y);
+            }
+        }
+    }
+    REQUIRE(open.x >= 0);
+    REQUIRE(open.y >= 1);
+    pHedron->m_pos = CPoint(open.x * CPathSearch::GRID_SQUARE_SIZEX + CPathSearch::GRID_SQUARE_SIZEX / 2,
+        (open.y - 1) * CPathSearch::GRID_SQUARE_SIZEY + CPathSearch::GRID_SQUARE_SIZEY / 2);
+    const CPoint pt = pHedron->m_pos;
+    const int outsideY = pArea->m_cInfinity.nAreaY + 1;
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 1, outsideY - pt.y);
+    pArea->m_cInfinity.nNewX = pt.x;
+    pArea->m_cInfinity.nNewY = pt.y;
+    pHedron->m_canBeSeen = 1;
+    pArea->m_visibility.field_E = 0;
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+
+    CAIAction escape;
+    escape.m_actionID = 108;
+    // specificID2 is the edge-search state (0x75B644): 1 skips the two edge
+    // attempts and goes straight to the scan. The non-empty string keeps the
+    // state marker from being reset (the reset needs an empty string1).
+    escape.m_specificID2 = 1;
+    escape.SetString1(CString("keep-state"));
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+
+    INFO("position " << pHedron->m_pos.x << "," << pHedron->m_pos.y
+                     << " open square " << open.x << "," << open.y);
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_ERROR);
+    CHECK(!pHedron->m_removeFromArea);
+    // The retained world candidate lives in the action's dest; MoveToPoint
+    // rejects it as out of the area before touching m_curDest.
+    CHECK(pHedron->m_curAction.m_dest == CPoint(pt.x, outsideY));
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    ClearMessages();
+}
+
+// CGameSprite::UseItem (0x746480), called by ExecuteAction's action 34. One
+// party fixture exercises both item-resolution forms, the guard paths, the
+// two-sprite reach/approach, the facing turn, the item-type-dependent delay,
+// self/projectile effects and charge consumption on real ITM resources.
+TEST_CASE("sprite: UseItem handles potions and wands through action 34", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    ClearMessages();
+
+    CAIObjectType self(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    auto prepare = [&](const CAIObjectType& target, LONG slot, LONG ability) {
+        pCharacter->SetCurrAction(CAIAction(CAIAction::USEITEM, target, slot, ability, 0));
+        pCharacter->m_curItem = NULL;
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_castCounter = -1;
+        pCharacter->m_bStartedCasting = FALSE;
+        pCharacter->field_7118 = 0;
+        pCharacter->m_nDirection = 0;
+        // A target on the same point takes GetDirection from the desired
+        // direction, not from the static geometry helper's zero.
+        pCharacter->m_nNewDirection = 0;
+    };
+
+    // No target and an inactive target fail before item selection.
+    CHECK(pCharacter->UseItem(NULL) == CGameAIBase::ACTION_ERROR);
+    const BOOL savedActiveAI = pCharacter->m_activeAI;
+    pCharacter->m_activeAI = FALSE;
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_activeAI = savedActiveAI;
+
+    prepare(self, -1, 0);
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+
+    // Use three otherwise-empty inventory slots in turn. The potion has one
+    // ability, five self-targeted effects and projectile 1; the wand has one
+    // ability and two projectile-targeted effects; a second potion serves the
+    // door-target case (00POTN01/00WAND02 ITM).
+    SHORT nPotionSlot = -1;
+    SHORT nWandSlot = -1;
+    SHORT nDoorSlot = -1;
+    for (SHORT n = 18; n < CGameSpriteEquipment::NUM_SLOT && nDoorSlot == -1; n++) {
+        if (pCharacter->m_equipment.m_items[n] == NULL) {
+            if (nPotionSlot == -1) {
+                nPotionSlot = n;
+            } else if (nWandSlot == -1) {
+                nWandSlot = n;
+            } else {
+                nDoorSlot = n;
+            }
+        }
+    }
+    REQUIRE(nDoorSlot != -1);
+    CItem* pPotion = new CItem(CResRef("00POTN01"), 2, 0, 0, 0, 1);
+    REQUIRE(pPotion->GetItemType() == 9);
+    REQUIRE(pPotion->GetAbilityCount() == 1);
+    pCharacter->m_equipment.m_items[nPotionSlot] = pPotion;
+
+    prepare(self, nPotionSlot, 1);
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+    CHECK(pPotion->GetUsageCount(0) == 2);
+
+    // Named resolution is case-insensitive in the equipment scan. A potion
+    // (type 9) has no 20-tick delay; at matching self-facing the action still
+    // sends direction, then queues its five self effects and its fire message.
+    prepare(self, nPotionSlot, 0);
+    pCharacter->m_curAction.SetString1("00potn01");
+    const unsigned int potionRandState = iwd2r_rand_state();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curItem == pPotion);
+    CHECK(pCharacter->field_559E == nPotionSlot);
+    CHECK(pCharacter->field_55A0 == 0);
+    CHECK(pCharacter->field_7118 == 1);
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    CHECK(pCharacter->m_curProjectile == NULL);
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    std::vector<CMessageFireProjectile*> potionFire = Queued<CMessageFireProjectile>();
+    REQUIRE(potionFire.size() == 1);
+    // DecodeProjectile converts ITM missile id 1 to its internal type 0.
+    CHECK(potionFire[0]->m_projectileType == 0);
+    CHECK(potionFire[0]->m_projectileTargetId == pCharacter->GetId());
+    CHECK(potionFire[0]->m_projectileTarget == pCharacter->GetPos());
+    // No UMD roll and no whirlwind seed: this use path draws no random number.
+    CHECK(RandDraws(potionRandState, iwd2r_rand_state()) == 0);
+
+    // A facing change is a separate normal-return turn and spends no charge.
+    ClearMessages();
+    prepare(self, nPotionSlot, 0);
+    pCharacter->m_curAction.SetString1("00POTN01");
+    pCharacter->m_nDirection = 1;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->field_7118 == 0);
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    REQUIRE(Queued<CMessageSetDirection>().size() == 1);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+
+    // Hedron is outside a one-square potion's reach. The range failure uses
+    // MoveToObject and leaves the charge untouched; this would not distinguish
+    // the path with 00WAND02's 100-square range, which already reaches him.
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CAIObjectType hedron(0, 0, 0, 0, 0, 0, 0, 0, pHedron->GetId(), 0, 0);
+    prepare(hedron, nPotionSlot, 0);
+    pCharacter->m_actionCount = 1;
+    pCharacter->field_5616 = 0;
+    const SHORT approach = pCharacter->ExecuteAction();
+    CHECK(approach != CGameAIBase::ACTION_DONE);
+    CHECK(approach != CGameAIBase::ACTION_ERROR);
+    CHECK(pCharacter->m_curDest == pHedron->GetPos());
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+    pCharacter->DropSearchRequest();
+    pCharacter->DropPath();
+    pCharacter->m_curItem = NULL;
+
+    // Slot resolution on the next fresh action spends the last charge. A dead
+    // target skips even the hopeless range check and takes the object's only
+    // drop-path arm, which fires only when the action already committed
+    // (field_7118 from a prior in-range tick); m_pPath is not consulted,
+    // unlike UseItemPoint's drop paths. The committed flag also skips the
+    // facing turn. An ordinary in-range call sends no such message.
+    const DWORD savedHedronState = pHedron->m_baseStats.m_generalState;
+    pHedron->m_baseStats.m_generalState |= STATE_DEAD;
+    ClearMessages();
+    prepare(hedron, nPotionSlot, 0);
+    pCharacter->field_7118 = 1;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    pHedron->m_baseStats.m_generalState = savedHedronState;
+    CHECK(Queued<CMessageDropPath>().size() == 1);
+    // This ability's usageFlags are 1, so CheckIfUsedUp removes the item and
+    // emits Unusable before the quick-list update.
+    CHECK(pCharacter->m_equipment.m_items[nPotionSlot] == NULL);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    bool unusable = false;
+    for (CMessageSetTrigger* message : Queued<CMessageSetTrigger>()) {
+        if (message->m_trigger.m_triggerID == CAITRIGGER_UNUSABLE
+            && strcmp(message->m_trigger.m_string1, "00POTN01") == 0) {
+            unusable = true;
+        }
+    }
+    CHECK(unusable);
+    pCharacter->m_curItem = NULL;
+    ClearMessages();
+
+    // 00WAND02 is usable by a wizard and is item type 35, not one of the two
+    // zero-delay types. It therefore waits until actionCount reaches 20.
+    CItem* pWand = new CItem(CResRef("00WAND02"), 2, 0, 0, 0, 1);
+    REQUIRE(pWand->GetItemType() == 35);
+    REQUIRE(pWand->GetAbilityCount() == 1);
+    pCharacter->m_equipment.m_items[nWandSlot] = pWand;
+    const DWORD savedClassMask = pCharacter->m_derivedStats.m_classMask;
+    pCharacter->m_derivedStats.m_classMask = CLASSMASK_WIZARD;
+    REQUIRE(pGame->CheckItemUsable(pCharacter, pWand) == 1);
+
+    // Nineteen ticks only turn and wait; twenty retains and demands the same
+    // item, fires missile 68 (internal projectile 67) and consumes a charge.
+    prepare(self, nWandSlot, 0);
+    pCharacter->m_actionCount = 19;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pWand->GetUsageCount(0) == 2);
+    CHECK(pCharacter->m_curItem == pWand);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    ClearMessages();
+    pCharacter->m_actionCount = 20;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWand->GetUsageCount(0) == 1);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    std::vector<CMessageFireProjectile*> wandFire = Queued<CMessageFireProjectile>();
+    REQUIRE(wandFire.size() == 1);
+    // ITM missile id 68 similarly becomes internal projectile type 67.
+    CHECK(wandFire[0]->m_projectileType == 67);
+    CHECK(wandFire[0]->m_projectileTargetId == pCharacter->GetId());
+    CHECK(wandFire[0]->m_projectileTarget == pCharacter->GetPos());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    ClearMessages();
+    pCharacter->m_curItem = NULL;
+    delete pWand;
+    pCharacter->m_equipment.m_items[nWandSlot] = NULL;
+    pCharacter->m_derivedStats.m_classMask = savedClassMask;
+    pCharacter->SetCurrAction(CAIAction::NULL_ACTION);
+
+    // A door target exercises the non-sprite paths: the entry active checks
+    // do not apply, the reach uses only the caster's personal space, LOS is
+    // never checked, and -- since the port's layout cannot reproduce the
+    // original's type-confused +0x5BC read on a door (the closed bounding
+    // rect's bottom edge there) -- the door counts as live. A fresh potion
+    // (type 9, no twenty-tick wait) provides the item; its first charge is
+    // spent, not its last, so CheckIfUsedUp leaves it equipped.
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door5");
+    REQUIRE(pDoor != NULL);
+    CAIObjectType doorId(0, 0, 0, 0, 0, 0, 0, 0, pDoor->GetId(), 0, 0);
+    CItem* pDoorPotion = new CItem(CResRef("00POTN01"), 2, 0, 0, 0, 1);
+    pCharacter->m_equipment.m_items[nDoorSlot] = pDoorPotion;
+
+    // From the start point the door is out of the potion's one-square
+    // reach: the range arm runs, MoveToObject approaches, no drop path is
+    // queued and the charge stays untouched.
+    ClearMessages();
+    prepare(doorId, nDoorSlot, 0);
+    pCharacter->m_actionCount = 1;
+    pCharacter->field_5616 = 0;
+    const SHORT doorApproach = pCharacter->ExecuteAction();
+    CHECK(doorApproach != CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageDropPath>().empty());
+    CHECK(pDoorPotion->GetUsageCount(0) == 2);
+    pCharacter->DropSearchRequest();
+    pCharacter->DropPath();
+    pCharacter->m_curItem = NULL;
+
+    // On the door's own point the use completes: the in-range arm sends no
+    // drop path (unlike UseItemPoint's in-range arm), and the projectile
+    // carries the door's own id and point.
+    const CPoint savedPos = pCharacter->m_pos;
+    pCharacter->m_pos = pDoor->GetPos();
+    ClearMessages();
+    prepare(doorId, nDoorSlot, 0);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    pCharacter->m_pos = savedPos;
+    CHECK(Queued<CMessageDropPath>().empty());
+    CHECK(pDoorPotion->GetUsageCount(0) == 1);
+    CHECK(pCharacter->m_equipment.m_items[nDoorSlot] == pDoorPotion);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    std::vector<CMessageFireProjectile*> doorFire = Queued<CMessageFireProjectile>();
+    REQUIRE(doorFire.size() == 1);
+    CHECK(doorFire[0]->m_projectileType == 0);
+    CHECK(doorFire[0]->m_projectileTargetId == pDoor->GetId());
+    CHECK(doorFire[0]->m_projectileTarget == pDoor->GetPos());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    pCharacter->m_curItem = NULL;
+    delete pDoorPotion;
+    pCharacter->m_equipment.m_items[nDoorSlot] = NULL;
     ClearMessages();
 }

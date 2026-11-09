@@ -25,7 +25,6 @@
 0x501FE0 CMessageInsertResponse::UnmarshalMessage
 0x502B40 CMessageLoadDialog::MarshalMessage
 0x502D60 CMessageLoadDialog::UnmarshalMessage
-0x504070 CMessageRemoveItem::MarshalMessage
 0x5154E0 CMessage105::MarshalMessage
 0x515670 CMessage105::UnmarshalMessage
 0x516910 CMessage117::MarshalMessage

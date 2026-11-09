@@ -2056,9 +2056,9 @@ class CheckEvidenceTest(unittest.TestCase):
         self.git('add', '-A')
         self.git('commit', '-q', '--allow-empty', '-m', message)
 
-    def check(self):
+    def check(self, *args):
         return subprocess.run([sys.executable, '-I', EVIDENCE_CHECKER,
-                               '--base', self.base],
+                               '--base', self.base, *args],
                               cwd=self.repo, capture_output=True, text=True)
 
     def evidence(self, addr, extra):
@@ -2263,6 +2263,100 @@ class CheckEvidenceTest(unittest.TestCase):
         self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
                                                       'return x * 2;'))
         self.assertEqual(self.check().returncode, 0)
+
+    # -- --worktree: the same check against the working tree ---------------
+
+    def test_worktree_mode_counts_an_uncommitted_body_change(self):
+        # The failure this closes: workers ran the committed-only check
+        # against dirty trees and read "0 touched function(s)". The default
+        # still ignores the edit (the test above); --worktree must not.
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('src/a.cpp: 0x401000 A::f', r.stdout)
+        self.assertNotIn('0x401020', r.stdout)
+        self.assertIn('1 touched function(s)', r.stdout)
+
+    def test_worktree_mode_passes_with_an_untracked_evidence_file(self):
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.evidence('401000', 'exemption: "pure data"')  # not committed
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn('1 touched function(s), all with evidence', r.stdout)
+
+    def test_worktree_mode_counts_an_untracked_source_file(self):
+        self.write('src/b.cpp', '// 0x402000\nvoid B::h()\n{\n}\n')
+        self.assertEqual(self.check().returncode, 0)  # untracked: ignored
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('src/b.cpp: 0x402000 B::h', r.stdout)
+
+    def test_worktree_mode_path_with_space_and_non_ascii(self):
+        rel = 'src/sub dir/\u00e9t\u00e9.cpp'
+        self.write(rel, '// 0x402000\nvoid B::h()\n{\n    int x = 1;\n}\n')
+        self.commit('new file')
+        self.write(rel, '// 0x402000\nvoid B::h()\n{\n    int x = 2;\n}\n')
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('src/sub dir/\u00e9t\u00e9.cpp: 0x402000 B::h', r.stdout)
+
+    def test_worktree_mode_counts_staged_edits(self):
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.git('add', 'src/a.cpp')
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('0x401000', r.stdout)
+
+    def test_worktree_mode_reports_overlapping_hunks_once(self):
+        # f carries a committed and a dirty edit, g only a committed one:
+        # two touched functions, not three -- one diff, no duplicate rows.
+        self.write('src/a.cpp', TWO_FUNCTIONS
+                   .replace('return x;', 'return x - 1;')
+                   .replace('return x + 1;', 'return x + 2;'))
+        self.evidence('401000', 'exemption: "fixture"')
+        self.evidence('401020', 'exemption: "fixture"')
+        self.commit('committed edits in both')
+        self.write('src/a.cpp', TWO_FUNCTIONS
+                   .replace('return x;', 'return x - 2;')
+                   .replace('return x + 1;', 'return x + 2;'))
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn('2 touched function(s), all with evidence', r.stdout)
+
+    def test_worktree_mode_applies_the_rules_math_check(self):
+        address = self.rules_address()
+        source = TWO_FUNCTIONS.replace('0x401000', f'0x{address:X}')
+        self.write('src/a.cpp', source.replace('return x;', 'return x * 2;'))
+        self.evidence(f'{address:X}', 'exemption: "pure data"\n'
+                                      'kind: read-only')  # untracked
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn(f'0x{address:X} A::f', r.stdout)
+        self.assertIn('kind: read-only', r.stdout)
+        self.assertIn('requires kind: oracle', r.stdout)
+
+    def test_worktree_mode_applies_the_trace_check(self):
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.evidence('401000', 'kind: trace\ntrace_source: not a citation')
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('without a trace_source citing', r.stdout)
+
+    def test_worktree_mode_reports_a_misspelt_untracked_evidence_file(self):
+        self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
+                                                      'return x * 2;'))
+        self.write('docs/evidence/0x401000.md',
+                   '---\naddress: 0x401000\nkind: read-only\n'
+                   'exemption: "x"\n---\n')
+        r = self.check('--worktree')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('docs/evidence/401000.md', r.stdout)
+        self.assertIn('docs/evidence/0x401000.md is spelt wrong', r.stdout)
+        self.assertIn('(caps, no 0x)', r.stdout)
 
     def rules_address(self):
         """A rules-math address that cannot collide with the fixture's."""
@@ -9329,6 +9423,117 @@ class ParityTest(unittest.TestCase):
         found = parity_run.touched(self.repo, base)
         self.assertEqual({address for _, address, _ in found},
                          {0x401000, 0x401040})
+
+    # -- --worktree / --require-complete -------------------------------------
+
+    def fake_exe(self):
+        """Point oracle.VANILLA_EXE at an existing scratch file, so run.py
+        gets past its exe check without a real vanilla exe."""
+        parity_run = load_parity_tool('run')
+        exe = os.path.join(self.home, 'vanilla.exe')
+        with open(exe, 'w') as f:
+            f.write('fixture exe')
+        old = parity_run.oracle.VANILLA_EXE
+        setattr(parity_run.oracle, 'VANILLA_EXE', exe)
+        self.addCleanup(setattr, parity_run.oracle, 'VANILLA_EXE', old)
+        return parity_run
+
+    def test_parity_run_strict_fails_without_the_exe(self):
+        parity_run = load_parity_tool('run')
+        old = parity_run.oracle.VANILLA_EXE
+        setattr(parity_run.oracle, 'VANILLA_EXE',
+                os.path.join(self.home, 'no-such.exe'))
+        self.addCleanup(setattr, parity_run.oracle, 'VANILLA_EXE', old)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.main('HEAD', require_complete=True)
+        self.assertEqual(code, 1)
+        self.assertIn('FAILED', out.getvalue())
+        self.assertIn('no vanilla exe', out.getvalue())
+        self.assertIn('--require-complete', out.getvalue())
+        # The default still skips (exit 0), as the test above records.
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.main('HEAD')
+        self.assertEqual(code, 0)
+        self.assertIn('skipped (no vanilla exe)', out.getvalue())
+
+    def test_parity_run_strict_fails_on_an_undiffable_base(self):
+        parity_run = self.fake_exe()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.main('1234567890abcdef1234567890abcdef1234567',
+                                   repo=self.repo, require_complete=True)
+        self.assertEqual(code, 1)
+        self.assertIn('FAILED', out.getvalue())
+        self.assertIn('cannot diff against', out.getvalue())
+        self.assertIn('--require-complete', out.getvalue())
+
+    def test_parity_run_strict_fails_without_exports(self):
+        # Through the CLI, so the new flags' wiring is what runs: a fake
+        # exe, a diffable base, and the fixture IWD2R_HOME with no
+        # ghidra-exports -- the run cannot be complete, so it fails.
+        parity_run = self.fake_exe()
+        self.write('src/a.cpp', THREE_FUNCTIONS)
+        self.commit('base')
+        base = self.git('rev-parse', 'HEAD').strip()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.cli(['--base', base, '--repo', self.repo,
+                                   '--worktree', '--require-complete'])
+        self.assertEqual(code, 1, out.getvalue())
+        self.assertIn('FAILED', out.getvalue())
+        self.assertIn('functions.tsv/callgraph.tsv', out.getvalue())
+        self.assertIn('ExportCallGraph.java', out.getvalue())
+
+    def test_parity_worktree_mode_counts_uncommitted_changes(self):
+        self.write('src/a.cpp', THREE_FUNCTIONS)
+        self.commit('base')
+        base = self.git('rev-parse', 'HEAD').strip()
+        self.write('src/a.cpp', THREE_FUNCTIONS.replace('return x;',
+                                                        'return x * 2;'))
+        parity_run = load_parity_tool('run')
+        self.assertEqual(list(parity_run.touched(self.repo, base)), [])
+        found = parity_run.touched(self.repo, base, worktree=True)
+        self.assertEqual([address for _, address, _ in found], [0x401000])
+
+    def test_parity_worktree_mode_checks_the_dirty_function(self):
+        # End to end with a fake exe and fixture exports: the dirty body
+        # (which calls nothing, while the call graph says it calls A::h)
+        # is checked and goes RED -- the committed-only default sees
+        # nothing changed and exits clean.
+        parity_run = self.fake_exe()
+        self.write('src/a.cpp', THREE_FUNCTIONS)
+        self.commit('base')
+        base = self.git('rev-parse', 'HEAD').strip()
+        self.write('src/a.cpp', THREE_FUNCTIONS.replace('return x;',
+                                                        'return x * 2;'))
+        self.exports('401000\tA::f\t100\n401040\tA::h\t100\n',
+                     '401000\t401040\n')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.main(base, repo=self.repo, worktree=True)
+        text = out.getvalue()
+        self.assertEqual(code, 1, text)
+        self.assertIn('1 function(s) since', text)
+        self.assertIn('missing in src: A::h', text)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = parity_run.main(base, repo=self.repo)
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn('0 functions changed', out.getvalue())
+
+    def test_parity_collect_reads_the_working_tree_in_worktree_mode(self):
+        self.write('src/a.cpp', THREE_FUNCTIONS)
+        self.commit('base')
+        base = self.git('rev-parse', 'HEAD').strip()
+        self.write('src/a.cpp', THREE_FUNCTIONS.replace('return x;',
+                                                        'return x * 2;'))
+        parity_run = load_parity_tool('run')
+        self.assertEqual(parity_run.collect(self.repo, base), [])
+        work = parity_run.collect(self.repo, base, worktree=True)
+        self.assertEqual([(rel, address) for rel, address, _n, _l, _f, _t
+                           in work], [('src/a.cpp', 0x401000)])
 
 
 class AnnotateTest(ParityTest):
@@ -26220,6 +26425,69 @@ class ClaimsTest(unittest.TestCase):
         root = self.fast_repo({'docs/n.md': 'n\n'}, ancestor=False)
         self.assert_full(self.run_gate(root, '--base', 'work'), 'work')
         self.assert_full(self.run_gate(root, '--base', 'no-such-rev'), 'no-such-rev')
+
+    # -- the pre-push preflight switches -------------------------------------
+
+    def gate_env(self, **extra):
+        """os.environ with the gate's preflight env defaults cleared and
+        `extra` layered on top, so a test never inherits the host's."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('IWD2R_GATE_WORKTREE',
+                            'IWD2R_GATE_REQUIRE_GAME_DATA',
+                            'IWD2R_GATE_REQUIRE_COMPLETE_PARITY')}
+        env.update(extra)
+        return env
+
+    def test_gate_require_game_data_preflight(self):
+        root = self.lock_repo()
+        gates = os.path.join(root, 'tools', 'gates.sh')
+        data = os.path.join(self.tmp, 'game-data')
+        os.makedirs(data)
+        # No CHITIN.KEY in IWD2R_DATA: the flag fails the gate up front.
+        r = subprocess.run(['bash', gates, '--summary-fixture',
+                            '--require-game-data'], capture_output=True,
+                           text=True, env=self.gate_env(IWD2_DATA=data),
+                           timeout=60)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('--require-game-data', r.stderr)
+        self.assertIn('CHITIN.KEY', r.stderr)
+        # The env default does the same without the flag.
+        r = subprocess.run(['bash', gates, '--summary-fixture'],
+                           capture_output=True, text=True, timeout=60,
+                           env=self.gate_env(IWD2_DATA=data,
+                                             IWD2R_GATE_REQUIRE_GAME_DATA='1'))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('CHITIN.KEY', r.stderr)
+        # With the key present the preflight passes and the gate proceeds.
+        _write(os.path.join(data, 'CHITIN.KEY'), 'x\n')
+        r = subprocess.run(['bash', gates, '--summary-fixture',
+                            '--require-game-data'], capture_output=True,
+                           text=True, env=self.gate_env(IWD2_DATA=data),
+                           timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('game data at', r.stdout)
+        self.assertIn('gates: all passed', r.stdout)
+
+    def test_gate_wires_the_pre_push_preflight(self):
+        # The wiring the pre-push command relies on: --worktree reaches
+        # both checks, and strict parity runs without the exe pre-check.
+        with open(os.path.join(ROOT, 'tools', 'gates.sh')) as f:
+            gates = f.read()
+        self.assertIn('step "decompiler evidence (base $BASE)" python3 -I '
+                      'tools/check_evidence.py --base "$BASE" $WORKTREE_ARG',
+                      gates)
+        self.assertIn('"$parity_py" tools/parity/run.py --base "$BASE" '
+                      '$WORKTREE_ARG --require-complete', gates)
+        self.assertIn('"$parity_py" tools/parity/run.py --base "$BASE" '
+                      '$WORKTREE_ARG\n', gates)
+        for arm in ('--worktree) WORKTREE=1; shift ;;',
+                    '--require-game-data) REQUIRE_GAME_DATA=1; shift ;;',
+                    '--require-complete-parity) '
+                    'REQUIRE_COMPLETE_PARITY=1; shift ;;'):
+            self.assertIn(arm, gates)
+        for var in ('IWD2R_GATE_WORKTREE', 'IWD2R_GATE_REQUIRE_GAME_DATA',
+                    'IWD2R_GATE_REQUIRE_COMPLETE_PARITY'):
+            self.assertIn(var, gates)
 
     def test_gate_lock_serializes(self):
         if not shutil.which('flock'):

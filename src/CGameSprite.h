@@ -564,7 +564,9 @@ public:
     BOOL sub_71CFF0();
     int sub_75E930(int a1);
     SHORT Formation(CGameSprite* pTarget);
+    SHORT ProtectPoint();
     SHORT Follow();
+    SHORT ProtectObject(CGameAIBase* pTarget);
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);
     SHORT RandomWalk();
@@ -576,6 +578,7 @@ public:
     void sub_720B50(CMemINIValue* a1, CMemINIValue* a2);
     SHORT FindItemBags(const CString& sName, LONG number, BOOL checkForIdentified);
     SHORT TakeItemBags(const CString& sName, LONG number, SHORT slotNum);
+    CItem* DropItemFromBag(CString sName);
     void sub_722820();
     BOOL HaveUnexportableItems();
     void SetMonkAbilities();
@@ -637,6 +640,7 @@ public:
     SHORT Interact(CGameSprite* pTarget);
     SHORT StartDialog(CGameSprite* pTarget);
     SHORT UseDoor();
+    SHORT EscapeArea();
     SHORT TryBash(CGameObject* pTarget);
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
@@ -669,6 +673,7 @@ public:
     SHORT EquipItem();
     SHORT FindTraps();
     SHORT Panic();
+    SHORT PickPockets(CGameSprite* pTarget);
     SHORT Turn();
     SHORT EquipMostDamagingMelee();
     SHORT EquipRanged();
@@ -685,6 +690,7 @@ public:
     SHORT LeaveAreaName();
     SHORT Help();
     SHORT Rest();
+    SHORT UseItem(CGameAIBase* pTarget);
     SHORT UseItemPoint();
     SHORT JoinParty();
     SHORT RemoveSpell();
@@ -694,6 +700,7 @@ public:
     SHORT ForceHide(CGameSprite* pSprite);
     SHORT sub_7615F0(int a1);
     void sub_761650();
+    SHORT DropItem(SHORT nSlot);
     SHORT DropItem(CItem* pItem);
     void sub_761990();
     SHORT PlayBardSong();

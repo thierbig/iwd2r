@@ -772,6 +772,131 @@ TEST_CASE("ai: ExecuteAction changes allegiance and general, ChangeClass changes
     ClearMessages();
 }
 
+TEST_CASE("ai: sprite internal, morale, TurnAMT and SetExtendedNight actions", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameSprite* pSprite = MakeSprite();
+    CGameSprite* pTarget = MakeSprite();
+    CAIObjectType target(0, 0, 0, 0, 0, 0, 0, 0, pTarget->m_id, 0, 0);
+
+    // SetInternal/IncrementInternal (239/240): five signed words at CRE
+    // offset 0x298, selected by specificID and set/incremented by specificID2.
+    SHORT* pInternals = reinterpret_cast<SHORT*>(pTarget->m_baseStats.field_295 + 3);
+    pInternals[2] = 100;
+    pSprite->SetCurrAction(CAIAction(239, target, 2, -1234, 0));
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pInternals[2] == -1234);
+    pSprite->SetCurrAction(CAIAction(240, target, 2, 123, 0));
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pInternals[2] == -1111);
+    for (LONG nIndex : { -1, 5 }) {
+        pSprite->SetCurrAction(CAIAction(240, target, nIndex, 5000, 0));
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(pInternals[2] == -1111);
+    }
+    pInternals[4] = SHRT_MAX;
+    pSprite->SetCurrAction(CAIAction(240, target, 4, 1, 0));
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pInternals[4] == SHRT_MIN);
+
+    // MoraleSet/MoraleInc/MoraleDec (102-104) queue a freshly decoded morale
+    // effect. The acting sprite is the message source and the shared target is
+    // the message target.
+    const int moraleActions[] = { 102, 103, 104 };
+    const int expectedAmounts[] = { 7, 7, -7 };
+    const DWORD expectedFlags[] = { 1, 0, 0 };
+    for (int n = 0; n < 3; n++) {
+        ClearMessages();
+        pSprite->SetCurrAction(CAIAction(moraleActions[n], target, 7, 0, 0));
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        CMessageAddEffect* pAdd = NULL;
+        int nAdd = 0;
+        CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+        POSITION pos = handler.m_messageList.GetHeadPosition();
+        while (pos != NULL) {
+            auto* pMessage = dynamic_cast<CMessageAddEffect*>(handler.m_messageList.GetNext(pos));
+            if (pMessage != NULL) {
+                pAdd = pMessage;
+                nAdd++;
+            }
+        }
+        REQUIRE(nAdd == 1);
+        REQUIRE(pAdd != NULL);
+        CHECK(pAdd->m_sourceId == pSprite->m_id);
+        CHECK(pAdd->m_targetId == pTarget->m_id);
+        REQUIRE(pAdd->m_effect != NULL);
+        CHECK(dynamic_cast<CGameEffectMorale*>(pAdd->m_effect) != NULL);
+        std::unique_ptr<ITEM_EFFECT> pEffect(pAdd->m_effect->GetItemEffect());
+        REQUIRE(pEffect != NULL);
+        CHECK(pEffect->effectID == CGAMEEFFECT_MORALE);
+        CHECK(pEffect->effectAmount == expectedAmounts[n]);
+        CHECK(pEffect->dwFlags == expectedFlags[n]);
+        CHECK(pEffect->durationType == 1);
+    }
+
+    // TurnAMT (277) is a relative Face: the turn is based on the pending
+    // direction (m_nNewDirection, +0x537E), not the drawn one, so 14 + 5
+    // wraps to 3. It sends the sprite update only for a placed sprite; both
+    // the unplaced and placed paths set the requested direction and finish
+    // at once.
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    pSprite->m_pArea = NULL;
+    pSprite->m_pos = CPoint(-1, -1);
+    pSprite->m_nNewDirection = 14;
+    pSprite->m_nDirection = 13;
+    pSprite->m_walkBackwards = FALSE;
+    CAIAction turn;
+    turn.m_actionID = 277;
+    turn.m_specificID = 5;
+    pSprite->SetCurrAction(turn);
+    ClearMessages();
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_nNewDirection == 3);
+    CHECK(pSprite->m_deltaDirection == 1);
+
+    pSprite->m_pos = CPoint(100, 100);
+    pSprite->m_nNewDirection = 3;
+    pSprite->m_nDirection = 12;
+    turn.m_specificID = 2;
+    pSprite->SetCurrAction(turn);
+    ClearMessages();
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_nNewDirection == 5);
+    // The placed path also constructs and broadcasts CMessageSpriteUpdate;
+    // BROADCAST_OTHERS with force FALSE hands it to Broadcast, which deletes
+    // it rather than queueing it for self, so there is nothing local to read.
+
+    // SetExtendedNight (301) sets area-type bit 0x40. This sprite-specific
+    // case clears the whole area type for FALSE (the base's version only
+    // clears the bit), and reports its update through CMessageSetAreaType.
+    auto* const area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+    std::memset(area, 0, sizeof(CGameArea));
+    pSprite->m_pArea = reinterpret_cast<CGameArea*>(area);
+    pSprite->m_pArea->m_header.m_areaType = 0x81;
+    CAIAction extendedNight;
+    extendedNight.m_actionID = 301;
+    extendedNight.m_specificID = 1;
+    pSprite->SetCurrAction(extendedNight);
+    ClearMessages();
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_pArea->m_header.m_areaType == 0xC1);
+    // CMessageSetAreaType is BROADCAST_FORCED_OTHERS and is likewise deleted
+    // by Broadcast, so this exercises its construction without a local copy.
+    extendedNight.m_specificID = 0;
+    pSprite->SetCurrAction(extendedNight);
+    ClearMessages();
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_pArea->m_header.m_areaType == 0);
+
+    pSprite->m_pArea = NULL;
+    ::operator delete(area);
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
+    ClearMessages();
+}
+
 TEST_CASE("ai: a named creature is found by its name in any case", "[ai]")
 {
     // AddKey (0x550D10) stores the name upper case without spaces and hashes
