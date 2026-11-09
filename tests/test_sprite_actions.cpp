@@ -6010,3 +6010,258 @@ TEST_CASE("sprite: EscapeArea propagates an invalid edge destination", "[ai][dat
     CHECK(pHedron->m_currentSearchRequest == NULL);
     ClearMessages();
 }
+
+// CGameSprite::UseItem (0x746480), called by ExecuteAction's action 34. One
+// party fixture exercises both item-resolution forms, the guard paths, the
+// two-sprite reach/approach, the facing turn, the item-type-dependent delay,
+// self/projectile effects and charge consumption on real ITM resources.
+TEST_CASE("sprite: UseItem handles potions and wands through action 34", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    ClearMessages();
+
+    CAIObjectType self(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    auto prepare = [&](const CAIObjectType& target, LONG slot, LONG ability) {
+        pCharacter->SetCurrAction(CAIAction(CAIAction::USEITEM, target, slot, ability, 0));
+        pCharacter->m_curItem = NULL;
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_castCounter = -1;
+        pCharacter->m_bStartedCasting = FALSE;
+        pCharacter->field_7118 = 0;
+        pCharacter->m_nDirection = 0;
+        // A target on the same point takes GetDirection from the desired
+        // direction, not from the static geometry helper's zero.
+        pCharacter->m_nNewDirection = 0;
+    };
+
+    // No target and an inactive target fail before item selection.
+    CHECK(pCharacter->UseItem(NULL) == CGameAIBase::ACTION_ERROR);
+    const BOOL savedActiveAI = pCharacter->m_activeAI;
+    pCharacter->m_activeAI = FALSE;
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_activeAI = savedActiveAI;
+
+    prepare(self, -1, 0);
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+
+    // Use three otherwise-empty inventory slots in turn. The potion has one
+    // ability, five self-targeted effects and projectile 1; the wand has one
+    // ability and two projectile-targeted effects; a second potion serves the
+    // door-target case (00POTN01/00WAND02 ITM).
+    SHORT nPotionSlot = -1;
+    SHORT nWandSlot = -1;
+    SHORT nDoorSlot = -1;
+    for (SHORT n = 18; n < CGameSpriteEquipment::NUM_SLOT && nDoorSlot == -1; n++) {
+        if (pCharacter->m_equipment.m_items[n] == NULL) {
+            if (nPotionSlot == -1) {
+                nPotionSlot = n;
+            } else if (nWandSlot == -1) {
+                nWandSlot = n;
+            } else {
+                nDoorSlot = n;
+            }
+        }
+    }
+    REQUIRE(nDoorSlot != -1);
+    CItem* pPotion = new CItem(CResRef("00POTN01"), 2, 0, 0, 0, 1);
+    REQUIRE(pPotion->GetItemType() == 9);
+    REQUIRE(pPotion->GetAbilityCount() == 1);
+    pCharacter->m_equipment.m_items[nPotionSlot] = pPotion;
+
+    prepare(self, nPotionSlot, 1);
+    CHECK(pCharacter->UseItem(pCharacter) == CGameAIBase::ACTION_ERROR);
+    CHECK(pPotion->GetUsageCount(0) == 2);
+
+    // Named resolution is case-insensitive in the equipment scan. A potion
+    // (type 9) has no 20-tick delay; at matching self-facing the action still
+    // sends direction, then queues its five self effects and its fire message.
+    prepare(self, nPotionSlot, 0);
+    pCharacter->m_curAction.SetString1("00potn01");
+    const unsigned int potionRandState = iwd2r_rand_state();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curItem == pPotion);
+    CHECK(pCharacter->field_559E == nPotionSlot);
+    CHECK(pCharacter->field_55A0 == 0);
+    CHECK(pCharacter->field_7118 == 1);
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    CHECK(pCharacter->m_curProjectile == NULL);
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    std::vector<CMessageFireProjectile*> potionFire = Queued<CMessageFireProjectile>();
+    REQUIRE(potionFire.size() == 1);
+    // DecodeProjectile converts ITM missile id 1 to its internal type 0.
+    CHECK(potionFire[0]->m_projectileType == 0);
+    CHECK(potionFire[0]->m_projectileTargetId == pCharacter->GetId());
+    CHECK(potionFire[0]->m_projectileTarget == pCharacter->GetPos());
+    // No UMD roll and no whirlwind seed: this use path draws no random number.
+    CHECK(RandDraws(potionRandState, iwd2r_rand_state()) == 0);
+
+    // A facing change is a separate normal-return turn and spends no charge.
+    ClearMessages();
+    prepare(self, nPotionSlot, 0);
+    pCharacter->m_curAction.SetString1("00POTN01");
+    pCharacter->m_nDirection = 1;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->field_7118 == 0);
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    REQUIRE(Queued<CMessageSetDirection>().size() == 1);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+
+    // Hedron is outside a one-square potion's reach. The range failure uses
+    // MoveToObject and leaves the charge untouched; this would not distinguish
+    // the path with 00WAND02's 100-square range, which already reaches him.
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CAIObjectType hedron(0, 0, 0, 0, 0, 0, 0, 0, pHedron->GetId(), 0, 0);
+    prepare(hedron, nPotionSlot, 0);
+    pCharacter->m_actionCount = 1;
+    pCharacter->field_5616 = 0;
+    const SHORT approach = pCharacter->ExecuteAction();
+    CHECK(approach != CGameAIBase::ACTION_DONE);
+    CHECK(approach != CGameAIBase::ACTION_ERROR);
+    CHECK(pCharacter->m_curDest == pHedron->GetPos());
+    CHECK(pPotion->GetUsageCount(0) == 1);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+    pCharacter->DropSearchRequest();
+    pCharacter->DropPath();
+    pCharacter->m_curItem = NULL;
+
+    // Slot resolution on the next fresh action spends the last charge. A dead
+    // target skips even the hopeless range check and takes the object's only
+    // drop-path arm, which fires only when the action already committed
+    // (field_7118 from a prior in-range tick); m_pPath is not consulted,
+    // unlike UseItemPoint's drop paths. The committed flag also skips the
+    // facing turn. An ordinary in-range call sends no such message.
+    const DWORD savedHedronState = pHedron->m_baseStats.m_generalState;
+    pHedron->m_baseStats.m_generalState |= STATE_DEAD;
+    ClearMessages();
+    prepare(hedron, nPotionSlot, 0);
+    pCharacter->field_7118 = 1;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    pHedron->m_baseStats.m_generalState = savedHedronState;
+    CHECK(Queued<CMessageDropPath>().size() == 1);
+    // This ability's usageFlags are 1, so CheckIfUsedUp removes the item and
+    // emits Unusable before the quick-list update.
+    CHECK(pCharacter->m_equipment.m_items[nPotionSlot] == NULL);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    bool unusable = false;
+    for (CMessageSetTrigger* message : Queued<CMessageSetTrigger>()) {
+        if (message->m_trigger.m_triggerID == CAITRIGGER_UNUSABLE
+            && strcmp(message->m_trigger.m_string1, "00POTN01") == 0) {
+            unusable = true;
+        }
+    }
+    CHECK(unusable);
+    pCharacter->m_curItem = NULL;
+    ClearMessages();
+
+    // 00WAND02 is usable by a wizard and is item type 35, not one of the two
+    // zero-delay types. It therefore waits until actionCount reaches 20.
+    CItem* pWand = new CItem(CResRef("00WAND02"), 2, 0, 0, 0, 1);
+    REQUIRE(pWand->GetItemType() == 35);
+    REQUIRE(pWand->GetAbilityCount() == 1);
+    pCharacter->m_equipment.m_items[nWandSlot] = pWand;
+    const DWORD savedClassMask = pCharacter->m_derivedStats.m_classMask;
+    pCharacter->m_derivedStats.m_classMask = CLASSMASK_WIZARD;
+    REQUIRE(pGame->CheckItemUsable(pCharacter, pWand) == 1);
+
+    // Nineteen ticks only turn and wait; twenty retains and demands the same
+    // item, fires missile 68 (internal projectile 67) and consumes a charge.
+    prepare(self, nWandSlot, 0);
+    pCharacter->m_actionCount = 19;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pWand->GetUsageCount(0) == 2);
+    CHECK(pCharacter->m_curItem == pWand);
+    CHECK(Queued<CMessageFireProjectile>().empty());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    ClearMessages();
+    pCharacter->m_actionCount = 20;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWand->GetUsageCount(0) == 1);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    std::vector<CMessageFireProjectile*> wandFire = Queued<CMessageFireProjectile>();
+    REQUIRE(wandFire.size() == 1);
+    // ITM missile id 68 similarly becomes internal projectile type 67.
+    CHECK(wandFire[0]->m_projectileType == 67);
+    CHECK(wandFire[0]->m_projectileTargetId == pCharacter->GetId());
+    CHECK(wandFire[0]->m_projectileTarget == pCharacter->GetPos());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    ClearMessages();
+    pCharacter->m_curItem = NULL;
+    delete pWand;
+    pCharacter->m_equipment.m_items[nWandSlot] = NULL;
+    pCharacter->m_derivedStats.m_classMask = savedClassMask;
+    pCharacter->SetCurrAction(CAIAction::NULL_ACTION);
+
+    // A door target exercises the non-sprite paths: the entry active checks
+    // do not apply, the reach uses only the caster's personal space, LOS is
+    // never checked, and -- since the port's layout cannot reproduce the
+    // original's type-confused +0x5BC read on a door (the closed bounding
+    // rect's bottom edge there) -- the door counts as live. A fresh potion
+    // (type 9, no twenty-tick wait) provides the item; its first charge is
+    // spent, not its last, so CheckIfUsedUp leaves it equipped.
+    CGameDoor* pDoor = FindDoor(pArea, "AR1000_Door5");
+    REQUIRE(pDoor != NULL);
+    CAIObjectType doorId(0, 0, 0, 0, 0, 0, 0, 0, pDoor->GetId(), 0, 0);
+    CItem* pDoorPotion = new CItem(CResRef("00POTN01"), 2, 0, 0, 0, 1);
+    pCharacter->m_equipment.m_items[nDoorSlot] = pDoorPotion;
+
+    // From the start point the door is out of the potion's one-square
+    // reach: the range arm runs, MoveToObject approaches, no drop path is
+    // queued and the charge stays untouched.
+    ClearMessages();
+    prepare(doorId, nDoorSlot, 0);
+    pCharacter->m_actionCount = 1;
+    pCharacter->field_5616 = 0;
+    const SHORT doorApproach = pCharacter->ExecuteAction();
+    CHECK(doorApproach != CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageDropPath>().empty());
+    CHECK(pDoorPotion->GetUsageCount(0) == 2);
+    pCharacter->DropSearchRequest();
+    pCharacter->DropPath();
+    pCharacter->m_curItem = NULL;
+
+    // On the door's own point the use completes: the in-range arm sends no
+    // drop path (unlike UseItemPoint's in-range arm), and the projectile
+    // carries the door's own id and point.
+    const CPoint savedPos = pCharacter->m_pos;
+    pCharacter->m_pos = pDoor->GetPos();
+    ClearMessages();
+    prepare(doorId, nDoorSlot, 0);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    pCharacter->m_pos = savedPos;
+    CHECK(Queued<CMessageDropPath>().empty());
+    CHECK(pDoorPotion->GetUsageCount(0) == 1);
+    CHECK(pCharacter->m_equipment.m_items[nDoorSlot] == pDoorPotion);
+    CHECK(Queued<CMessageAddEffect>().size() == 5);
+    std::vector<CMessageFireProjectile*> doorFire = Queued<CMessageFireProjectile>();
+    REQUIRE(doorFire.size() == 1);
+    CHECK(doorFire[0]->m_projectileType == 0);
+    CHECK(doorFire[0]->m_projectileTargetId == pDoor->GetId());
+    CHECK(doorFire[0]->m_projectileTarget == pDoor->GetPos());
+    CHECK(Queued<CMessageSetDirection>().size() == 1);
+
+    pCharacter->m_curItem = NULL;
+    delete pDoorPotion;
+    pCharacter->m_equipment.m_items[nDoorSlot] = NULL;
+    ClearMessages();
+}
