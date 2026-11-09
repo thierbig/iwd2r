@@ -1235,6 +1235,353 @@ std::vector<CGameObject*> ObjectsOfType(CGameArea* pArea, BYTE type)
 
 }
 
+TEST_CASE("sprite: PickPockets resolves guards, rolls, gold and item transfers in one game", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const CPoint ptCharacter = pCharacter->m_pos;
+    const CPoint ptHedron = pHedron->m_pos;
+    pCharacter->m_pos = ptHedron;
+    pHedron->field_70F2 = 0;
+
+    auto runPick = [](CGameSprite* pActor, CGameSprite* pTarget, unsigned int nSeed) {
+        CAIObjectType target(0, 0, 0, 0, 0, 0, 0, 0, pTarget->GetId(), 0, 0);
+        pActor->SetCurrAction(CAIAction(CAIAction::PICKPOCKETS, target, 0, 0, 0));
+        pActor->m_actionCount = 0;
+        iwd2r_srand(nSeed);
+        return pActor->ExecuteAction();
+    };
+    auto isolateItem = [](CGameSprite* pTarget, CItem** pSaved, CItem* pItem) {
+        memcpy(pSaved, pTarget->m_equipment.m_items, sizeof(CItem*) * 51);
+        for (int nSlot = 0; nSlot < 51; nSlot++) {
+            pTarget->m_equipment.m_items[nSlot] = NULL;
+        }
+        // Slot 18 is stealable for both a PC and an NPC target.
+        pTarget->m_equipment.m_items[18] = pItem;
+    };
+    auto restoreItems = [](CGameSprite* pTarget, CItem* const* pSaved) {
+        memcpy(pTarget->m_equipment.m_items, pSaved, sizeof(CItem*) * 51);
+    };
+
+    // Null, disabled-by-armour, hostile and hidden-target guards consume no
+    // random numbers. Run these through action 25 as well, so the dispatcher's
+    // share/release path is exercised before any item changes.
+    iwd2r_srand(37);
+    const unsigned int nGuardSeed = iwd2r_rand_state();
+    CHECK(pCharacter->PickPockets(NULL) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+
+    const BOOL bPickDisabled = pCharacter->m_derivedStats.m_disabledButtons[1];
+    pCharacter->m_derivedStats.m_disabledButtons[1] = TRUE;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pCharacter->m_derivedStats.m_disabledButtons[1] = bPickDisabled;
+
+    const BYTE nHedronEA = pHedron->m_typeAI.m_nEnemyAlly;
+    pHedron->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_ENEMY;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_ERROR);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pHedron->m_typeAI.m_nEnemyAlly = nHedronEA;
+
+    pHedron->field_70F2 = 1;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, 37) == CGameAIBase::ACTION_DONE);
+    CHECK(iwd2r_rand_state() == nGuardSeed);
+    pHedron->field_70F2 = 0;
+
+    // A failed check is one draw and one PickPocketFailed trigger from the
+    // actor to the target. WIS 10 and level zero make the target modifier zero.
+    const signed char nCharacterSkill = pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET];
+    const SHORT nHedronWis = pHedron->m_derivedStats.m_nWIS;
+    const BYTE nHedronLevel = pHedron->m_derivedStats.m_nLevel;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+    pHedron->m_derivedStats.m_nWIS = 10;
+    pHedron->m_derivedStats.m_nLevel = 0;
+    unsigned int nFailureSeed = 0;
+    for (unsigned int n = 1; n < 1000; n++) {
+        if (RandValues(RandSeed(n), 1)[0] % 20 == 19) {
+            nFailureSeed = RandSeed(n);
+            break;
+        }
+    }
+    REQUIRE(nFailureSeed != 0);
+    ClearMessages();
+    const unsigned int nBeforeFailure = nFailureSeed;
+    CHECK(runPick(pCharacter, pHedron, nFailureSeed) == CGameAIBase::ACTION_DONE);
+    CHECK(RandDraws(nBeforeFailure, iwd2r_rand_state()) == 1);
+    const std::vector<CMessageSetTrigger*> failed = Queued<CMessageSetTrigger>();
+    REQUIRE(failed.size() == 1);
+    CHECK(failed[0]->m_trigger.m_triggerID == CAITRIGGER_PICKPOCKETFAILED);
+    CHECK(failed[0]->GetSource() == pCharacter->GetId());
+    CHECK(failed[0]->GetTarget() == pHedron->GetId());
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    ClearMessages();
+
+    // Find a real, droppable area item for the controlled transfer cases. Gold
+    // itself is avoided because its copy constructor can make another draw.
+    CItem* pSource = NULL;
+    const std::vector<CGameObject*> sprites = ObjectsOfType(pArea, CGameObject::TYPE_SPRITE);
+    for (CGameObject* pObject : sprites) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+        for (int nSlot = 0; nSlot < 51 && pSource == NULL; nSlot++) {
+            CItem* pItem = pSprite->m_equipment.m_items[nSlot];
+            if (pItem != NULL && (pItem->m_flags & 0x2) == 0
+                && (pItem->GetFlagsFile() & 0x4) != 0 && pItem->cResRef != "MISC07") {
+                pSource = pItem;
+            }
+        }
+        if (pSource != NULL) {
+            break;
+        }
+    }
+    REQUIRE(pSource != NULL);
+    CItem* pTestItem = new CItem(*pSource);
+    REQUIRE(pTestItem != NULL);
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+
+    unsigned int nGoldSeed = 0;
+    unsigned int nItemSeed = 0;
+    for (unsigned int n = 1; n < 1000 && (nGoldSeed == 0 || nItemSeed == 0); n++) {
+        const unsigned int nSeed = RandSeed(n);
+        const std::vector<int> values = RandValues(nSeed, 3);
+        // Keep these checks in 1..10: skill + 10 succeeds, while total 20+
+        // automatically fails in the original's high-roll-fails comparison.
+        if (values[0] % 20 >= 10) {
+            continue;
+        }
+        if (values[2] % 3 == 0) {
+            nGoldSeed = nSeed;
+        } else if (nItemSeed == 0) {
+            nItemSeed = nSeed;
+        }
+    }
+    REQUIRE(nGoldSeed != 0);
+    REQUIRE(nItemSeed != 0);
+
+    // From an NPC, the one-in-three gold choice adds 1-5 party gold and does
+    // not copy or remove the item. Exactly four draws: check, starting slot,
+    // gold/item choice and gold amount.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, pTestItem);
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        const std::vector<CMessagePartyGold*> gold = Queued<CMessagePartyGold>();
+        REQUIRE(gold.size() == 1);
+        CHECK(gold[0]->m_gold == RandValues(nGoldSeed, 4)[3] % 5 + 1);
+        CHECK(gold[0]->m_bAdjustment == TRUE);
+        CHECK(gold[0]->m_bFeedback == TRUE);
+        CHECK(gold[0]->GetSource() == pCharacter->GetId());
+        CHECK(gold[0]->GetTarget() == pCharacter->GetId());
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessageAddAction>().empty());
+        ClearMessages();
+    }
+
+    // The item choice copies it into the character's first free personal slot
+    // and queues removal of the target's slot. An invisible actor first queues
+    // ForceVisible, without disturbing the check/starting-slot/choice draws.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, pTestItem);
+        SHORT nFree = -1;
+        for (SHORT nSlot = 18; nSlot < 42 && nFree == -1; nSlot++) {
+            if (pCharacter->m_equipment.m_items[nSlot] == NULL) {
+                nFree = nSlot;
+            }
+        }
+        REQUIRE(nFree != -1);
+        const DWORD nState = pCharacter->m_derivedStats.m_generalState;
+        const BYTE nField2FC = pCharacter->m_baseStats.field_2FC;
+        pCharacter->m_derivedStats.m_generalState |= STATE_INVISIBLE;
+        pCharacter->m_baseStats.field_2FC &= ~0x1;
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_DONE);
+        pCharacter->m_derivedStats.m_generalState = nState;
+        pCharacter->m_baseStats.field_2FC = nField2FC;
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 3);
+        CItem* pStolen = pCharacter->m_equipment.m_items[nFree];
+        REQUIRE(pStolen != NULL);
+        CHECK(pStolen != pTestItem);
+        CHECK(pStolen->cResRef == pTestItem->cResRef);
+        delete pStolen;
+        pCharacter->m_equipment.m_items[nFree] = NULL;
+        CHECK(Queued<CMessageAddEffect>().size() == 1);
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pCharacter->GetId());
+        CHECK(removed[0]->GetTarget() == pHedron->GetId());
+        CHECK(removed[0]->GetCommType() == CMessage::SEND);
+        CHECK(removed[0]->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(removed[0]->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM);
+        BYTE packed[10] = {};
+        BYTE* pPacked = packed;
+        DWORD packedSize = 0;
+        removed[0]->MarshalMessage(&pPacked, &packedSize);
+        CHECK(packedSize == sizeof(packed));
+        PLAYER_ID packedPlayer = 0;
+        LONG packedRemoteId = 0;
+        SHORT packedSlot = -1;
+        memcpy(&packedPlayer, packed, sizeof(packedPlayer));
+        memcpy(&packedRemoteId, packed + sizeof(packedPlayer), sizeof(packedRemoteId));
+        memcpy(&packedSlot, packed + sizeof(packedPlayer) + sizeof(packedRemoteId), sizeof(packedSlot));
+        CHECK(packedPlayer == pHedron->m_remotePlayerID);
+        CHECK(packedRemoteId == pHedron->m_remoteObjectID);
+        CHECK(packedSlot == 18);
+        CHECK(Queued<CMessagePartyGold>().empty());
+        CGameObject* pShared = NULL;
+        const BYTE rc = pGame->GetObjectArray()->GetShare(pHedron->GetId(), CGameObjectArray::THREAD_ASYNCH, &pShared, INFINITE);
+        CHECK(rc == CGameObjectArray::SUCCESS);
+        if (rc == CGameObjectArray::SUCCESS) {
+            pGame->GetObjectArray()->ReleaseShare(pHedron->GetId(), CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+        ClearMessages();
+    }
+
+    // With no stealable slot at all the successful check draws only the check
+    // and starting slot, and reports that the target had nothing to steal.
+    {
+        CItem* pSaved[51];
+        isolateItem(pHedron, pSaved, NULL);
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pHedron, pSaved);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 2);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessagePartyGold>().empty());
+        ClearMessages();
+    }
+
+    // An NPC stealing gold from a PC removes exactly the rolled amount from
+    // party gold and queues the actor's CreateItem("MISC07", amount) action.
+    const DWORD nPartyGold = pGame->GetGameSave()->m_nPartyGold;
+    const signed char nHedronSkill = pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET];
+    pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = 0;
+    {
+        CItem* pSaved[51];
+        isolateItem(pCharacter, pSaved, pTestItem);
+        pGame->GetGameSave()->m_nPartyGold = 100000;
+        ClearMessages();
+        CHECK(runPick(pHedron, pCharacter, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pCharacter, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        const LONG nGold = RandValues(nGoldSeed, 4)[3] % 5 + 1;
+        const std::vector<CMessagePartyGold*> gold = Queued<CMessagePartyGold>();
+        REQUIRE(gold.size() == 1);
+        CHECK(gold[0]->m_gold == -nGold);
+        CHECK(gold[0]->GetSource() == pHedron->GetId());
+        CHECK(gold[0]->GetTarget() == pHedron->GetId());
+        const std::vector<CMessageAddAction*> added = Queued<CMessageAddAction>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->m_action.m_actionID == 82);
+        CHECK(added[0]->m_action.m_specificID == nGold);
+        CHECK(added[0]->m_action.m_string1 == CString("MISC07"));
+        CHECK(added[0]->m_action.m_string2 == CString(pCharacter->m_scriptName));
+        CHECK(added[0]->GetSource() == pCharacter->GetId());
+        CHECK(added[0]->GetTarget() == pHedron->GetId());
+        ClearMessages();
+    }
+
+    // Too little party gold falls through to the already selected item. The
+    // non-party thief uses its first free slot in 15-42, not the PC inventory.
+    {
+        SHORT nFree = -1;
+        for (SHORT nSlot = 15; nSlot < 43 && nFree == -1; nSlot++) {
+            if (pHedron->m_equipment.m_items[nSlot] == NULL) {
+                nFree = nSlot;
+            }
+        }
+        REQUIRE(nFree != -1);
+        CItem* pSaved[51];
+        isolateItem(pCharacter, pSaved, pTestItem);
+        pGame->GetGameSave()->m_nPartyGold = 0;
+        ClearMessages();
+        CHECK(runPick(pHedron, pCharacter, nGoldSeed) == CGameAIBase::ACTION_DONE);
+        restoreItems(pCharacter, pSaved);
+        CHECK(RandDraws(nGoldSeed, iwd2r_rand_state()) == 4);
+        CHECK(Queued<CMessagePartyGold>().empty());
+        CHECK(Queued<CMessageAddAction>().empty());
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pHedron->GetId());
+        CHECK(removed[0]->GetTarget() == pCharacter->GetId());
+        CItem* pStolen = pHedron->m_equipment.m_items[nFree];
+        REQUIRE(pStolen != NULL);
+        CHECK(pStolen != pTestItem);
+        CHECK(pStolen->cResRef == pTestItem->cResRef);
+        delete pStolen;
+        pHedron->m_equipment.m_items[nFree] = NULL;
+        ClearMessages();
+    }
+
+    // A full personal inventory reports ACTION_ERROR without queuing removal.
+    {
+        CItem* pSavedTarget[51];
+        CItem* pSavedActor[51];
+        isolateItem(pHedron, pSavedTarget, pTestItem);
+        memcpy(pSavedActor, pCharacter->m_equipment.m_items, sizeof(pSavedActor));
+        std::vector<CItem*> added;
+        for (int nSlot = 18; nSlot < 42; nSlot++) {
+            if (pCharacter->m_equipment.m_items[nSlot] == NULL) {
+                CItem* pFill = new CItem(*pTestItem);
+                pCharacter->m_equipment.m_items[nSlot] = pFill;
+                added.push_back(pFill);
+            }
+        }
+        ClearMessages();
+        CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_ERROR);
+        CHECK(RandDraws(nItemSeed, iwd2r_rand_state()) == 3);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        restoreItems(pHedron, pSavedTarget);
+        for (CItem* pFill : added) {
+            delete pFill;
+        }
+        memcpy(pCharacter->m_equipment.m_items, pSavedActor, sizeof(pSavedActor));
+        ClearMessages();
+    }
+
+    delete pTestItem;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nCharacterSkill;
+    pHedron->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET] = nHedronSkill;
+    pHedron->m_derivedStats.m_nWIS = nHedronWis;
+    pHedron->m_derivedStats.m_nLevel = nHedronLevel;
+    pGame->GetGameSave()->m_nPartyGold = nPartyGold;
+
+    // Out of reach, action 25 walks first instead of rolling or taking anything.
+    pCharacter->m_pos = ptCharacter;
+    pHedron->m_pos = ptHedron;
+    ClearMessages();
+    CHECK(runPick(pCharacter, pHedron, nItemSeed) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_targetId == pHedron->GetId());
+    CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PICKPOCKETS);
+    CHECK(Queued<CMessageRemoveItem>().empty());
+    ClearMessages();
+}
+
 TEST_CASE("sprite: PickLock unlocks a picked door, and reports a failed or unpickable one", "[ai][data]")
 {
     if (DataDir() == nullptr) {

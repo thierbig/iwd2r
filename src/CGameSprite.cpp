@@ -14686,11 +14686,11 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = Panic();
         goto done;
     case 25:
-        // PickPockets
-        // TODO: 0x729664-0x72968C not ported (CGameSprite_PickPockets
-        // 0x7586E0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // PickPockets (0x729664-0x72968C): the target is shared and released.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        returnValue = PickPockets(static_cast<CGameSprite*>(pTarget));
+        goto release;
     case 27:
         // ProtectPoint
         // TODO: 0x72968C-0x7296AB not ported (CGameSprite_ProtectPoint
@@ -27845,6 +27845,204 @@ SHORT CGameSprite::Panic()
     CAIAction randomWalk(CAIAction::RANDOMWALK, CPoint(-1, -1), 0, -1);
     AddAction(randomWalk);
 
+    return ACTION_DONE;
+}
+
+// 0x7586E0
+SHORT CGameSprite::PickPockets(CGameSprite* pTarget)
+{
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    if (m_derivedStats.m_disabledButtons[1] != 0) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_ARMOR, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    if (pTarget->GetAIType().OfType(m_typeAI.GetEnemyOf(), FALSE, FALSE)) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_HOSTILE, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    CPoint targetPos = pTarget->GetPos();
+    CPoint ptTarget(targetPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        targetPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    const CPoint& selfPos = GetPos();
+    CPoint ptSelf(selfPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        selfPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    LONG nDistance = CAIUtil::CountSquares(ptSelf, ptTarget);
+    if (nDistance * nDistance > 4
+        || !m_pArea->CheckLOS(pTarget->GetPos(), GetPos(), m_visibleTerrainTable, pTarget->Orderable(FALSE))) {
+        SHORT returnValue = MoveToObject(pTarget);
+        if (returnValue == ACTION_DONE) {
+            return ACTION_INTERRUPTABLE;
+        }
+        return returnValue;
+    }
+
+    if (pTarget->field_70F2 == 1) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_SKILL, 0, 0, 0, -1, 0, 0);
+        return ACTION_DONE;
+    }
+
+    if (!IsVisibleToCaller(FALSE)) {
+        ITEM_EFFECT effect;
+        CGameEffect::ClearItemEffect(&effect, CGAMEEFFECT_FORCEVISIBLE);
+        effect.durationType = 1;
+        CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, m_id, CPoint(-1, -1));
+        CMessage* message = new CMessageAddEffect(pEffect, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    INT nWisdomModifier = pGame->GetRuleTables().GetAbilityScoreModifier(pTarget->m_derivedStats.m_nWIS);
+    INT nTargetModifier = nWisdomModifier + pTarget->m_derivedStats.m_nLevel;
+    if (nTargetModifier < 0) {
+        nTargetModifier = 0;
+    }
+
+    INT nRoll = rand() % 20 + nTargetModifier + 1;
+    if (pTarget->GetObjectType() != CGameObject::TYPE_SPRITE) {
+        nRoll = rand() % 20 + 1;
+    }
+    INT nSkill = static_cast<signed char>(m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_PICK_POCKET]) + 10;
+    FeedBack(FEEDBACK_ROLL, nSkill, nRoll, nWisdomModifier, 0x9986, 0, 0);
+
+    if (nRoll >= 20 || nRoll > nSkill) {
+        CAITrigger trigger(CAITRIGGER_PICKPOCKETFAILED, m_typeAI, 0);
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_SKILL, 0, 0, 0, -1, 0, 0);
+        CMessage* message = new CMessageSetTrigger(trigger, m_id, pTarget->m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        return ACTION_DONE;
+    }
+
+    // NUM_SLOT (0x85BD87) is 51; its out-of-line definition makes it a VLA to C++.
+    BOOL bSkipSlot[51] = { FALSE };
+    bSkipSlot[CGameSpriteEquipment::SLOT_FIST] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_ARMOR] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_BELT] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_BOOTS] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_CLOAK] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_GAUNTLETS] = TRUE;
+    bSkipSlot[CGameSpriteEquipment::SLOT_HELMET] = TRUE;
+    bSkipSlot[pTarget->m_equipment.m_selectedWeapon] = TRUE;
+    SHORT nLauncherSlot = pTarget->GetLauncherSlot(pTarget->m_equipment.m_selectedWeapon,
+        pTarget->m_equipment.m_selectedWeaponAbility);
+    if (nLauncherSlot != -1) {
+        bSkipSlot[nLauncherSlot] = TRUE;
+    }
+
+    // The original protects seven weapon slots and three ammunition slots:
+    // 43-49 and 11-13, respectively (0x758A2B-0x758A4E).
+    for (SHORT nSlot = CGameSpriteEquipment::SLOT_WEAPON;
+        nSlot < CGameSpriteEquipment::SLOT_WEAPON + 7;
+        nSlot++) {
+        bSkipSlot[nSlot] = TRUE;
+    }
+    for (SHORT nSlot = CGameSpriteEquipment::SLOT_AMMO;
+        nSlot < CGameSpriteEquipment::SLOT_AMMO + 3;
+        nSlot++) {
+        bSkipSlot[nSlot] = TRUE;
+    }
+    if (pTarget->GetAIType().m_nEnemyAlly == CAIObjectType::EA_PC) {
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 1] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 2] = TRUE;
+    } else {
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 6] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 7] = TRUE;
+        bSkipSlot[CGameSpriteEquipment::SLOT_MISC + 8] = TRUE;
+    }
+
+    CString sTargetName(pTarget->m_scriptName);
+    SHORT nStartSlot = static_cast<SHORT>(rand() % CGameSpriteEquipment::NUM_SLOT);
+    SHORT nSlot = nStartSlot;
+    CItem* pItem = NULL;
+    while (pItem == NULL) {
+        CItem* pCandidate = pTarget->m_equipment.m_items[nSlot];
+        if (!bSkipSlot[nSlot]
+            && pCandidate != NULL
+            && (pCandidate->m_flags & 0x2) == 0
+            && (pCandidate->GetFlagsFile() & 0x4) != 0) {
+            pItem = pCandidate;
+            break;
+        }
+
+        // Even starting slots scan forward, odd slots backward (0x758AF6).
+        if ((nStartSlot % 2) == 0) {
+            nSlot++;
+            if (nSlot >= CGameSpriteEquipment::NUM_SLOT) {
+                nSlot = 0;
+            }
+        } else {
+            nSlot--;
+            if (nSlot < 0) {
+                nSlot = CGameSpriteEquipment::NUM_SLOT - 1;
+            }
+        }
+        if (nSlot == nStartSlot) {
+            FeedBack(FEEDBACK_PICKPOCKETFAILED_NOITEMS, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+    }
+
+    // The constants at 0x85BD14 and 0x85BD18 make one successful item choice
+    // in three steal 1-5 gold instead; any other result steals the item.
+    if (rand() % 3 == 0) {
+        LONG nGold = rand() % 5 + 1;
+        if (pGame->GetCharacterPortraitNum(pTarget->m_id) == -1) {
+            CMessage* message = new CMessagePartyGold(TRUE, TRUE, nGold, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        if (pGame->GetGameSave()->m_nPartyGold > static_cast<DWORD>(nGold)) {
+            CMessage* message = new CMessagePartyGold(TRUE, TRUE, -nGold, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            CAIAction action;
+            // CreateItem (action 82; the SHORT at 0x847818).
+            action.m_actionID = 82;
+            action.m_specificID = nGold;
+            action.m_specificID2 = 0;
+            action.m_specificID3 = 0;
+            action.SetString1(CString("MISC07")); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
+            action.SetString2(sTargetName);
+            message = new CMessageAddAction(action, pTarget->m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+        // Not enough party gold: retain the selected slot and steal its item.
+    }
+
+    SHORT nInventorySlot = -1;
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        for (SHORT nIndex = 0; nIndex < CScreenInventory::PERSONAL_INVENTORY_SIZE; nIndex++) {
+            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_MISC + 3 + nIndex] == NULL) {
+                nInventorySlot = CGameSpriteEquipment::SLOT_MISC + 3 + nIndex;
+                break;
+            }
+        }
+    } else {
+        for (SHORT nIndex = 0; nIndex < 28; nIndex++) {
+            if (m_equipment.m_items[CGameSpriteEquipment::SLOT_MISC + nIndex] == NULL) {
+                nInventorySlot = CGameSpriteEquipment::SLOT_MISC + nIndex;
+                break;
+            }
+        }
+    }
+    if (nInventorySlot == -1) {
+        FeedBack(FEEDBACK_PICKPOCKETFAILED_INVENTORYFULL, 0, 0, 0, -1, 0, 0);
+        return ACTION_ERROR;
+    }
+
+    m_equipment.m_items[nInventorySlot] = new CItem(*pItem);
+    CMessage* message = new CMessageRemoveItem(nSlot, m_id, pTarget->m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    FeedBack(FEEDBACK_PICKPOCKETSUCCEEDED, 0, 0, 0, -1, 0, 0);
     return ACTION_DONE;
 }
 
