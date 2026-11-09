@@ -412,3 +412,35 @@ TEST_CASE("compress: a bag in a pile ages through its store, rescues critical co
     pPile2->RemoveFromArea();
     ClearMessages();
 }
+
+TEST_CASE("compress: a bag walk counts store lines, not stock", "[compress][data]")
+{
+    ProbeOrSkip();
+
+    // One line of five gems whose stock reads 3. The original bounds the
+    // walk on the line count ([store+0xFC] at 0x47DDBA), so a single pass
+    // takes one gem off the line. Bounding on GetNumItems() (the summed
+    // stock, 3) would run three passes, the last two re-using the stale
+    // item after GetItem(1) fails, and leave two gems.
+    SeedBag("00GBGA03", { { "00GEM01", 5 } });
+    {
+        CStore bag(CResRef("00GBGA03"));
+        REQUIRE(bag.m_lInventory.GetCount() == 1);
+        REQUIRE(bag.m_lInventory.GetHead()->m_usageCount[0] == 5);
+        bag.m_lInventory.GetHead()->m_nInStock = 3;
+        bag.Marshal(g_pBaldurChitin->GetObjectGame()->m_sTempDir);
+    }
+    ClearMessages();
+    CGameContainer* pPile = NewPile();
+    pPile->m_lstItems.AddTail(new CItem(CResRef("00GBGA03"), 1, 0, 0, 0, 0));
+
+    CHECK(pPile->CompressTime(CTimerWorld::TIMESCALE_MSEC_PER_DAY + 1) == FALSE);
+    CHECK(pPile->m_lstItems.IsEmpty());
+
+    CStore after(CResRef("00GBGA03"));
+    REQUIRE(after.m_lInventory.GetCount() == 1);
+    CHECK(after.m_lInventory.GetHead()->m_usageCount[0] == 4);
+
+    pPile->RemoveFromArea();
+    ClearMessages();
+}

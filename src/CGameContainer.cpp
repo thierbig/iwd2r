@@ -1707,7 +1707,10 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
                 CStore store(pItem->cResRef);
 
                 if (store.m_header.m_nStoreType == 4) {
-                    for (INT i = 0; i < store.GetNumItems(); i++) {
+                    // 0x47DDBA: the bound is the line count ([store+0xFC],
+                    // m_lInventory's count), not GetNumItems(), which sums
+                    // the stock.
+                    for (INT i = 0; i < store.m_lInventory.GetCount(); i++) {
                         store.GetItem(i, tempItem);
 
                         if (tempItem.GetFlagsFile() & 1) {
@@ -1725,9 +1728,10 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
                             bRet = FALSE;
                         }
 
-                        // 0x47DEA4: every iteration removes a stack, the
-                        // inventory shrinks while i advances, and the count
-                        // is re-read — the walk skips every other item. The
+                        // 0x47DEA4: every pass takes one off a line (a
+                        // stackable line loses one, any other line goes),
+                        // the count is re-read and i advances anyway, so an
+                        // emptied line makes the walk skip the next one. The
                         // original behaves that way; keep it.
                         store.RemoveItemExt(tempItem.cResRef, tempItem.m_flags, -1, 1, NULL);
                     }
@@ -1758,6 +1762,11 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
                             == FALSE) {
                             // 0x47D9F4: broken session — drop it and skip
                             // this item entirely, no item-flags tail.
+                            // NOTE: the original jumps to 0x47DF45, past the
+                            // store of the walk position at 0x47DF41, so the
+                            // next item's RemoveAt reuses this bag's POSITION
+                            // (and deletes the wrong node's item). The port
+                            // keeps the walk position right.
                             g_pChitin->cNetwork.CloseSession(TRUE);
                             continue;
                         }
@@ -1777,7 +1786,8 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
                             FALSE);
                     }
 
-                    for (INT i = 0; i < store.GetNumItems(); i++) {
+                    // 0x47DB1E: the line count again, re-read each pass.
+                    for (INT i = 0; i < store.m_lInventory.GetCount(); i++) {
                         store.GetItem(i, tempItem);
 
                         if (tempItem.GetFlagsFile() & 1) {
