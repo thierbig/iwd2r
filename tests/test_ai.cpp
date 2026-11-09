@@ -700,6 +700,74 @@ TEST_CASE("ai: the sprite's dispatcher runs its own actions and leaves the rest 
     ClearMessages();
 }
 
+TEST_CASE("ai: ExecuteAction changes allegiance and general, ChangeClass changes nothing", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // ChangeEnemyAlly(255) (153): LOBYTE(m_specificID) lands in m_nEnemyAlly
+    // of all three types - GetAIType's m_typeAI, m_liveTypeAI and, unlike the
+    // later arms, the start copy taken from m_startTypeAI (0x44EF89).
+    CAIAction changeEnemyAlly;
+    changeEnemyAlly.m_actionID = 153;
+    changeEnemyAlly.m_acteeID = actee;
+    changeEnemyAlly.m_specificID = 255;
+    pCaller->SetCurrAction(changeEnemyAlly);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->GetAIType().GetEnemyAlly() == 255);
+    CHECK(pSprite->m_liveTypeAI.GetEnemyAlly() == 255);
+    CHECK(pSprite->m_startTypeAI.GetEnemyAlly() == 255);
+
+    // The sprite update is BROADCAST_OTHERS-routed without force-passthrough,
+    // so the single-player game (no other players to sync) drops it in
+    // CMessageHandler::Broadcast (bSendMessageToSelf FALSE): the queue stays
+    // empty. The EA change above ran inside the same conditional, so the
+    // message path was taken.
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetCount() == 0);
+
+    // ChangeGeneral(4) (154): same shape, m_nGeneral on all three; the start
+    // copy comes from m_liveTypeAI here, so it carries the EA written above
+    // (0x44F1CC).
+    CAIAction changeGeneral;
+    changeGeneral.m_actionID = 154;
+    changeGeneral.m_acteeID = actee;
+    changeGeneral.m_specificID = 4;
+    pCaller->SetCurrAction(changeGeneral);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->GetAIType().GetGeneral() == 4);
+    CHECK(pSprite->m_liveTypeAI.GetGeneral() == 4);
+    CHECK(pSprite->m_startTypeAI.GetGeneral() == 4);
+    CHECK(pSprite->m_startTypeAI.GetEnemyAlly() == 255);
+    CHECK(pSprite->m_liveTypeAI.GetEnemyAlly() == 255);
+
+    // ChangeClass (156): the original builds three CAIObjectType locals and
+    // discards them without touching the sprite (0x44F55E) - the general
+    // stays as ChangeGeneral left it.
+    CAIAction changeClass;
+    changeClass.m_actionID = 156;
+    changeClass.m_acteeID = actee;
+    changeClass.m_specificID = 99;
+    pCaller->SetCurrAction(changeClass);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->GetAIType().GetGeneral() == 4);
+    CHECK(pSprite->GetAIType().GetEnemyAlly() == 255);
+
+    // A second ChangeEnemyAlly (200) follows whatever value the action
+    // carries, proving the 255s above were written by the action rather
+    // than coinciding with the fixture's stored types.
+    changeEnemyAlly.m_specificID = 200;
+    pCaller->SetCurrAction(changeEnemyAlly);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->GetAIType().GetEnemyAlly() == 200);
+    CHECK(pSprite->m_liveTypeAI.GetEnemyAlly() == 200);
+    CHECK(pSprite->m_startTypeAI.GetEnemyAlly() == 200);
+
+    ClearMessages();
+}
+
 TEST_CASE("ai: a named creature is found by its name in any case", "[ai]")
 {
     // AddKey (0x550D10) stores the name upper case without spaces and hashes
