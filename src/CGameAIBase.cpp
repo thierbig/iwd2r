@@ -4506,8 +4506,33 @@ SHORT CGameAIBase::BitGlobal()
             message = new CMessageSetVariable(sScope, sName, var.m_intValue, m_id, m_id);
         }
         g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    } else if (strcmp(sScope, "LOCALS") == 0) {
+        // Only sprites carry local variables; any other object type
+        // falls through to ACTION_DONE without a message.
+        if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(this);
+            CString sLocalName(sName);
+            CVariable* pVariable = pSprite->GetLocalVariables()->FindKey(sLocalName);
+            if (pVariable != NULL) {
+                if (!CombineGlobalBit(pVariable->m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                    return ACTION_ERROR;
+                }
+            } else {
+                // The original constructs this one on the stack too.
+                CVariable var;
+                var.SetName(sLocalName);
+                if (!CombineGlobalBit(var.m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                    return ACTION_ERROR;
+                }
+                pSprite->GetLocalVariables()->AddKey(var);
+                pVariable = &var;
+            }
+
+            message = new CMessageSetVariable(sScope, sLocalName, pVariable->m_intValue, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
     }
-    // TODO: 0x468C06-0x469037 (LOCALS and area arms) not ported yet.
+    // TODO: 0x468DEF-0x469037 (MYAREA and area arms) not ported yet.
 
     return ACTION_DONE;
 }
