@@ -14847,10 +14847,34 @@ SHORT CGameSprite::ExecuteAction()
     case 102:
     case 103:
     case 104:
-        // MoraleSet, MoraleInc, MoraleDec
-        // TODO: 0x729EE8-0x72A094 not ported (the morale effects).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // MoraleSet, MoraleInc, MoraleDec (0x729EE8-0x72A094)
+        {
+            ITEM_EFFECT* pItemEffect = new ITEM_EFFECT;
+            CGameEffect::ClearItemEffect(pItemEffect, CGAMEEFFECT_MORALE);
+            if (m_curAction.m_actionID == 102) {
+                pItemEffect->dwFlags = 1;
+                pItemEffect->effectAmount = m_curAction.m_specificID;
+            } else if (m_curAction.m_actionID == 103) {
+                pItemEffect->dwFlags = 0;
+                pItemEffect->effectAmount = m_curAction.m_specificID;
+            } else {
+                pItemEffect->effectID = CGAMEEFFECT_MORALE;
+                pItemEffect->dwFlags = 0;
+                pItemEffect->effectAmount = -m_curAction.m_specificID;
+            }
+            pItemEffect->durationType = 1;
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(pItemEffect, m_pos, m_id, CPoint(-1, -1));
+
+            pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+            if (pTarget != NULL) {
+                bShare = TRUE;
+                CMessage* message = new CMessageAddEffect(pEffect, m_id, pTarget->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+            delete pItemEffect;
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 105:
         // AttackOneRound (0x72A094-0x72A0E7): Attack's case without its
         // timing counters and without a party member's fallback target;
@@ -15135,10 +15159,26 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 239:
     case 240:
-        // SetInternal, IncrementInternal
-        // TODO: 0x72AAA8-0x72AB5C not ported.
-        returnValue = ACTION_ERROR;
-        goto done;
+        // SetInternal, IncrementInternal (0x72AAA8-0x72AB5C): the five
+        // signed words at creature-header offset 0x298.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            goto done;
+        }
+        bShare = TRUE;
+        if (m_curAction.m_specificID >= 0 && m_curAction.m_specificID < 5) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            SHORT* pInternal = reinterpret_cast<SHORT*>(pSprite->m_baseStats.field_295 + 3);
+            const LONG nIndex = m_curAction.m_specificID;
+            if (m_curAction.m_actionID == 239) {
+                pInternal[nIndex] = static_cast<SHORT>(m_curAction.m_specificID2);
+            } else {
+                pInternal[nIndex] = static_cast<SHORT>(pInternal[nIndex]
+                    + static_cast<SHORT>(m_curAction.m_specificID2));
+            }
+            returnValue = ACTION_DONE;
+        }
+        goto release;
     case 249:
         // SetSavedLocationPoint (0x72AA71-0x72AAA8)
         m_baseStats.field_2E4 = static_cast<SHORT>(m_curAction.m_specificID);
@@ -15237,9 +15277,15 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = PlayBardSong();
         goto done;
     case 277:
-        // TurnAMT
-        // TODO: 0x72AD6D-0x72AE1F not ported.
-        returnValue = ACTION_ERROR;
+        // TurnAMT (0x72AD6D-0x72AE1F): turn relative to the current facing.
+        SetDirection(static_cast<SHORT>((m_nDirection + m_curAction.m_specificID) % NUM_DIR));
+        if ((m_pos != CPoint(-1, -1) || m_pArea != NULL)
+            && (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
+            CMessage* message = new CMessageSpriteUpdate(this, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 299:
         // EquipWeapon (0x72AE1F-0x72AE43): a sprite holding nothing or its
@@ -15260,9 +15306,19 @@ SHORT CGameSprite::ExecuteAction()
             TRUE);
         goto done;
     case 301:
-        // SetExtendedNight
-        // TODO: 0x72AE64-0x72AEE4 not ported.
-        returnValue = ACTION_ERROR;
+        // SetExtendedNight (0x72AE64-0x72AEE4). Unlike the base action, a
+        // sprite clears the whole area type when the argument is zero.
+        if (m_curAction.m_specificID == 0) {
+            m_pArea->m_header.m_areaType = 0;
+        } else {
+            *reinterpret_cast<BYTE*>(&m_pArea->m_header.m_areaType) |= 0x40;
+        }
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID) {
+            CMessage* message = new CMessageSetAreaType(m_pArea->m_header.m_areaType, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 309:
         // SetMarkedSpell
