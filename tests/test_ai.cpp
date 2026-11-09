@@ -730,7 +730,9 @@ TEST_CASE("ai: ExecuteAction changes allegiance and general, ChangeClass changes
 
     // ChangeGeneral(4) (154): same shape, m_nGeneral on all three; the start
     // copy comes from m_liveTypeAI here, so it carries the EA written above
-    // (0x44F1CC).
+    // and overwrites a race only the start type had (0x44F1CC).
+    pSprite->m_startTypeAI.SetRace(77);
+    REQUIRE(pSprite->m_liveTypeAI.GetRace() != 77);
     CAIAction changeGeneral;
     changeGeneral.m_actionID = 154;
     changeGeneral.m_acteeID = actee;
@@ -742,6 +744,7 @@ TEST_CASE("ai: ExecuteAction changes allegiance and general, ChangeClass changes
     CHECK(pSprite->m_startTypeAI.GetGeneral() == 4);
     CHECK(pSprite->m_startTypeAI.GetEnemyAlly() == 255);
     CHECK(pSprite->m_liveTypeAI.GetEnemyAlly() == 255);
+    CHECK(pSprite->m_startTypeAI.GetRace() == pSprite->m_liveTypeAI.GetRace());
 
     // ChangeClass (156): the original builds three CAIObjectType locals and
     // discards them without touching the sprite (0x44F55E) - the general
