@@ -570,6 +570,83 @@ TEST_CASE("combat: DropInventory puts a goblin's droppable items and gold on its
     ClearMessages();
 }
 
+// DropItem (0x754D70): at 0x754E87 the original compares only the low byte
+// of ability zero's type. 0x0104 must therefore take the launcher arm too.
+TEST_CASE("combat: DropItem reads only the low byte of a launcher's ability type", "[combat][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    Fight fight;
+    std::string why;
+    if (!SetUpFight(fight, why)) {
+        if (why.find("CHR") != std::string::npos) {
+            SKIP("[iwd2r-skip] " + why);
+        }
+        FAIL(why);
+    }
+    const CPoint& pos = fight.pCharacter->GetPos();
+    CGameSprite* pArcher = AddCreature(fight.pArea,
+        "10GOBAR",
+        CPoint(pos.x - 6 * CPathSearch::GRID_SQUARE_SIZEX, pos.y));
+    REQUIRE(pArcher != NULL);
+
+    // Use a real droppable item resource with an ability. Both the patch and
+    // restoration are made while the resource is demanded. Since DropItem's
+    // ReleaseAll drops every demand, restoration deliberately re-demands the
+    // resource rather than retaining an ITEM_ABILITY pointer across that.
+    CItem* pTemplate = NULL;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pCandidate = pArcher->GetEquipment()->m_items[nSlot];
+        if (pCandidate == NULL || (pCandidate->GetFlagsFile() & 0x4) == 0) {
+            continue;
+        }
+        pCandidate->Demand();
+        ITEM_ABILITY* pAbility = pCandidate->GetAbility(0);
+        pCandidate->Release();
+        if (pAbility != NULL) {
+            pTemplate = pCandidate;
+            break;
+        }
+    }
+    REQUIRE(pTemplate != NULL);
+
+    CItem** ppDropped = NULL;
+    for (SHORT nSlot = 18; nSlot < 42; nSlot++) {
+        if (fight.pCharacter->GetEquipment()->m_items[nSlot] == NULL) {
+            ppDropped = &fight.pCharacter->GetEquipment()->m_items[nSlot];
+            break;
+        }
+    }
+    REQUIRE(ppDropped != NULL);
+    CItem* pDropped = new CItem(*pTemplate);
+    *ppDropped = pDropped;
+    pDropped->Demand();
+    ITEM_ABILITY* pAbility = pDropped->GetAbility(0);
+    REQUIRE(pAbility != NULL);
+    const WORD nOriginalType = pAbility->type;
+
+    // A non-selected item is dropped while an ammo slot is selected. Only
+    // the low-byte comparison reaches SelectWeaponAbility(SLOT_FIST, ...).
+    pAbility->type = 0x0104;
+    CGameSpriteEquipment* pEquipment = fight.pCharacter->GetEquipment();
+    pEquipment->m_selectedWeapon = CGameSpriteEquipment::SLOT_AMMO;
+    pEquipment->m_selectedWeaponAbility = 0;
+    CHECK(fight.pCharacter->DropItem(static_cast<SHORT>(ppDropped - pEquipment->m_items)) == CGameAIBase::ACTION_DONE);
+    pDropped->Demand();
+    pAbility = pDropped->GetAbility(0);
+    REQUIRE(pAbility != NULL);
+    pAbility->type = nOriginalType;
+    pDropped->ReleaseAll();
+    CHECK(pEquipment->m_selectedWeapon == CGameSpriteEquipment::SLOT_FIST);
+    CHECK(*ppDropped == NULL);
+    ClearMessages();
+}
+
 // EquipMostDamagingMelee (0x75DFD0): the goblin's melee weapon set, not the
 // fist; with the magic weapon slot in use nothing changes (ACTION_ERROR).
 TEST_CASE("combat: EquipMostDamagingMelee takes the goblin's melee weapon back from its fists", "[combat][data]")

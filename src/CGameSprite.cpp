@@ -13198,6 +13198,26 @@ SHORT CGameSprite::TakeItemBags(const CString& sName, LONG number, SHORT slotNum
     return numTaken;
 }
 
+// 0x722740
+CItem* CGameSprite::DropItemFromBag(CString sName)
+{
+    sName.MakeUpper();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        CItem* pItem = m_equipment.m_items[nSlot];
+        if (pItem != NULL && pItem->GetItemType() == 58) {
+            CItem* pDroppedItem = pGame->RemoveItemFromBag(pItem->cResRef, CResRef(sName));
+            if (pDroppedItem != NULL) {
+                return pDroppedItem;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 // 0x722820
 void CGameSprite::sub_722820()
 {
@@ -14584,11 +14604,16 @@ SHORT CGameSprite::ExecuteAction()
         }
         goto release;
     case 9:
-        // DropItem
-        // TODO: 0x7293C4-0x72944E not ported (FindItemPersonal,
-        // CGameSprite_DropItemFromBag 0x722740, DropItem 0x7618E0,
-        // 0x754D70).
-        returnValue = ACTION_ERROR;
+        // DropItem (0x7293C4-0x72944E): an item in a bag is removed first;
+        // both forms use the item's resref in string1.
+        {
+            SHORT nSlot = FindItemPersonal(m_curAction.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                returnValue = DropItem(DropItemFromBag(m_curAction.GetString1()));
+            } else {
+                returnValue = DropItem(nSlot);
+            }
+        }
         goto done;
     case 10:
         // Enemy (0x72944E-0x72945E)
@@ -35033,6 +35058,57 @@ CString CGameSprite::GetRaceString(BYTE nRace)
     return sRace;
 }
 
+// 0x754D70
+SHORT CGameSprite::DropItem(SHORT nSlot)
+{
+    if (nSlot == -1) {
+        return ACTION_ERROR;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    LONG nGroundPile = pGame->GetGroundPile(m_id);
+    if (nGroundPile == CGameObjectArray::INVALID_INDEX) {
+        return ACTION_ERROR;
+    }
+
+    CGameContainer* pGroundPile;
+    BYTE rc = pGame->GetObjectArray()->GetDeny(nGroundPile,
+        CGameObjectArray::THREAD_ASYNCH,
+        reinterpret_cast<CGameObject**>(&pGroundPile),
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        return ACTION_ERROR;
+    }
+
+    if (nSlot != CGameSpriteEquipment::SLOT_FIST) {
+        CItem** ppItem = &m_equipment.m_items[nSlot];
+        if (*ppItem != NULL && ((*ppItem)->GetFlagsFile() & 0x4) != 0) {
+            CItem* pItem = *ppItem;
+            pGroundPile->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+            pItem->Demand();
+
+            // The original's second arm covers only the first three ammo
+            // slots and reads ability zero without a NULL check.
+            if (nSlot == m_equipment.m_selectedWeapon
+                || (m_equipment.m_selectedWeapon >= CGameSpriteEquipment::SLOT_AMMO
+                    && m_equipment.m_selectedWeapon < CGameSpriteEquipment::SLOT_AMMO + 3
+                    && static_cast<BYTE>(pItem->GetAbility(0)->type) == 4)) {
+                SelectWeaponAbility(CGameSpriteEquipment::SLOT_FIST, 0, 0, 1);
+            }
+
+            pItem->ReleaseAll();
+            Unequip(nSlot);
+            *ppItem = NULL;
+        }
+    }
+
+    pGame->GetObjectArray()->ReleaseDeny(nGroundPile,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    return ACTION_DONE;
+}
+
 // The creature's droppable items (file flag 0x4) and its gold (as MISC07)
 // go onto its ground pile, except an item whose resref is sException; with
 // bCriticalOnly only the droppable items with file flag 0x1 drop, and every
@@ -35151,8 +35227,8 @@ SHORT CGameSprite::DropInventory(BOOLEAN bCriticalOnly, CString sException)
     return ACTION_DONE;
 }
 
-// GiveItem: the item named by the action's string1 (carried, else in a bag)
-// leaves this creature; a creature target gets a copy through
+// GiveItem: the item named by the action's string1 (carried, not yet one in
+// a bag) leaves this creature; a creature target gets a copy through
 // CMessageAddItem and the item itself is disposed of.
 //
 // 0x757540
@@ -35166,10 +35242,13 @@ SHORT CGameSprite::GiveItem(CGameAIBase* pTarget)
 
     CItem* pItem;
     if (nSlot == -1) {
-        // TODO: Incomplete. The original takes the item out of a bag
-        // (DropItemFromBag 0x722740 through CInfGame 0x5C8C30, not ported),
-        // then unequips slot -1 and clears the DWORD before m_items (the
-        // field at +0x4AD4). Without it an item in a bag is not given.
+        // TODO: Incomplete. The original's arm for a name not carried calls
+        // DropItemFromBag (0x722740, now ported, through CInfGame 0x5C8C30)
+        // and a miss is ACTION_ERROR, but a hit still runs Unequip(-1) and
+        // clears m_items[-1]: the write lands on +0x4AD4, the tail (field_18)
+        // of m_shapeshifts, an out-of-bounds original write whose target's
+        // meaning is unclear. Until that is understood the arm stays unwired,
+        // so an item in a bag is not given.
         return ACTION_ERROR;
     } else {
         pItem = m_equipment.m_items[nSlot];
