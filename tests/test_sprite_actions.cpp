@@ -2985,7 +2985,7 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
         }
     }
     INFO("light dark " << nLightDark << " bright " << nLightBright
-                      << " mod " << nLightMod << " skill " << nSkill << " roll " << R);
+                       << " mod " << nLightMod << " skill " << nSkill << " roll " << R);
     REQUIRE(nSkill != -1);
 
     unsigned int nSeed = rollSeed(R);
