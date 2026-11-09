@@ -190,6 +190,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PLAY_SOUND = 32;
 // 0x84CEF8
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PLAY_SOUND_REF = 33;
 
+// 0x84CEF9
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM = 34;
+
 // 0x84CEFA
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_REPLIES = 35;
 
@@ -22673,6 +22676,140 @@ void CMessageProjectileImmumityUpdate::Run()
 }
 
 // -----------------------------------------------------------------------------
+
+// NOTE: Inlined in CGameSprite::ExecuteAction at 0x72A883-0x72A892.
+CMessageRemoveItem::CMessageRemoveItem(SHORT slot, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_slot = slot;
+}
+
+// 0x40A0D0
+SHORT CMessageRemoveItem::GetCommType()
+{
+    return SEND;
+}
+
+// 0x40A0E0
+BYTE CMessageRemoveItem::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x4641F0
+BYTE CMessageRemoveItem::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM;
+}
+
+// 0x504070
+void CMessageRemoveItem::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 15295
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
+        LONG remoteObjectID = pObject->m_remoteObjectID;
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+
+        *dwSize = sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(SHORT);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 15316
+        UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+        DWORD cnt = 0;
+
+        *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+        cnt += sizeof(LONG);
+
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_slot;
+        cnt += sizeof(SHORT);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 15339
+        UTIL_ASSERT(cnt == *dwSize);
+    } else {
+        *dwSize = 0;
+    }
+}
+
+// 0x504250
+void CMessageRemoveItem::Run()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        if (pSprite->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CItem* pItem = pSprite->m_equipment.m_items[m_slot];
+            if (pItem != NULL) {
+                pSprite->Unequip(m_slot);
+                // The original re-reads the slot after Unequip (0x50430A).
+                pGame->AddDisposableItem(pSprite->m_equipment.m_items[m_slot]);
+                pSprite->m_equipment.m_items[m_slot] = NULL;
+                if (m_slot == pSprite->m_equipment.m_selectedWeapon) {
+                    pSprite->EquipMostDamagingMelee();
+                }
+            }
+
+            CMessage* message = new CMessageSpriteEquipment(pSprite, pSprite->GetId(), pSprite->GetId());
+            // 0x504374 calls the three-argument AddMessage after evaluating
+            // GetCommType (0x4F7530), not the two-argument wrapper (0x4F7500).
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE, message->GetCommType());
+
+            static_cast<CBaldurEngine*>(g_pBaldurChitin->pActiveEngine)->UpdatePersonalItemStatus(m_targetId);
+
+            if (m_slot >= CGameSpriteEquipment::SLOT_WEAPON && m_slot <= CGameSpriteEquipment::SLOT_WEAPON + 7) {
+                pSprite->SetQuickWeapon(static_cast<BYTE>(m_slot - CGameSpriteEquipment::SLOT_WEAPON),
+                    CButtonData());
+                pSprite->SetQuickWeapon(static_cast<BYTE>(m_slot - CGameSpriteEquipment::SLOT_WEAPON),
+                    static_cast<BYTE>(0));
+            } else if (m_slot >= CGameSpriteEquipment::SLOT_MISC && m_slot <= CGameSpriteEquipment::SLOT_MISC + 2) {
+                pSprite->SetQuickItem(static_cast<BYTE>(m_slot - CGameSpriteEquipment::SLOT_MISC),
+                    CButtonData());
+            }
+
+            if ((m_slot - CGameSpriteEquipment::SLOT_WEAPON) / 2 == pSprite->m_nWeaponSet) {
+                pSprite->sub_726F20();
+            }
+
+            if (pGame->GetCharacterPortraitNum(pSprite->GetId()) == g_pBaldurChitin->m_pEngineWorld->GetSelectedCharacter()) {
+                pGame->GetButtonArray()->UpdateButtons();
+            }
+        }
+
+        pGame->GetObjectArray()->ReleaseDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
 
 // 0x5041A0
 BOOL CMessageRemoveItem::UnmarshalMessage(BYTE* pData, DWORD dwSize)

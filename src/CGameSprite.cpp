@@ -14972,10 +14972,28 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 128:
+        // AnkhegEmerge (0x72A1C9-0x72A28A)
+        if (m_animation.GetAboveGround()) {
+            returnValue = ACTION_DONE;
+            goto done;
+        }
+        if (m_nSequence != SEQ_EMERGE) {
+            CMessage* message = new CMessageSetSequence(SEQ_EMERGE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_NORMAL;
+        goto done;
     case 129:
-        // AnkhegEmerge, AnkhegHide
-        // TODO: 0x72A1C9-0x72A33E not ported.
-        returnValue = ACTION_ERROR;
+        // AnkhegHide (0x72A28A-0x72A33E)
+        if (!m_animation.GetAboveGround()) {
+            returnValue = ACTION_DONE;
+            goto done;
+        }
+        if (m_nSequence != SEQ_HIDE) {
+            CMessage* message = new CMessageSetSequence(SEQ_HIDE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_NORMAL;
         goto done;
     case 134:
         // AttackReevaluate (0x72A33E-0x72A34E)
@@ -15014,9 +15032,24 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = PickLock(pTarget);
         goto release;
     case 146:
-        // Polymorph
-        // TODO: 0x72A42B-0x72A4FE not ported (the polymorph effect).
-        returnValue = ACTION_ERROR;
+        // Polymorph (0x72A42B-0x72A4FE): an animation-change effect, not
+        // opcode 135's creature-resource polymorph.
+        {
+            ITEM_EFFECT* effect = new ITEM_EFFECT;
+            CGameEffect::ClearItemEffect(effect, CGAMEEFFECT_ANIMATIONCHANGE);
+            effect->effectAmount = m_curAction.m_specificID;
+            // NOTE: The duration type is the WORD constant at 0x8491AA (1).
+            effect->durationType = 1;
+
+            CGameEffect* pEffect = new CGameEffectAnimationChange(effect,
+                CPoint(-1, -1),
+                -1,
+                CPoint(-1, -1));
+            CMessage* message = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            delete effect;
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 147:
         // RemoveSpell
@@ -15146,8 +15179,30 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 223:
-        // TODO: 0x72A83D-0x72A976 not ported (the quick list check).
-        returnValue = ACTION_ERROR;
+        // Clear every occupied equipment slot except the fist, together with
+        // its quick-list buttons (0x72A83D-0x72A976).
+        for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+            if (m_equipment.m_items[nSlot] == NULL || nSlot == CGameSpriteEquipment::SLOT_FIST) {
+                continue;
+            }
+
+            CMessage* message = new CMessageRemoveItem(static_cast<SHORT>(nSlot), m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            // NOTE: 0x72A90A-0x72A945 sets the ability number, not the item
+            // type: 2/slot/0, then 2/slot/1, then 2/slot/2.
+            CAbilityId ability;
+            ability.m_res = "";
+            ability.m_itemType = 2;
+            ability.m_itemNum = static_cast<SHORT>(nSlot);
+            ability.m_abilityNum = 0;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+            ability.m_abilityNum = 1;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+            ability.m_abilityNum = 2;
+            CheckQuickLists(&ability, 0, TRUE, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 224:
         // Engine-internal action 224 (0x72A9A7-0x72A9B7), no ACTION.IDS
