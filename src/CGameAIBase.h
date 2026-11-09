@@ -100,6 +100,7 @@ public:
     SHORT Wait();
     SHORT SmallWait();
     SHORT Shout();
+    SHORT CreateCreature();
     void PutItemGround(CItem* pItem);
     SHORT ClearActions(CGameObject* target);
     BOOL PlaceItem(CItem* item, BOOL deny, BOOL drop, DWORD count, BOOL feedback);

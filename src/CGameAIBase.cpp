@@ -8,6 +8,7 @@
 #include "CAIUtil.h"
 #include "CBaldurChitin.h"
 #include "CBaldurProjector.h"
+#include "CCreatureFile.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
@@ -2550,6 +2551,55 @@ SHORT CGameAIBase::Shout()
     }
 
     return ACTION_DONE;
+}
+
+// 0x4608A0
+// The CreateCreature action: builds a CGameSprite straight from the CRE
+// file named by the action's first string, adds it to the area, and
+// registers it in the area's named creatures under the script name given
+// by the second string. The destination is the action's destination point
+// (or, when it is (-1, -1), the source position of the acting object).
+// Action 7 places the new sprite on the nearest open square around the
+// destination; action 228 (0xE4) takes the exact square containing it.
+SHORT CGameAIBase::CreateCreature()
+{
+    CVariable cVariable;
+    CPoint pos = m_curAction.m_dest;
+
+    if (pos.x == -1 && pos.y == -1)
+        CProjectile::GetSourcePosition(m_id, pos, TRUE);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(CResRef(m_curAction.GetString1()), 1009, TRUE) == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CCreatureFile creatureFile;
+
+    // NOTE: Uninline.
+    creatureFile.SetResRef(CResRef(m_curAction.GetString1()), TRUE, TRUE);
+
+    // NOTE: The original evaluates the size first.
+    DWORD nSize = creatureFile.GetDataSize();
+    BYTE* pData = creatureFile.GetData();
+
+    CGameSprite* pNewSprite = new CGameSprite(pData, nSize, 0, 0, -1, 0, 0, 0x7FFFFFFF,
+        pos,
+        static_cast<WORD>(m_curAction.m_specificID));
+    if (pNewSprite == NULL) {
+        creatureFile.ReleaseData();
+        return ACTION_ERROR;
+    }
+
+    // NOTE: the exe reaches the resref through a call Ghidra labels
+    // GetEllipseRect (0x4699e0); semantically it is &creatureFile.cResRef.
+    pNewSprite->SetResRef(CResRef(creatureFile.GetResRef().GetResRefStr()));
+
+    creatureFile.ReleaseData();
+
+    pNewSprite->SetResRef(CResRef(m_curAction.GetString1()));
+
+    // TODO: 0x460B2B not ported.
+    return ACTION_ERROR;
 }
 
 // 0x462470
