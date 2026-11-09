@@ -764,12 +764,17 @@ TEST_CASE("ai: sprite internal, morale, TurnAMT and SetExtendedNight actions", "
         CHECK(pEffect->durationType == 1);
     }
 
-    // TurnAMT (277) is a relative Face: 14 + 5 wraps to direction 3. It sends
-    // the sprite update only for a placed sprite; both the unplaced and placed
-    // paths still set the requested direction and finish at once.
+    // TurnAMT (277) is a relative Face: the turn is based on the pending
+    // direction (m_nNewDirection, +0x537E), not the drawn one, so 14 + 5
+    // wraps to 3. It sends the sprite update only for a placed sprite; both
+    // the unplaced and placed paths set the requested direction and finish
+    // at once.
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
     pSprite->m_pArea = NULL;
     pSprite->m_pos = CPoint(-1, -1);
-    pSprite->m_nDirection = 14;
+    pSprite->m_nNewDirection = 14;
+    pSprite->m_nDirection = 13;
     pSprite->m_walkBackwards = FALSE;
     CAIAction turn;
     turn.m_actionID = 277;
@@ -781,12 +786,16 @@ TEST_CASE("ai: sprite internal, morale, TurnAMT and SetExtendedNight actions", "
     CHECK(pSprite->m_deltaDirection == 1);
 
     pSprite->m_pos = CPoint(100, 100);
-    pSprite->m_nDirection = 3;
+    pSprite->m_nNewDirection = 3;
+    pSprite->m_nDirection = 12;
     turn.m_specificID = 2;
     pSprite->SetCurrAction(turn);
     ClearMessages();
     CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
     CHECK(pSprite->m_nNewDirection == 5);
+    // The placed path also constructs and broadcasts CMessageSpriteUpdate;
+    // BROADCAST_OTHERS with force FALSE hands it to Broadcast, which deletes
+    // it rather than queueing it for self, so there is nothing local to read.
 
     // SetExtendedNight (301) sets area-type bit 0x40. This sprite-specific
     // case clears the whole area type for FALSE (the base's version only
@@ -802,6 +811,8 @@ TEST_CASE("ai: sprite internal, morale, TurnAMT and SetExtendedNight actions", "
     ClearMessages();
     CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
     CHECK(pSprite->m_pArea->m_header.m_areaType == 0xC1);
+    // CMessageSetAreaType is BROADCAST_FORCED_OTHERS and is likewise deleted
+    // by Broadcast, so this exercises its construction without a local copy.
     extendedNight.m_specificID = 0;
     pSprite->SetCurrAction(extendedNight);
     ClearMessages();
@@ -810,6 +821,7 @@ TEST_CASE("ai: sprite internal, morale, TurnAMT and SetExtendedNight actions", "
 
     pSprite->m_pArea = NULL;
     ::operator delete(area);
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
 

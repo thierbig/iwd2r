@@ -15277,8 +15277,9 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = PlayBardSong();
         goto done;
     case 277:
-        // TurnAMT (0x72AD6D-0x72AE1F): turn relative to the current facing.
-        SetDirection(static_cast<SHORT>((m_nDirection + m_curAction.m_specificID) % NUM_DIR));
+        // TurnAMT (0x72AD6D-0x72AE1F): turn relative to the pending facing
+        // (m_nNewDirection, +0x537E; the word SetDirection writes).
+        SetDirection(static_cast<SHORT>((m_nNewDirection + m_curAction.m_specificID) % NUM_DIR));
         if ((m_pos != CPoint(-1, -1) || m_pArea != NULL)
             && (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
                 || g_pChitin->cNetwork.m_idLocalPlayer == m_remotePlayerID)) {
