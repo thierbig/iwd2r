@@ -564,6 +564,7 @@ public:
     BOOL sub_71CFF0();
     int sub_75E930(int a1);
     SHORT Formation(CGameSprite* pTarget);
+    SHORT ProtectPoint();
     SHORT Follow();
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);

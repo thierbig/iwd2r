@@ -14692,10 +14692,9 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_ERROR;
         goto done;
     case 27:
-        // ProtectPoint
-        // TODO: 0x72968C-0x7296AB not ported (CGameSprite_ProtectPoint
-        // 0x7496E0).
-        returnValue = ACTION_ERROR;
+        // ProtectPoint (0x72968C-0x7296AB).
+        ResolveTargetPoint(&m_curAction, m_queuedActions.GetHeadPosition());
+        returnValue = ProtectPoint();
         goto done;
     case 28:
         // RemoveTraps
@@ -23987,6 +23986,166 @@ noTarget: {
     AddAction(wait);
 }
     return ACTION_DONE;
+}
+
+// 0x7496E0
+SHORT CGameSprite::ProtectPoint()
+{
+    INT nProtectRange = static_cast<SHORT>(m_curAction.m_specificID / CPathSearch::GRID_SQUARE_SIZEX);
+    INT nProtectRangeSquared = nProtectRange * nProtectRange;
+    CAIObjectType enemy;
+    enemy.Set(m_typeAI.GetEnemyOf());
+
+    SHORT returnValue = ACTION_INTERRUPTABLE;
+    CGameObject* pTarget = NULL;
+    BYTE nWeaponSlot = m_equipment.m_selectedWeapon;
+    CItem* curWeapon = m_equipment.m_items[nWeaponSlot];
+    if (curWeapon == NULL) {
+        EquipMostDamagingMelee();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    curWeapon->Demand();
+    const ITEM_ABILITY* curAttack = curWeapon->GetAbility(m_equipment.m_selectedWeaponAbility);
+    if (curAttack == NULL) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if ((curAttack->type & 0xFF) == 4) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if (curAttack->usageFlags == 3
+        && curWeapon->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+        && curAttack->maxUsageCount != 0) {
+        curWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    CPoint ptProtectGrid(m_curAction.m_dest.x / CPathSearch::GRID_SQUARE_SIZEX,
+        m_curAction.m_dest.y / CPathSearch::GRID_SQUARE_SIZEY);
+    const CPoint& ptSelf = GetPos();
+    CPoint ptSelfGrid(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+        ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+    INT dx = ptSelfGrid.x - ptProtectGrid.x;
+    INT dy = ptSelfGrid.y - ptProtectGrid.y;
+    if (dx * dx + dy * dy > nProtectRangeSquared) {
+        if (m_derivedStats.m_nEncumberance == 2) {
+            FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 1, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        AddAction(m_curAction);
+        CAIAction action(CAIAction::MOVETOPOINT, m_curAction.m_dest, 0, -1);
+        action.m_specificID3 = 1;
+        AddAction(action);
+        curWeapon->Release();
+        return ACTION_DONE;
+    }
+
+    BYTE rc;
+    LONG nNearest = m_pArea->GetNearest(m_id,
+        enemy,
+        GetVisualRange(),
+        GetVisibleTerrainTable(),
+        TRUE,
+        GetCanSeeInvisible(),
+        FALSE,
+        0,
+        FALSE);
+    if (nNearest == CGameObjectArray::INVALID_INDEX) {
+        // With nobody to attack, only a guard more than two CountSquares away
+        // from the protected point walks back to it.
+        CPoint ptGuardGrid(m_curAction.m_dest.x / CPathSearch::GRID_SQUARE_SIZEX,
+            m_curAction.m_dest.y / CPathSearch::GRID_SQUARE_SIZEY);
+        CPoint ptGuardSelfGrid(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+        if (CAIUtil::CountSquares(ptGuardSelfGrid, ptGuardGrid) <= 2) {
+            goto done;
+        }
+
+        if (m_derivedStats.m_nEncumberance == 2) {
+            FeedBack(FEEDBACK_TOOHEAVY_STOPPED, 1, 0, 0, -1, 0, 0);
+            return ACTION_DONE;
+        }
+
+        AddAction(m_curAction);
+        CAIAction action(CAIAction::MOVETOPOINT, m_curAction.m_dest, 0, -1);
+        action.m_specificID3 = 1;
+        AddAction(action);
+        curWeapon->Release();
+        return ACTION_DONE;
+    }
+
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nNearest,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pTarget,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        BYTE nSpace = static_cast<BYTE>((m_animation.GetPersonalSpace() - 1) >> 1);
+        INT nAttackRange = nSpace + curAttack->range + 1;
+        INT nPursuitRange = nProtectRange + nSpace + curAttack->range + 1;
+        INT nAttackDistance = nAttackRange * nAttackRange;
+        INT nPursuitDistance = nPursuitRange * nPursuitRange;
+
+        INT nTargetDistance;
+        if ((curAttack->type & 0xFF) == 2) {
+            const CPoint& ptTarget = pTarget->GetPos();
+            CPoint ptTargetGrid(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptNow = GetPos();
+            CPoint ptNowGrid(ptNow.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptNow.y / CPathSearch::GRID_SQUARE_SIZEY);
+            dx = ptNowGrid.x - ptTargetGrid.x;
+            dy = ptNowGrid.y - ptTargetGrid.y;
+            nTargetDistance = dx * dx + dy * dy;
+        } else {
+            const CPoint& ptTarget = pTarget->GetPos();
+            CPoint ptTargetGrid(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptNow = GetPos();
+            CPoint ptNowGrid(ptNow.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptNow.y / CPathSearch::GRID_SQUARE_SIZEY);
+            nTargetDistance = CAIUtil::CountSquares(ptNowGrid, ptTargetGrid);
+            nTargetDistance *= nTargetDistance;
+        }
+
+        if (nTargetDistance <= nPursuitDistance) {
+            if (nTargetDistance <= nAttackDistance) {
+                if (m_pPath != NULL) {
+                    CMessage* message = new CMessageDropPath(m_id, m_id);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                }
+
+                if (m_attackFrame == -2) {
+                    m_attackFrame = -1;
+                }
+                returnValue = Swing(static_cast<CGameSprite*>(pTarget));
+            } else {
+                returnValue = MoveToObject(pTarget);
+                if (returnValue == ACTION_DONE || returnValue == ACTION_ERROR) {
+                    returnValue = ACTION_INTERRUPTABLE;
+                }
+            }
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nNearest,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+done:
+    // Movement can change the equipment slot. The original releases its
+    // demand only when the item is still in the slot it came from.
+    if (curWeapon == m_equipment.m_items[nWeaponSlot]) {
+        curWeapon->Release();
+    }
+    return returnValue;
 }
 
 // 0x74A7C0

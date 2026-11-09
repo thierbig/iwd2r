@@ -6,6 +6,7 @@
 #include "CAIScript.h"
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
 #include "CGameAnimationTypeCharacter.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
@@ -244,6 +245,30 @@ CGameSprite* NewGameInStartArea(std::vector<BYTE>& bytes)
     // test does not switch engines: EngineActivated starts the sound).
     g_pBaldurChitin->pActiveEngine = pWorld;
     pGame->m_bGameLoaded = TRUE;
+    return pSprite;
+}
+
+// A creature of the game's files put on the area's front list at `pos`.
+CGameSprite* AddCreature(CGameArea* pArea, const char* resRef, const CPoint& pos)
+{
+    CCreatureFile creatureData;
+    creatureData.SetResRef(CResRef(resRef), TRUE, TRUE);
+    if (creatureData.GetDataSize() == 0) {
+        return NULL;
+    }
+    CGameSprite* pSprite = new CGameSprite(creatureData.GetData(),
+        creatureData.GetDataSize(),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        pos,
+        0);
+    pSprite->SetResRef(CResRef(resRef));
+    creatureData.ReleaseData();
+    pSprite->AddToArea(pArea, pos, 0, CGameObject::LIST_FRONT);
     return pSprite;
 }
 
@@ -519,6 +544,73 @@ TEST_CASE("sprite: a party member given MoveToPoint walks to the point and its a
     CAIAction next;
     pCharacter->SetCurrAction(pCharacter->GetNextAction(next));
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::NO_ACTION);
+}
+
+TEST_CASE("sprite: ProtectPoint queues its return path and swings at a nearby enemy", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre); // One NewGame fixture.
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    auto clearQueue = [pCharacter]() {
+        while (!pCharacter->m_queuedActions.IsEmpty()) {
+            delete pCharacter->m_queuedActions.RemoveHead();
+        }
+    };
+    const CPoint guard = pCharacter->GetPos();
+
+    // Outside the one-square protect radius, the current action is copied
+    // first and its MoveToPoint second; AddAction puts the move at the head.
+    const CPoint away(guard.x + 4 * CPathSearch::GRID_SQUARE_SIZEX, guard.y);
+    pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, away,
+        CPathSearch::GRID_SQUARE_SIZEX, -1));
+    clearQueue();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+    CAIAction* pMove = pCharacter->m_queuedActions.GetHead();
+    CAIAction* pAgain = pCharacter->m_queuedActions.GetTail();
+    CHECK(pMove->m_actionID == CAIAction::MOVETOPOINT);
+    CHECK(pMove->m_dest == away);
+    CHECK(pMove->m_specificID == 0);
+    CHECK(pMove->m_specificID2 == -1);
+    CHECK(pMove->m_specificID3 == 1);
+    CHECK(pMove->m_internalFlags == 0);
+    CHECK(pAgain->m_actionID == CAIAction::PROTECTPOINT);
+    CHECK(pAgain->m_dest == away);
+    CHECK(pAgain->m_specificID == CPathSearch::GRID_SQUARE_SIZEX);
+    CHECK(pAgain->m_specificID2 == -1);
+    CHECK(pCharacter->m_targetPoint == away);
+
+    // A goblin on the adjacent square is found through the live area and
+    // shared object array. The -2 attack frame is re-armed before Swing.
+    CGameSprite* pGoblin = AddCreature(pArea, "10GOB",
+        CPoint(guard.x + CPathSearch::GRID_SQUARE_SIZEX, guard.y));
+    REQUIRE(pGoblin != NULL);
+    REQUIRE(pGoblin->GetAIType().m_nEnemyAlly > CAIObjectType::EA_GOODCUTOFF);
+    pArea->SortLists();
+    clearQueue();
+    ClearMessages();
+    pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, guard,
+        8 * CPathSearch::GRID_SQUARE_SIZEX, -1));
+    pCharacter->m_attackFrame = -2;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_attackFrame == 0);
+    CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PROTECTPOINT);
+    CHECK(pCharacter->m_queuedActions.IsEmpty());
+    clearQueue();
 }
 
 TEST_CASE("sprite: action 215 asks for a formation slot around the target sprite", "[ai][data]")
