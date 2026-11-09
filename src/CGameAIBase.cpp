@@ -347,7 +347,7 @@ SHORT CGameAIBase::ExecuteAction()
     case 7:
     case 228:
         // CreateCreature
-        // TODO: 0x44E231-0x44E23F calls 0x4608A0 (not ported).
+        returnValue = CreateCreature();
         goto done;
     case 16:
         // GiveOrder
