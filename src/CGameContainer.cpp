@@ -11,6 +11,7 @@
 #include "CPathSearch.h"
 #include "CResRef.h"
 #include "CScreenWorld.h"
+#include "CTimerWorld.h"
 #include "CUtil.h"
 #include "CVidInf.h"
 #include "CVidPoly.h"
@@ -1658,4 +1659,68 @@ void CGameContainer::SetScriptRes(CString scriptRes)
 SHORT CGameContainer::GetNumItems()
 {
     return static_cast<SHORT>(m_lstItems.GetCount());
+}
+
+// 0x47D850
+BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
+{
+    // 0x47D877: the polygon-draw timer ages by an unsigned compare of the
+    // sign-extended value; anything older than the delta clamps to zero.
+    if (static_cast<DWORD>(static_cast<INT>(m_drawPoly)) >= deltaTime) {
+        m_drawPoly = static_cast<SHORT>(m_drawPoly - static_cast<INT>(deltaTime));
+    } else {
+        m_drawPoly = 0;
+    }
+
+    BOOLEAN bRet = TRUE;
+
+    // 0x47D8A2: less than a full day of compression leaves the pile alone.
+    if (deltaTime <= CTimerWorld::TIMESCALE_MSEC_PER_DAY) {
+        return TRUE;
+    }
+
+    // 0x47D8AE: only ground piles (type 4) decay.
+    if (m_containerType != 4) {
+        return TRUE;
+    }
+
+    POSITION pos = m_lstItems.GetHeadPosition();
+    while (pos != NULL) {
+        POSITION posSave = pos;
+        CItem* pItem = m_lstItems.GetNext(pos);
+
+        if (pItem == NULL) {
+            // 0x47D8EE: drop the empty node without deleting anything.
+            m_lstItems.RemoveAt(posSave);
+            continue;
+        }
+
+        if (pItem->GetItemType() == 0x3A) {
+            // 0x3A: bag-type item (gem bag, quiver, ...). Its contents are
+            // aged through the owning store.
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            CItem tempItem;
+
+            // TODO: 0x47D945 not ported
+            // TODO: 0x47DD94 not ported
+
+            // 0x47DEEB: fall through to the item-flags tail.
+        }
+
+        // 0x47DF1B: keep flagged items, drop everything else.
+        if (pItem->GetFlagsFile() & 1) {
+            bRet = FALSE;
+        } else {
+            m_lstItems.RemoveAt(posSave);
+            delete pItem;
+        }
+    }
+
+    // 0x47DF53: an emptied pile takes its container with it.
+    RefreshRenderPile();
+    if (bRet) {
+        m_bDeleteMe = TRUE;
+        return FALSE;
+    }
+    return TRUE;
 }
