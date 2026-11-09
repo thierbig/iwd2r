@@ -27638,8 +27638,27 @@ SHORT CGameSprite::Hide()
 
     // A roll of 100 or a disabled stealth button forces the reveal.
     if (nRoll == 100 || GetDerivedStats()->m_disabledButtons[0] != 0) {
-        // TODO: 0x758339-0x75843B not ported (the forced reveal).
-        return ACTION_ERROR;
+        // 0x758339: unlike the detected reveal this leaves m_nModalState
+        // alone, so SetModalState below really runs the leaving arm of the
+        // stealth state.
+        m_bHiding = FALSE;
+        FeedBack(FEEDBACK_HIDEFAILED, 0, 0, 0, -1, 0, 0);
+        m_nStealthGreyOut = 90;
+        pGame->GetButtonArray()->m_nSelectedButton = 100;
+        SetModalState(0, TRUE);
+        if (g_pBaldurChitin->GetActiveEngine()->GetSelectedCharacter()
+            == pGame->GetCharacterPortraitNum(m_id)) {
+            INT nButtonState = pGame->GetButtonArray()->m_nState;
+            if (nButtonState != 0x66 && nButtonState != 0x65 && nButtonState != 0x68
+                && nButtonState != 0x67 && nButtonState != 0x69 && nButtonState != 0x70
+                && nButtonState != 0x73 && nButtonState != 0x74 && nButtonState != 0x75
+                && nButtonState != 0x76 && nButtonState != 0x77 && nButtonState != 0x78
+                && nButtonState != 0x79 && nButtonState != 0x7A && nButtonState != 0x7B
+                && nButtonState != 0x6A) {
+                pGame->GetButtonArray()->ResetState();
+            }
+        }
+        return ACTION_DONE;
     }
 
     // The nearest enemy inside visual range witnesses the attempt.
@@ -27758,8 +27777,52 @@ SHORT CGameSprite::Hide()
         }
     }
 
-    // TODO: 0x7580AF-0x75843B not ported (the still-hidden and reveal arms).
-    return ACTION_ERROR;
+    if (bHidden != TRUE) {
+        // 0x7581F5: clearing m_nModalState first makes the SetModalState
+        // call a no-op through its unchanged-state early return.
+        m_bHiding = FALSE;
+        m_nModalState = 0;
+        FeedBack(FEEDBACK_HIDEFAILED, 0, 0, 0, -1, 0, 0);
+        m_nStealthGreyOut = 90;
+        pGame->GetButtonArray()->m_nSelectedButton = 100;
+        SetModalState(0, TRUE);
+        if (g_pBaldurChitin->GetActiveEngine()->GetSelectedCharacter()
+            == pGame->GetCharacterPortraitNum(m_id)) {
+            INT nButtonState = pGame->GetButtonArray()->m_nState;
+            if (nButtonState != 0x66 && nButtonState != 0x65 && nButtonState != 0x68
+                && nButtonState != 0x67 && nButtonState != 0x69 && nButtonState != 0x70
+                && nButtonState != 0x73 && nButtonState != 0x74 && nButtonState != 0x75
+                && nButtonState != 0x76 && nButtonState != 0x77 && nButtonState != 0x78
+                && nButtonState != 0x79 && nButtonState != 0x7A && nButtonState != 0x7B
+                && nButtonState != 0x6A) {
+                pGame->GetButtonArray()->ResetState();
+            }
+        }
+    } else {
+        // 0x7580AF: still hidden. The cue sounds on the cycle we first
+        // hide, and a 300-tick self-invisibility (the exe folds 3 x 100
+        // from data) renews the unseen state until the next check.
+        if (m_bHiding == 0) {
+            PlaySound(CResRef("ACT_07"));
+        }
+        FeedBack(FEEDBACK_HIDESUCCEEDED, 0, 0, 0, -1, 0, 0);
+
+        ITEM_EFFECT* pEffect = new ITEM_EFFECT;
+        CGameEffect::ClearItemEffect(pEffect, CGAMEEFFECT_INVISIBLE);
+        pEffect->dwFlags = 0;
+        pEffect->effectAmount = 1;
+        pEffect->durationType = 0x1000;
+        pEffect->duration = pGame->GetWorldTimer()->m_gameTime + 300;
+        CGameEffect* pDecoded = CGameEffect::DecodeEffect(pEffect, m_pos, m_id, CPoint(-1, -1));
+        CMessage* message = new CMessageAddEffect(pDecoded, m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        delete pEffect;
+
+        m_bHiding = TRUE;
+        m_nModalState = 3;
+    }
+
+    return ACTION_DONE;
 }
 
 // 0x758440
