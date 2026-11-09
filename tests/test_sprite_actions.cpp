@@ -7,6 +7,7 @@
 #include "CAITrigger.h"
 #include "CBaldurChitin.h"
 #include "CGameAnimationTypeCharacter.h"
+#include "CGameAnimationTypeMonsterAnkheg.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDialog.h"
@@ -4624,5 +4625,226 @@ TEST_CASE("sprite: action 224 loses the first item when the amulet slot is occup
     }
     CHECK(nBagAfter == nBagBefore);
     INFO("lost resref " << static_cast<const char*>(sLost));
+    ClearMessages();
+}
+
+// AnkhegEmerge and AnkhegHide (128/129, 0x72A1C9-0x72A33E) gate on the
+// animation's burrow state and queue, rather than directly apply, a sequence.
+TEST_CASE("sprite: AnkhegEmerge and AnkhegHide respect the burrow state", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    pCharacter->GetAnimation()->SetAnimationType(0x3000,
+        pCharacter->m_baseStats.m_colors,
+        static_cast<WORD>(pCharacter->m_nDirection));
+    auto* pAnkheg = dynamic_cast<CGameAnimationTypeMonsterAnkheg*>(pCharacter->GetAnimation()->m_animation);
+    REQUIRE(pAnkheg != NULL);
+
+    CAIAction action;
+    action.m_actionID = 128;
+    pCharacter->SetCurrAction(action);
+    pAnkheg->m_bAboveGround = FALSE;
+    pCharacter->m_nSequence = CGameSprite::SEQ_READY;
+    ClearMessages();
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_NORMAL);
+    std::vector<CMessageSetSequence*> sequences = Queued<CMessageSetSequence>();
+    REQUIRE(sequences.size() == 1);
+    CHECK(sequences[0]->m_sequence == CGameSprite::SEQ_EMERGE);
+    CHECK(sequences[0]->m_sourceId == pCharacter->GetId());
+    CHECK(sequences[0]->m_targetId == pCharacter->GetId());
+    CHECK(pCharacter->m_nSequence == CGameSprite::SEQ_READY);
+
+    ClearMessages();
+    pCharacter->m_nSequence = CGameSprite::SEQ_EMERGE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    pAnkheg->m_bAboveGround = TRUE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    action.m_actionID = 129;
+    pCharacter->SetCurrAction(action);
+    pCharacter->m_nSequence = CGameSprite::SEQ_READY;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    sequences = Queued<CMessageSetSequence>();
+    REQUIRE(sequences.size() == 1);
+    CHECK(sequences[0]->m_sequence == CGameSprite::SEQ_HIDE);
+    CHECK(pCharacter->m_nSequence == CGameSprite::SEQ_READY);
+
+    ClearMessages();
+    pCharacter->m_nSequence = CGameSprite::SEQ_HIDE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(Queued<CMessageSetSequence>().empty());
+
+    pAnkheg->m_bAboveGround = FALSE;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetSequence>().empty());
+    ClearMessages();
+}
+
+// Polymorph (146, 0x72A42B-0x72A4FE) is the action that changes an
+// animation id: it builds opcode 53 directly, with no creature resource.
+TEST_CASE("sprite: Polymorph queues a permanent animation-change effect", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CAIAction action;
+    action.m_actionID = 146;
+    action.m_specificID = 0x3000;
+    pCharacter->SetCurrAction(action);
+    ClearMessages();
+
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    std::vector<CMessageAddEffect*> messages = Queued<CMessageAddEffect>();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages[0]->m_sourceId == pCharacter->GetId());
+    CHECK(messages[0]->m_targetId == pCharacter->GetId());
+    auto* pEffect = dynamic_cast<CGameEffectAnimationChange*>(messages[0]->m_effect);
+    REQUIRE(pEffect != NULL);
+    CHECK(pEffect->m_effectID == CGAMEEFFECT_ANIMATIONCHANGE);
+    CHECK(pEffect->m_effectAmount == action.m_specificID);
+    CHECK(pEffect->m_durationType == 1);
+    CHECK(pEffect->m_duration == 0);
+    CHECK(pEffect->m_source == CPoint(-1, -1));
+    CHECK(pEffect->m_sourceID == -1);
+    CHECK(pEffect->m_target == CPoint(-1, -1));
+    CHECK(pEffect->field_18C == -1);
+    ClearMessages();
+}
+
+// Action 223 (0x72A83D-0x72A976) emits a removal for every occupied slot
+// except the fist and clears the quick weapon/item buttons for abilities 0-2.
+TEST_CASE("sprite: action 223 removes equipped items and their quick buttons except the fist", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    std::vector<SHORT> occupied;
+    SHORT nEmpty = -1;
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        if (pCharacter->m_equipment.m_items[nSlot] != NULL) {
+            occupied.push_back(nSlot);
+        } else if (nEmpty == -1) {
+            nEmpty = nSlot;
+        }
+    }
+    REQUIRE(!occupied.empty());
+    REQUIRE(nEmpty != -1);
+    REQUIRE(pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] != NULL);
+    const SHORT nSlot = occupied.front();
+
+    auto button = [](SHORT itemType, SHORT itemNum, SHORT abilityNum) {
+        CButtonData value;
+        value.m_icon = "PROBE";
+        value.m_name = 1;
+        value.m_count = 5;
+        value.m_abilityId.m_itemType = itemType;
+        value.m_abilityId.m_itemNum = itemNum;
+        value.m_abilityId.m_abilityNum = abilityNum;
+        value.m_abilityId.m_res = "";
+        return value;
+    };
+    // The original clears itemType 2, itemNum slot, ability 0 then 1 then 2.
+    pCharacter->m_quickWeapons[0] = button(2, nSlot, 0);
+    pCharacter->m_quickWeapons[1] = button(2, nSlot, 1);
+    pCharacter->m_quickWeapons[2] = button(2, nSlot, 2);
+    pCharacter->m_quickWeapons[3] = button(2, nSlot, 3);
+    pCharacter->field_3D3A[0] = 7;
+    pCharacter->m_quickItems[0] = button(2, nSlot, 0);
+    pCharacter->m_quickItems[1] = button(2, nSlot, 1);
+    pCharacter->m_quickItems[2] = button(2, nSlot, 2);
+    pCharacter->m_quickSpells[0] = button(1, nSlot, 0);
+    pCharacter->m_quickInnates[0] = button(1, nSlot, 0);
+    pCharacter->m_quickSongs[0] = button(1, nSlot, 0);
+    pCharacter->m_quickSpells[1] = button(1, nEmpty, 0);
+    pCharacter->m_quickSpells[2] = button(1, CGameSpriteEquipment::SLOT_FIST, 0);
+
+    CAIAction action;
+    action.m_actionID = 223;
+    pCharacter->SetCurrAction(action);
+    ClearMessages();
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+
+    std::vector<CMessageRemoveItem*> messages = Queued<CMessageRemoveItem>();
+    REQUIRE(messages.size() == occupied.size());
+    for (size_t n = 0; n < occupied.size(); n++) {
+        CHECK(messages[n]->m_slot == occupied[n]);
+        CHECK(messages[n]->m_sourceId == pCharacter->GetId());
+        CHECK(messages[n]->m_targetId == pCharacter->GetId());
+    }
+    CHECK(messages[0]->GetCommType() == CMessage::SEND);
+    CHECK(messages[0]->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(messages[0]->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_REMOVE_ITEM);
+
+    BYTE packed[16] = {};
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    messages[0]->MarshalMessage(&pPacked, &packedSize);
+    REQUIRE(packedSize == sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(SHORT));
+    CHECK(*reinterpret_cast<PLAYER_ID*>(packed) == pCharacter->m_remotePlayerID);
+    CHECK(*reinterpret_cast<LONG*>(packed + sizeof(PLAYER_ID)) == pCharacter->m_remoteObjectID);
+    CHECK(*reinterpret_cast<SHORT*>(packed + sizeof(PLAYER_ID) + sizeof(LONG)) == nSlot);
+
+    CHECK(pCharacter->m_quickWeapons[0].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[1].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[2].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->field_3D3A[0] == 0);
+    CHECK(pCharacter->m_quickItems[0].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickItems[1].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickItems[2].m_abilityId.m_itemType == -1);
+    CHECK(pCharacter->m_quickWeapons[0].m_icon == "");
+    // Ability 3 and every spell-side button are outside the three calls.
+    CHECK(pCharacter->m_quickWeapons[3].m_abilityId.m_abilityNum == 3);
+    CHECK(pCharacter->m_quickWeapons[3].m_icon == "PROBE");
+    CHECK(pCharacter->m_quickSpells[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickInnates[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickSongs[0].m_abilityId.m_itemType == 1);
+    CHECK(pCharacter->m_quickSpells[1].m_abilityId.m_itemNum == nEmpty);
+    CHECK(pCharacter->m_quickSpells[2].m_abilityId.m_itemNum == CGameSpriteEquipment::SLOT_FIST);
+
+    CItem* pFist = pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST];
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    for (SHORT nRemoved : occupied) {
+        CHECK(pCharacter->m_equipment.m_items[nRemoved] == NULL);
+    }
+    CHECK(pCharacter->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] == pFist);
     ClearMessages();
 }
