@@ -2810,8 +2810,59 @@ SHORT CGameAIBase::CreateItem()
         return ACTION_ERROR;
     }
 
-    // TODO: 0x463596 not ported.
-    return ACTION_ERROR;
+    if (m_objectType == TYPE_SPRITE) {
+        // A creature outside the party: the first blank of its carried
+        // slots (equipment slots and both packs, as PlaceItem scans them).
+        CGameSprite* pSprite = static_cast<CGameSprite*>(this);
+        int index;
+        for (index = 0; index < 28; index++) {
+            if (pSprite->m_equipment.m_items[index + 15] == NULL)
+                break;
+        }
+        if (index < 28) {
+            pSprite->m_equipment.m_items[index + 15] = pItem;
+            return ACTION_DONE;
+        }
+
+        // No blank slot: the ground pile takes the item, but the action
+        // itself failed.
+        LONG nPileId = pGame->GetGroundPile(m_id);
+        CGameContainer* pPile;
+        if (nPileId != CGameObjectArray::INVALID_INDEX && pGame->GetObjectArray()->GetDeny(nPileId,
+                                                               CGameObjectArray::THREAD_ASYNCH,
+                                                               reinterpret_cast<CGameObject**>(&pPile),
+                                                               INFINITE)
+            == CGameObjectArray::SUCCESS) {
+            pPile->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+            pGame->GetObjectArray()->ReleaseDeny(nPileId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+        return ACTION_ERROR;
+    }
+
+    if (m_objectType == TYPE_CONTAINER) {
+        static_cast<CGameContainer*>(this)->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+        return ACTION_DONE;
+    }
+
+    // Any other object: the item goes to the ground pile beside it.
+    LONG nPileId = pGame->GetGroundPile(m_id);
+    if (nPileId == CGameObjectArray::INVALID_INDEX) {
+        return ACTION_ERROR;
+    }
+
+    CGameContainer* pPile;
+    if (pGame->GetObjectArray()->GetDeny(nPileId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pPile),
+            INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        return ACTION_ERROR;
+    }
+
+    pPile->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+    pGame->GetObjectArray()->ReleaseDeny(nPileId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+
+    return ACTION_DONE;
 }
 
 // 0x463740
