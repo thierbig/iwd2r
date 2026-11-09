@@ -2545,6 +2545,37 @@ SHORT CGameAIBase::Shout()
     return ACTION_DONE;
 }
 
+// 0x462470
+// Applies the action's spell to the target: the resref comes from the
+// action's override string or, failing that, DecodeSpell on the spell id.
+// Every effect of ability 0 is built by CSpell::GetAbilityEffect and
+// dispatched on its target type -- the same fan-out ForceSpell performs
+// with a caster level.
+SHORT CGameAIBase::ApplySpell(CGameObject* pTarget)
+{
+    CString sResRef;
+    CMessage* message;
+
+    if (strcmp(m_curAction.GetString1(), "") == 0) {
+        DecodeSpell(m_curAction.m_specificID, sResRef);
+        if (strcmp(sResRef, "") == 0) {
+            return ACTION_ERROR;
+        }
+    } else {
+        sResRef = m_curAction.GetString1();
+    }
+
+    CSpell* pSpell = new CSpell(CResRef(sResRef));
+    if (pSpell == NULL) {
+        return ACTION_ERROR;
+    }
+
+    // TODO: 0x4625AC-0x4628ED not ported (target check, Demand,
+    // CheckAppropriateTarget, the ability-0 effect loop and cleanup).
+    delete pSpell;
+    return ACTION_ERROR;
+}
+
 // 0x463310
 void CGameAIBase::PutItemGround(CItem* pItem)
 {
