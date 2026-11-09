@@ -26946,9 +26946,10 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
             }
 
             // NOTE: The duration type is the WORD constant at 0x8491BC
-            // (0x1000: the duration is absolute).
+            // (0x1000: the duration is absolute). The exe adds the cast
+            // time as a SHORT (`movsx eax, di`).
             effect.durationType = 0x1000;
-            effect.duration = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime + nCastTime;
+            effect.duration = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime + static_cast<SHORT>(nCastTime);
         }
 
         // The join at 0x7621EF adds a four-tick release margin to every path
