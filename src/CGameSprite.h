@@ -673,6 +673,7 @@ public:
     SHORT EquipItem();
     SHORT FindTraps();
     SHORT Panic();
+    SHORT PickPockets(CGameSprite* pTarget);
     SHORT Turn();
     SHORT EquipMostDamagingMelee();
     SHORT EquipRanged();
