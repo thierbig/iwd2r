@@ -294,6 +294,66 @@ TEST_CASE("sp-host: an item dropped on a bag fills the host's server store", "[s
     ClearPartySlot(pSprite);
 }
 
+TEST_CASE("sp-host: RemoveItemFromBag removes one item from the server store", "[sp-host][inventory][store][data]")
+{
+    if (engine_world::DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(engine_world::StartEngine(error));
+    INFO(error);
+    engine_world::FramePump pump;
+    std::vector<BYTE> bytes = engine_world::FinishedCharacter();
+    if (bytes.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    HostSession session;
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameInStartAreaHost(bytes);
+    REQUIRE(pSprite != NULL);
+
+    // Start with a one-line bag so both the returned item and the persisted
+    // post-removal store are unambiguous.
+    {
+        CStore bag(CResRef("00GBGA01"));
+        REQUIRE(bag.GetType() == 4);
+        while (bag.m_lInventory.GetCount() > 0) {
+            delete bag.m_lInventory.RemoveHead();
+        }
+        CItem gem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+        REQUIRE(bag.AddItemExt(gem, 1) == 0);
+        bag.Marshal(pGame->m_sTempDir);
+    }
+
+    CItem* pItem = pGame->RemoveItemFromBag(CResRef("00GBGA01"), CResRef("00GEM01"));
+    REQUIRE(pItem != NULL);
+    CHECK(pItem->GetResRef() == CResRef("00GEM01"));
+    CHECK(pItem->GetUsageCount(0) == 1);
+    delete pItem;
+
+    {
+        CStore bag(CResRef("00GBGA01"));
+        CHECK(bag.GetNumItems() == 0);
+        CHECK(bag.GetItemIndex(CResRef("00GEM01")) == INT_MAX);
+    }
+    for (INT nSlot = 0; nSlot < 12; nSlot++) {
+        if (pGame->m_aServerStore[nSlot] != NULL) {
+            CHECK(pGame->m_aServerStore[nSlot]->m_resRef != CResRef("00GBGA01"));
+        }
+    }
+
+    // The no-match tail also releases the demanded server store.
+    CHECK(pGame->RemoveItemFromBag(CResRef("00GBGA01"), CResRef("NOSUCHIT")) == NULL);
+    for (INT nSlot = 0; nSlot < 12; nSlot++) {
+        if (pGame->m_aServerStore[nSlot] != NULL) {
+            CHECK(pGame->m_aServerStore[nSlot]->m_resRef != CResRef("00GBGA01"));
+        }
+    }
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    ClearPartySlot(pSprite);
+}
+
 TEST_CASE("sp-host: the delete-area poll starts on one rand and deletes the empty area", "[sp-host][data]")
 {
     if (engine_world::DataDir() == nullptr) {

@@ -576,6 +576,7 @@ public:
     void sub_720B50(CMemINIValue* a1, CMemINIValue* a2);
     SHORT FindItemBags(const CString& sName, LONG number, BOOL checkForIdentified);
     SHORT TakeItemBags(const CString& sName, LONG number, SHORT slotNum);
+    CItem* DropItemFromBag(CString sName);
     void sub_722820();
     BOOL HaveUnexportableItems();
     void SetMonkAbilities();
@@ -694,6 +695,7 @@ public:
     SHORT ForceHide(CGameSprite* pSprite);
     SHORT sub_7615F0(int a1);
     void sub_761650();
+    SHORT DropItem(SHORT nSlot);
     SHORT DropItem(CItem* pItem);
     void sub_761990();
     SHORT PlayBardSong();

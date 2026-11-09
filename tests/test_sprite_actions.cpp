@@ -2345,6 +2345,115 @@ TEST_CASE("trigger: SubRace and Kit and CheckSkillGT/LT and PartyHasItem (0x40CD
     pEquipment->m_items[bagSlot] = NULL;
 }
 
+TEST_CASE("sprite: DropItem (9) drops personal and bagged items onto the ground pile", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter->GetArea() != NULL);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+    CMessageHandler* pHandler = g_pBaldurChitin->GetMessageHandler();
+
+    auto pileContains = [&](const CResRef& cResItem) {
+        LONG nPile = pGame->GetGroundPile(pCharacter->GetId());
+        REQUIRE(nPile != CGameObjectArray::INVALID_INDEX);
+        CGameContainer* pPile = NULL;
+        REQUIRE(pGame->GetObjectArray()->GetShare(nPile,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pPile),
+                    INFINITE)
+            == CGameObjectArray::SUCCESS);
+        BOOL found = FALSE;
+        for (SHORT nSlot = 0; nSlot < pPile->GetNumItems(); nSlot++) {
+            CItem* pItem = pPile->GetItem(nSlot);
+            if (pItem != NULL && pItem->GetResRef() == cResItem) {
+                found = TRUE;
+                break;
+            }
+        }
+        pGame->GetObjectArray()->ReleaseShare(nPile, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return found;
+    };
+
+    // The slot helper rejects -1, and deliberately leaves the fist alone.
+    CHECK(pCharacter->DropItem(static_cast<SHORT>(-1)) == CGameAIBase::ACTION_ERROR);
+    CItem* pFist = pEquipment->m_items[CGameSpriteEquipment::SLOT_FIST];
+    REQUIRE(pFist != NULL);
+    CHECK(pCharacter->DropItem(CGameSpriteEquipment::SLOT_FIST) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[CGameSpriteEquipment::SLOT_FIST] == pFist);
+
+    SHORT nGemSlot = -1;
+    SHORT nBagSlot = -1;
+    for (SHORT nSlot = 18; nSlot < CGameSpriteEquipment::NUM_SLOT && nBagSlot == -1; nSlot++) {
+        if (pEquipment->m_items[nSlot] == NULL) {
+            if (nGemSlot == -1) {
+                nGemSlot = nSlot;
+            } else {
+                nBagSlot = nSlot;
+            }
+        }
+    }
+    REQUIRE(nBagSlot != -1);
+
+    // Personal inventory takes the 0x754D70 arm of the dispatcher.
+    pEquipment->m_items[nGemSlot] = new CItem(CResRef("00GEM02"), 1, 0, 0, 0, 0);
+    REQUIRE((pEquipment->m_items[nGemSlot]->GetFlagsFile() & 0x4) != 0);
+    REQUIRE(pCharacter->FindItemPersonal(CString("00gem02"), 0, FALSE) == nGemSlot);
+    ClearMessages();
+    pCharacter->m_curAction = CAIAction();
+    pCharacter->m_curAction.m_actionID = 9;
+    pCharacter->m_curAction.SetString1(CString("00gem02"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[nGemSlot] == NULL);
+    pHandler->AsynchronousUpdate();
+    CHECK(pileContains(CResRef("00GEM02")));
+
+    // The bag has one gem. It is removed from the store and the returned
+    // CItem goes through the existing 0x7618E0 helper.
+    pEquipment->m_items[nBagSlot] = new CItem(CResRef("00GBGA01"), 0, 0, 0, 0, 0);
+    REQUIRE(pEquipment->m_items[nBagSlot]->GetItemType() == 58);
+    {
+        CStore bag(CResRef("00GBGA01"));
+        while (bag.m_lInventory.GetCount() > 0) {
+            delete bag.m_lInventory.RemoveHead();
+        }
+        CItem gem(CResRef("00GEM03"), 1, 0, 0, 0, 0);
+        REQUIRE(bag.AddItemExt(gem, 1) == 0);
+        bag.Marshal(pGame->m_sTempDir);
+    }
+    CHECK(pCharacter->DropItemFromBag(CString("NOSUCHIT")) == NULL);
+    pCharacter->m_curAction.SetString1(CString("00gem03"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[nBagSlot] != NULL);
+    CHECK(pEquipment->m_items[nBagSlot]->GetResRef() == CResRef("00GBGA01"));
+    pHandler->AsynchronousUpdate();
+    CHECK(pileContains(CResRef("00GEM03")));
+    {
+        CStore bag(CResRef("00GBGA01"));
+        CHECK(bag.GetItemIndex(CResRef("00GEM03")) == INT_MAX);
+    }
+
+    // A name absent from both places produces no item and an error.
+    pCharacter->m_curAction.SetString1(CString("NOSUCHIT"));
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    CStore::InvalidateStore(CResRef("00GBGA01"));
+    delete pEquipment->m_items[nBagSlot];
+    pEquipment->m_items[nBagSlot] = NULL;
+    ClearMessages();
+}
+
 TEST_CASE("sprite: ResolveInstants sends the idle sequence after 60 no-action ticks (0x728BC0)", "[ai][data]")
 {
     if (DataDir() == nullptr) {
