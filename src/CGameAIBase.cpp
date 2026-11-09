@@ -755,11 +755,83 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 157:
+        // ChangeSpecifics
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAI.SetSpecific(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetSpecific(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetSpecific(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 158:
+        // ChangeGender
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAI.SetGender(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetGender(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetGender(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 159:
-        // ChangeSpecifics, ChangeGender, ChangeAlignment
-        // TODO: 0x44F626-0x44FB82 not ported.
-        goto done;
+        // ChangeAlignment
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAI.SetAlignment(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetAlignment(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetAlignment(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 160:
         // ApplySpell
         // TODO: 0x44FB82-0x44FC12 calls 0x462470 (not ported).
