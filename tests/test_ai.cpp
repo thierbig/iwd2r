@@ -27,12 +27,15 @@
 #include "platform/data_dir.h"
 #include "platform/window.h"
 
+#include <atomic>
+#include <chrono>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <new>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -1408,5 +1411,215 @@ TEST_CASE("ai: ExecuteAction 160 ApplySpell casts SPWI105 on the sprite and reje
     pCaller->SetCurrAction(noSpell);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
     CHECK(handler.m_messageList.GetCount() == 0);
+    ClearMessages();
+}
+
+// CreateCreature (0x4608A0) through the case 7 and 228 arms of ExecuteAction,
+// on AR3000 loaded the way a travel loads it (CInfGame::LoadArea 0x5A24D0):
+// the area's real search map answers the case 7 nearest-open-square search,
+// and the ice trolls' own resref (30ICETRL) builds sprites with live
+// animations.
+TEST_CASE("ai: ExecuteAction 7 and 228 CreateCreature place and register a new sprite", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea;
+    pCaller->m_pos = CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX,
+        7 * CPathSearch::GRID_SQUARE_SIZEY);
+    const BYTE* pTerrain = pCaller->GetTerrainTable();
+
+    auto queuedCount = [pArea] {
+        return pArea->m_lVertSortAdd.GetCount() + pArea->m_lVertSortBackAdd.GetCount()
+            + pArea->m_lVertSortFlightAdd.GetCount();
+    };
+    auto namedId = [pArea](const char* name) -> LONG {
+        CVariable* pVariable = pArea->m_namedCreatures.FindKey(CString(name));
+        return pVariable != NULL ? pVariable->m_intValue : CGameObjectArray::INVALID_INDEX;
+    };
+    auto spriteById = [pGame](LONG id) -> CGameSprite* {
+        CGameObject* pObject = NULL;
+        if (pGame->GetObjectArray()->GetShare(id, CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            return NULL;
+        }
+        pGame->GetObjectArray()->ReleaseShare(id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            return NULL;
+        }
+        return static_cast<CGameSprite*>(pObject);
+    };
+
+    // Rejected: the resref names no creature in this install, so the key
+    // table lookup fails before any sprite is built.
+    int nQueuedBefore = static_cast<int>(queuedCount());
+    CAIAction noCreature;
+    noCreature.m_actionID = 7;
+    noCreature.m_string1 = "NOSUCHCR";
+    noCreature.m_string2 = "NOSUCHNM";
+    noCreature.m_dest = CPoint(100, 100);
+    pCaller->SetCurrAction(noCreature);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pArea->m_namedCreatures.FindKey(CString("NOSUCHNM")) == NULL);
+    CHECK(queuedCount() == nQueuedBefore);
+    ClearMessages();
+
+    // Case 228 places on the exact square containing the destination point:
+    // the mid-square pixel (10*16+5, 10*12+3) divides back to square (10, 10).
+    CAIAction place;
+    place.m_actionID = 228;
+    place.m_string1 = "30ICETRL";
+    place.m_string2 = "TROLL228";
+    place.m_specificID = 6; // the facing the sprite constructor keeps (& 0xF)
+    place.m_dest = CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX + 5,
+        10 * CPathSearch::GRID_SQUARE_SIZEY + 3);
+    pCaller->SetCurrAction(place);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    LONG idPlaced = namedId("TROLL228");
+    REQUIRE(idPlaced != CGameObjectArray::INVALID_INDEX);
+    CGameSprite* pPlaced = spriteById(idPlaced);
+    REQUIRE(pPlaced != NULL);
+    CHECK(pPlaced->m_resRef == CResRef("30ICETRL"));
+    CHECK(pPlaced->m_pArea == pArea);
+    CHECK(pPlaced->GetPos() == CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX, 10 * CPathSearch::GRID_SQUARE_SIZEY));
+    // Even facing: stored as 6 & 0xF by the constructor and untouched by the
+    // head-turn mask at the end of SetSequence (see the case 7 check below).
+    CHECK(pPlaced->m_nDirection == 6);
+    CHECK(CString(reinterpret_cast<const char*>(pPlaced->GetScriptName())) == "TROLL228");
+
+    // Case 7 searches for the nearest open square around the point, with the
+    // new sprite's personal space and the caller's terrain table. A preview
+    // sprite built from the same CRE gives that personal space, and the
+    // oracle run before the action sees the search map exactly as the action
+    // will: nothing between them adds to or removes from the map (the placed
+    // troll above has already marked its own square).
+    CCreatureFile previewFile;
+    previewFile.SetResRef(CResRef("30ICETRL"), TRUE, TRUE);
+    BYTE* previewData = previewFile.GetData();
+    REQUIRE(previewData != NULL);
+    std::vector<BYTE> previewBytes(previewData, previewData + previewFile.GetDataSize());
+    previewFile.Release();
+    CGameSprite* pPreview = new CGameSprite(previewBytes.data(),
+        static_cast<LONG>(previewBytes.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    BYTE nPersonalSpace = pPreview->m_animation.GetPersonalSpace();
+
+    // A wall to aim at: the first impassable square inside the map's margin,
+    // under the same cost rule the search uses (GetCost with bump checking).
+    SHORT nTableIndex;
+    CPoint blocked(-1, -1);
+    CSize dims = pArea->m_search.m_GridSquareDimensions;
+    for (int y = 4; y < dims.cy - 4 && blocked.x == -1; y++) {
+        for (int x = 4; x < dims.cx - 4; x++) {
+            if (pArea->m_search.GetCost(CPoint(x, y), pTerrain, nPersonalSpace, nTableIndex, TRUE)
+                == CPathSearch::COST_IMPASSABLE) {
+                blocked = CPoint(x, y);
+                break;
+            }
+        }
+    }
+    REQUIRE(blocked.x != -1);
+
+    CPoint expected = pArea->m_search.GetNearestOpenSquare(blocked, pTerrain, nPersonalSpace, -1);
+    const bool movedOffWall = expected.x != blocked.x || expected.y != blocked.y;
+    REQUIRE(movedOffWall);
+
+    CAIAction search;
+    search.m_actionID = 7;
+    search.m_string1 = "30ICETRL";
+    search.m_string2 = "TROLLOPEN";
+    search.m_specificID = 13;
+    search.m_dest = CPoint(blocked.x * CPathSearch::GRID_SQUARE_SIZEX + 1,
+        blocked.y * CPathSearch::GRID_SQUARE_SIZEY + 1);
+    pCaller->SetCurrAction(search);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    LONG idSearched = namedId("TROLLOPEN");
+    REQUIRE(idSearched != CGameObjectArray::INVALID_INDEX);
+    CGameSprite* pSearched = spriteById(idSearched);
+    REQUIRE(pSearched != NULL);
+    CHECK(pSearched->m_resRef == CResRef("30ICETRL"));
+    CHECK(pSearched->GetPos() == CPoint(expected.x * CPathSearch::GRID_SQUARE_SIZEX, expected.y * CPathSearch::GRID_SQUARE_SIZEY));
+    // The facing (m_specificID = 13) survives CreateCreature and the sprite
+    // constructor's own `facing & 0xF` store, but the constructor finishes with
+    // SetSequence(SEQ_HEAD_TURN) (0x707230), which masks m_nDirection with
+    // 0xFE before writing it back, so any odd facing rounds down to the next
+    // even direction: 13 becomes 12. (Case 228's facing 6 is already even and
+    // passes through unchanged.)
+    CHECK(pSearched->m_nDirection == 12);
+    CHECK(CString(reinterpret_cast<const char*>(pSearched->GetScriptName())) == "TROLLOPEN");
+
+    // A (-1, -1) destination takes the caller's source position instead (the
+    // case 7 search around square (7, 7), where the caller stands).
+    CPoint expectedFromCaller = pArea->m_search.GetNearestOpenSquare(
+        CPoint(pCaller->m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            pCaller->m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+        pTerrain,
+        nPersonalSpace,
+        -1);
+    CAIAction fromSource;
+    fromSource.m_actionID = 7;
+    fromSource.m_string1 = "30ICETRL";
+    fromSource.m_string2 = "TROLLSRC";
+    fromSource.m_dest = CPoint(-1, -1);
+    pCaller->SetCurrAction(fromSource);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    LONG idFromSource = namedId("TROLLSRC");
+    REQUIRE(idFromSource != CGameObjectArray::INVALID_INDEX);
+    CGameSprite* pFromSource = spriteById(idFromSource);
+    REQUIRE(pFromSource != NULL);
+    CHECK(pFromSource->GetPos() == CPoint(expectedFromCaller.x * CPathSearch::GRID_SQUARE_SIZEX, expectedFromCaller.y * CPathSearch::GRID_SQUARE_SIZEY));
+
+    // All three sprites are on the area's sorted lists after the sort a
+    // frame's AIUpdate runs.
+    pArea->SortLists();
+    int nFound = 0;
+    CTypedPtrList<CPtrList, int*>* lists[] = { &pArea->m_lVertSort, &pArea->m_lVertSortBack, &pArea->m_lVertSortFlight };
+    for (CTypedPtrList<CPtrList, int*>* objects : lists) {
+        POSITION pos = objects->GetHeadPosition();
+        while (pos != NULL) {
+            LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(objects->GetNext(pos)));
+            if (id == idPlaced || id == idSearched || id == idFromSource) {
+                nFound++;
+            }
+        }
+    }
+    CHECK(nFound == 3);
     ClearMessages();
 }
