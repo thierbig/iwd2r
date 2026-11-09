@@ -14772,11 +14772,12 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 87:
-        // ProtectObject
-        // TODO: 0x729D26-0x729D4E not ported (CGameSprite_ProtectObject
-        // 0x749FC0).
-        returnValue = ACTION_ERROR;
-        goto done;
+        // ProtectObject (0x729D26-0x729D4E): the protected object is shared as
+        // an AI object, passed to the handler, and released by the common tail.
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = ProtectObject(static_cast<CGameAIBase*>(pTarget));
+        goto release;
     case 88:
         // Leader (0x729C18-0x729CE3)
         m_followLeader = TRUE;
@@ -23987,6 +23988,183 @@ noTarget: {
     AddAction(wait);
 }
     return ACTION_DONE;
+}
+
+// 0x749FC0
+SHORT CGameSprite::ProtectObject(CGameAIBase* pTarget)
+{
+    SHORT nProtectRange = static_cast<SHORT>(m_curAction.m_specificID / CPathSearch::GRID_SQUARE_SIZEX);
+    if (nProtectRange == 0) {
+        nProtectRange = 5000;
+    }
+
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CItem* pWeapon = m_equipment.m_items[m_equipment.m_selectedWeapon];
+    if (pWeapon == NULL) {
+        EquipMostDamagingMelee();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    pWeapon->Demand();
+    const ITEM_ABILITY* pAbility = pWeapon->GetAbility(m_equipment.m_selectedWeaponAbility);
+    if (pAbility == NULL) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    // The original compares only the low byte of the ability type.
+    if (static_cast<BYTE>(pAbility->type) == 4) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    if (pAbility->usageFlags == 3
+        && pWeapon->GetUsageCount(m_equipment.m_selectedWeaponAbility) == 0
+        && pAbility->maxUsageCount > 0) {
+        pWeapon->Release();
+        return ACTION_INTERRUPTABLE;
+    }
+
+    // The original constructs three default types, then fills them with Set.
+    // `type` receives the selected attacker type but is otherwise unread.
+    CAIObjectType type;
+    CAIObjectType targetAttacker;
+    CAIObjectType selfAttacker;
+    type.Set(pTarget->m_lAttacker);
+    targetAttacker.Set(pTarget->m_lAttacker);
+    selfAttacker.Set(m_lAttacker);
+
+    CGameSprite* pTargetAttacker = NULL;
+    CGameSprite* pSelfAttacker = NULL;
+    CGameSprite* pEnemy;
+
+    // NOTE: The original inlines CAIObjectType::Equal for both checks of each
+    // attacker type (NOONE at 0x8C7708, NOT_SPRITE at 0x8C76C8).
+    if (targetAttacker.Equal(CAIObjectType::NOONE)
+        || targetAttacker.Equal(CAIObjectType::NOT_SPRITE)) {
+        type.Set(pTarget->m_lAttacker);
+        pSelfAttacker = static_cast<CGameSprite*>(selfAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pEnemy = pSelfAttacker;
+    } else {
+        pTargetAttacker = static_cast<CGameSprite*>(targetAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pEnemy = pTargetAttacker;
+
+        if (!selfAttacker.Equal(CAIObjectType::NOONE)
+            && !selfAttacker.Equal(CAIObjectType::NOT_SPRITE)) {
+            pSelfAttacker = static_cast<CGameSprite*>(selfAttacker.sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE)); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        }
+
+        if (pEnemy == NULL) {
+            type.Set(selfAttacker);
+            pEnemy = pSelfAttacker;
+        } else if (pSelfAttacker == NULL) {
+            type.Set(targetAttacker);
+        } else {
+            switch (m_typeAI.m_nAlignment) {
+            case CAIOBJECTTYPE_LAWFUL_EVIL:
+            case CAIOBJECTTYPE_NEUTRAL_EVIL:
+            case CAIOBJECTTYPE_CHAOTIC_EVIL:
+                type.Set(selfAttacker);
+                pEnemy = pSelfAttacker;
+                break;
+            case CAIOBJECTTYPE_LAWFUL_NEUTRAL:
+            case CAIOBJECTTYPE_NEUTRAL:
+            case CAIOBJECTTYPE_CHAOTIC_NEUTRAL:
+                if (rand() % 2 == 0) {
+                    type.Set(selfAttacker);
+                    pEnemy = pSelfAttacker;
+                } else {
+                    type.Set(targetAttacker);
+                }
+                break;
+            default:
+                type.Set(targetAttacker);
+                break;
+            }
+        }
+    }
+
+    if (pEnemy != NULL) {
+        const BYTE nSelfSpace = m_animation.GetPersonalSpace();
+        const BYTE nEnemySpace = pEnemy->m_animation.GetPersonalSpace();
+        const BYTE nSpace = static_cast<BYTE>(((nEnemySpace - 1) >> 1) + ((nSelfSpace - 1) >> 1) - 1);
+        const LONG nNearRange = static_cast<LONG>(pAbility->range) + nSpace + 1;
+        const LONG nFarRange = nNearRange + nProtectRange;
+        const LONG nNearDistance = nNearRange * nNearRange;
+        const LONG nFarDistance = nFarRange * nFarRange;
+
+        // NOTE: These two returned references are discarded in the original
+        // too (0x74A4C9-0x74A4DF), before it fetches the positions it uses.
+        (void)pTarget->GetPos();
+        (void)GetPos();
+
+        LONG nDistance;
+        if (static_cast<BYTE>(pAbility->type) == 2) {
+            const CPoint& ptEnemy = pEnemy->GetPos();
+            const LONG nEnemyX = ptEnemy.x / CPathSearch::GRID_SQUARE_SIZEX;
+            const LONG nEnemyY = ptEnemy.y / CPathSearch::GRID_SQUARE_SIZEY;
+            const CPoint& ptSelf = GetPos();
+            const LONG nSelfX = ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX;
+            const LONG nSelfY = ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY;
+            const LONG dx = nSelfX - nEnemyX;
+            const LONG dy = nSelfY - nEnemyY;
+            nDistance = dx * dx + dy * dy;
+        } else {
+            const CPoint& ptEnemy = pEnemy->GetPos();
+            const CPoint ptEnemySquare(ptEnemy.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptEnemy.y / CPathSearch::GRID_SQUARE_SIZEY);
+            const CPoint& ptSelf = GetPos();
+            const CPoint ptSelfSquare(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+            nDistance = CAIUtil::CountSquares(ptSelfSquare, ptEnemySquare);
+            nDistance *= nDistance;
+        }
+
+        if (nDistance <= nFarDistance) {
+            if (nDistance <= nNearDistance) {
+                if (m_pPath != NULL) {
+                    CMessage* message = new CMessageDropPath(m_id, m_id);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+                }
+
+                if (m_attackFrame == -2) {
+                    m_attackFrame = -1;
+                }
+                Swing(pEnemy);
+            } else {
+                MoveToObject(pEnemy);
+            }
+        }
+    } else {
+        const CPoint& ptTarget = pTarget->GetPos();
+        const CPoint ptTargetSquare(ptTarget.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptTarget.y / CPathSearch::GRID_SQUARE_SIZEY);
+        const CPoint& ptSelf = GetPos();
+        const CPoint ptSelfSquare(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
+        const LONG nDistance = CAIUtil::CountSquares(ptTargetSquare, ptSelfSquare);
+        const SHORT nFollowRange = nProtectRange > 6 ? 6 : nProtectRange;
+        if (nDistance > nFollowRange) {
+            MoveToObject(pTarget);
+        }
+    }
+
+    if (pTargetAttacker != NULL) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pTargetAttacker->m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+    if (pSelfAttacker != NULL) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pSelfAttacker->m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    pWeapon->Release();
+    return ACTION_INTERRUPTABLE;
 }
 
 // 0x74A7C0
