@@ -27625,6 +27625,55 @@ SHORT CGameSprite::FindTraps()
     return ACTION_DONE;
 }
 
+// 0x757B40
+// The Hide in Shadows attempt. Every outcome -- success, detection and
+// the forced reveal -- returns ACTION_DONE: the action is one try, and
+// staying hidden is re-checked by CheckModal every third modal count.
+SHORT CGameSprite::Hide()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // d20 roll scaled onto the 5..100 band the contests below use.
+    INT nRoll = (rand() % 20) * 5 + 5;
+
+    // A roll of 100 or a disabled stealth button forces the reveal.
+    if (nRoll == 100 || GetDerivedStats()->m_disabledButtons[0] != 0) {
+        // TODO: 0x758339-0x75843B not ported (the forced reveal).
+        return ACTION_ERROR;
+    }
+
+    // The nearest enemy inside visual range witnesses the attempt.
+    LONG nEnemyId = m_pArea->GetNearest(m_id,
+                                        GetAIType().GetEnemyOf(),
+                                        GetVisualRange(),
+                                        GetVisibleTerrainTable(),
+                                        TRUE,
+                                        TRUE,
+                                        TRUE,
+                                        0,
+                                        FALSE);
+
+    INT nMoveSilently = m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_MOVE_SILENTLY];
+    INT nHide = m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_HIDE];
+
+    // Average (0x5467E0) inlined: the arithmetic mean of the two skills.
+    INT nAvg = (nHide + nMoveSilently) / 2;
+
+    INT nHideSkillMod = sub_763E40(CGAMESPRITE_SKILL_HIDE);
+
+    // The racial LIGHTMOD row of CRELIGHT scales the area light level
+    // against the average skill.
+    CString sRace = GetRaceString(GetAIType().m_nRace);
+    INT nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
+    INT nLight = static_cast<signed char>(GetLightLevel());
+
+    INT nStealth = ((nAvg - (nLight * nLightMod * nAvg) / 10000) + 10) * 5;
+
+    // TODO: 0x757D2B-0x75843B not ported (the no-witness and enemy
+    // contests, and the still-hidden and reveal arms).
+    return ACTION_ERROR;
+}
+
 // 0x758440
 SHORT CGameSprite::Panic()
 {

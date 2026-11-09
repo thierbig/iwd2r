@@ -690,6 +690,7 @@ public:
     SHORT RemoveSpell();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
     SHORT RunAwayFromNoLeaveArea(CGameSprite* pTarget);
+    SHORT Hide();
     SHORT ForceHide(CGameSprite* pSprite);
     SHORT sub_7615F0(int a1);
     void sub_761650();
