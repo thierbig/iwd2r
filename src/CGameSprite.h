@@ -685,6 +685,7 @@ public:
     SHORT LeaveAreaName();
     SHORT Help();
     SHORT Rest();
+    SHORT UseItem(CGameAIBase* pTarget);
     SHORT UseItemPoint();
     SHORT JoinParty();
     SHORT RemoveSpell();
