@@ -20,6 +20,7 @@
 #include "CMessage.h"
 #include "CPathSearch.h"
 #include "CScreenCreateChar.h"
+#include "CSpell.h"
 #include "CVariableHash.h"
 #include "ScreenLayout.h"
 #include "data_view.h"
@@ -1216,4 +1217,71 @@ TEST_CASE("action: the copy constructor copies all three specific ids", "[ai]")
     CHECK(copy.m_string1 == "one");
     CHECK(copy.m_string2 == "two");
     CHECK(copy.m_dest == CPoint(7, 9));
+}
+
+TEST_CASE("ai: ExecuteAction 160 ApplySpell casts SPWI105 on the sprite and rejects unresolved targets", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+
+    // The case 160 arm resolves the actee instance through
+    // GetTargetShareAIType after GetTargetShareType comes up empty, then
+    // ApplySpell builds one CMessageAddEffect per effect of the spell's
+    // ability 0. SPWI105's ability 0 has 13 effects: the first targets the
+    // caster itself, the other twelve the resolved sprite.
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIAction applySpell;
+    applySpell.m_actionID = 160;
+    applySpell.m_acteeID = actee;
+    applySpell.m_string1 = "SPWI105";
+    pCaller->SetCurrAction(applySpell);
+
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    CHECK(handler.m_messageList.GetCount() == 13);
+
+    CMessageAddEffect* pSelf = NULL;
+    int nToSprite = 0;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        auto* pAdd = dynamic_cast<CMessageAddEffect*>(handler.m_messageList.GetNext(pos));
+        if (pAdd == NULL) {
+            continue;
+        }
+        CHECK(pAdd->m_sourceId == pCaller->m_id);
+        CHECK(pAdd->m_effect->m_source == pCaller->m_pos);
+        if (pAdd->m_targetId == pSprite->m_id) {
+            nToSprite++;
+            CHECK(pAdd->m_effect->m_targetType == 2);
+            CHECK(pAdd->m_effect->m_target == pSprite->GetPos());
+        } else {
+            pSelf = pAdd;
+            CHECK(pAdd->m_targetId == pCaller->m_id);
+            CHECK(pAdd->m_effect->m_targetType == 1);
+            CHECK((pAdd->m_effect->m_flags & 0x2) != 0); // the self effect gets the persistent flag
+        }
+    }
+    CHECK(nToSprite == 12);
+    CHECK(pSelf != NULL);
+    ClearMessages();
+
+    // Rejected: a NOONE actee never resolves a target, so the arm passes
+    // NULL and ApplySpell bails before the spell's effects are read.
+    CAIAction noTarget = applySpell;
+    noTarget.m_acteeID = CAIObjectType::NOONE;
+    pCaller->SetCurrAction(noTarget);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(handler.m_messageList.GetCount() == 0);
+
+    // Rejected: the resref names no spell in this install, so the
+    // constructed CSpell carries no data and CheckAppropriateTarget fails.
+    CAIAction noSpell = applySpell;
+    noSpell.m_string1 = "SPWI123";
+    pCaller->SetCurrAction(noSpell);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(handler.m_messageList.GetCount() == 0);
+    ClearMessages();
 }
