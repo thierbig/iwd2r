@@ -500,7 +500,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 82:
         // CreateItem
-        // TODO: 0x44EEAB-0x44EEB9 calls 0x4633A0 (not ported).
+        returnValue = CreateItem();
         goto done;
     case 285:
         // SmallWaitRandom
