@@ -3513,6 +3513,74 @@ TEST_CASE("sprite: the inline item and state actions update the current sprite",
     ClearMessages();
 }
 
+TEST_CASE("sprite: the fly side is signed in SetTargetFly and AIUpdateFly", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // FLY_RIGHT is -1 (0xFF in m_circleFacing). The original sign-extends it
+    // for the initial hop (SetTargetFly) and for the arc (AIUpdateFly); an
+    // unsigned read turns 0xFF into 255.
+    struct FlyRun {
+        CPoint posOld;
+        CPoint pos;
+        double directionOffset;
+        signed char facing;
+    };
+    auto run = [&](SHORT side) {
+        CAIAction action;
+        action.m_actionID = CAIAction::SETTARGETFLY;
+        action.m_acteeID.m_nGeneral = 2;
+        action.m_acteeID.m_nEnemyAlly = static_cast<BYTE>(side);
+        action.m_specificID = 512;
+        pCharacter->SetCurrAction(action);
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_nDirection = 0;
+        pCharacter->m_pos = CPoint(1000, 1000);
+        pCharacter->m_baseStats.m_flags |= 0x80000000;
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+        CHECK(pCharacter->m_radius == 512);
+        CHECK(pCharacter->m_nSequence == CGAMESPRITE_SEQ_WALK);
+
+        FlyRun result;
+        result.posOld = pCharacter->m_posOld;
+        result.directionOffset = pCharacter->m_fDirectionOffset;
+        result.facing = static_cast<signed char>(pCharacter->m_circleFacing);
+        pCharacter->AIUpdateFly();
+        result.pos = pCharacter->m_pos;
+        return result;
+    };
+
+    const FlyRun left = run(CGameSprite::FLY_LEFT);
+    const FlyRun right = run(static_cast<BYTE>(CGameSprite::FLY_RIGHT));
+
+    CHECK(left.facing == CGameSprite::FLY_LEFT);
+    CHECK(right.facing == CGameSprite::FLY_RIGHT);
+    CHECK(left.posOld == CPoint(1512, 1000));
+    CHECK(right.posOld == CPoint(488, 1000));
+    CHECK(left.directionOffset == 3.1415926535);
+    CHECK(right.directionOffset == 2 * 3.1415926535);
+    CHECK(left.pos != left.posOld);
+    CHECK(right.pos != right.posOld);
+    CHECK(left.pos.x > 1000);
+    CHECK(right.pos.x < 1000);
+    CHECK(std::abs(left.pos.x + right.pos.x - 2000) <= 1);
+    CHECK(std::abs(left.pos.y - right.pos.y) <= 1);
+
+    ClearMessages();
+}
+
 TEST_CASE("sprite: RemoveSpell erases the action's spell from its list", "[ai][data]")
 {
     if (DataDir() == nullptr) {

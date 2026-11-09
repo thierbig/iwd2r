@@ -3805,8 +3805,12 @@ void CGameSprite::AIUpdateFly()
         double fCurrCircleChange = min(m_fCircleChange, m_fCurrCircleChange + 1.0);
 
         if (m_circleFacing != 0) {
+            // The side is a signed BYTE in the original (movsx at
+            // 0x6FB6E4 and 0x6FB7A0), so FLY_RIGHT is -1, not 255.
+            const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
             double fAngle = static_cast<double>(m_animation.GetMoveScale())
-                    * static_cast<double>(m_circleFacing)
+                    * static_cast<double>(nCircleFacing)
                     * fCurrCircleChange
                     / static_cast<double>(m_radius)
                 + m_fDirectionOffset;
@@ -3814,7 +3818,7 @@ void CGameSprite::AIUpdateFly()
             m_pos.x = m_posOld.x + static_cast<LONG>(cos(fAngle) * static_cast<double>(m_radius));
             m_pos.y = m_posOld.y - static_cast<LONG>(sin(fAngle) * static_cast<double>(m_radius) * 3.0 / 4.0);
 
-            if (m_circleFacing == FLY_LEFT) {
+            if (nCircleFacing == FLY_LEFT) {
                 if (m_pos != m_posOld) {
                     SetDirection((GetDirection(CPoint(m_pos.x, 4 * m_pos.y / 3),
                                       CPoint(m_posOld.x, 4 * m_posOld.y / 3))
@@ -7023,20 +7027,25 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         m_circleFacing = 0;
         m_fCircleChange = static_cast<double>(m_radius / m_animation.GetMoveScale());
     } else {
+        // The side is a signed BYTE in the original: FLY_RIGHT is 0xFF and
+        // every use sign-extends it (movsx at 0x70815E, 0x708178, 0x708192,
+        // 0x7081A9 and 0x7081F9).
+        const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
         m_fCircleChange = static_cast<double>(m_radius) * static_cast<double>(circleType) * 3.1415926535 / static_cast<double>(m_animation.GetMoveScale()) / 2.0;
 
         switch (abs(4 * ((m_nDirection + 2) / 4))) {
         case 0:
-            m_posOld.x += m_radius * m_circleFacing;
+            m_posOld.x += m_radius * nCircleFacing;
             break;
         case 4:
-            m_posOld.y += 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y += 3 * m_radius * nCircleFacing / 4;
             break;
         case 8:
-            m_posOld.x -= m_radius * m_circleFacing;
+            m_posOld.x -= m_radius * nCircleFacing;
             break;
         case 12:
-            m_posOld.y -= 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y -= 3 * m_radius * nCircleFacing / 4;
             break;
         default:
             // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
@@ -7045,7 +7054,7 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         }
 
         m_fDirectionOffset = static_cast<double>(8 - m_nDirection) * 3.1415926535 / 8.0;
-        if (m_circleFacing == FLY_RIGHT) {
+        if (nCircleFacing == FLY_RIGHT) {
             m_fDirectionOffset += 3.1415926535;
         }
     }
