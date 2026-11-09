@@ -11,6 +11,7 @@
 #include "CPathSearch.h"
 #include "CResRef.h"
 #include "CScreenWorld.h"
+#include "CStore.h"
 #include "CTimerWorld.h"
 #include "CUtil.h"
 #include "CVidInf.h"
@@ -1701,8 +1702,42 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
             CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
             CItem tempItem;
 
-            // TODO: 0x47D945 not ported
-            // TODO: 0x47DD94 not ported
+            if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+                // 0x47DD94: no session — the bag's store is a local copy.
+                CStore store(pItem->cResRef);
+
+                if (store.m_header.m_nStoreType == 4) {
+                    for (INT i = 0; i < store.GetNumItems(); i++) {
+                        store.GetItem(i, tempItem);
+
+                        if (tempItem.GetFlagsFile() & 1) {
+                            // 0x47DDEC: the local message carries only the
+                            // identity, stack counts and flags — not the
+                            // full item copy the network path sends.
+                            CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(CItem(), 0x7FFF, FALSE, m_id, m_id);
+                            pMessage->m_item.SetResRef(tempItem.cResRef, TRUE);
+                            pMessage->m_item.m_useCount1 = tempItem.m_useCount1;
+                            pMessage->m_item.m_useCount2 = tempItem.m_useCount2;
+                            pMessage->m_item.m_useCount3 = tempItem.m_useCount3;
+                            pMessage->m_item.m_wear = tempItem.m_wear;
+                            pMessage->m_item.m_flags = tempItem.m_flags;
+                            g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+                            bRet = FALSE;
+                        }
+
+                        // 0x47DEA4: every iteration removes a stack, the
+                        // inventory shrinks while i advances, and the count
+                        // is re-read — the walk skips every other item. The
+                        // original behaves that way; keep it.
+                        store.RemoveItemExt(tempItem.cResRef, tempItem.m_flags, -1, 1, NULL);
+                    }
+
+                    // 0x47DED5
+                    store.Marshal(pGame->m_sTempDir);
+                }
+            } else {
+                // TODO: 0x47D945 not ported
+            }
 
             // 0x47DEEB: fall through to the item-flags tail.
         }
