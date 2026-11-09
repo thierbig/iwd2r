@@ -35073,8 +35073,8 @@ SHORT CGameSprite::DropInventory(BOOLEAN bCriticalOnly, CString sException)
     return ACTION_DONE;
 }
 
-// GiveItem: the item named by the action's string1 (carried, else in a bag)
-// leaves this creature; a creature target gets a copy through
+// GiveItem: the item named by the action's string1 (carried, not yet one in
+// a bag) leaves this creature; a creature target gets a copy through
 // CMessageAddItem and the item itself is disposed of.
 //
 // 0x757540
@@ -35088,10 +35088,13 @@ SHORT CGameSprite::GiveItem(CGameAIBase* pTarget)
 
     CItem* pItem;
     if (nSlot == -1) {
-        // NOTE: This caller's bag handoff remains unwired. The original takes
-        // the item out of a bag (DropItemFromBag 0x722740 through CInfGame
-        // 0x5C8C30), then unequips slot -1 and clears the DWORD before m_items
-        // (the field at +0x4AD4). An item in a bag is therefore not given.
+        // TODO: Incomplete. The original's arm for a name not carried calls
+        // DropItemFromBag (0x722740, now ported, through CInfGame 0x5C8C30)
+        // and a miss is ACTION_ERROR, but a hit still runs Unequip(-1) and
+        // clears m_items[-1]: the write lands on +0x4AD4, the tail (field_18)
+        // of m_shapeshifts, an out-of-bounds original write whose target's
+        // meaning is unclear. Until that is understood the arm stays unwired,
+        // so an item in a bag is not given.
         return ACTION_ERROR;
     } else {
         pItem = m_equipment.m_items[nSlot];
