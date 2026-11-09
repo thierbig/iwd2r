@@ -4445,9 +4445,9 @@ SHORT CGameAIBase::IncrementGlobal()
 
 namespace {
 
-// 0x469040's op dispatch, reached once per destination arm: m_specificID 1
-// AND, 2 OR, 3 XOR. FALSE for any other value, which every caller turns
-// into ACTION_ERROR before writing anything.
+// The op dispatch shared by 0x469040 and 0x4688A0, reached once per
+// destination arm: m_specificID(2) 1 AND, 2 OR, 3 XOR. FALSE for any other
+// value, which every caller turns into ACTION_ERROR before writing anything.
 BOOL CombineGlobalBit(LONG& nDest, LONG nSrc, LONG nOp)
 {
     switch (nOp) {
@@ -4466,6 +4466,51 @@ BOOL CombineGlobalBit(LONG& nDest, LONG nSrc, LONG nOp)
 }
 
 } // namespace
+
+// 0x4688A0
+SHORT CGameAIBase::BitGlobal()
+{
+    // Action 247 (BitGlobal): combine an integer mask into a script
+    // variable with a bitwise op. String1 names the variable as
+    // "SCOPE:NAME" (uppercased); m_specificID is the mask and
+    // m_specificID2 picks the op: 1 AND, 2 OR, 3 XOR. Any other op
+    // returns ACTION_ERROR without writing the variable.
+
+    CMessage* message;
+
+    CString sString = m_curAction.GetString1();
+    sString.MakeUpper();
+    int nColon = sString.Find(":");
+    CString sScope = sString.Left(nColon);
+    CString sName = sString.Right(sString.GetLength() - nColon - 1);
+
+    if (strcmp(sScope, "GLOBAL") == 0) {
+        CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+        if (pVariable != NULL) {
+            if (!CombineGlobalBit(pVariable->m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                return ACTION_ERROR;
+            }
+
+            message = new CMessageSetVariable(sScope, sName, pVariable->m_intValue, m_id, m_id);
+        } else {
+            // The original news the variable here and leaks it on the
+            // invalid-op path; a stack variable outlives the AddKey copy
+            // the same way.
+            CVariable var;
+            var.SetName(sName);
+            if (!CombineGlobalBit(var.m_intValue, m_curAction.m_specificID, m_curAction.m_specificID2)) {
+                return ACTION_ERROR;
+            }
+            g_pBaldurChitin->GetObjectGame()->m_variables.AddKey(var);
+
+            message = new CMessageSetVariable(sScope, sName, var.m_intValue, m_id, m_id);
+        }
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+    }
+    // TODO: 0x468C06-0x469037 (LOCALS and area arms) not ported yet.
+
+    return ACTION_DONE;
+}
 
 // 0x469040
 SHORT CGameAIBase::GlobalBitGlobal()

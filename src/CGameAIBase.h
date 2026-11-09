@@ -132,6 +132,7 @@ public:
     SHORT PlaySound(LONG x, LONG y, BOOL bPoint);
     SHORT SetGlobal();
     SHORT IncrementGlobal();
+    SHORT BitGlobal();
     SHORT GlobalBitGlobal();
     SHORT SetGlobalTimer();
     SHORT StartCutScene();
