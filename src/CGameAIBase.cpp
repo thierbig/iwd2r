@@ -689,14 +689,76 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 154:
+        // ChangeGeneral
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAI.SetGeneral(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetGeneral(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetGeneral(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 155:
+        // ChangeRace
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+            typeAI.Set(pSprite->GetAIType());
+            typeAILive.Set(pSprite->m_liveTypeAI);
+            typeAIStart.Set(pSprite->m_liveTypeAI);
+            typeAI.SetRace(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAILive.SetRace(static_cast<BYTE>(m_curAction.m_specificID));
+            typeAIStart.SetRace(static_cast<BYTE>(m_curAction.m_specificID));
+            pSprite->SetAIType(typeAI, TRUE, FALSE);
+            pSprite->m_liveTypeAI.Set(typeAILive);
+            pSprite->m_startTypeAI.Set(typeAIStart);
+            if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+                || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID) {
+                message = new CMessageSpriteUpdate(pSprite, pSprite->m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 156:
+        // ChangeClass: the original (0x44F55E-0x44F621) constructs three
+        // default CAIObjectType locals and destroys them again without
+        // storing a field or calling SetAIType - the action changes
+        // nothing but the target share.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            CAIObjectType typeAI;
+            CAIObjectType typeAILive;
+            CAIObjectType typeAIStart;
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 157:
     case 158:
     case 159:
-        // ChangeGeneral, ChangeRace, ChangeClass, ChangeSpecifics,
-        // ChangeGender, ChangeAlignment
-        // TODO: 0x44F1CC-0x44FB82 not ported.
+        // ChangeSpecifics, ChangeGender, ChangeAlignment
+        // TODO: 0x44F626-0x44FB82 not ported.
         goto done;
     case 160:
         // ApplySpell
