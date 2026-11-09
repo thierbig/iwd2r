@@ -28829,13 +28829,13 @@ SHORT CGameSprite::PickPockets(CGameSprite* pTarget)
     // The original protects seven weapon slots and three ammunition slots:
     // 43-49 and 11-13, respectively (0x758A2B-0x758A4E).
     for (SHORT nSlot = CGameSpriteEquipment::SLOT_WEAPON;
-        nSlot < CGameSpriteEquipment::SLOT_WEAPON + 7;
-        nSlot++) {
+         nSlot < CGameSpriteEquipment::SLOT_WEAPON + 7;
+         nSlot++) {
         bSkipSlot[nSlot] = TRUE;
     }
     for (SHORT nSlot = CGameSpriteEquipment::SLOT_AMMO;
-        nSlot < CGameSpriteEquipment::SLOT_AMMO + 3;
-        nSlot++) {
+         nSlot < CGameSpriteEquipment::SLOT_AMMO + 3;
+         nSlot++) {
         bSkipSlot[nSlot] = TRUE;
     }
     if (pTarget->GetAIType().m_nEnemyAlly == CAIObjectType::EA_PC) {
@@ -29510,25 +29510,24 @@ SHORT CGameSprite::EscapeArea()
         }
     }
 
-move:
-    {
-        const CPoint ptStart(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
-            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
-        if (ptSearch == ptStart) {
-            m_removeFromArea = TRUE;
-            return ACTION_DONE;
-        }
-
-        // The candidate is saved in the action's dest (+0x540/+0x544,
-        // 0x75BC0D/0x75BC15) and passed by reference to MoveToPoint; the
-        // sprite's m_curDest is only written by MoveToPoint itself.
-        m_curAction.m_dest = ptDest;
-        SHORT rc = MoveToPoint(ptDest, 0);
-        if (rc == ACTION_DONE || rc == ACTION_INTERRUPTABLE) {
-            return ACTION_NORMAL;
-        }
-        return rc;
+move: {
+    const CPoint ptStart(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+        m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    if (ptSearch == ptStart) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
     }
+
+    // The candidate is saved in the action's dest (+0x540/+0x544,
+    // 0x75BC0D/0x75BC15) and passed by reference to MoveToPoint; the
+    // sprite's m_curDest is only written by MoveToPoint itself.
+    m_curAction.m_dest = ptDest;
+    SHORT rc = MoveToPoint(ptDest, 0);
+    if (rc == ACTION_DONE || rc == ACTION_INTERRUPTABLE) {
+        return ACTION_NORMAL;
+    }
+    return rc;
+}
 }
 
 // 0x75CBD0
