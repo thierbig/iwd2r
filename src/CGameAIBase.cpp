@@ -2570,10 +2570,81 @@ SHORT CGameAIBase::ApplySpell(CGameObject* pTarget)
         return ACTION_ERROR;
     }
 
-    // TODO: 0x4625AC-0x4628ED not ported (target check, Demand,
-    // CheckAppropriateTarget, the ability-0 effect loop and cleanup).
+    if (pTarget == NULL) {
+        delete pSpell;
+        return ACTION_ERROR;
+    }
+
+    pSpell->Demand();
+
+    if (!CheckAppropriateTarget(pSpell, static_cast<CGameAIBase*>(pTarget))) {
+        pSpell->Release();
+        delete pSpell;
+        return ACTION_ERROR;
+    }
+
+    SPELL_ABILITY* pAbility = pSpell->GetAbility(0);
+    if (pAbility == NULL) {
+        pSpell->Release();
+        delete pSpell;
+        return ACTION_ERROR;
+    }
+
+    BYTE nCasterLevel = 0;
+    if (m_curAction.m_internalFlags & 0x20000000) {
+        nCasterLevel = static_cast<BYTE>(m_curAction.m_specificID3);
+    }
+
+    for (LONG nEffect = 0; nEffect < pAbility->effectCount; nEffect++) {
+        CGameEffect* pEffect = pSpell->GetAbilityEffect(0, nEffect, this, 0, 0, nCasterLevel);
+        pEffect->m_source = m_pos;
+        pEffect->m_sourceID = m_id;
+        pEffect->m_target = pTarget->GetPos();
+
+        switch (pEffect->m_targetType) {
+        case 1:
+            pEffect->m_flags |= 0x2;
+            message = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            break;
+        case 2:
+            message = new CMessageAddEffect(pEffect, m_id, pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            break;
+        case 3:
+            ApplyEffectToParty(pEffect);
+            delete pEffect;
+            break;
+        case 4:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
+        case 5:
+            GetArea()->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            delete pEffect;
+            break;
+        case 6:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
+        case 7:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, TRUE, pTarget->GetAIType().m_nSpecific, NULL);
+            delete pEffect;
+            break;
+        case 8:
+            GetArea()->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
+            delete pEffect;
+            break;
+        default:
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\CGameAIBaseActions.cpp
+            // __LINE__: 2001
+            UTIL_ASSERT(FALSE);
+        }
+    }
+
+    pSpell->Release();
     delete pSpell;
-    return ACTION_ERROR;
+    return ACTION_DONE;
 }
 
 // 0x463310
