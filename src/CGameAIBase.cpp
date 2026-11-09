@@ -1075,6 +1075,7 @@ SHORT CGameAIBase::ExecuteAction()
     case 289:
         // SpellCastEffect
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
         if (pTarget == NULL) {
             returnValue = ACTION_ERROR;
         } else {
