@@ -14962,10 +14962,8 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 108:
     case 176:
-        // EscapeArea, EscapeAreaDestroy
-        // TODO: 0x72A3F3-0x72A403 not ported (CGameSprite_EscapeArea
-        // 0x75B280).
-        returnValue = ACTION_ERROR;
+        // EscapeArea, EscapeAreaDestroy (0x72A3F3-0x72A403)
+        returnValue = EscapeArea();
         goto done;
     case 110:
         // LeaveAreaLUA
@@ -28700,6 +28698,260 @@ SHORT CGameSprite::UseDoor()
     delete pGroupList;
 
     return ACTION_DONE;
+}
+
+// 0x75B280
+SHORT CGameSprite::EscapeArea()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    CRect rView;
+    rView.CopyRect(m_pArea->m_cInfinity.rViewPort);
+    INT nViewX;
+    INT nViewY;
+    m_pArea->m_cInfinity.GetViewPosition(nViewX, nViewY);
+    rView.OffsetRect(nViewX, nViewY);
+
+    // NOTE: The original reads string1 with this comparison and discards the
+    // answer (0x75B2E2-0x75B308); kept.
+    (void)strcmp(m_curAction.GetString1(), "");
+
+    CMessage* pMessage = new CMessageEscapeArea(m_id, m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+    m_bEscapingArea = TRUE;
+
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        LeaveParty();
+    }
+
+    if (m_curAction.m_actionID == 176) {
+        if (m_actionCount >= m_curAction.m_specificID * 15) {
+            m_removeFromArea = TRUE;
+            return ACTION_DONE;
+        }
+    } else if (m_actionCount >= 120) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (m_canBeSeen <= 0) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (strcmp(m_curAction.GetString1(), "") == 0) {
+        m_expirationTime = pGame->GetWorldTimer()->m_gameTime;
+    }
+
+    CRect rFx;
+    CPoint ptReference;
+    m_animation.CalculateFxRect(rFx, ptReference, m_posZ);
+
+    // NOTE: The original calls this and discards the height (0x75B44B-0x75B45D).
+    m_pArea->GetHeightOffset(m_pos, m_listType);
+
+    if (!rView.PtInRect(m_pos)
+        || m_pos.x < rView.left
+        || m_pos.x >= rView.right
+        || m_pos.y < rView.top
+        || m_pos.y >= rView.bottom) {
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    // NOTE: The edge-search state lives in specificID2 (+0x530), not the
+    // action's delay parameter; the original writes 0x530 at 0x75B4DF.
+    if (m_pPath == NULL && strcmp(m_curAction.GetString1(), "") == 0) {
+        m_curAction.m_specificID2 = 0;
+    }
+
+    BOOL bFindEdge = m_actionCount % 16 == 0 ? TRUE : FALSE;
+    // The seed destination is the action's own dest (+0x540/+0x544), not the
+    // sprite's current destination; 0x75B4FD/0x75B507 read m_curAction.m_dest.
+    CPoint ptDest = m_curAction.m_dest;
+    CPoint ptSearch;
+    if (ptDest.x < rView.left
+        || ptDest.x >= rView.right
+        || ptDest.y < rView.top
+        || ptDest.y >= rView.bottom) {
+        bFindEdge = FALSE;
+    }
+
+    LONG nTargetId = m_pArea->GetNearestTravelTrigger(m_id, GetVisualRange(), m_terrainTable, FALSE);
+    if (nTargetId != CGameObjectArray::INVALID_INDEX) {
+        CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+        type.m_nInstance = nTargetId;
+        CGameObject* pTarget = GetTargetShareAIType(type, CGameObject::TYPE_AIBASE);
+        SHORT rc = MoveToObject(pTarget);
+        if (pTarget != NULL) {
+            pGame->GetObjectArray()->ReleaseShare(nTargetId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+
+        if (rc != ACTION_DONE && rc != ACTION_ERROR) {
+            return ACTION_NORMAL;
+        }
+
+        m_removeFromArea = TRUE;
+        return ACTION_DONE;
+    }
+
+    if (!bFindEdge && (m_pPath != NULL || m_currentSearchRequest != NULL)) {
+        return ACTION_NORMAL;
+    }
+
+    auto AdjustTarget = [this](CPoint& dest, CPoint& search) -> BOOL {
+        return m_pArea->AdjustTarget(CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                                         m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+            &search,
+            m_animation.GetPersonalSpace(),
+            10);
+    };
+
+    // NOTE: specificID2 (+0x530) is the edge-search state tested at 0x75B644
+    // (and again, redundantly, at 0x75B802): zero runs the two edge attempts.
+    if (m_curAction.m_specificID2 == 0) {
+        // First try the nearest horizontal and vertical view edges, allowing
+        // for the sprite's width and height at the destination.
+        if (m_pos.x < ((rView.right - rView.left) >> 1) + rView.left) {
+            ptDest.x = rView.left + rFx.left - rFx.right - 1;
+        } else {
+            ptDest.x = rView.right + rFx.right - rFx.left + 1;
+        }
+        if (m_pos.y < ((rView.bottom - rView.top) >> 1) + rView.top) {
+            ptDest.y = rView.top + rFx.top - rFx.bottom - 1;
+        } else {
+            ptDest.y = rView.bottom + rFx.bottom - rFx.top + 1;
+        }
+
+        const LONG nMaxX = static_cast<SHORT>(m_pArea->m_cInfinity.nAreaX) / CPathSearch::GRID_SQUARE_SIZEX;
+        const LONG nMaxY = static_cast<SHORT>(m_pArea->m_cInfinity.nAreaY) / CPathSearch::GRID_SQUARE_SIZEY;
+        ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+            ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+
+        // These tests read the first quotient, even after a previous arm has
+        // changed the point (0x75B6FB-0x75B775).
+        if (ptSearch.x <= 0) {
+            ptDest.x = rView.right + rFx.right - rFx.left + 1;
+        }
+        if (ptSearch.y <= 0) {
+            ptDest.y = rView.bottom + rFx.bottom - rFx.top + 1;
+        }
+        if (ptSearch.x >= nMaxX) {
+            ptDest.x = rView.left + rFx.left - rFx.right - 1;
+        }
+        if (ptSearch.y >= nMaxY) {
+            ptDest.y = rView.top + rFx.top - rFx.bottom - 1;
+        }
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (AdjustTarget(ptDest, ptSearch)) {
+            goto move;
+        }
+
+        // Then try the opposite sides. The bounds use equality here and the
+        // same saved first quotient as above.
+        ptDest.x = m_pos.x < ((rView.right - rView.left) >> 1) + rView.left
+            ? rView.right
+            : rView.left;
+        ptDest.y = m_pos.y < ((rView.bottom - rView.top) >> 1) + rView.top
+            ? rView.bottom
+            : rView.top;
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (ptSearch.x == 0) {
+            ptDest.x = rView.right;
+        }
+        if (ptSearch.y == 0) {
+            ptDest.y = rView.bottom;
+        }
+        if (ptSearch.x == nMaxX) {
+            ptDest.x = rView.left;
+        }
+        if (ptSearch.y == nMaxY) {
+            ptDest.y = rView.top;
+        }
+
+        ptSearch.x = ptDest.x / CPathSearch::GRID_SQUARE_SIZEX;
+        ptSearch.y = ptDest.y / CPathSearch::GRID_SQUARE_SIZEY;
+        if (AdjustTarget(ptDest, ptSearch)) {
+            goto move;
+        }
+    }
+
+    if (m_pPath != NULL) {
+        return ACTION_NORMAL;
+    }
+
+    // Last resort: scan the top and bottom rows, then the left and right
+    // columns of the view for an adjusted square.
+    {
+        BOOLEAN bFound = FALSE;
+        for (LONG x = 0; x <= rView.Width() && !bFound; x += CPathSearch::GRID_SQUARE_SIZEX) {
+            for (LONG y = 0; y <= rView.Height(); y += rView.Height()) {
+                ptDest.x = rView.left + x;
+                ptDest.y = rView.top + y;
+                ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+                    ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+                if (AdjustTarget(ptDest, ptSearch)) {
+                    bFound = TRUE;
+                    break;
+                }
+            }
+            if (bFound) {
+                break;
+            }
+        }
+
+        for (LONG x = 0; x <= rView.Width() && !bFound; x += rView.Width()) {
+            for (LONG y = 0; y <= rView.Height(); y += CPathSearch::GRID_SQUARE_SIZEY) {
+                ptDest.x = rView.left + x;
+                ptDest.y = rView.top + y;
+                ptSearch = CPoint(ptDest.x / CPathSearch::GRID_SQUARE_SIZEX,
+                    ptDest.y / CPathSearch::GRID_SQUARE_SIZEY);
+                if (AdjustTarget(ptDest, ptSearch)) {
+                    bFound = TRUE;
+                    break;
+                }
+            }
+            if (bFound) {
+                break;
+            }
+        }
+
+        if (!bFound) {
+            m_removeFromArea = TRUE;
+            return ACTION_DONE;
+        }
+
+        if (strcmp(m_curAction.GetString1(), "") == 0) {
+            // NOTE: The state marker is specificID2 (+0x530), as at 0x75BBC0.
+            m_curAction.m_specificID2 = 1;
+        }
+    }
+
+move:
+    {
+        const CPoint ptStart(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+        if (ptSearch == ptStart) {
+            m_removeFromArea = TRUE;
+            return ACTION_DONE;
+        }
+
+        // The candidate is saved in the action's dest (+0x540/+0x544,
+        // 0x75BC0D/0x75BC15) and passed by reference to MoveToPoint; the
+        // sprite's m_curDest is only written by MoveToPoint itself.
+        m_curAction.m_dest = ptDest;
+        SHORT rc = MoveToPoint(ptDest, 0);
+        if (rc == ACTION_DONE || rc == ACTION_INTERRUPTABLE) {
+            return ACTION_NORMAL;
+        }
+        return rc;
+    }
 }
 
 // 0x75CBD0

@@ -1192,6 +1192,93 @@ LONG CGameArea::GetNearestDialogMatch(LONG startObject, CResRef dialog, LONG ran
     return nFound;
 }
 
+// 0x46C9E0
+LONG CGameArea::GetNearestTravelTrigger(LONG startObject, SHORT range, const BYTE* terrainTable, BOOL checkLOS)
+{
+    LONG nBest = static_cast<LONG>(range) * range + 1;
+    LONG nFound = CGameObjectArray::INVALID_INDEX;
+    CAIObjectType callerType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CGameArea.cpp
+    // __LINE__: 1756
+    UTIL_ASSERT(terrainTable != NULL);
+
+    CGameObject* pObject;
+    BYTE rc = m_pGame->GetObjectArray()->GetShare(startObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        &pObject,
+        INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        return CGameObjectArray::INVALID_INDEX;
+    }
+
+    // NOTE: The caller's type is copied and never read.
+    callerType.Set(pObject->GetAIType());
+    if (pObject->GetVertListType() != CGameObject::LIST_FRONT) {
+        // NOTE: The original jumps straight to the epilogue here (0x46CAC4
+        // to 0x46CCF7) without releasing the share; kept.
+        return CGameObjectArray::INVALID_INDEX;
+    }
+
+    CPoint ptStart = pObject->GetPos();
+    CPoint ptStartScaled(ptStart.x, 4 * ptStart.y / 3);
+
+    // NOTE: The original reads the list position and never uses it.
+    pObject->GetVertListPos();
+    m_pGame->GetObjectArray()->ReleaseShare(startObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    if (checkLOS) {
+        // The original inlines PointToTile, including its SHORT result.
+        SHORT nTile = static_cast<SHORT>(ptStart.x / CVisibilityMap::SQUARE_SIZEX
+            + m_visibility.m_nWidth * (ptStart.y / CVisibilityMap::SQUARE_SIZEY));
+        if (m_pGame->GetCharacterPortraitNum(startObject) != -1) {
+            if (!m_visibility.IsTileVisible(nTile)) {
+                return CGameObjectArray::INVALID_INDEX;
+            }
+        } else if (!m_visibility.IsTileExplored(nTile)) {
+            return CGameObjectArray::INVALID_INDEX;
+        }
+    }
+
+    // NOTE: This really is the back list (area +0x9AE, head at +0x9B2), not
+    // the front list checked above; the original's unusual choice is kept.
+    POSITION pos = m_lVertSortBack.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(m_lVertSortBack.GetNext(pos)));
+
+        rc = m_pGame->GetObjectArray()->GetShare(nId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+        if (rc == CGameObjectArray::SUCCESS) {
+            if (pObject->GetVertListPos() != NULL) {
+                const CPoint& pt = pObject->GetPos();
+                LONG dy = ptStartScaled.y - 4 * pt.y / 3;
+                LONG nDistance = dy * dy;
+                if (nDistance < nBest
+                    && pObject->GetObjectType() == CGameObject::TYPE_TRIGGER
+                    && static_cast<CGameTrigger*>(pObject)->m_triggerType == 2
+                    && (!checkLOS || CheckLOS(ptStart, pObject->GetPos(), terrainTable, TRUE))) {
+                    LONG dx = ptStartScaled.x - pt.x;
+                    nDistance += dx * dx;
+                    if (nDistance < nBest) {
+                        nBest = nDistance;
+                        nFound = nId;
+                    }
+                }
+            }
+
+            m_pGame->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    return nFound;
+}
+
 // NOTE: Walks the vertical list outward from `posVertList` (the caller's
 // own node, which it skips), one object above and one below per round, and
 // stops a side once an object on it is out of range vertically: the list is

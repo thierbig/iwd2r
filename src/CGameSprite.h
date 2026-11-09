@@ -640,6 +640,7 @@ public:
     SHORT Interact(CGameSprite* pTarget);
     SHORT StartDialog(CGameSprite* pTarget);
     SHORT UseDoor();
+    SHORT EscapeArea();
     SHORT TryBash(CGameObject* pTarget);
     SHORT ReturnToStartLoc();
     SHORT Spell(CGameAIBase* target);
