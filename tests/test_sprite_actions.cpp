@@ -4626,3 +4626,273 @@ TEST_CASE("sprite: action 224 loses the first item when the amulet slot is occup
     INFO("lost resref " << static_cast<const char*>(sLost));
     ClearMessages();
 }
+
+// CGameSprite::EscapeArea (0x75B280), shared by actions 108 and 176.
+TEST_CASE("sprite: EscapeArea and EscapeAreaDestroy honor removal guards and post their message", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    const CPoint pt = pHedron->m_pos;
+    const CRect savedView = pArea->m_cInfinity.rViewPort;
+    const int savedNewX = pArea->m_cInfinity.nNewX;
+    const int savedNewY = pArea->m_cInfinity.nNewY;
+    const SHORT savedSeen = pHedron->m_canBeSeen;
+    const SHORT savedVisualRange = pArea->m_visibility.field_E;
+    const DWORD savedExpiration = pHedron->m_expirationTime;
+    const bool savedEscaping = pHedron->m_bEscapingArea != FALSE;
+
+    // A known visible NPC in a centered view. Only this NPC runs the actions;
+    // the party member is deliberately left alone (EscapeArea calls
+    // LeaveParty on a party sprite).
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 640, 480);
+    pArea->m_cInfinity.nNewX = pt.x - 320;
+    pArea->m_cInfinity.nNewY = pt.y - 240;
+    pHedron->m_canBeSeen = 1;
+
+    // Action 108's ordinary limit is 120 calls. This also isolates the common
+    // message: both participants are the escaping sprite and the return value
+    // is installed by ExecuteAction's shared tail.
+    CAIAction escape;
+    escape.m_actionID = 108;
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+    pHedron->m_actionCount = 120;
+    pHedron->m_removeFromArea = FALSE;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(pHedron->m_bEscapingArea);
+    // BROADCAST_FORCED_OTHERS consumes the message rather than queueing it
+    // for this single-player recipient. Verify its exact identity separately;
+    // the escaping flag above is the local effect and the message list stays
+    // free of a locally replayed escape message.
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    CMessageEscapeArea escapeMessage(pHedron->GetId(), pHedron->GetId());
+    CHECK(escapeMessage.GetSource() == pHedron->GetId());
+    CHECK(escapeMessage.GetTarget() == pHedron->GetId());
+    CHECK(escapeMessage.GetCommType() == CMessage::BROADCAST_FORCED_OTHERS);
+    CHECK(escapeMessage.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ESCAPE_AREA);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(pHedron->m_bEscapingArea);
+    ClearMessages();
+
+    // EscapeAreaDestroy uses the action's delay in 15-call units. With an
+    // outstanding path and no target in range, one call before the limit is
+    // still running and does not queue removal.
+    CAIAction destroy;
+    destroy.m_actionID = 176;
+    destroy.m_specificID = 2;
+    pHedron->SetCurrAction(destroy);
+    pHedron->m_actionCount = 29;
+    pHedron->m_removeFromArea = FALSE;
+    pHedron->m_expirationTime = savedExpiration;
+    pArea->m_visibility.field_E = 0; // zero visual range: no transition target
+    LONG* oldPath = pHedron->m_pPath;
+    LONG* path = new LONG[1];
+    path[0] = 0;
+    pHedron->m_pPath = path;
+    ClearMessages();
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(!pHedron->m_removeFromArea);
+    CHECK(pHedron->m_expirationTime == g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    pHedron->m_pPath = oldPath;
+    delete[] path;
+    pArea->m_visibility.field_E = savedVisualRange;
+    ClearMessages();
+
+    // At the exact delay boundary the same action is done and removed.
+    pHedron->m_actionCount = 30;
+    pHedron->m_removeFromArea = FALSE;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    ClearMessages();
+
+    // An unseen creature is removed immediately, before the duration and
+    // routing work. This is the same guard for action 108.
+    pHedron->SetCurrAction(escape);
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    pHedron->m_expirationTime = savedExpiration;
+    pHedron->m_canBeSeen = 0;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->m_removeFromArea);
+    CHECK(pHedron->m_expirationTime == savedExpiration);
+    CHECK(Queued<CMessageEscapeArea>().empty());
+    ClearMessages();
+
+    pHedron->m_canBeSeen = savedSeen;
+    pHedron->m_expirationTime = savedExpiration;
+    pHedron->m_bEscapingArea = savedEscaping ? TRUE : FALSE;
+    pArea->m_cInfinity.rViewPort = savedView;
+    pArea->m_cInfinity.nNewX = savedNewX;
+    pArea->m_cInfinity.nNewY = savedNewY;
+    pArea->m_visibility.field_E = savedVisualRange;
+}
+
+TEST_CASE("sprite: EscapeArea selects an adjusted edge destination when no transition target exists", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    const CPoint pt = pHedron->m_pos;
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 640, 480);
+    pArea->m_cInfinity.nNewX = pt.x - 320;
+    pArea->m_cInfinity.nNewY = pt.y - 240;
+    pHedron->m_canBeSeen = 1;
+    pArea->m_visibility.field_E = 0;
+    pHedron->m_curDest = pt;
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+
+    CAIAction escape;
+    escape.m_actionID = 108;
+    // The saved destination seeds the edge-hunt flag: start it outside the
+    // view so the flag is cleared for certain (m_curAction.m_dest is the
+    // seed, 0x75B4FD).
+    escape.m_dest = CPoint(pt.x + 640, pt.y);
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+
+    INFO("position " << pt.x << "," << pt.y << " destination " << pHedron->m_curDest.x << ","
+                     << pHedron->m_curDest.y);
+    CHECK(pArea->GetNearestTravelTrigger(pHedron->GetId(), 0, pHedron->m_terrainTable, FALSE)
+        == CGameObjectArray::INVALID_INDEX);
+    const SHORT rc = pHedron->ExecuteAction();
+    INFO("return " << rc << " destination " << pHedron->m_curDest.x << "," << pHedron->m_curDest.y
+                   << " path " << pHedron->m_pPath << " request " << pHedron->m_currentSearchRequest
+                   << " action " << pHedron->m_curAction.m_actionID << " count " << pHedron->m_actionCount
+                   << " specific " << pHedron->m_curAction.m_specificID);
+    CHECK(rc == CGameAIBase::ACTION_NORMAL);
+    CHECK(!pHedron->m_removeFromArea);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_NORMAL);
+    // This fixture is deterministic on AR1000: the top-left candidate fails
+    // and the bottom-left one adjusts. EscapeArea keeps the retained world
+    // candidate in m_curAction.m_dest and calls MoveToPoint with it; it
+    // differs from m_curDest, so MoveToPoint adopts it as the current
+    // destination and starts a search request, answering INTERRUPTABLE,
+    // which the common tail converts to NORMAL.
+    CHECK(pHedron->m_curAction.m_dest == CPoint(pt.x - 320, pt.y + 240));
+    CHECK(pHedron->m_curDest == CPoint(pt.x - 320, pt.y + 240));
+    // The scan found the edge, so the action's state marker is set.
+    CHECK(pHedron->m_curAction.m_specificID2 == 1);
+    CHECK(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest != NULL);
+    CHECK(pHedron->m_currentSearchRequest->m_nTargetPoints == 1);
+    REQUIRE(pHedron->m_currentSearchRequest->m_targetPoints != NULL);
+    CHECK(pHedron->m_currentSearchRequest->m_targetPoints[0].x == pt.x - 320);
+    CHECK(pHedron->m_currentSearchRequest->m_targetPoints[0].y == pt.y + 240);
+    ClearMessages();
+}
+
+TEST_CASE("sprite: EscapeArea propagates an invalid edge destination", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    (void)pCharacter;
+    CGameSprite* pHedron = FindSpeaker(g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+    CGameArea* pArea = pHedron->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+
+    // Find the bottommost open square. Put the actor one row above it and the
+    // view's bottom edge just outside the area: the top candidate is the actor
+    // itself (rejected), while AdjustTarget walks the outside candidate back
+    // to that open square. The retained world point is still outside and
+    // MoveToPoint rejects it.
+    CPoint open(-1, -1);
+    const CSize dimensions = pArea->m_search.m_GridSquareDimensions;
+    for (int y = 0; y < dimensions.cy; y++) {
+        for (int x = 0; x < dimensions.cx; x++) {
+            if (OpenSquare(pHedron, CPoint(x, y))) {
+                open = CPoint(x, y);
+            }
+        }
+    }
+    REQUIRE(open.x >= 0);
+    REQUIRE(open.y >= 1);
+    pHedron->m_pos = CPoint(open.x * CPathSearch::GRID_SQUARE_SIZEX + CPathSearch::GRID_SQUARE_SIZEX / 2,
+        (open.y - 1) * CPathSearch::GRID_SQUARE_SIZEY + CPathSearch::GRID_SQUARE_SIZEY / 2);
+    const CPoint pt = pHedron->m_pos;
+    const int outsideY = pArea->m_cInfinity.nAreaY + 1;
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 1, outsideY - pt.y);
+    pArea->m_cInfinity.nNewX = pt.x;
+    pArea->m_cInfinity.nNewY = pt.y;
+    pHedron->m_canBeSeen = 1;
+    pArea->m_visibility.field_E = 0;
+    pHedron->m_actionCount = 0;
+    pHedron->m_removeFromArea = FALSE;
+    REQUIRE(pHedron->m_pPath == NULL);
+    REQUIRE(pHedron->m_currentSearchRequest == NULL);
+
+    CAIAction escape;
+    escape.m_actionID = 108;
+    // specificID2 is the edge-search state (0x75B644): 1 skips the two edge
+    // attempts and goes straight to the scan. The non-empty string keeps the
+    // state marker from being reset (the reset needs an empty string1).
+    escape.m_specificID2 = 1;
+    escape.SetString1(CString("keep-state"));
+    pHedron->SetCurrAction(escape);
+    ClearMessages();
+
+    INFO("position " << pHedron->m_pos.x << "," << pHedron->m_pos.y
+                     << " open square " << open.x << "," << open.y);
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_ERROR);
+    CHECK(!pHedron->m_removeFromArea);
+    // The retained world candidate lives in the action's dest; MoveToPoint
+    // rejects it as out of the area before touching m_curDest.
+    CHECK(pHedron->m_curAction.m_dest == CPoint(pt.x, outsideY));
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    ClearMessages();
+}
