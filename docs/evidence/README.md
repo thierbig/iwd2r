@@ -96,6 +96,10 @@ definition, the rule `tools/ghidra/labels.py` uses for the Ghidra labels) to
 the first following line that starts with `}`. A committed change to any line
 of a span touches the function. Changes between functions, in headers, and
 deleted functions are ignored; `src/` files new in the branch count in full.
+With `--worktree` the diff runs from the base's merge point to the working
+tree instead — staged, unstaged and untracked `src/` files count, and the
+spans and evidence files are read from the working tree — so a pre-push run
+covers edits that are not committed yet.
 
 Layout changes in headers are not detected: a struct whose fields move,
 change size or are renamed (such as a file format in `src/FileFormat.h`)

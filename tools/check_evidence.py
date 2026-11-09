@@ -1,6 +1,6 @@
 """Require decompiler evidence for every engine function a change touches.
 
-Usage: python3 -I tools/check_evidence.py [--base REV] [--repo DIR]
+Usage: python3 -I tools/check_evidence.py [--base REV] [--repo DIR] [--worktree]
 
 A touched function is a labelled function (a `// 0xADDR` comment directly
 above a definition, the rule of tools/ghidra/labels.py) in a src/**/*.cpp file
@@ -10,7 +10,18 @@ Changes outside every span (includes, globals, comments between functions),
 changes in headers, and deleted functions or files are ignored; files new in
 the branch count in full. Only committed changes are compared.
 
-Each touched function needs docs/evidence/<ADDR>.md at HEAD (ADDR in upper-case
+--worktree audits the working tree instead: the diff runs from the base's
+merge point to the working tree, so the staged and unstaged edits and the
+untracked src/*.cpp files (counting in full, the way files new in the
+branch do) are covered too, and the source spans and the evidence files
+are read from the working tree, so an untracked evidence file counts. One
+diff also means a function that a committed and a dirty hunk both touch
+is reported once. A pre-push run wants --worktree: the committed-only
+check on a dirty tree reads `0 touched function(s)` while the edits sit
+uncommitted.
+
+Each touched function needs docs/evidence/<ADDR>.md in the revision under test
+(at HEAD normally, or the working tree with --worktree; ADDR in upper-case
 hex without 0x, docs/evidence/README.md has the format) whose front matter has
 a non-empty `oracle_case` or `exemption`, or is `kind: trace` with a
 `trace_source` that checks out (below), which needs neither. Prints each offending function and
@@ -278,21 +289,64 @@ def changed_lines(diff):
     return result
 
 
-def touched(repo, base):
-    """(path, address, name) of each labelled function changed since base."""
+def _source_lines(repo, path, worktree=False):
+    """The lines of a source file: HEAD's copy, or the working tree's
+    (None when the working tree no longer has it)."""
+    if not worktree:
+        return git(repo, 'show', f'HEAD:{path}').stdout.splitlines()
+    try:
+        with open(os.path.join(repo, path), encoding='utf-8',
+                  errors='replace') as f:
+            return f.read().splitlines()
+    except OSError:
+        return None
+
+
+def touched(repo, base, worktree=False):
+    """(path, address, name) of each labelled function changed since base.
+
+    The default compares only the committed changes (`git diff
+    base...HEAD`) and reads the spans at HEAD. worktree=True audits the
+    working tree: one diff from the base's merge point to the working
+    tree covers the committed changes, the staged and unstaged edits and
+    the untracked src/*.cpp files, and the spans are read from the
+    working tree -- a dirty tree cannot hide a touched function (the
+    failure this closes: workers ran the committed-only check against
+    dirty trees and read `0 touched function(s)`). One diff, so a
+    function that a committed and a dirty hunk both touch is reported
+    once."""
     # --minimal: git's default diff gives up on optimality in large files
     # with big insertions and reports untouched neighbouring functions.
-    diff = git(repo, 'diff', '--unified=0', '--no-color', '--no-ext-diff',
-               '--minimal', '-M', f'{base}...HEAD', '--', 'src/').stdout
+    untracked = frozenset()
+    if worktree:
+        # `git diff <merge-base>`: the working tree against the same point
+        # base...HEAD diffs from, tracked files only (staged and unstaged
+        # alike); the untracked src files are added below.
+        point = git(repo, 'merge-base', base, 'HEAD').stdout.strip()
+        diff = git(repo, 'diff', '--unified=0', '--no-color', '--no-ext-diff',
+                   '--minimal', '-M', point, '--', 'src/').stdout
+        untracked = frozenset(
+            p for p in git(repo, 'ls-files', '--others',
+                           '--exclude-standard', '--', 'src/').stdout.splitlines()
+            if p.endswith('.cpp'))
+    else:
+        diff = git(repo, 'diff', '--unified=0', '--no-color', '--no-ext-diff',
+                   '--minimal', '-M', f'{base}...HEAD', '--', 'src/').stdout
+    ranges = changed_lines(diff)
+    for path in untracked:
+        ranges.setdefault(path, [])
     result = []
-    for path, ranges in sorted(changed_lines(diff).items()):
-        if not path.endswith('.cpp') or not ranges:
+    for path, changed in sorted(ranges.items()):
+        if not path.endswith('.cpp') or (not changed and path not in untracked):
             continue
-        lines = git(repo, 'show', f'HEAD:{path}').stdout.splitlines()
+        lines = _source_lines(repo, path, worktree)
+        if lines is None:
+            continue
         for first, last, address, name in spans(lines):
-            if any(first <= lo and hi <= last if deletion
-                   else lo <= last and first <= hi
-                   for lo, hi, deletion in ranges):
+            if path in untracked or any(
+                    first <= lo and hi <= last if deletion
+                    else lo <= last and first <= hi
+                    for lo, hi, deletion in changed):
                 result.append((path, address, name))
     return result
 
@@ -350,22 +404,42 @@ def fork_note_mentions(sha, path, address, name, run=subprocess.run):
                    + '; cite the note that covers this function')
 
 
-def problem(repo, address, name='', run=None):
+def _evidence_names(repo, worktree=False):
+    """The evidence directory's file names: at HEAD, or in the working
+    tree."""
+    if worktree:
+        folder = os.path.join(repo, EVIDENCE_DIR)
+        return os.listdir(folder) if os.path.isdir(folder) else []
+    if git(repo, 'rev-parse', '--verify', '--quiet', f'HEAD:{EVIDENCE_DIR}',
+           check=False).returncode != 0:
+        return []
+    return git(repo, 'ls-tree', '--name-only', f'HEAD:{EVIDENCE_DIR}',
+               check=False).stdout.splitlines()
+
+
+def problem(repo, address, name='', run=None, worktree=False):
     """(why, fields): why the evidence for address is insufficient, else
-    None with the file's front matter."""
+    None with the file's front matter.  The evidence is read at HEAD, or
+    with worktree=True from the working tree, so an untracked evidence
+    file counts (and a dirty deletion of one does not pass)."""
     rel = f'{EVIDENCE_DIR}/{evidence_name(address)}'
-    r = git(repo, 'show', f'HEAD:{rel}', check=False)
-    if r.returncode != 0:
-        names = git(repo, 'ls-tree', '--name-only', f'HEAD:{EVIDENCE_DIR}',
-                    check=False).stdout.splitlines() if git(
-            repo, 'rev-parse', '--verify', '--quiet', f'HEAD:{EVIDENCE_DIR}',
-            check=False).returncode == 0 else []
-        odd = misspelt_in(names, address)
+    if worktree:
+        try:
+            with open(os.path.join(repo, rel), encoding='utf-8',
+                      errors='replace') as f:
+                text = f.read()
+        except OSError:
+            text = None
+    else:
+        r = git(repo, 'show', f'HEAD:{rel}', check=False)
+        text = r.stdout if r.returncode == 0 else None
+    if text is None:
+        odd = misspelt_in(_evidence_names(repo, worktree), address)
         if odd:
             return (f'no {rel}, but {EVIDENCE_DIR}/{odd[0]} is spelt wrong: '
                     f'name it {rel} (caps, no 0x)'), None
         return f'no {rel}; write {rel} (caps, no 0x)', None
-    fields = front_matter(r.stdout)
+    fields = front_matter(text)
     recorded = fields.get('address', '')
     try:
         if recorded and int(recorded, 16) != address:
@@ -405,21 +479,28 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--base', default='origin/main')
     ap.add_argument('--repo', default='.')
+    ap.add_argument('--worktree', action='store_true',
+                    help='audit the working tree (staged, unstaged and '
+                         'untracked files), not just committed changes')
     args = ap.parse_args(argv)
 
     if not diffable(args.repo, args.base):
         print(f'check_evidence: cannot diff against {args.base}; skipping',
               file=sys.stderr)
         return 0
+    if args.worktree:
+        print('check_evidence: --worktree: auditing the working tree '
+              '(staged, unstaged and untracked files)')
     errors = []
     kinds = {}
     untagged = []
     rules_kinds = {}
     rules_found = 0
-    found = touched(args.repo, args.base)
+    found = touched(args.repo, args.base, worktree=args.worktree)
     for path, address, name in found:
         rules = address in RULES_MATH
-        why, fields = problem(args.repo, address, name)
+        why, fields = problem(args.repo, address, name,
+                              worktree=args.worktree)
         if rules:
             rules_found += 1
         if why:
