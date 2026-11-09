@@ -27669,8 +27669,96 @@ SHORT CGameSprite::Hide()
 
     INT nStealth = ((nAvg - (nLight * nLightMod * nAvg) / 10000) + 10) * 5;
 
-    // TODO: 0x757D2B-0x75843B not ported (the no-witness and enemy
-    // contests, and the still-hidden and reveal arms).
+    // The witness contests the attempt; bHidden survives them all or the
+    // sprite is revealed below.
+    BOOL bHidden = TRUE;
+
+    if (nEnemyId == CGameObjectArray::INVALID_INDEX) {
+        // No witness in range: the light-adjusted stealth contests the roll.
+        if (nStealth > nRoll) {
+            FeedBack(FEEDBACK_ROLL, nStealth / 5, nRoll / 5, nHideSkillMod, 0x9983, 0, 0);
+        } else {
+            FeedBack(FEEDBACK_ROLL, nStealth / 5, nRoll / 5, nHideSkillMod, 0x9984, 0, 0);
+            bHidden = FALSE;
+        }
+    } else {
+        CGameObject* pObject;
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetShare(nEnemyId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            CGameSprite* pEnemy = static_cast<CGameSprite*>(pObject);
+            BYTE nEnemyLevel = pEnemy->m_derivedStats.m_nLevel;
+            INT nWisMod = pGame->GetRuleTables().GetAbilityScoreModifier(pEnemy->m_derivedStats.m_nWIS);
+            CString sEnemyRace = GetRaceString(pEnemy->GetAIType().m_nRace);
+
+            // A deafened enemy cannot hear us, so the Move Silently contest
+            // is skipped.
+            if (!pEnemy->m_derivedStats.m_spellStates[SPLSTATE_DEAFENED]) {
+                LONG nHearing = (atol(pGame->GetRuleTables().m_tCREHIDEM.GetAt(CString("QUIETMOD"), sEnemyRace))
+                    + nWisMod + nEnemyLevel) * 5;
+                if (nHearing < 0) {
+                    nHearing = 0;
+                }
+                LONG nResult;
+                if (nHearing + nRoll < nMoveSilently) {
+                    bHidden = FALSE;
+                    nResult = 0x9981;
+                } else {
+                    nResult = 0x70;
+                }
+                FeedBack(FEEDBACK_ROLL, nMoveSilently / 5, nHearing / 5, nRoll / 5, nResult, 0, 0);
+            }
+
+            // A blinded enemy cannot see us, so the Hide in Shadows contest
+            // is skipped.
+            if ((pEnemy->m_derivedStats.m_generalState & STATE_BLIND) == 0) {
+                nEnemyLevel = pEnemy->m_derivedStats.m_nLevel;
+                nWisMod = pGame->GetRuleTables().GetAbilityScoreModifier(pEnemy->m_derivedStats.m_nWIS);
+                LONG nSight = (atol(pGame->GetRuleTables().m_tCREHIDEM.GetAt(CString("HIDEMOD"), sEnemyRace))
+                    + nWisMod + nEnemyLevel) * 5;
+                if (nSight < 0) {
+                    nSight = 0;
+                }
+                pGame->GetObjectArray()->ReleaseShare(nEnemyId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                LONG nResult;
+                if (nSight + nRoll < nHide) {
+                    nResult = 0x6EDB;
+                } else {
+                    nResult = 0x9982;
+                    bHidden = FALSE;
+                }
+                FeedBack(FEEDBACK_ROLL, nStealth / 5, nSight / 5, nRoll / 5, nResult, 0, 0);
+            }
+
+            // A creature that can neither hear nor see contests a plain
+            // stealth roll.
+            if (pEnemy->m_derivedStats.m_spellStates[SPLSTATE_DEAFENED]
+                && (pEnemy->m_derivedStats.m_generalState & STATE_BLIND)) {
+                LONG nResult;
+                if (nRoll < nStealth) {
+                    nResult = 0x9983;
+                } else {
+                    nResult = 0x9984;
+                    bHidden = FALSE;
+                }
+                FeedBack(FEEDBACK_ROLL, nStealth / 5, nRoll / 5, nHideSkillMod, nResult, 0, 0);
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(nEnemyId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    // TODO: 0x7580AF-0x75843B not ported (the still-hidden and reveal arms).
     return ACTION_ERROR;
 }
 
