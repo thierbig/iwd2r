@@ -565,6 +565,7 @@ public:
     int sub_75E930(int a1);
     SHORT Formation(CGameSprite* pTarget);
     SHORT Follow();
+    SHORT ProtectObject(CGameAIBase* pTarget);
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);
     SHORT RandomWalk();

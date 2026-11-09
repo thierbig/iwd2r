@@ -1236,6 +1236,163 @@ std::vector<CGameObject*> ObjectsOfType(CGameArea* pArea, BYTE type)
 
 }
 
+// CGameSprite::ProtectObject (0x749FC0, action 87): with no attacker it stays
+// near the protected object; otherwise it walks to the attacker it selects.
+TEST_CASE("sprite: ProtectObject follows its object and selects an attacker", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    CGameSprite* pHedron = FindSpeaker(pArea, "10HEDRON");
+    REQUIRE(pHedron != NULL);
+
+    CGameSprite* pOther = NULL;
+    for (CGameObject* pObject : ObjectsOfType(pArea, CGameObject::TYPE_SPRITE)) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+        if (pSprite != pCharacter && pSprite != pHedron && pSprite->m_animation.m_animation != NULL) {
+            pOther = pSprite;
+            break;
+        }
+    }
+    REQUIRE(pOther != NULL);
+    // Use the game's real fist item for the ability/range checks.
+    CItem* pFist = new CItem(CResRef("00FIST"), 0, 0, 0, 0, 0);
+    pHedron->m_equipment.m_items[CGameSpriteEquipment::SLOT_FIST] = pFist;
+    pHedron->m_equipment.m_selectedWeapon = CGameSpriteEquipment::SLOT_FIST;
+    pHedron->m_equipment.m_selectedWeaponAbility = 0;
+    REQUIRE(pHedron->m_equipment.m_selectedWeapon < CGameSpriteEquipment::NUM_SLOT);
+    pFist->Demand();
+    REQUIRE(pFist->GetAbility(0) != NULL);
+    pFist->Release();
+
+    auto objectType = [](CGameSprite* pSprite) {
+        return CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, pSprite->GetId(), 0, 0);
+    };
+    auto resetMovement = [pHedron]() {
+        pHedron->DropSearchRequest();
+        pHedron->DropPath();
+        pHedron->m_currentSearchRequest = NULL;
+        pHedron->field_5618 = 0;
+        pHedron->field_5616 = 0;
+        pHedron->m_curDest = CPoint(-1, -1);
+    };
+    auto requireWalk = [pHedron](CGameSprite* pExpected) {
+        REQUIRE(pHedron->m_currentSearchRequest != NULL);
+        REQUIRE(pHedron->m_currentSearchRequest->m_nTargetIds == 1);
+        REQUIRE(pHedron->m_currentSearchRequest->m_targetIds != NULL);
+        CHECK(pHedron->m_currentSearchRequest->m_targetIds[0] == pExpected->GetId());
+        CHECK(pHedron->m_curDest == pExpected->GetPos());
+    };
+
+    const CPoint origin = pHedron->GetPos();
+    const CAIObjectType character = objectType(pCharacter);
+    const CAIObjectType other = objectType(pOther);
+    pHedron->m_lAttacker.Set(CAIObjectType::NOONE);
+    pCharacter->m_lAttacker.Set(CAIObjectType::NOONE);
+    pHedron->m_curAction = CAIAction(87, character, 0, 0, 0);
+
+    // No protected object is an error; a valid one runs through action 87 and
+    // stores the handler's interruptable result as the last action result.
+    CHECK(pHedron->ProtectObject(NULL) == CGameAIBase::ACTION_ERROR);
+    pCharacter->m_pos = origin;
+    CHECK(pHedron->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_nLastActionReturn == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+
+    // Beyond min(specificID / 16, 6) squares, follow the protected object. The
+    // default specificID 0 becomes 5000, so this also exercises the fallback.
+    pCharacter->m_pos = origin + CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX, 0);
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pCharacter);
+
+    // A target's real attacker takes over from the no-attacker follow branch.
+    // The self attacker is NOONE here, so there is no priority contest.
+    pCharacter->m_lAttacker.Set(other);
+    pOther->m_pos = origin + CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX, 0);
+    pHedron->m_attackFrame = -2;
+
+    // A nonzero specificID is divided by the horizontal grid size. Outside
+    // ability range + personal space + that radius, the attacker is ignored:
+    // there is neither a walk nor a swing.
+    pHedron->m_curAction.m_specificID = CPathSearch::GRID_SQUARE_SIZEX;
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    CHECK(pHedron->m_attackFrame == -2);
+
+    // The default range is large enough to walk toward this attacker.
+    pHedron->m_curAction.m_specificID = 0;
+    resetMovement();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pOther);
+
+    // If the target has no attacker but the protector does, use the
+    // protector's attacker without an alignment check or a random draw.
+    pCharacter->m_lAttacker.Set(CAIObjectType::NOONE);
+    pHedron->m_lAttacker.Set(other);
+    resetMovement();
+    srand(1);
+    const unsigned int beforeOnlySelf = iwd2r_rand_state();
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    requireWalk(pOther);
+    CHECK(iwd2r_rand_state() == beforeOnlySelf);
+
+    // Both attackers exist. Evil protectors always take their own attacker;
+    // neutral ones take it on an even rand() % 2 and the target's on an odd
+    // one; other alignments take the target's. Every attacker is deliberately
+    // out of melee reach, so the selected object's search request identifies
+    // the choice without starting a combat round.
+    pCharacter->m_lAttacker.Set(other);
+    pHedron->m_lAttacker.Set(character);
+    pCharacter->m_pos = origin + CPoint(0, 10 * CPathSearch::GRID_SQUARE_SIZEY);
+    const struct {
+        BYTE alignment;
+        unsigned int seed;
+        bool ownAttacker;
+    } choices[] = {
+        { CAIOBJECTTYPE_NEUTRAL, 1, false },
+        { CAIOBJECTTYPE_NEUTRAL, 3, true },
+        { CAIOBJECTTYPE_LAWFUL_EVIL, 1, true },
+        { CAIOBJECTTYPE_LAWFUL_GOOD, 1, false },
+    };
+    for (const auto& choice : choices) {
+        INFO("alignment " << static_cast<int>(choice.alignment) << " seed " << choice.seed);
+        pHedron->m_typeAI.m_nAlignment = choice.alignment;
+        resetMovement();
+        srand(choice.seed);
+        CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+        requireWalk(choice.ownAttacker ? pCharacter : pOther);
+    }
+
+    // In weapon reach, the handler starts a round instead and ignores Swing's
+    // result: the action remains interruptable.
+    pHedron->m_lAttacker.Set(CAIObjectType::NOONE);
+    pOther->m_pos = origin;
+    pHedron->m_attackFrame = -2;
+    resetMovement();
+    srand(12);
+    CHECK(pHedron->ProtectObject(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pHedron->m_currentSearchRequest == NULL);
+    CHECK(pHedron->m_attackFrame == 0);
+
+    resetMovement();
+    ClearMessages();
+}
+
 TEST_CASE("sprite: PickLock unlocks a picked door, and reports a failed or unpickable one", "[ai][data]")
 {
     if (DataDir() == nullptr) {
