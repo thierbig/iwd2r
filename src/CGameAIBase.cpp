@@ -2759,6 +2759,61 @@ void CGameAIBase::PutItemGround(CItem* pItem)
     }
 }
 
+// 0x4633A0
+// The CreateItem action: makes the item named by the action's first
+// string (usage counts from m_specificID through m_specificID3) and
+// stores it. A party member takes it in the first blank personal-inventory
+// slot; a creature outside the party in the first blank of its carried
+// slots; a container in its first blank slot; any other object drops it
+// on the ground pile beside the acting object. When a sprite has no blank
+// slot left the pile still takes the item, but the action reports an
+// error (as CGameAIBase::PlaceItem's full-pack drop does).
+SHORT CGameAIBase::CreateItem()
+{
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(CResRef(m_curAction.GetString1()), 1005, TRUE) == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CItem* pItem = new CItem(CResRef(m_curAction.GetString1()),
+        static_cast<WORD>(m_curAction.m_specificID),
+        static_cast<WORD>(m_curAction.m_specificID2),
+        static_cast<WORD>(m_curAction.m_specificID3),
+        0,
+        0);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (pGame->GetCharacterPortraitNum(m_id) != -1) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(this);
+        int index;
+        for (index = 0; index < CScreenInventory::PERSONAL_INVENTORY_SIZE; index++) {
+            if (pSprite->m_equipment.m_items[index + 18] == NULL)
+                break;
+        }
+        if (index < CScreenInventory::PERSONAL_INVENTORY_SIZE) {
+            pSprite->m_equipment.m_items[index + 18] = pItem;
+            return ACTION_DONE;
+        }
+
+        // The pack is full: the ground pile takes the item, but the
+        // action itself failed.
+        LONG nPileId = pGame->GetGroundPile(m_id);
+        CGameContainer* pPile;
+        if (nPileId != CGameObjectArray::INVALID_INDEX && pGame->GetObjectArray()->GetDeny(nPileId,
+                                                               CGameObjectArray::THREAD_ASYNCH,
+                                                               reinterpret_cast<CGameObject**>(&pPile),
+                                                               INFINITE)
+            == CGameObjectArray::SUCCESS) {
+            pPile->PlaceItemInBlankSlot(pItem, TRUE, SHORT_MAX);
+            pGame->GetObjectArray()->ReleaseDeny(nPileId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+        return ACTION_ERROR;
+    }
+
+    // TODO: 0x463596 not ported.
+    return ACTION_ERROR;
+}
+
 // 0x463740
 SHORT CGameAIBase::ClearActions(CGameObject* target)
 {
