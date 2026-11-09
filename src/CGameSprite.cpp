@@ -14619,9 +14619,10 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = Help();
         goto done;
     case 18:
-        // Hide
-        // TODO: 0x72956F-0x72958D not ported (CGameSprite_Hide 0x757B40).
-        returnValue = ACTION_ERROR;
+        // Hide (0x72956F-0x72958D)
+        if (m_bHiding == 0) {
+            returnValue = Hide();
+        }
         goto done;
     case 19:
         // JoinParty
@@ -16742,10 +16743,11 @@ void CGameSprite::CheckModal()
         break;
     }
     case 2:
-        // TODO: 0x730EA2-0x730EC4 not ported (stealth). The exe re-runs
-        // CGameSprite::Hide (0x757B40) every third modal count; this tree has
-        // no declaration for 0x757B40 under any name yet, so the arm waits on
-        // that recovery (the WSO fork's arm calls it on the same cadence).
+        // Stealth (0x730EA2-0x730EC4): re-run the Hide check every third
+        // modal count; the return value is discarded.
+        if (m_modalCounter % 3u == 0) {
+            Hide();
+        }
         break;
     case 3:
         // TODO: 0x730EC4-0x731B04 not ported (turn undead).
