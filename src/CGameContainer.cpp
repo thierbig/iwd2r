@@ -1736,7 +1736,81 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
                     store.Marshal(pGame->m_sTempDir);
                 }
             } else {
-                // TODO: 0x47D945 not ported
+                // 0x47D945: a session is up — the bag ages through the
+                // shared store, host and client each in their own way.
+                CStore store;
+                BOOLEAN bDemanded = FALSE;
+
+                if (g_pChitin->cNetwork.m_bIsHost != FALSE) {
+                    // 0x47DADF: the host owns the master copy.
+                    pGame->DemandServerStore(pItem->cResRef, TRUE);
+                    store.SetResRef(pItem->cResRef);
+                } else {
+                    // 0x47D970: the client works from its local copy and
+                    // demands a fresh one only when the copy is stale.
+                    store.SetResRef(pItem->cResRef);
+
+                    if (store.m_bLocalCopy == FALSE
+                        || memcmp(store.m_pVersion, "STORV9.0", 8) != 0) {
+                        // 0x47D9A6: nonzero means the demand went through.
+                        if (g_pBaldurChitin->m_cBaldurMessage.DemandResourceFromServer(
+                                pItem->cResRef.GetResRefStr(), 1014, TRUE, TRUE, TRUE)
+                            == FALSE) {
+                            // 0x47D9F4: broken session — drop it and skip
+                            // this item entirely, no item-flags tail.
+                            g_pChitin->cNetwork.CloseSession(TRUE);
+                            continue;
+                        }
+
+                        store.SetResRef(pItem->cResRef);
+                        bDemanded = TRUE;
+                    }
+                }
+
+                if (store.m_header.m_nStoreType == 4) {
+                    if (g_pChitin->cNetwork.m_bIsHost == FALSE && bDemanded == FALSE) {
+                        // 0x47DA82: demand the store through the message
+                        // channel.
+                        bDemanded = TRUE;
+                        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                            new CMessageStoreDemand(pItem->cResRef, CGameObjectArray::INVALID_INDEX, CGameObjectArray::INVALID_INDEX),
+                            FALSE);
+                    }
+
+                    for (INT i = 0; i < store.GetNumItems(); i++) {
+                        store.GetItem(i, tempItem);
+
+                        if (tempItem.GetFlagsFile() & 1) {
+                            // 0x47DB56: unlike the local path the network
+                            // message carries the full item copy.
+                            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                                new CMessageContainerAddItem(tempItem, 0x7FFF, FALSE, m_id, m_id),
+                                FALSE);
+                            bRet = FALSE;
+                        }
+
+                        // 0x47DBE1: every item leaves the store.
+                        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                            new CMessageStoreRemoveItem(pItem->cResRef, pItem->cResRef, i, 1, pItem->m_flags, m_id, m_id),
+                            FALSE);
+                    }
+
+                    if (g_pChitin->cNetwork.m_bIsHost == FALSE
+                        && g_pChitin->cNetwork.m_bConnectionEstablished != FALSE) {
+                        // 0x47DCA0
+                        CStore::InvalidateStore(pItem->cResRef);
+                    }
+                }
+
+                if (g_pChitin->cNetwork.m_bIsHost != FALSE) {
+                    // 0x47DCC5
+                    pGame->ReleaseServerStore(store.m_resRef);
+                } else if (bDemanded != FALSE) {
+                    // 0x47DD01
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                        new CMessageStoreRelease(store.m_resRef, CGameObjectArray::INVALID_INDEX, CGameObjectArray::INVALID_INDEX),
+                        FALSE);
+                }
             }
 
             // 0x47DEEB: fall through to the item-flags tail.
