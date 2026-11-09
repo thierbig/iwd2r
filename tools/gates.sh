@@ -4,11 +4,41 @@
 # minutes. Linux presets always; the Windows builds with --windows.
 #
 #   tools/gates.sh [--base REV] [--windows] [--skip-clang] [--no-wait]
-#                  [--full] [--summary-fixture]
+#                  [--full] [--summary-fixture] [--worktree]
+#                  [--require-game-data] [--require-complete-parity]
 #
 # --base is the evidence check's base (default: iwd2r/main, what CI's push
 # event would have used). Engine tests run serially and muted. Exits 1 on the
 # first failing step and prints a summary.
+#
+# Pre-push preflight (all opt-in; the defaults above are unchanged), the
+# switches a maintainer-bound local run uses to fail closed where the
+# default gate skips or ignores:
+#   --worktree                 the decompiler-evidence check and structural
+#                              parity audit the working tree (staged,
+#                              unstaged and untracked files) through the
+#                              tools' own --worktree mode, so uncommitted
+#                              edits cannot pass uncovered -- the default
+#                              checks are committed-only and read a dirty
+#                              tree as "0 touched functions". No local
+#                              commit is needed for coverage.
+#   --require-game-data        fail before any step unless actual game data
+#                              is present: CHITIN.KEY after the default
+#                              discovery below (IWD2_DATA, else the
+#                              Linux-local copy).
+#   --require-complete-parity  structural parity runs strict
+#                              (--require-complete): a missing vanilla exe,
+#                              a base it cannot diff, or missing
+#                              functions.tsv/callgraph.tsv is a failure,
+#                              not an exit-0 SKIP.
+# Each has an env default (1 enables it): IWD2R_GATE_WORKTREE,
+# IWD2R_GATE_REQUIRE_GAME_DATA, IWD2R_GATE_REQUIRE_COMPLETE_PARITY.
+# Practical pre-push command, from the worktree under test:
+#   tools/gates.sh --base first --worktree --require-game-data --require-complete-parity
+# On a docs-only change the build, test and parity steps keep taking the
+# fast path below even with the preflight flags (nothing under src/
+# changed); the parity step still skips there rather than re-checking the
+# base's engine state.
 #
 # One gate runs at a time: gates.sh holds an exclusive flock on .gates.lock at
 # the MAIN repo root (shared by every worktree) and a second gate waits for it.
@@ -33,6 +63,11 @@
 set -u
 cd "$(dirname "$0")/.."
 BASE=iwd2r/main; BASE_GIVEN=0; FULL=0; WINDOWS=0; CLANG=1; NOWAIT=0; DRYLOCK=; FIXTURE=0
+# The pre-push preflight switches (header above): the env vars are the
+# defaults, the flags enable on top of them.
+WORKTREE="${IWD2R_GATE_WORKTREE:-0}"
+REQUIRE_GAME_DATA="${IWD2R_GATE_REQUIRE_GAME_DATA:-0}"
+REQUIRE_COMPLETE_PARITY="${IWD2R_GATE_REQUIRE_COMPLETE_PARITY:-0}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --base) BASE="$2"; BASE_GIVEN=1; shift 2 ;;
@@ -42,9 +77,15 @@ while [ $# -gt 0 ]; do
         --no-wait) NOWAIT=1; shift ;;
         --dry-lock) DRYLOCK="$2"; shift 2 ;;
         --summary-fixture) FIXTURE=1; shift ;;
+        --worktree) WORKTREE=1; shift ;;
+        --require-game-data) REQUIRE_GAME_DATA=1; shift ;;
+        --require-complete-parity) REQUIRE_COMPLETE_PARITY=1; shift ;;
         *) echo "gates: unknown option $1" >&2; exit 2 ;;
     esac
 done
+# The shared --worktree argument for the evidence check and parity below.
+WORKTREE_ARG=""
+[ "$WORKTREE" = 1 ] && WORKTREE_ARG="--worktree"
 # Whether a changed path MAY skip the engine steps: an allow-list, so anything
 # unknown (a root-level file, a new directory, CMakeUserPresets.json) runs the
 # full gate. tools/ is allowed except what the gate or the C++ tests read:
@@ -83,6 +124,27 @@ detect_docs_only() {
     return 0
 }
 detect_docs_only
+# Pre-push preflight (opt-in, header above): require actual game data
+# before any step runs or the lock is taken. The same default discovery
+# the engine steps use below (IWD2_DATA wins, else the Linux-local copy).
+# ${HOME:-} keeps a HOME-less environment (the summary fixture's minimal
+# env) from tripping set -u here, where the original assignment sat after
+# the fixture exit and was never reached by one.
+LINUX_DATA="${IWD2R_HOME:-${HOME:-}/.local/share/iwd2r}/game"
+discover_game_data() {
+    [ -z "${IWD2_DATA:-}" ] && [ -f "$LINUX_DATA/CHITIN.KEY" ] && export IWD2_DATA="$LINUX_DATA"
+    return 0
+}
+if [ "$REQUIRE_GAME_DATA" = 1 ]; then
+    discover_game_data
+    if [ -z "${IWD2_DATA:-}" ] || [ ! -f "$IWD2_DATA/CHITIN.KEY" ]; then
+        echo "gates: --require-game-data: no CHITIN.KEY after default discovery" >&2
+        echo "gates:   set IWD2_DATA to a game-data root, or make the Linux copy at $LINUX_DATA" >&2
+        echo "gates:   (the rsync line in the comment above the engine steps in this script); or drop --require-game-data" >&2
+        exit 1
+    fi
+    echo "gates: --require-game-data: game data at $IWD2_DATA/CHITIN.KEY"
+fi
 failed=()
 GATE_START=$SECONDS
 USE_CCACHE=0
@@ -151,8 +213,7 @@ export IWD2R_AUDIO=null SDL_AUDIO_DRIVER=dummy
 # Tests never write the copy: every engine-starting test runs on a private
 # view of it (tests/data_view.h), and copy_unchanged below fails a preset whose
 # tests changed it anyway.
-LINUX_DATA="${IWD2R_HOME:-$HOME/.local/share/iwd2r}/game"
-if [ -z "${IWD2_DATA:-}" ] && [ -f "$LINUX_DATA/CHITIN.KEY" ]; then export IWD2_DATA="$LINUX_DATA"; fi
+discover_game_data
 # The start-screen smoke test's frame hash depends on the game copy, so each
 # machine pins its own: tests/smoke_start_screen.cpp requires the hash in
 # IWD2R_SMOKE_HASH when it is set. The test fixes what else the menu reads
@@ -250,20 +311,27 @@ step "subsystem map" python3 -I tools/gen_map.py --check
 step "recovery status" python3 -I tools/re_status.py --check
 step "replay fields" python3 tools/gen_fields.py --check
 [ -f tools/shaders.py ] && step "shader blobs" python3 -I tools/shaders.py --check
-step "decompiler evidence (base $BASE)" python3 -I tools/check_evidence.py --base "$BASE"
+step "decompiler evidence (base $BASE)" python3 -I tools/check_evidence.py --base "$BASE" $WORKTREE_ARG
 # Structural parity (tools/parity/run.py): the changed functions' call graph,
 # vtables, struct layout, member offsets and address markers against the
 # vanilla exe. The exe-based columns need pefile/capstone from the parity venv
 # (tools/parity/setup.sh); on bare python3 they SKIP and the lints still run.
-# Without the exe there is nothing to diff against.
+# Without the exe there is nothing to diff against. --require-complete-parity
+# (the pre-push preflight) instead runs it strict: run.py's own SKIPs (no
+# vanilla exe, an undiffable base, missing functions.tsv/callgraph.tsv) are
+# failures, so there is no exe pre-check on that path.
 parity_py=python3
 parity_venv="${IWD2R_HOME:-$HOME/.local/share/iwd2r}/parity-venv/bin/python"
 [ -x "$parity_venv" ] && parity_py="$parity_venv"
 parity_step() {
     local exe
+    if [ "$REQUIRE_COMPLETE_PARITY" = 1 ]; then
+        "$parity_py" tools/parity/run.py --base "$BASE" $WORKTREE_ARG --require-complete
+        return
+    fi
     exe=$(python3 -I -c "import sys; sys.path.insert(0, 'tools'); import oracle; print(oracle.VANILLA_EXE)")
     if [ -f "$exe" ]; then
-        "$parity_py" tools/parity/run.py --base "$BASE"
+        "$parity_py" tools/parity/run.py --base "$BASE" $WORKTREE_ARG
     else
         echo "structural parity: skipped (no vanilla exe)"
     fi
