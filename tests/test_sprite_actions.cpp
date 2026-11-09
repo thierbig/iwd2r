@@ -25,6 +25,7 @@
 #include "CSearchBitmap.h"
 #include "CStore.h"
 #include "CUtil.h"
+#include "IcewindCGameEffects.h"
 #include "ScreenLayout.h"
 #include "compat/msvc_rand.h"
 #include "data_view.h"
@@ -2745,6 +2746,98 @@ TEST_CASE("sprite: ChangeAnimation builds the new creature and retargets the scr
         }
     }
     CHECK(nVisual219 == 0);
+
+    ClearMessages();
+}
+
+TEST_CASE("sprite: SpellCastEffect (289) arms the cast, holds until the expiry and releases", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    ClearMessages();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->m_worldTime.m_gameTime = 1000;
+
+    // The action targets the caster itself, the way the one vanilla script
+    // that uses it (Override/41cNateW.bcs) does: effect 15, a casting glow
+    // with flags 6, and no delay. The voice is string1 (channel 2); string2
+    // is "<casting loop>:<release>", both on channel 4.
+    CAIObjectType self(0, 0, 0, 0, 0, 0, 0, 0, pCharacter->GetId(), 0, 0);
+    CAIAction action(289, self, 15, 0, 0);
+    action.m_string1 = "CAS_M08";
+    action.m_string2 = "AMB_D01A:AMB_D02A";
+
+    // The first call arms the cast: the glow effect message, the two sounds
+    // (played directly), and the action holds.
+    pCharacter->SetCurrAction(action);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->field_753A == 1);
+    REQUIRE(pCharacter->field_753C > 1000);
+
+    // The sound messages are BROADCAST_FORCED_OTHERS, which AddMessage(msg,
+    // FALSE) hands to Broadcast, and Broadcast deletes them in single player
+    // without queueing: the sounds play through the direct CSound calls, and
+    // the only message that survives routing is the CMessageAddEffect.
+    int nAdd = 0;
+    CMessageAddEffect* pAdd = NULL;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = handler.m_messageList.GetNext(pos);
+        pAdd = dynamic_cast<CMessageAddEffect*>(pMessage);
+        if (pAdd != NULL) {
+            nAdd++;
+        }
+    }
+    CHECK(nAdd == 1);
+
+    // The arming sounds themselves: the voice (channel 2) is all of string1
+    // and the casting loop (channel 4) is string2's head. The channel lives in
+    // the sound mixer, which the null audio backend never initializes, so the
+    // observable here is which resref each sound was armed with.
+    CHECK(pCharacter->m_sndVoice.cResRef == "CAS_M08");
+    CHECK(pCharacter->field_4EC8.cResRef == "AMB_D01A");
+    REQUIRE(pAdd != NULL);
+    CHECK(pAdd->m_sourceId == pCharacter->GetId());
+    CHECK(pAdd->m_targetId == pCharacter->GetId());
+    REQUIRE(pAdd->m_effect != NULL);
+    CHECK(pAdd->m_effect->GetItemEffect()->effectID == ICEWIND_CGAMEEFFECT_CASTINGGLOW);
+    CHECK(pAdd->m_effect->GetItemEffect()->dwFlags == 6);
+    CHECK(pAdd->m_effect->GetItemEffect()->durationType == 0x1000);
+    CHECK(pAdd->m_effect->GetItemEffect()->duration == static_cast<DWORD>(pCharacter->field_753C));
+
+    // Before the expiry the tail holds the action without touching anything.
+    ClearMessages();
+    pGame->m_worldTime.m_gameTime = pCharacter->field_753C - 1;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+    CHECK(pCharacter->field_753A == 1);
+    CHECK(handler.m_messageList.IsEmpty());
+
+    // At the expiry the release (string2's tail) plays and the action ends.
+    pGame->m_worldTime.m_gameTime = pCharacter->field_753C;
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->field_753A == 0);
+
+    // The release sound plays through field_4EC8 (re-armed with string2's
+    // tail); its broadcast message is dropped like the arming ones, so no
+    // message survives.
+    CHECK(pCharacter->field_4EC8.cResRef == "AMB_D02A");
+    CHECK(handler.m_messageList.IsEmpty());
 
     ClearMessages();
 }
