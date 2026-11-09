@@ -834,8 +834,15 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 160:
         // ApplySpell
-        // TODO: 0x44FB82-0x44FC12 calls 0x462470 (not ported).
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL && m_curAction.m_acteeID.m_nInstance != CGameObjectArray::INVALID_INDEX) {
+            CAIObjectType typeAI;
+            typeAI.m_nInstance = m_curAction.m_acteeID.m_nInstance;
+            pTarget = GetTargetShareAIType(typeAI, CGameObject::TYPE_SPRITE);
+        }
+        bShare = TRUE;
+        returnValue = ApplySpell(pTarget);
+        goto release;
     case 161:
         // IncrementChapter
         if (m_curAction.m_specificID2 == 0) {
