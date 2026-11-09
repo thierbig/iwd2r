@@ -2598,8 +2598,43 @@ SHORT CGameAIBase::CreateCreature()
 
     pNewSprite->SetResRef(CResRef(m_curAction.GetString1()));
 
-    // TODO: 0x460B2B not ported.
-    return ACTION_ERROR;
+    if (m_curAction.m_actionID == 228) {
+        // Action 228 (0xE4) takes the exact square containing the point.
+        pos = CPoint(pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            pos.y / CPathSearch::GRID_SQUARE_SIZEY);
+    } else {
+        // Action 7 searches for the nearest open square around it, using
+        // the new sprite's personal space and this object's terrain table.
+        BYTE nPersonalSpace = pNewSprite->m_animation.GetPersonalSpace();
+        pos = m_pArea->m_search.GetNearestOpenSquare(
+            CPoint(pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+            GetTerrainTable(),
+            nPersonalSpace,
+            -1);
+    }
+
+    BYTE nListType = pNewSprite->m_animation.GetListType();
+
+    pNewSprite->AddToArea(m_pArea,
+        CPoint(pos.x * CPathSearch::GRID_SQUARE_SIZEX,
+            pos.y * CPathSearch::GRID_SQUARE_SIZEY),
+        0,
+        nListType);
+
+    if (strcmp(m_curAction.GetString2(), "") != 0) {
+        memcpy(pNewSprite->m_scriptName,
+            m_curAction.GetString2().GetBuffer(SCRIPTNAME_SIZE),
+            SCRIPTNAME_SIZE);
+    }
+
+    cVariable.SetName(CString(reinterpret_cast<const char*>(pNewSprite->GetScriptName())));
+    cVariable.m_intValue = pNewSprite->GetId();
+    m_pArea->m_namedCreatures.AddKey(cVariable);
+
+    field_342.Set(pNewSprite->GetAIType());
+
+    return ACTION_DONE;
 }
 
 // 0x462470
