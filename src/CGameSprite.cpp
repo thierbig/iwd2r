@@ -24145,7 +24145,7 @@ SHORT CGameSprite::ProtectObject(CGameAIBase* pTarget)
         const CPoint& ptSelf = GetPos();
         const CPoint ptSelfSquare(ptSelf.x / CPathSearch::GRID_SQUARE_SIZEX,
             ptSelf.y / CPathSearch::GRID_SQUARE_SIZEY);
-        const LONG nDistance = CAIUtil::CountSquares(ptTargetSquare, ptSelfSquare);
+        const LONG nDistance = CAIUtil::CountSquares(ptSelfSquare, ptTargetSquare);
         const SHORT nFollowRange = nProtectRange > 6 ? 6 : nProtectRange;
         if (nDistance > nFollowRange) {
             MoveToObject(pTarget);
