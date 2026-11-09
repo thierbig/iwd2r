@@ -3805,8 +3805,12 @@ void CGameSprite::AIUpdateFly()
         double fCurrCircleChange = min(m_fCircleChange, m_fCurrCircleChange + 1.0);
 
         if (m_circleFacing != 0) {
+            // The side is a signed BYTE in the original (movsx at
+            // 0x6FB6E4 and 0x6FB7A0), so FLY_RIGHT is -1, not 255.
+            const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
             double fAngle = static_cast<double>(m_animation.GetMoveScale())
-                    * static_cast<double>(m_circleFacing)
+                    * static_cast<double>(nCircleFacing)
                     * fCurrCircleChange
                     / static_cast<double>(m_radius)
                 + m_fDirectionOffset;
@@ -3814,7 +3818,7 @@ void CGameSprite::AIUpdateFly()
             m_pos.x = m_posOld.x + static_cast<LONG>(cos(fAngle) * static_cast<double>(m_radius));
             m_pos.y = m_posOld.y - static_cast<LONG>(sin(fAngle) * static_cast<double>(m_radius) * 3.0 / 4.0);
 
-            if (m_circleFacing == FLY_LEFT) {
+            if (nCircleFacing == FLY_LEFT) {
                 if (m_pos != m_posOld) {
                     SetDirection((GetDirection(CPoint(m_pos.x, 4 * m_pos.y / 3),
                                       CPoint(m_posOld.x, 4 * m_posOld.y / 3))
@@ -7023,20 +7027,25 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         m_circleFacing = 0;
         m_fCircleChange = static_cast<double>(m_radius / m_animation.GetMoveScale());
     } else {
+        // The side is a signed BYTE in the original: FLY_RIGHT is 0xFF and
+        // every use sign-extends it (movsx at 0x70815E, 0x708178, 0x708192,
+        // 0x7081A9 and 0x7081F9).
+        const SHORT nCircleFacing = static_cast<signed char>(m_circleFacing);
+
         m_fCircleChange = static_cast<double>(m_radius) * static_cast<double>(circleType) * 3.1415926535 / static_cast<double>(m_animation.GetMoveScale()) / 2.0;
 
         switch (abs(4 * ((m_nDirection + 2) / 4))) {
         case 0:
-            m_posOld.x += m_radius * m_circleFacing;
+            m_posOld.x += m_radius * nCircleFacing;
             break;
         case 4:
-            m_posOld.y += 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y += 3 * m_radius * nCircleFacing / 4;
             break;
         case 8:
-            m_posOld.x -= m_radius * m_circleFacing;
+            m_posOld.x -= m_radius * nCircleFacing;
             break;
         case 12:
-            m_posOld.y -= 3 * m_radius * m_circleFacing / 4;
+            m_posOld.y -= 3 * m_radius * nCircleFacing / 4;
             break;
         default:
             // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
@@ -7045,7 +7054,7 @@ void CGameSprite::SetTargetFly(BYTE circleType, BYTE facing, LONG radius)
         }
 
         m_fDirectionOffset = static_cast<double>(8 - m_nDirection) * 3.1415926535 / 8.0;
-        if (m_circleFacing == FLY_RIGHT) {
+        if (nCircleFacing == FLY_RIGHT) {
             m_fDirectionOffset += 3.1415926535;
         }
     }
@@ -14586,9 +14595,21 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = Enemy();
         goto done;
     case 11:
-        // EquipItem
-        // TODO: 0x72945E-0x7294F6 not ported (CItem::Equip/Unequip).
-        returnValue = ACTION_ERROR;
+        // EquipItem (0x72945E-0x7294F6)
+        {
+            SHORT nSlot = FindItemPersonal(m_curAction.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                returnValue = ACTION_ERROR;
+                goto done;
+            }
+
+            if (m_curAction.m_specificID == 0) {
+                m_equipment.m_items[nSlot]->Unequip(this, nSlot, TRUE, FALSE);
+            } else {
+                m_equipment.m_items[nSlot]->Equip(this, nSlot, FALSE);
+            }
+            returnValue = ACTION_DONE;
+        }
         goto done;
     case 12:
         // (0x7294F6-0x72951F)
@@ -14841,8 +14862,19 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = RandomFly();
         goto done;
     case 101:
-        // TODO: 0x729048-0x7290BB not ported (SetTargetFly).
-        returnValue = ACTION_ERROR;
+        // SetTargetFly (0x729048-0x7290BB): start the arc once, then wait for
+        // the ready sequence.
+        if (m_actionCount == 0) {
+            SetTargetFly(m_curAction.m_acteeID.m_nGeneral,
+                m_curAction.m_acteeID.m_nEnemyAlly,
+                m_curAction.m_specificID);
+        }
+        if (m_actionCount > 0 && m_nSequence == CGAMESPRITE_SEQ_READY) {
+            m_baseStats.m_flags &= ~0x80000000;
+            returnValue = ACTION_DONE;
+        } else {
+            returnValue = ACTION_NORMAL;
+        }
         goto done;
     case 102:
     case 103:
@@ -15017,9 +15049,11 @@ SHORT CGameSprite::ExecuteAction()
         }
         goto done;
     case 152:
-        // ChangeAIType
-        // TODO: 0x72A56E-0x72A5AC not ported.
-        returnValue = ACTION_ERROR;
+        // ChangeAIType (0x72A56E-0x72A5AC)
+        SetAIType(m_curAction.m_acteeID, FALSE, FALSE);
+        m_liveTypeAI.Set(m_curAction.m_acteeID);
+        m_startTypeAI.Set(m_curAction.m_acteeID);
+        returnValue = ACTION_DONE;
         goto done;
     case 166:
         // SetNumTimesTalkedTo (0x72A5AC-0x72A5DE)
@@ -15040,9 +15074,17 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = EquipRanged();
         goto done;
     case 175:
-        // SetLeavePartyDialogFile
-        // TODO: 0x72A606-0x72A747 not ported.
-        returnValue = ACTION_ERROR;
+        // SetLeavePartyDialogFile (0x72A606-0x72A747)
+        m_dialog = pGame->GetRuleTables().m_tPostDialog.GetAt(CRuleTables::POST_DIALOG_FILE,
+            CString(m_scriptName));
+        if (m_dialog == pGame->GetRuleTables().m_tPostDialog.GetDefault()) {
+            m_dialog = "multig";
+        }
+        if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+            CMessage* message = new CMessageSetDialogResRef(m_dialog, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 179:
         // DialogInterrupt (0x72A747-0x72A764)

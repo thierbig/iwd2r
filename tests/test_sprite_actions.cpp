@@ -3394,6 +3394,193 @@ TEST_CASE("sprite: RandomFly queues the fly arc, rounds the facing and jumps aft
     ClearMessages();
 }
 
+TEST_CASE("sprite: the inline item and state actions update the current sprite", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // EquipItem finds the item without case and accepts both specific values.
+    // These are scopes, not Catch2 SECTIONs: every SECTION would call NewGame
+    // again on the same long-lived engine with the previous party still present.
+    {
+        SHORT nSlot = -1;
+        for (SHORT n = 18; n < 51; n++) {
+            if (pCharacter->m_equipment.m_items[n] == NULL) {
+                nSlot = n;
+                break;
+            }
+        }
+        REQUIRE(nSlot != -1);
+        CItem* pItem = new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+        pCharacter->m_equipment.m_items[nSlot] = pItem;
+
+        CAIAction action;
+        action.m_actionID = 11;
+        action.m_string1 = "00gem01";
+        action.m_specificID = 0;
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        action.m_specificID = 1;
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        action.m_string1 = "NOSUCHIT";
+        pCharacter->SetCurrAction(action);
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+        pCharacter->m_equipment.m_items[nSlot] = NULL;
+        delete pItem;
+    }
+
+    // SetTargetFly starts once and finishes when the ready sequence is reached.
+    {
+        CAIAction action;
+        action.m_actionID = CAIAction::SETTARGETFLY;
+        action.m_acteeID.m_nGeneral = 2;
+        action.m_acteeID.m_nEnemyAlly = CGameSprite::FLY_LEFT;
+        action.m_specificID = 512;
+        pCharacter->SetCurrAction(action);
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_nDirection = 0;
+        pCharacter->m_pos = CPoint(1000, 1000);
+        pCharacter->m_baseStats.m_flags |= 0x80000000;
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+        CHECK(pCharacter->m_radius == 512);
+        CHECK(pCharacter->m_circleFacing == CGameSprite::FLY_LEFT);
+        CHECK(pCharacter->m_posOld == CPoint(1512, 1000));
+        CHECK(pCharacter->m_nSequence == CGAMESPRITE_SEQ_WALK);
+        CHECK((pCharacter->m_baseStats.m_flags & 0x80000000) != 0);
+
+        const CPoint posOld = pCharacter->m_posOld;
+        pCharacter->m_actionCount = 1;
+        pCharacter->m_nSequence = CGAMESPRITE_SEQ_READY;
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_posOld == posOld);
+        CHECK((pCharacter->m_baseStats.m_flags & 0x80000000) == 0);
+    }
+
+    // ChangeAIType copies the action's type to the current, live and starting types.
+    {
+        CAIAction action;
+        action.m_actionID = 152;
+        action.m_acteeID.m_nEnemyAlly = 201;
+        action.m_acteeID.m_nGeneral = CAIOBJECTTYPE_G_UNDEAD;
+        action.m_acteeID.m_nRace = CAIOBJECTTYPE_R_GOBLIN;
+        action.m_acteeID.m_nClass = CAIObjectType::C_ROGUE;
+        action.m_acteeID.m_nSpecific = 7;
+        action.m_acteeID.m_sName = "ChangedType";
+        pCharacter->SetCurrAction(action);
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        for (const CAIObjectType* type : { &pCharacter->m_typeAI, &pCharacter->m_liveTypeAI, &pCharacter->m_startTypeAI }) {
+            CHECK(type->m_nEnemyAlly == 201);
+            CHECK(type->m_nGeneral == CAIOBJECTTYPE_G_UNDEAD);
+            CHECK(type->m_nRace == CAIOBJECTTYPE_R_GOBLIN);
+            CHECK(type->m_nClass == CAIObjectType::C_ROGUE);
+            CHECK(type->m_nSpecific == 7);
+            CHECK(type->m_sName == "ChangedType");
+        }
+    }
+
+    // SetLeavePartyDialogFile uses the table's MULTIG fallback.
+    {
+        std::memset(pCharacter->m_scriptName, 0, SCRIPTNAME_SIZE);
+        strcpy(pCharacter->m_scriptName, "NO_SUCH_POST_DIALOG");
+        const BOOLEAN connected = g_pChitin->cNetwork.m_bConnectionEstablished;
+        g_pChitin->cNetwork.m_bConnectionEstablished = FALSE;
+        pCharacter->m_dialog = CResRef("");
+        CAIAction action;
+        action.m_actionID = 175;
+        pCharacter->SetCurrAction(action);
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(pCharacter->m_dialog == CResRef("multig"));
+        g_pChitin->cNetwork.m_bConnectionEstablished = connected;
+    }
+
+    ClearMessages();
+}
+
+TEST_CASE("sprite: the fly side is signed in SetTargetFly and AIUpdateFly", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+
+    // FLY_RIGHT is -1 (0xFF in m_circleFacing). The original sign-extends it
+    // for the initial hop (SetTargetFly) and for the arc (AIUpdateFly); an
+    // unsigned read turns 0xFF into 255.
+    struct FlyRun {
+        CPoint posOld;
+        CPoint pos;
+        double directionOffset;
+        signed char facing;
+    };
+    auto run = [&](SHORT side) {
+        CAIAction action;
+        action.m_actionID = CAIAction::SETTARGETFLY;
+        action.m_acteeID.m_nGeneral = 2;
+        action.m_acteeID.m_nEnemyAlly = static_cast<BYTE>(side);
+        action.m_specificID = 512;
+        pCharacter->SetCurrAction(action);
+        pCharacter->m_actionCount = 0;
+        pCharacter->m_nDirection = 0;
+        pCharacter->m_pos = CPoint(1000, 1000);
+        pCharacter->m_baseStats.m_flags |= 0x80000000;
+
+        CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_NORMAL);
+        CHECK(pCharacter->m_radius == 512);
+        CHECK(pCharacter->m_nSequence == CGAMESPRITE_SEQ_WALK);
+
+        FlyRun result;
+        result.posOld = pCharacter->m_posOld;
+        result.directionOffset = pCharacter->m_fDirectionOffset;
+        result.facing = static_cast<signed char>(pCharacter->m_circleFacing);
+        pCharacter->AIUpdateFly();
+        result.pos = pCharacter->m_pos;
+        return result;
+    };
+
+    const FlyRun left = run(CGameSprite::FLY_LEFT);
+    const FlyRun right = run(static_cast<BYTE>(CGameSprite::FLY_RIGHT));
+
+    CHECK(left.facing == CGameSprite::FLY_LEFT);
+    CHECK(right.facing == CGameSprite::FLY_RIGHT);
+    CHECK(left.posOld == CPoint(1512, 1000));
+    CHECK(right.posOld == CPoint(488, 1000));
+    CHECK(left.directionOffset == 3.1415926535);
+    CHECK(right.directionOffset == 2 * 3.1415926535);
+    CHECK(left.pos != left.posOld);
+    CHECK(right.pos != right.posOld);
+    CHECK(left.pos.x > 1000);
+    CHECK(right.pos.x < 1000);
+    CHECK(std::abs(left.pos.x + right.pos.x - 2000) <= 1);
+    CHECK(std::abs(left.pos.y - right.pos.y) <= 1);
+
+    ClearMessages();
+}
+
 TEST_CASE("sprite: RemoveSpell erases the action's spell from its list", "[ai][data]")
 {
     if (DataDir() == nullptr) {
