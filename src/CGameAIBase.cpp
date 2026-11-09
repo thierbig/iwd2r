@@ -940,7 +940,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 247:
         // BitGlobal
-        // TODO: 0x450694-0x4506A2 calls 0x4688A0 (not ported).
+        returnValue = BitGlobal();
         goto done;
     case 248:
         // GlobalBitGlobal
