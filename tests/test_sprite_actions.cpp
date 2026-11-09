@@ -24,6 +24,7 @@
 #include "CScreenWorld.h"
 #include "CSearchBitmap.h"
 #include "CStore.h"
+#include "CUIControlTextDisplay.h"
 #include "CUtil.h"
 #include "IcewindCGameEffects.h"
 #include "ScreenLayout.h"
@@ -2839,6 +2840,315 @@ TEST_CASE("sprite: SpellCastEffect (289) arms the cast, holds until the expiry a
     CHECK(pCharacter->field_4EC8.cResRef == "AMB_D02A");
     CHECK(handler.m_messageList.IsEmpty());
 
+    ClearMessages();
+}
+
+// CGameSprite::Hide 0x757B40 through its two callers: the case 18 arm of
+// ExecuteAction (0x72956F-0x72958D) and CheckModal's stealth re-check
+// (0x730EA2-0x730EC4). A thief in the dark of the start area hides -- the
+// feedback is "Hide Succeeded" and a 300-tick self-invisibility effect is
+// queued -- the same roll in the light (the area's lum bitmap unbound, the
+// tint falls back to white) fails the light-scaled contest and reveals, and
+// the forced gates (a natural roll of 100, the disabled stealth button,
+// CheckModal's every-third-count re-check) reveal with the toolbar reset.
+TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals on the forced gates", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    pArea->m_visibility.SetAreaExplored();
+    ClearMessages();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->m_worldTime.m_gameTime = 1000;
+
+    // The hide feedback reaches the world screen's dialog display (it is
+    // not a queued message); observe it like tests/test_combat.cpp does.
+    CUIControlTextDisplay* pDisplay = g_pBaldurChitin->m_pEngineWorld->m_pActiveDialogDisplay;
+    REQUIRE(pDisplay != NULL);
+    REQUIRE(pDisplay->m_plstStrings != NULL);
+    REQUIRE(g_pBaldurChitin->pActiveEngine == g_pBaldurChitin->m_pEngineWorld);
+
+    auto Tlk = [](STRREF strRef) {
+        STR_RES strRes;
+        g_pBaldurChitin->m_cTlkTable.Fetch(strRef, strRes);
+        return std::string(static_cast<LPCSTR>(strRes.szText));
+    };
+    // The dialog lines an act adds past `before`, joined: one message can
+    // wrap over several CDisplayStrings, so only substring finds are safe.
+    auto dialogAdded = [&](INT_PTR before) {
+        std::string all;
+        INT_PTR n = 0;
+        POSITION pos = pDisplay->m_plstStrings->GetHeadPosition();
+        while (pos != NULL) {
+            CDisplayString* pString = pDisplay->m_plstStrings->GetNext(pos);
+            if (n++ >= before) {
+                all += std::string(static_cast<LPCSTR>(pString->GetString())) + "\n";
+            }
+        }
+        return all;
+    };
+    // A seed whose first rand() draw is the roll ((rand() % 20) * 5 + 5).
+    auto rollSeed = [](INT roll) {
+        for (unsigned int seed = 1; seed < 100000; seed++) {
+            iwd2r_srand(seed);
+            if ((iwd2r_rand() % 20) * 5 + 5 == roll) {
+                return seed;
+            }
+        }
+        return 0u;
+    };
+    auto hide = [&](unsigned int seed) {
+        pCharacter->SetCurrAction(CAIAction(18, CPoint(-1, -1), 0, 0));
+        pCharacter->m_actionCount = 0;
+        iwd2r_srand(seed);
+        return pCharacter->ExecuteAction();
+    };
+
+    // The light knobs: the dark level the area's lum bitmap gives where the
+    // sprite stands, and the bright fallback (white tint) when no bitmap is
+    // bound. If the start position samples fully bright, walk outward for a
+    // darker sample and move the sprite there. The bitmap stays bound for
+    // the dark scenarios; the bright scenario below unbinds it again.
+    CResBitmap* pLumRes = pArea->m_bmLum.pRes;
+    REQUIRE(pLumRes != NULL);
+    INT nLightDark = static_cast<signed char>(pCharacter->GetLightLevel());
+    pArea->m_bmLum.pRes = NULL;
+    INT nLightBright = static_cast<signed char>(pCharacter->GetLightLevel());
+    pArea->m_bmLum.pRes = pLumRes;
+    if (nLightBright == nLightDark) {
+        const CPoint original = pCharacter->m_pos;
+        bool darker = false;
+        for (int distance = 1; distance <= 8 && !darker; distance++) {
+            const CPoint deltas[] = {
+                CPoint(distance * 64, 0), CPoint(-distance * 64, 0),
+                CPoint(0, distance * 64), CPoint(0, -distance * 64)
+            };
+            for (const CPoint& delta : deltas) {
+                pCharacter->m_pos = original + delta;
+                if (static_cast<signed char>(pCharacter->GetLightLevel()) < nLightBright) {
+                    darker = true;
+                    break;
+                }
+            }
+        }
+        REQUIRE(darker);
+        nLightDark = static_cast<signed char>(pCharacter->GetLightLevel());
+    }
+    REQUIRE(nLightBright > nLightDark);
+
+    // The attempts below are unwitnessed: no enemy inside visual range.
+    REQUIRE(pArea->GetNearest(pCharacter->GetId(),
+                pCharacter->GetAIType().GetEnemyOf(),
+                pCharacter->GetVisualRange(),
+                pCharacter->GetVisibleTerrainTable(),
+                TRUE,
+                TRUE,
+                TRUE,
+                0,
+                FALSE)
+        == CGameObjectArray::INVALID_INDEX);
+
+    // The racial LIGHTMOD row of CRELIGHT scales the light level against
+    // the skill average.
+    CString sRace = CGameSprite::GetRaceString(pCharacter->GetAIType().m_nRace);
+    INT nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
+    INFO("LIGHTMOD for " << std::string(static_cast<LPCSTR>(sRace)) << " is " << nLightMod);
+    REQUIRE(nLightMod > 0);
+
+    // The skill band where the dark hides and the bright fails on one roll:
+    // R >= the bright contest (a tie fails it: the contest is strict) and
+    // below the dark contest. Both skills equal the average, as the average
+    // of equal skills is the skill.
+    INT nSkill = -1;
+    INT R = -1;
+    for (INT nAvg = 1; nAvg <= 127; nAvg++) {
+        INT nScoreBright = (nAvg - (nLightBright * nLightMod * nAvg) / 10000) + 10;
+        INT nScoreDark = (nAvg - (nLightDark * nLightMod * nAvg) / 10000) + 10;
+        INT nRoll = std::max(nScoreBright * 5, 5);
+        if (nRoll <= 95 && nScoreDark * 5 > nRoll) {
+            nSkill = nAvg;
+            R = nRoll;
+            break;
+        }
+    }
+    INFO("light dark " << nLightDark << " bright " << nLightBright
+                      << " mod " << nLightMod << " skill " << nSkill << " roll " << R);
+    REQUIRE(nSkill != -1);
+
+    unsigned int nSeed = rollSeed(R);
+    unsigned int nSeed100 = rollSeed(100);
+    unsigned int nSeed50 = rollSeed(50);
+    REQUIRE(nSeed != 0);
+    REQUIRE(nSeed100 != 0);
+    REQUIRE(nSeed50 != 0);
+
+    pCharacter->m_bHiding = FALSE;
+    pCharacter->m_nModalState = 0;
+    pCharacter->m_modalCounter = 0;
+    pCharacter->m_nStealthGreyOut = 0;
+    pCharacter->m_derivedStats.m_disabledButtons[0] = 0;
+    // Off: the success below posts its outcome text but no roll line (the
+    // static is shared across tests, so restore it below).
+    CGameSprite::m_bRollFeedbackEnabled = 0;
+
+    // In the dark the attempt hides the sprite: "Hide Succeeded" and a
+    // 300-tick self-invisibility effect queued on the world timer.
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_HIDE] = static_cast<signed char>(nSkill);
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_MOVE_SILENTLY] = static_cast<signed char>(nSkill);
+    const INT_PTR beforeA = pDisplay->m_plstStrings->GetCount();
+    CHECK(hide(nSeed) == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_bHiding == TRUE);
+    CHECK(pCharacter->m_nModalState == 3);
+    CHECK(pCharacter->m_nStealthGreyOut == 0);
+    std::vector<CMessageAddEffect*> addsA = Queued<CMessageAddEffect>();
+    REQUIRE(addsA.size() == 1);
+    CHECK(addsA[0]->m_sourceId == pCharacter->GetId());
+    CHECK(addsA[0]->m_targetId == pCharacter->GetId());
+    REQUIRE(addsA[0]->m_effect != NULL);
+    CHECK(addsA[0]->m_effect->GetItemEffect()->effectID == CGAMEEFFECT_INVISIBLE);
+    CHECK(addsA[0]->m_effect->GetItemEffect()->dwFlags == 0);
+    CHECK(addsA[0]->m_effect->GetItemEffect()->effectAmount == 1);
+    CHECK(addsA[0]->m_effect->GetItemEffect()->durationType == 0x1000);
+    CHECK(addsA[0]->m_effect->GetItemEffect()->duration == 1300);
+    const std::string textA = dialogAdded(beforeA);
+    INFO(textA);
+    CHECK(textA.find(Tlk(19944)) != std::string::npos); // "Hide Succeeded"
+    CHECK(textA.find(Tlk(17120)) == std::string::npos); // "Hide Failed"
+
+    // The action arm skips a second Hide while hiding: no new effect, no
+    // new feedback, still hidden.
+    ClearMessages();
+    const INT_PTR beforeA2 = pDisplay->m_plstStrings->GetCount();
+    CHECK(hide(nSeed) == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_bHiding == TRUE);
+    CHECK(pCharacter->m_nModalState == 3);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    CHECK(dialogAdded(beforeA2).empty());
+
+    // CheckModal re-runs Hide every third modal count: the first count
+    // leaves the hidden sprite alone, the third re-checks -- here forced to
+    // reveal by the disabled stealth button.
+    pCharacter->field_44A = static_cast<int>(pCharacter->GetId());
+    ClearMessages();
+    const INT_PTR beforeE = pDisplay->m_plstStrings->GetCount();
+    pCharacter->m_modalCounter = 0;
+    pCharacter->CheckModal();
+    CHECK(pCharacter->m_modalCounter == 1);
+    CHECK(pCharacter->m_bHiding == TRUE);
+    CHECK(pCharacter->m_nModalState == 3);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    CHECK(dialogAdded(beforeE).empty());
+
+    pCharacter->m_derivedStats.m_disabledButtons[0] = 1;
+    pCharacter->m_modalCounter = 2;
+    pCharacter->CheckModal();
+    CHECK(pCharacter->m_modalCounter == 3);
+    CHECK(pCharacter->m_bHiding == FALSE);
+    CHECK(pCharacter->m_nModalState == 0);
+    CHECK(pCharacter->m_nStealthGreyOut == 90);
+    CHECK(pGame->GetButtonArray()->m_nSelectedButton == 100);
+    const std::string textE = dialogAdded(beforeE);
+    INFO(textE);
+    CHECK(textE.find(Tlk(17120)) != std::string::npos); // "Hide Failed"
+    pCharacter->m_derivedStats.m_disabledButtons[0] = 0;
+
+    // A natural roll of 100 forces the reveal whatever the skills. The
+    // sprite sits in the stealth modal state but is not hiding (the action
+    // arm only calls Hide when not hiding): the forced reveal clears
+    // m_bHiding before SetModalState runs the 3-to-0 transition, so the
+    // leaving-shadows text never posts.
+    pCharacter->m_bHiding = FALSE;
+    pCharacter->m_nModalState = 3;
+    pCharacter->m_nStealthGreyOut = 0;
+    pGame->GetButtonArray()->m_nSelectedButton = 0;
+    ClearMessages();
+    const INT_PTR beforeC = pDisplay->m_plstStrings->GetCount();
+    CHECK(hide(nSeed100) == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_bHiding == FALSE);
+    CHECK(pCharacter->m_nModalState == 0);
+    CHECK(pCharacter->m_nStealthGreyOut == 90);
+    CHECK(pGame->GetButtonArray()->m_nSelectedButton == 100);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    const std::string textC = dialogAdded(beforeC);
+    INFO(textC);
+    CHECK(textC.find(Tlk(17120)) != std::string::npos); // "Hide Failed"
+    CHECK(textC.find(Tlk(4188)) == std::string::npos); // "Leaving Shadows"
+
+    // Zero skills: the stealth score is the flat 50 whatever the light, and
+    // a roll of exactly 50 fails it -- the contest is strict (score > roll).
+    pCharacter->m_bHiding = FALSE;
+    pCharacter->m_nModalState = 0;
+    pCharacter->m_nStealthGreyOut = 0;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_HIDE] = 0;
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_MOVE_SILENTLY] = 0;
+    ClearMessages();
+    const INT_PTR beforeD = pDisplay->m_plstStrings->GetCount();
+    CHECK(hide(nSeed50) == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_bHiding == FALSE);
+    CHECK(pCharacter->m_nModalState == 0);
+    CHECK(pCharacter->m_nStealthGreyOut == 90);
+    CHECK(pGame->GetButtonArray()->m_nSelectedButton == 100);
+    const std::string textD = dialogAdded(beforeD);
+    INFO(textD);
+    CHECK(textD.find(Tlk(17120)) != std::string::npos); // "Hide Failed"
+    CHECK(textD.find(Tlk(19944)) == std::string::npos); // "Hide Succeeded"
+
+    // The same roll that hid in the dark fails in the light: the lum
+    // bitmap unbound, the white fallback tint gives the bright level, and
+    // the light-scaled contest no longer beats the roll. Roll feedback on:
+    // the failed contest's line posts with the scores in it.
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_HIDE] = static_cast<signed char>(nSkill);
+    pCharacter->m_derivedStats.m_nSkills[CGAMESPRITE_SKILL_MOVE_SILENTLY] = static_cast<signed char>(nSkill);
+    pCharacter->m_bHiding = FALSE;
+    pCharacter->m_nModalState = 0;
+    pCharacter->m_nStealthGreyOut = 0;
+    CGameSprite::m_bRollFeedbackEnabled = 1;
+    pArea->m_bmLum.pRes = NULL;
+    REQUIRE(pArea->m_bmLum.pRes == NULL);
+    CHECK(static_cast<signed char>(pCharacter->GetLightLevel()) == nLightBright);
+    ClearMessages();
+    const INT_PTR beforeB = pDisplay->m_plstStrings->GetCount();
+    CHECK(hide(nSeed) == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_bHiding == FALSE);
+    CHECK(pCharacter->m_nModalState == 0);
+    CHECK(pCharacter->m_nStealthGreyOut == 90);
+    const std::string textB = dialogAdded(beforeB);
+    INFO(textB);
+    CHECK(textB.find(Tlk(17120)) != std::string::npos); // "Hide Failed"
+    CHECK(textB.find(Tlk(19944)) == std::string::npos); // "Hide Succeeded"
+    // The roll line the exe posts: the failed no-witness contest (strRef
+    // 0x9984) formatted with the bright score, the roll and the hide skill
+    // modifier. Word wrapping may split its tail; its first words survive.
+    STR_RES rollRes;
+    g_pBaldurChitin->m_cTlkTable.Fetch(0x9984, rollRes);
+    CString expected;
+    expected.Format(rollRes.szText,
+        ((nSkill - (nLightBright * nLightMod * nSkill) / 10000) + 10),
+        R / 5,
+        pCharacter->sub_763E40(CGAMESPRITE_SKILL_HIDE),
+        0,
+        0);
+    const std::string expectRoll(static_cast<LPCSTR>(expected));
+    CHECK(textB.find(expectRoll.substr(0, std::min<std::size_t>(expectRoll.size(), 16)))
+        != std::string::npos);
+
+    // Restore the shared knobs.
+    pArea->m_bmLum.pRes = pLumRes;
+    CHECK(static_cast<signed char>(pCharacter->GetLightLevel()) == nLightDark);
+    CGameSprite::m_bRollFeedbackEnabled = -1;
     ClearMessages();
 }
 
