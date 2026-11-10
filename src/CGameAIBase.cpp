@@ -3169,16 +3169,23 @@ SHORT CGameAIBase::TakeItemListParty()
 
                 PlaceItem(pTaken, TRUE, TRUE, 1, TRUE);
 
-                // TODO: 0x464521-0x46494A (the re-find tail of the take
-                // loop, the bag sweep, the ReleaseShare, the 226 count and
-                // the default-item fallback) not ported.
-                return ACTION_DONE;
+                match++;
+                slot = pSprite->FindItemPersonal(sItemName, match, FALSE);
             }
 
-            // TODO: 0x464549-0x46494A (the bag sweep and the ReleaseShare)
-            // not ported.
-            (void)bTookSomething;
-            break;
+            // The member has no more personal copies of this row's item.
+            // The bags are drained next, up to 0x7FFF of the item; the bag
+            // copies land as one freshly created stack of `taken` items,
+            // placed without feedback, unlike the personal copies above.
+            SHORT taken = pSprite->TakeItemBags(sItemName, 0x7FFF, -1);
+            if (taken > 0) {
+                bTookSomething = TRUE;
+                PlaceItem(new CItem(CResRef(sItemName), 1, 0, 0, 0, 0), TRUE, TRUE, taken, FALSE);
+            }
+
+            pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
         }
 
         // TODO: 0x46460F-0x46494A (the 226 per-row count) not ported.
