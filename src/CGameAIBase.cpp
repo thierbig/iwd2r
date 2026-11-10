@@ -1190,11 +1190,57 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 266:
         // DisplayMessage
-        // TODO: 0x450D61-0x450E19 not ported.
+        {
+            STR_RES strRes;
+            if (g_pBaldurChitin->GetTlkTable().Fetch(m_curAction.GetSpecifics(), strRes)) {
+                g_pBaldurChitin->GetBaldurMessage()->DisplayText(CString(""),
+                    strRes.szText,
+                    RGB(160, 200, 215),
+                    RGB(160, 200, 215),
+                    -1,
+                    GetId(),
+                    GetId());
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 267:
         // ExportParty
-        // TODO: 0x450E19-0x450FBC not ported.
+        {
+            CString sFileName;
+            int nExportIndex = 1;
+
+            g_pBaldurChitin->GetBaldurMessage()->DisplayTextRef(-1, 26827, RGB(0, 0, 0), RGB(255, 255, 0), -1, 0, 0);
+
+            for (int nCharacter = 0;
+                 nCharacter < g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+                 nCharacter++) {
+                CGameObject* pObject;
+                LONG nCharacterId = g_pBaldurChitin->GetObjectGame()->GetCharacterId(nCharacter);
+                BYTE rc;
+
+                do {
+                    rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pObject,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) {
+                    // The export flag is m_flags bit 0x800 of the base stats.
+                    if ((static_cast<CGameSprite*>(pObject)->GetBaseStats()->m_flags & 0x800) != 0) {
+                        sFileName.Format("%s%d", (LPCSTR)m_curAction.GetString1(), nExportIndex);
+                        g_pBaldurChitin->GetObjectGame()->CharacterExport(nCharacterId, sFileName);
+                        nExportIndex++;
+                    }
+
+                    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 268:
         // ClearPartyEffects
