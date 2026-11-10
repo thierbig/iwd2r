@@ -8,6 +8,7 @@
 #include "CAIUtil.h"
 #include "CBaldurChitin.h"
 #include "CBaldurProjector.h"
+#include "CButtonData.h"
 #include "CCreatureFile.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
@@ -2863,6 +2864,98 @@ SHORT CGameAIBase::CreateItem()
     pGame->GetObjectArray()->ReleaseDeny(nPileId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
 
     return ACTION_DONE;
+}
+
+// 0x463B30
+// The TakePartyItem family: TakePartyItem (116), TakePartyItemAll (188),
+// TakePartyItemRange (193) and TakePartyItemNum (204) all funnel here.
+// The item named by the action's first string is taken from each party
+// member: the member's own slot is cleared through a CMessageRemoveItem,
+// the quick buttons keyed to that slot are refreshed, and the taken copy
+// lands in this sprite's inventory through PlaceItem. 116 and 193 stop
+// after one item; 193 only reaches members standing in this sprite's
+// area within m_specificID grid squares; 188 sweeps every member empty;
+// 204 takes m_specificID charges, splitting a stack when it holds more.
+// Members with nothing personal left are drained through their bags.
+SHORT CGameAIBase::TakePartyItem()
+{
+    CString sName = m_curAction.GetString1();
+    BOOL ranged = m_curAction.m_actionID == 193;
+    LONG range = ranged ? m_curAction.m_specificID : 0;
+    CItem* lastItem = NULL;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    for (SHORT nPortrait = 0; nPortrait < pGame->GetNumCharacters(); nPortrait++) {
+        LONG nCharacterId = pGame->GetCharacterId(nPortrait);
+
+        CGameSprite* pSprite;
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pSprite),
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+        if (rc != CGameObjectArray::SUCCESS) {
+            return ACTION_NORMAL;
+        }
+
+        int match = 0;
+
+        // 193: only members in this sprite's area, within range grid
+        // squares; the distance is squared and measured on coordinates
+        // already divided by the square size.
+        BOOL inRange = TRUE;
+        if (ranged) {
+            if (pSprite->m_pArea != m_pArea) {
+                inRange = FALSE;
+            } else {
+                const CPoint& pos = pSprite->GetPos();
+                LONG dy = m_pos.y / CPathSearch::GRID_SQUARE_SIZEY - pos.y / CPathSearch::GRID_SQUARE_SIZEY;
+                LONG dx = m_pos.x / CPathSearch::GRID_SQUARE_SIZEX - pos.x / CPathSearch::GRID_SQUARE_SIZEX;
+                inRange = dy * dy + dx * dx <= range;
+            }
+        }
+
+        if (inRange) {
+            SHORT slot = pSprite->FindItemPersonal(sName, match, FALSE);
+            if (slot != -1) {
+                CItem* pTaken = new CItem(*pSprite->m_equipment.m_items[slot]);
+                lastItem = pTaken;
+
+                CMessage* message = new CMessageRemoveItem(slot, m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                // NOTE: the quick-list sweep keys on the slot, not on an
+                // ability of the item: 2/slot/0, then 2/slot/1, then
+                // 2/slot/2, as the action 223 arm does.
+                CAbilityId ability;
+                ability.m_res = "";
+                ability.m_itemType = 2;
+                ability.m_itemNum = slot;
+                ability.m_abilityNum = 0;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+                ability.m_abilityNum = 1;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+                ability.m_abilityNum = 2;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+
+                // TODO: 0x463E18 not ported.
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return ACTION_DONE;
+            }
+
+            // TODO: 0x463F54 not ported.
+        }
+
+        pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    return lastItem != NULL ? ACTION_DONE : ACTION_ERROR;
 }
 
 // 0x463740
