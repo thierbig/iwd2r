@@ -1,13 +1,13 @@
 # Subsystem map
 
-Generated from commit `5e9ad054` by `tools/gen_map.py`. Do not edit; CI runs `python3 -I tools/gen_map.py --check`.
+Generated from commit `8d5b0856` by `tools/gen_map.py`. Do not edit; CI runs `python3 -I tools/gen_map.py --check`.
 
-Totals: 566 files, 398054 lines, 42 `TODO: Incomplete`, 11329 address comments.
+Totals: 566 files, 398206 lines, 42 `TODO: Incomplete`, 11330 address comments.
 
 | Family | Files | Lines | `TODO: Incomplete` | Address comments | Platform headers included |
 |---|---:|---:|---:|---:|---|
 | AI | 22 | 9407 | 0 | 417 | — |
-| Game | 113 | 134236 | 21 | 2984 | replay.h |
+| Game | 113 | 134388 | 21 | 2985 | replay.h |
 | Screens | 36 | 79607 | 2 | 2077 | — |
 | UI | 28 | 13804 | 0 | 519 | — |
 | Video | 34 | 31954 | 4 | 1187 | ddraw_shim.h, gl_compat.h |
@@ -18,4 +18,4 @@ Totals: 566 files, 398054 lines, 42 `TODO: Incomplete`, 11329 address comments.
 | Other | 118 | 53311 | 10 | 1802 | compose.h, replay.h, state_dump.h, text_fonts.h, text_layer.h, window.h |
 | compat | 33 | 3874 | 0 | 0 | win32_api.h |
 | platform | 77 | 15287 | 0 | 2 | affinity.h, clock.h, compose.h, crash.h, data_dir.h, ddraw_shim.h, dsound_shim.h, fs.h, gl_compat.h, gpu_probe.h, handles.h, imm_stub.h, input_settings.h, png.h, present.h, present_backend.h, replay.h, replay_clock.h, replay_probe.h, script.h, script_core.h, state_dump.h, text_atlas.h, text_fonts.h, text_layer.h, text_overlay.h, win32_api.h, window.h |
-| **Total** | 566 | 398054 | 42 | 11329 | |
+| **Total** | 566 | 398206 | 42 | 11330 | |
