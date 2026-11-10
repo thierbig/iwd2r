@@ -1457,12 +1457,41 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 294:
         // XEquipItem
-        // TODO: 0x451D30-0x451D7F not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // The original jumps to the tail that forces ACTION_DONE
+            // (0x44E1DB) before setting bShare.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+        // TODO: 0x451D73 calls 0x7625F0 (not ported): equips the item named
+        // by m_curAction.GetString1() (a CString temp the listing builds at
+        // 0x451D6C) on the target sprite, with m_curAction.GetSpecifics()
+        // and GetSpecifics2() as the remaining arguments; its result is the
+        // action return, which keeps the ACTION_ERROR entry default here.
+        goto release;
     case 295:
         // TransferInventory
-        // TODO: 0x451D7F-0x451DED not ported.
-        goto done;
+        // TODO: 0x451D81 calls 0x45C290 (not ported): resolves the receiving
+        // sprite (a __thiscall on this returning CGameSprite*). It is
+        // unresolved, so pTarget stays NULL and the arm takes the original's
+        // null path (ACTION_ERROR straight to release); the non-null branch
+        // below is kept for the original's structure.
+        if (pTarget != NULL) {
+            bShare = TRUE;
+            CGameObject* pActee = m_curAction.GetActee2().sub_40CCA0(this, FALSE);
+            if (pActee != NULL) {
+                // TODO: 0x451DB6 calls 0x4C83F0 (not ported; annotated
+                // CGameObject::FloatText): the receiving sprite runs the
+                // transfer against the actee; its return is the action
+                // result, which keeps the ACTION_ERROR entry default here.
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+        goto release;
     case 296:
         // ChangeStoreMarkup
         // TODO: 0x451DED-0x451E5F not ported.
