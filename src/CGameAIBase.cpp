@@ -1393,11 +1393,14 @@ SHORT CGameAIBase::ExecuteAction()
             pTarget = GetTargetShareType(CGameObject::TYPE_CONTAINER);
             if (pTarget != NULL) {
                 bShare = TRUE;
-                // TODO: 0x4517F9 calls 0x482040 (not ported): the container
-                // takes the spell-hit effect at its own position and id
-                // (pTarget->GetPos(), pTarget->GetId(), GetSpecifics(),
-                // GetSpecifics2()); its result is the action return, which
-                // keeps the ACTION_ERROR entry default here.
+                // 0x4517F9: the container takes its own spell-hit effect,
+                // passing itself as the hit object.
+                returnValue = static_cast<CGameContainer*>(pTarget)->SpellHitEffect(
+                    static_cast<CGameContainer*>(pTarget),
+                    pTarget->GetPos(),
+                    pTarget->GetId(),
+                    m_curAction.GetSpecifics(),
+                    m_curAction.GetSpecifics2());
             } else {
                 returnValue = ACTION_ERROR;
             }

@@ -47,6 +47,9 @@ public:
     SHORT FindItemSlot(const CResRef& res);
     SHORT CountItem(const CResRef& res);
 
+    SHORT SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget, LONG targetId,
+        DWORD nType, LONG nHeight);
+
     void SetScriptRes(CString scriptRes);
     SHORT GetNumItems();
 

@@ -8,7 +8,9 @@
 #include "CInfCursor.h"
 #include "CInfGame.h"
 #include "CItem.h"
+#include "CMessage.h"
 #include "CPathSearch.h"
+#include "CProjectile.h"
 #include "CResRef.h"
 #include "CScreenWorld.h"
 #include "CStore.h"
@@ -1842,4 +1844,34 @@ BOOLEAN CGameContainer::CompressTime(DWORD deltaTime)
         return FALSE;
     }
     return TRUE;
+}
+
+// 0x482040
+SHORT CGameContainer::SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget,
+    LONG targetId, DWORD nType, LONG nHeight)
+{
+    WORD projectileType;
+    CProjectile* pProjectile;
+
+    // 0x482065: 0xd2 fires the plain area projectile decoded from the hit
+    // object itself; every other type decodes through the spell-hit table
+    // and reports its type offset by 0x1000 in the message.
+    if (nType != 0xd2) {
+        pProjectile = CProjectile::DecodeSpellHitProjectile(nType, NULL, FALSE);
+        projectileType = static_cast<WORD>(nType + 0x1000);
+    } else {
+        pProjectile = CProjectile::DecodeProjectile(0xd3, pHitObject, 0);
+        projectileType = static_cast<WORD>(nType);
+    }
+
+    // 0x4820a3: a failed allocation still passes the NULL message on.
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageFireProjectile(projectileType, targetId, ptTarget, nHeight, m_id, m_id, 0),
+        FALSE);
+
+    // 0x482119: Fire through vtable slot 0x6C with the point copied by value.
+    pProjectile->Fire(m_pArea, m_id, targetId, ptTarget, nHeight, static_cast<SHORT>(nType));
+
+    // 0x482120: the action return is the global ACTION_DONE word.
+    return ACTION_DONE;
 }
