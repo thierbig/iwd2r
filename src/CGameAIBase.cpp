@@ -924,7 +924,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 189:
         // LeaveAreaLUAPanic
-        // TODO: 0x44FF15-0x44FF23 calls 0x466910 (not ported).
+        returnValue = LeaveAreaLUAPanic();
         goto done;
     case 190:
         returnValue = FinalSave();
@@ -3700,6 +3700,21 @@ SHORT CGameAIBase::SetMusic()
 
     if (!m_pArea->SetSong(static_cast<SHORT>(m_curAction.m_specificID), static_cast<BYTE>(m_curAction.m_specificID2))) {
         return ACTION_ERROR;
+    }
+
+    return ACTION_DONE;
+}
+
+// 0x466910
+SHORT CGameAIBase::LeaveAreaLUAPanic()
+{
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
+        // TODO: 0x4669B6 calls 0x4381C0 (not ported): the CBaldurMessage
+        // hand-off for the networked panic jump. It is passed m_curAction's
+        // dest point, m_specificID, and copies of GetString1()/GetString2()
+        // (the copies feed only this call and are omitted with it), and on
+        // the host ends in CScreenWorld::SetLeaveAreaLuaPanicData
+        // (0x4384B0, in tree).
     }
 
     return ACTION_DONE;

@@ -121,6 +121,7 @@ public:
     SHORT TriggerActivation(CGameTrigger* target);
     SHORT StartMusic();
     SHORT SetMusic();
+    SHORT LeaveAreaLUAPanic();
     SHORT WaitAnimation(CGameSprite* pTarget);
     SHORT FinalSave();
     SHORT Unlock(CGameAIBase* pObject);
