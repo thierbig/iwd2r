@@ -112,6 +112,7 @@ public:
     SHORT GivePartyGoldGlobal();
     SHORT GiveOrder(CGameAIBase* sprite);
     SHORT DisplayString(CGameAIBase* sprite);
+    SHORT AddexperiencePartyGlobal();
     SHORT StartMovie();
     SHORT RevealAreaOnMap();
     SHORT ChangeTileState(CGameTiledObject* target);
