@@ -1381,16 +1381,76 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 290:
         // SpellHitEffectPoint
-        // TODO: 0x45176D-0x451805 not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget != NULL) {
+            bShare = TRUE;
+            // TODO: 0x4517A8 calls 0x7624F0 (not ported): the target sprite
+            // takes the spell-hit effect at the action's destination
+            // (m_curAction.GetDest(), source id 0, m_curAction.GetSpecifics(),
+            // GetSpecifics2()); its result is the action return, which keeps
+            // the ACTION_ERROR entry default here.
+        } else {
+            pTarget = GetTargetShareType(CGameObject::TYPE_CONTAINER);
+            if (pTarget != NULL) {
+                bShare = TRUE;
+                // TODO: 0x4517F9 calls 0x482040 (not ported): the container
+                // takes the spell-hit effect at its own position and id
+                // (pTarget->GetPos(), pTarget->GetId(), GetSpecifics(),
+                // GetSpecifics2()); its result is the action return, which
+                // keeps the ACTION_ERROR entry default here.
+            } else {
+                returnValue = ACTION_ERROR;
+            }
+        }
+        goto release;
     case 291:
         // SpellHitEffectSprite
-        // TODO: 0x451805-0x45189C not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget == NULL) {
+            returnValue = ACTION_ERROR;
+        } else {
+            CGameObject* pActee = m_curAction.GetActee2().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+            if (pActee == NULL) {
+                returnValue = ACTION_ERROR;
+            } else if (pActee->GetArea() == NULL) {
+                // NOTE: the original jumps to the ACTION_ERROR tail here
+                // without releasing the share sub_40CB20 acquired.
+                returnValue = ACTION_ERROR;
+            } else {
+                // TODO: 0x451882 calls 0x7624F0 (not ported): the target
+                // sprite takes the spell-hit effect at the actee's position
+                // and id (pActee->GetPos(), pActee->GetId(),
+                // GetSpecifics(), GetSpecifics2()); its result is the action
+                // return, which keeps the ACTION_ERROR entry default here.
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+        goto release;
     case 292:
         // ChunkCreature
-        // TODO: 0x45189C-0x45197F not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget == NULL) {
+            returnValue = ACTION_ERROR;
+        } else {
+            static_cast<CGameSprite*>(pTarget)->sub_761650();
+            // NOTE: the original news the 0x30-byte buffer (0x4518C5) and
+            // asserts on failure (0x45195E, "Memory Allocation problem"); it
+            // never frees the buffer.
+            ITEM_EFFECT* effect = new ITEM_EFFECT;
+            CGameEffect::ClearItemEffect(effect, 13);
+            effect->dwFlags = 8;
+            effect->numDice = 0;
+            effect->effectAmount = 0x31;
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(effect, CPoint(-1, -1), -1, CPoint(-1, -1));
+            message = new CMessageAddEffect(pEffect, GetId(), pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            returnValue = ACTION_DONE;
+        }
+        goto release;
     case 293:
         // UnHide
         // TODO: 0x45197F-0x451D30 not ported.
