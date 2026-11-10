@@ -3098,6 +3098,97 @@ SHORT CGameAIBase::TakePartyItem()
     return lastItem != NULL ? ACTION_DONE : ACTION_ERROR;
 }
 
+// 0x464200
+// The item-list pair: TakeItemListParty (220) and TakeItemListPartyNum
+// (226) both funnel here. Both are engine-internal in IWD2 (ACTION.IDS
+// has no entry for 205-228); IESDP documents them under the BG2
+// numbering the engine inherits -- 220 TakeItemListParty(S:ResRef*) and
+// 226 TakeItemListPartyNum(S:ResRef*,I:Num*) -- and IWD2's own scripts
+// call TakeItemListPartyNum in the AR0602 party-import scene. The 2DA
+// named by the action's first string is loaded and walked a row at a
+// time; each row's first cell names an item, which is taken from every
+// party member the way TakePartyItem takes one: the member's slot is
+// cleared through a CMessageRemoveItem, the quick buttons keyed to that
+// slot are refreshed, and the taken copy lands in this sprite's
+// inventory through PlaceItem. 226 carries a count in m_specificID,
+// spent once per 2DA row that yielded anything (not per item); if
+// nothing at all was taken, the 2DA's default cell names a fallback
+// item created into this sprite's inventory.
+SHORT CGameAIBase::TakeItemListParty()
+{
+    C2DArray t2DA;
+    CString sItemName;
+
+    t2DA.Load(CResRef(m_curAction.GetString1()));
+
+    LONG remaining = m_curAction.m_actionID == 226 ? m_curAction.m_specificID : -1;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    for (SHORT i = 0; i < t2DA.GetHeight(); i++) {
+        sItemName = t2DA.GetAt(CPoint(0, i));
+
+        BOOL bTookSomething = FALSE;
+        for (SHORT nPortrait = 0; nPortrait < pGame->GetNumCharacters(); nPortrait++) {
+            LONG nCharacterId = pGame->GetCharacterId(nPortrait);
+
+            CGameSprite* pSprite;
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pSprite),
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+            if (rc != CGameObjectArray::SUCCESS) {
+                return ACTION_NORMAL;
+            }
+
+            int match = 0;
+            SHORT slot = pSprite->FindItemPersonal(sItemName, match, FALSE);
+            while (slot != -1) {
+                bTookSomething = TRUE;
+
+                CItem* pTaken = new CItem(*pSprite->m_equipment.m_items[slot]);
+
+                CMessage* message = new CMessageRemoveItem(slot, m_id, pSprite->m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+                // NOTE: the quick-list sweep keys on the slot, not on an
+                // ability of the item: 2/slot/0, then 2/slot/1, then
+                // 2/slot/2, as TakePartyItem does.
+                CAbilityId ability;
+                ability.m_res = "";
+                ability.m_itemType = 2;
+                ability.m_itemNum = slot;
+                ability.m_abilityNum = 0;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+                ability.m_abilityNum = 1;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+                ability.m_abilityNum = 2;
+                pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
+
+                PlaceItem(pTaken, TRUE, TRUE, 1, TRUE);
+
+                // TODO: 0x464521-0x46494A (the re-find tail of the take
+                // loop, the bag sweep, the ReleaseShare, the 226 count and
+                // the default-item fallback) not ported.
+                return ACTION_DONE;
+            }
+
+            // TODO: 0x464549-0x46494A (the bag sweep and the ReleaseShare)
+            // not ported.
+            (void)bTookSomething;
+            break;
+        }
+
+        // TODO: 0x46460F-0x46494A (the 226 per-row count) not ported.
+    }
+
+    // TODO: 0x464650-0x46494A (the default-item fallback for 226) not
+    // ported.
+    return ACTION_DONE;
+}
+
 // 0x463740
 SHORT CGameAIBase::ClearActions(CGameObject* target)
 {

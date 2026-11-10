@@ -105,6 +105,7 @@ public:
     void PutItemGround(CItem* pItem);
     SHORT CreateItem();
     SHORT TakePartyItem();
+    SHORT TakeItemListParty();
     SHORT ClearActions(CGameObject* target);
     BOOL PlaceItem(CItem* item, BOOL deny, BOOL drop, DWORD count, BOOL feedback);
     SHORT GiveItemCreate(CGameObject* pTarget);
