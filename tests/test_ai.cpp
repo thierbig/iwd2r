@@ -1980,3 +1980,160 @@ TEST_CASE("ai: ExecuteAction 116/204 TakePartyItem takes the member's item or sp
     pGame->m_characterPortraits[0] = portrait;
     ClearMessages();
 }
+
+TEST_CASE("ai: ExecuteAction 141/165 give party gold and experience from a global", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = MakeSprite();
+    REQUIRE(pSprite->m_id != CGameObjectArray::INVALID_INDEX);
+
+    // The sprite carries 100 gold in both stats; the gold tail caps the
+    // amount at the derived gold and subtracts from both.
+    pSprite->m_baseStats.m_gold = 100;
+    pSprite->m_derivedStats.m_nGold = 100;
+
+    // A game global the way SetGlobal would have made it, and a local on the
+    // sprite for the LOCALS scope. The handler uppercases both strings.
+    CVariable var;
+    var.SetName(CString("T83_GOLD"));
+    var.m_intValue = 40;
+    pGame->m_variables.AddKey(var);
+    CVariable local;
+    local.SetName(CString("T83_LOCAL"));
+    local.m_intValue = 7;
+    pSprite->GetLocalVariables()->AddKey(local);
+
+    // 141 GivePartyGoldGlobal("t83_gold", "global"): string1 is the name and
+    // string2 the scope. The sprite pays, the party's gold message carries
+    // the amount, and the running message adds it to the party.
+    {
+        CAIAction give;
+        give.m_actionID = 141;
+        give.m_string1 = "t83_gold";
+        give.m_string2 = "global";
+        pSprite->SetCurrAction(give);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        const std::vector<CMessagePartyGold*> golds = Queued<CMessagePartyGold>();
+        REQUIRE(golds.size() == 1);
+        CHECK(golds[0]->m_gold == 40);
+        CHECK(golds[0]->m_bAdjustment == TRUE);
+        CHECK(golds[0]->m_bFeedback == TRUE);
+        CHECK(golds[0]->GetSource() == pSprite->m_id);
+        CHECK(golds[0]->GetTarget() == pSprite->m_id);
+        CHECK(pSprite->m_baseStats.m_gold == 60);
+        CHECK(pSprite->m_derivedStats.m_nGold == 60);
+
+        const DWORD nPartyGold = pGame->GetGameSave()->m_nPartyGold;
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CHECK(pGame->GetGameSave()->m_nPartyGold == nPartyGold + 40);
+        ClearMessages();
+    }
+
+    // The LOCALS scope reads the sprite's own variable.
+    {
+        CAIAction give;
+        give.m_actionID = 141;
+        give.m_string1 = "T83_LOCAL";
+        give.m_string2 = "LOCALS";
+        pSprite->SetCurrAction(give);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        const std::vector<CMessagePartyGold*> golds = Queued<CMessagePartyGold>();
+        REQUIRE(golds.size() == 1);
+        CHECK(golds[0]->m_gold == 7);
+        CHECK(pSprite->m_baseStats.m_gold == 53);
+        CHECK(pSprite->m_derivedStats.m_nGold == 53);
+        ClearMessages();
+    }
+
+    // A variable nobody set reads as 0: a zero message, no gold change.
+    {
+        CAIAction give;
+        give.m_actionID = 141;
+        give.m_string1 = "T83_MISSING";
+        give.m_string2 = "GLOBAL";
+        pSprite->SetCurrAction(give);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        const std::vector<CMessagePartyGold*> golds = Queued<CMessagePartyGold>();
+        REQUIRE(golds.size() == 1);
+        CHECK(golds[0]->m_gold == 0);
+        CHECK(pSprite->m_baseStats.m_gold == 53);
+        CHECK(pSprite->m_derivedStats.m_nGold == 53);
+
+        const DWORD nPartyGold = pGame->GetGameSave()->m_nPartyGold;
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CHECK(pGame->GetGameSave()->m_nPartyGold == nPartyGold);
+        ClearMessages();
+    }
+
+    // A variable above the sprite's gold is capped at its derived gold: the
+    // sprite pays all it has and the message carries the cap.
+    {
+        CVariable high;
+        high.SetName(CString("T83_HIGH"));
+        high.m_intValue = 500;
+        pGame->m_variables.AddKey(high);
+
+        CAIAction give;
+        give.m_actionID = 141;
+        give.m_string1 = "T83_HIGH";
+        give.m_string2 = "GLOBAL";
+        pSprite->SetCurrAction(give);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        const std::vector<CMessagePartyGold*> golds = Queued<CMessagePartyGold>();
+        REQUIRE(golds.size() == 1);
+        CHECK(golds[0]->m_gold == 53);
+        CHECK(pSprite->m_baseStats.m_gold == 0);
+        CHECK(pSprite->m_derivedStats.m_nGold == 0);
+        ClearMessages();
+    }
+
+    // 165 AddexperiencePartyGlobal("t83_xp", "GLOBAL"): the lone party
+    // member's share of the global rides an experience effect (opcode 104).
+    const SHORT nCharacters = pGame->m_nCharacters;
+    const LONG portrait = pGame->m_characterPortraits[0];
+    pGame->m_nCharacters = 1;
+    pGame->m_characterPortraits[0] = pSprite->m_id;
+    {
+        CVariable xp;
+        xp.SetName(CString("T83_XP"));
+        xp.m_intValue = 250;
+        pGame->m_variables.AddKey(xp);
+
+        CAIAction addXP;
+        addXP.m_actionID = 165;
+        addXP.m_string1 = "t83_xp";
+        addXP.m_string2 = "global";
+        pSprite->SetCurrAction(addXP);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        const std::vector<CMessageAddEffect*> added = Queued<CMessageAddEffect>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->GetTarget() == pSprite->m_id);
+        REQUIRE(added[0]->m_effect != NULL);
+        CHECK(added[0]->m_effect->GetItemEffect()->effectID == CGAMEEFFECT_XP);
+        CHECK(added[0]->m_effect->GetItemEffect()->effectAmount == 250);
+        ClearMessages();
+    }
+
+    // A missing variable reads as 0: the member's share is a zero effect.
+    {
+        CAIAction addXP;
+        addXP.m_actionID = 165;
+        addXP.m_string1 = "T83_MISSING";
+        addXP.m_string2 = "GLOBAL";
+        pSprite->SetCurrAction(addXP);
+        CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        const std::vector<CMessageAddEffect*> added = Queued<CMessageAddEffect>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->m_effect->GetItemEffect()->effectAmount == 0);
+        ClearMessages();
+    }
+
+    pGame->m_nCharacters = nCharacters;
+    pGame->m_characterPortraits[0] = portrait;
+    ClearMessages();
+}
