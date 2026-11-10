@@ -1643,6 +1643,219 @@ TEST_CASE("ai: ExecuteAction 7 and 228 CreateCreature place and register a new s
     ClearMessages();
 }
 
+// CreateCreatureObject (0x460D70) through the case 227 arm of ExecuteAction,
+// on the same loaded AR3000 as the CreateCreature tests above. The placement
+// always runs GetNearestOpenSquare around the TARGET object's position (the
+// action has no destination and there is no exact-square variant), and the
+// sprite registers under the script name the CRE file itself carries — the
+// action's second string is never copied.
+TEST_CASE("ai: ExecuteAction 227 CreateCreatureObject places at the target and registers the CRE's own name", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea;
+    pCaller->m_pos = CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX,
+        7 * CPathSearch::GRID_SQUARE_SIZEY);
+    const BYTE* pTerrain = pCaller->GetTerrainTable();
+
+    // The actee: GetTargetShareType(TYPE_AIBASE) only hands back objects
+    // whose type has the AIBASE bit, and a plain CGameAIBase (type 0) has
+    // none — the target must be a sprite, the way the game always calls it.
+    CGameSprite* pTarget = MakeSprite();
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pTarget->m_id, 0, 0);
+
+    auto queuedCount = [pArea] {
+        return pArea->m_lVertSortAdd.GetCount() + pArea->m_lVertSortBackAdd.GetCount()
+            + pArea->m_lVertSortFlightAdd.GetCount();
+    };
+    auto spriteById = [pGame](LONG id) -> CGameSprite* {
+        CGameObject* pObject = NULL;
+        if (pGame->GetObjectArray()->GetShare(id, CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            return NULL;
+        }
+        pGame->GetObjectArray()->ReleaseShare(id, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            return NULL;
+        }
+        return static_cast<CGameSprite*>(pObject);
+    };
+
+    int nQueuedBefore = static_cast<int>(queuedCount());
+
+    // Rejected: a NOONE actee never resolves a target, so the arm passes NULL
+    // and the handler fails its first instruction before anything runs.
+    CAIAction noTarget;
+    noTarget.m_actionID = 227;
+    noTarget.m_acteeID = CAIObjectType::NOONE;
+    noTarget.m_string1 = "30ICETRL";
+    pCaller->SetCurrAction(noTarget);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(queuedCount() == nQueuedBefore);
+    ClearMessages();
+
+    // Rejected: the resref names no creature in this install, so the key
+    // table lookup fails before any sprite is built or name registered.
+    CAIAction noCreature = noTarget;
+    noCreature.m_acteeID = actee;
+    noCreature.m_string1 = "NOSUCHCR";
+    noCreature.m_string2 = "NOSUCHNM";
+    pCaller->SetCurrAction(noCreature);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pArea->m_namedCreatures.FindKey(CString("NOSUCHNM")) == NULL);
+    CHECK(queuedCount() == nQueuedBefore);
+    ClearMessages();
+
+    // A preview sprite from the same CRE gives the personal space the search
+    // will use and reveals the script name the CRE carries: 227 registers
+    // under that name, whatever it is (the action's second string is not
+    // copied), so the expected name is read off the preview instead of being
+    // pinned to a literal.
+    CCreatureFile previewFile;
+    previewFile.SetResRef(CResRef("30ICETRL"), TRUE, TRUE);
+    BYTE* previewData = previewFile.GetData();
+    REQUIRE(previewData != NULL);
+    std::vector<BYTE> previewBytes(previewData, previewData + previewFile.GetDataSize());
+    previewFile.Release();
+    CGameSprite* pPreview = new CGameSprite(previewBytes.data(),
+        static_cast<LONG>(previewBytes.size()),
+        0,
+        0,
+        static_cast<DWORD>(-1),
+        0,
+        0,
+        INT_MAX,
+        CPoint(-1, -1),
+        0);
+    BYTE nPersonalSpace = pPreview->m_animation.GetPersonalSpace();
+    CString creName(reinterpret_cast<const char*>(pPreview->GetScriptName()));
+    REQUIRE(!creName.IsEmpty());
+
+    // A wall to aim the target at: the first impassable square inside the
+    // map's margin, under the same cost rule the search uses.
+    SHORT nTableIndex;
+    CPoint blocked(-1, -1);
+    CSize dims = pArea->m_search.m_GridSquareDimensions;
+    for (int y = 4; y < dims.cy - 4 && blocked.x == -1; y++) {
+        for (int x = 4; x < dims.cx - 4; x++) {
+            if (pArea->m_search.GetCost(CPoint(x, y), pTerrain, nPersonalSpace, nTableIndex, TRUE)
+                == CPathSearch::COST_IMPASSABLE) {
+                blocked = CPoint(x, y);
+                break;
+            }
+        }
+    }
+    REQUIRE(blocked.x != -1);
+
+    CPoint expected = pArea->m_search.GetNearestOpenSquare(blocked, pTerrain, nPersonalSpace, -1);
+    const bool movedOffWall = expected.x != blocked.x || expected.y != blocked.y;
+    REQUIRE(movedOffWall);
+
+    // Aim the TARGET object's position at the wall square (m_dest is never
+    // read here): the search must run around that square, not the caller's.
+    pTarget->m_pos = CPoint(blocked.x * CPathSearch::GRID_SQUARE_SIZEX + 1,
+        blocked.y * CPathSearch::GRID_SQUARE_SIZEY + 1);
+    CAIAction place;
+    place.m_actionID = 227;
+    place.m_acteeID = actee;
+    place.m_string1 = "30ICETRL";
+    place.m_string2 = "TROLLOPEN"; // never copied and never registered
+    place.m_specificID = 13; // odd facing; the sprite constructor rounds it down
+    pCaller->SetCurrAction(place);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CVariable* pPlacedVariable = pArea->m_namedCreatures.FindKey(creName);
+    REQUIRE(pPlacedVariable != NULL);
+    LONG idPlaced = pPlacedVariable->m_intValue;
+    CGameSprite* pPlaced = spriteById(idPlaced);
+    REQUIRE(pPlaced != NULL);
+    CHECK(pPlaced->m_resRef == CResRef("30ICETRL"));
+    CHECK(pPlaced->m_pArea == pArea);
+    CHECK(pPlaced->GetPos() == CPoint(expected.x * CPathSearch::GRID_SQUARE_SIZEX, expected.y * CPathSearch::GRID_SQUARE_SIZEY));
+    // The facing (m_specificID = 13) is masked to 0xF by the constructor and
+    // then rounded down to the next even direction by SetSequence's 0xFE mask
+    // (see the CreateCreature case 7 check above): 13 lands as 12.
+    CHECK(pPlaced->m_nDirection == 12);
+    // The second string did not become the sprite's script name, and no
+    // variable was registered under it either.
+    CHECK(CString(reinterpret_cast<const char*>(pPlaced->GetScriptName())) == creName);
+    CHECK(pArea->m_namedCreatures.FindKey(CString("TROLLOPEN")) == NULL);
+
+    // A (-1, -1) target position takes the caller's source position instead:
+    // the search runs around square (7, 7), where the caller stands (the
+    // wall sprite above has already marked its own square on the map).
+    CPoint expectedFromCaller = pArea->m_search.GetNearestOpenSquare(
+        CPoint(pCaller->m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            pCaller->m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+        pTerrain,
+        nPersonalSpace,
+        -1);
+    pTarget->m_pos = CPoint(-1, -1);
+    CAIAction fromSource;
+    fromSource.m_actionID = 227;
+    fromSource.m_acteeID = actee;
+    fromSource.m_string1 = "30ICETRL";
+    fromSource.m_specificID = 6; // even facing survives the constructor
+    pCaller->SetCurrAction(fromSource);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // The same CRE name: the registration replaces the variable's id with
+    // the new sprite's (AddKey assigns into the existing entry).
+    CVariable* pFromSourceVariable = pArea->m_namedCreatures.FindKey(creName);
+    REQUIRE(pFromSourceVariable != NULL);
+    LONG idFromSource = pFromSourceVariable->m_intValue;
+    REQUIRE(idFromSource != idPlaced);
+    CGameSprite* pFromSource = spriteById(idFromSource);
+    REQUIRE(pFromSource != NULL);
+    CHECK(pFromSource->GetPos() == CPoint(expectedFromCaller.x * CPathSearch::GRID_SQUARE_SIZEX, expectedFromCaller.y * CPathSearch::GRID_SQUARE_SIZEY));
+    CHECK(pFromSource->m_nDirection == 6);
+
+    // Both sprites are on the area's sorted lists after the sort a frame's
+    // AIUpdate runs.
+    pArea->SortLists();
+    int nFound = 0;
+    CTypedPtrList<CPtrList, int*>* lists[] = { &pArea->m_lVertSort, &pArea->m_lVertSortBack, &pArea->m_lVertSortFlight };
+    for (CTypedPtrList<CPtrList, int*>* objects : lists) {
+        POSITION pos = objects->GetHeadPosition();
+        while (pos != NULL) {
+            LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(objects->GetNext(pos)));
+            if (id == idPlaced || id == idFromSource) {
+                nFound++;
+            }
+        }
+    }
+    CHECK(nFound == 2);
+    ClearMessages();
+}
+
 TEST_CASE("ai: ExecuteAction 82 CreateItem stores the new item or hands it to the ground pile", "[ai][data][ar3000]")
 {
     REQUIRE_ENGINE();
