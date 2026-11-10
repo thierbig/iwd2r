@@ -109,6 +109,7 @@ public:
     SHORT GiveItemCreate(CGameObject* pTarget);
     SHORT TakePartyGold();
     SHORT GivePartyGold();
+    SHORT GivePartyGoldGlobal();
     SHORT GiveOrder(CGameAIBase* sprite);
     SHORT DisplayString(CGameAIBase* sprite);
     SHORT StartMovie();

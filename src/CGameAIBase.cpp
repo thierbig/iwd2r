@@ -3191,6 +3191,79 @@ SHORT CGameAIBase::GivePartyGold()
     return ACTION_DONE;
 }
 
+// 0x465220
+SHORT CGameAIBase::GivePartyGoldGlobal()
+{
+    CString sName = m_curAction.GetString1();
+    sName.MakeUpper();
+    CString sScope = m_curAction.GetString2();
+    sScope.MakeUpper();
+
+    // The original leaves the amount in a stack slot the missing-area path
+    // below reads before any store; bounded to 0 here.
+    LONG nAmount = 0;
+
+    if (strcmp(sScope, "GLOBAL") == 0) {
+        CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+        if (pVariable != NULL) {
+            nAmount = pVariable->m_intValue;
+        }
+    } else if (strcmp(sScope, "LOCALS") == 0) {
+        if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CVariable* pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                nAmount = pVariable->m_intValue;
+            }
+        }
+    } else if (strcmp(sScope, "LOCALS") == 0) {
+        // NOTE: dead in the original. The only predecessor of this second
+        // LOCALS compare (0x465330) is the jne from the first (0x4652cb),
+        // taken only when the scope is not LOCALS, so this compare always
+        // fails and the game-globals lookup below never runs.
+        CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+        if (pVariable != NULL) {
+            nAmount = pVariable->m_intValue;
+        }
+    } else {
+        if (strcmp(sScope, "MYAREA") == 0) {
+            // NOTE: The area's name is read as a C string from the start of
+            // the area (its header's RESREF), as the original does.
+            sScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+        }
+
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+        if (pArea != NULL) {
+            CVariable* pVariable = pArea->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                nAmount = pVariable->m_intValue;
+            }
+        } else {
+            // The original loads the amount from the uninitialized stack slot
+            // here (0x465416 reads [esp+0x14], a spill slot no path to this
+            // point has stored); bounded to the 0 above.
+        }
+    }
+
+    if (m_objectType == TYPE_SPRITE) {
+        CGameSprite* pSprite = static_cast<CGameSprite*>(this);
+        if (static_cast<DWORD>(nAmount) > pSprite->GetDerivedStats()->m_nGold) {
+            nAmount = pSprite->GetDerivedStats()->m_nGold;
+        }
+        pSprite->GetBaseStats()->m_gold -= nAmount;
+        pSprite->GetDerivedStats()->m_nGold -= nAmount;
+    }
+
+    CMessagePartyGold* pMessage = new CMessagePartyGold(TRUE,
+        TRUE,
+        nAmount,
+        m_id,
+        m_id);
+
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+    return ACTION_DONE;
+}
+
 // 0x4654C0
 SHORT CGameAIBase::GiveOrder(CGameAIBase* sprite)
 {
