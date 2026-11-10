@@ -558,7 +558,7 @@ SHORT CGameAIBase::ExecuteAction()
     case 204:
         // TakePartyItem, TakePartyItemAll, TakePartyItemRange,
         // TakePartyItemNum
-        // TODO: 0x44EF37-0x44EF45 calls 0x463B30 (not ported).
+        returnValue = TakePartyItem();
         goto done;
     case 117:
         returnValue = TakePartyGold();
