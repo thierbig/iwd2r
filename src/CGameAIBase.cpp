@@ -2669,8 +2669,52 @@ SHORT CGameAIBase::CreateCreatureObject(CGameObject* pTarget)
     // NOTE: Uninline.
     creatureFile.SetResRef(CResRef(m_curAction.GetString1()), TRUE, TRUE);
 
-    // TODO: 0x460F5A not ported.
-    return ACTION_ERROR;
+    // NOTE: The original evaluates the size first.
+    DWORD nSize = creatureFile.GetDataSize();
+    BYTE* pData = creatureFile.GetData();
+
+    CGameSprite* pNewSprite = new CGameSprite(pData, nSize, 0, 0, -1, 0, 0, 0x7FFFFFFF,
+        pos,
+        static_cast<WORD>(m_curAction.m_specificID));
+    if (pNewSprite == NULL) {
+        creatureFile.ReleaseData();
+        return ACTION_ERROR;
+    }
+
+    // NOTE: the exe reaches the resref through a call Ghidra labels
+    // GetEllipseRect (0x4699e0); semantically it is &creatureFile.cResRef.
+    pNewSprite->SetResRef(CResRef(creatureFile.GetResRef().GetResRefStr()));
+
+    creatureFile.ReleaseData();
+
+    pNewSprite->SetResRef(CResRef(m_curAction.GetString1()));
+
+    // The instructions always take the nearest open square around the
+    // target's square, using the new sprite's personal space and this
+    // object's terrain table; there is no exact-square variant here.
+    BYTE nPersonalSpace = pNewSprite->m_animation.GetPersonalSpace();
+    pos = m_pArea->m_search.GetNearestOpenSquare(
+        CPoint(pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+            pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+        GetTerrainTable(),
+        nPersonalSpace,
+        -1);
+
+    BYTE nListType = pNewSprite->m_animation.GetListType();
+
+    pNewSprite->AddToArea(m_pArea,
+        CPoint(pos.x * CPathSearch::GRID_SQUARE_SIZEX,
+            pos.y * CPathSearch::GRID_SQUARE_SIZEY),
+        0,
+        nListType);
+
+    // No second-string script name here: the variable takes the script
+    // name the CRE file itself left on the sprite.
+    cVariable.SetName(CString(reinterpret_cast<const char*>(pNewSprite->GetScriptName())));
+    cVariable.m_intValue = pNewSprite->GetId();
+    m_pArea->m_namedCreatures.AddKey(cVariable);
+
+    return ACTION_DONE;
 }
 
 // 0x462470
