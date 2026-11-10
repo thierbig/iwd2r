@@ -1145,16 +1145,49 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 258:
         // RestUntilHealed
-        // TODO: 0x450BD9-0x450CEB not ported.
+        {
+            STRREF strError;
+            if (g_pBaldurChitin->GetObjectGame()->CanRestParty(strError, 0, 1,
+                    (m_curAction.GetFlags() & 2) != 0)
+                == 1) {
+                CInfGame::m_bHealPartyOnRest = TRUE;
+                g_pBaldurChitin->GetObjectGame()->RestParty(1, TRUE);
+                CInfGame::m_bHealPartyOnRest = FALSE;
+                returnValue = ACTION_DONE;
+                goto done;
+            }
+
+            // The rest was refused: show why (Fetch only fills strRes when the
+            // strref resolves; otherwise no feedback is displayed).
+            STR_RES strRes;
+            if (g_pBaldurChitin->GetTlkTable().Fetch(strError, strRes)) {
+                g_pBaldurChitin->GetBaldurMessage()->DisplayText(CString(""),
+                    strRes.szText,
+                    RGB(0, 255, 0),
+                    RGB(0, 255, 0),
+                    -1,
+                    GetId(),
+                    GetId());
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 259:
         // SetVisualRange
-        // TODO: 0x450CEB-0x450D24 not ported.
+        message = new CMessage92(m_id, m_id, m_curAction.GetSpecifics());
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        returnValue = ACTION_DONE;
         goto done;
     case 260:
         // JumpToPointInstant
-        // TODO: 0x450D24-0x450D61 not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        static_cast<CGameSprite*>(pTarget)->JumpToPoint(m_curAction.GetDest(), FALSE);
+        goto release;
     case 266:
         // DisplayMessage
         // TODO: 0x450D61-0x450E19 not ported.
