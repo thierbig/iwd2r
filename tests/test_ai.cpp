@@ -11,6 +11,7 @@
 #include "CDerivedStats.h"
 #include "CGameAIBase.h"
 #include "CGameArea.h"
+#include "CGameContainer.h"
 #include "CGameDoor.h"
 #include "CGameEffect.h"
 #include "CGameObjectArray.h"
@@ -20,6 +21,7 @@
 #include "CMessage.h"
 #include "CPathSearch.h"
 #include "CScreenCreateChar.h"
+#include "CScreenInventory.h"
 #include "CSpell.h"
 #include "CVariableHash.h"
 #include "ScreenLayout.h"
@@ -1621,5 +1623,180 @@ TEST_CASE("ai: ExecuteAction 7 and 228 CreateCreature place and register a new s
         }
     }
     CHECK(nFound == 3);
+    ClearMessages();
+}
+
+TEST_CASE("ai: ExecuteAction 82 CreateItem stores the new item or hands it to the ground pile", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    // The pile lookup the full-pack and drop arms go through, counted item
+    // by item so stackable counts (CountItem sums usage counts) do not blur
+    // the check.
+    auto pileHas = [pGame](LONG idSprite, const CResRef& res) -> int {
+        LONG idPile = pGame->GetGroundPile(idSprite);
+        if (idPile == CGameObjectArray::INVALID_INDEX) {
+            return -1;
+        }
+        CGameContainer* pPile = NULL;
+        if (pGame->GetObjectArray()->GetShare(idPile,
+                CGameObjectArray::THREAD_ASYNCH,
+                reinterpret_cast<CGameObject**>(&pPile),
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            return -1;
+        }
+        int nCount = 0;
+        for (SHORT nSlot = 0; nSlot < pPile->GetNumItems(); nSlot++) {
+            CItem* pItem = pPile->GetItem(nSlot);
+            if (pItem != NULL && pItem->GetResRef() == res) {
+                nCount++;
+            }
+        }
+        pGame->GetObjectArray()->ReleaseShare(idPile, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        return nCount;
+    };
+
+    // Rejected: the resref names no item in this install, so the key table
+    // probe fails before a CItem is built.
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea;
+    pCaller->m_pos = CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX,
+        7 * CPathSearch::GRID_SQUARE_SIZEY);
+    CAIAction noItem;
+    noItem.m_actionID = 82;
+    noItem.m_string1 = "NOSUCHIT";
+    pCaller->SetCurrAction(noItem);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // A party member: the item lands in the first blank personal-inventory
+    // slot with the three requested usage counts.
+    CGameSprite* pSprite = MakeSprite();
+    pSprite->m_pArea = pArea;
+    pSprite->m_pos = CPoint(8 * CPathSearch::GRID_SQUARE_SIZEX,
+        8 * CPathSearch::GRID_SQUARE_SIZEY);
+    int nPartyBlank = -1;
+    for (int i = 0; i < CScreenInventory::PERSONAL_INVENTORY_SIZE; i++) {
+        if (pSprite->m_equipment.m_items[i + 18] == NULL) {
+            nPartyBlank = i;
+            break;
+        }
+    }
+    REQUIRE(nPartyBlank != -1);
+
+    const SHORT nCharacters = pGame->m_nCharacters;
+    const LONG portrait = pGame->m_characterPortraits[0];
+    pGame->m_nCharacters = 1;
+    pGame->m_characterPortraits[0] = pSprite->m_id;
+
+    CAIAction make;
+    make.m_actionID = 82;
+    make.m_string1 = "00POTN01";
+    make.m_specificID = 5;
+    make.m_specificID2 = 7;
+    make.m_specificID3 = 0;
+    pSprite->SetCurrAction(make);
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CItem* pStored = pSprite->m_equipment.m_items[nPartyBlank + 18];
+    REQUIRE(pStored != NULL);
+    CHECK(pStored->GetResRef() == CResRef("00POTN01"));
+    // A potion has one ability, so GetUsageCount gates counts 1 and 2 to 0;
+    // the raw members carry what CreateItem handed the constructor. The
+    // potion is stackable, and the constructor's clamp lifts a zero third
+    // count to 1.
+    CHECK(pStored->GetUsageCount(0) == 5);
+    CHECK(pStored->m_useCount2 == 7);
+    CHECK(pStored->m_useCount3 == 1);
+
+    // A full pack: the ground pile beside the sprite takes the item, but the
+    // action reports an error — dropping an item because there was no room
+    // is a failure, as PlaceItem's full-pack drop is.
+    for (int i = 0; i < CScreenInventory::PERSONAL_INVENTORY_SIZE; i++) {
+        if (pSprite->m_equipment.m_items[i + 18] == NULL) {
+            pSprite->m_equipment.m_items[i + 18] = new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0);
+        }
+    }
+    CAIAction overflow;
+    overflow.m_actionID = 82;
+    overflow.m_string1 = "00GBGA01";
+    ClearMessages();
+    pSprite->SetCurrAction(overflow);
+    CHECK(pSprite->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    // The pile takes the item through CMessageContainerAddItem.
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    CHECK(pileHas(pSprite->m_id, CResRef("00GBGA01")) == 1);
+
+    // Back to no party member.
+    pGame->m_nCharacters = nCharacters;
+    pGame->m_characterPortraits[0] = portrait;
+
+    // A creature outside the party: the first blank of its carried slots,
+    // the 15 equipment slots plus both packs.
+    CGameSprite* pLone = MakeSprite();
+    pLone->m_pArea = pArea;
+    pLone->m_pos = CPoint(9 * CPathSearch::GRID_SQUARE_SIZEX,
+        9 * CPathSearch::GRID_SQUARE_SIZEY);
+    int nCarriedBlank = -1;
+    for (int i = 0; i < 28; i++) {
+        if (pLone->m_equipment.m_items[i + 15] == NULL) {
+            nCarriedBlank = i;
+            break;
+        }
+    }
+    REQUIRE(nCarriedBlank != -1);
+
+    CAIAction carried;
+    carried.m_actionID = 82;
+    carried.m_string1 = "00POTN01";
+    carried.m_specificID = 2;
+    pLone->SetCurrAction(carried);
+    CHECK(pLone->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CItem* pCarried = pLone->m_equipment.m_items[nCarriedBlank + 15];
+    REQUIRE(pCarried != NULL);
+    CHECK(pCarried->GetResRef() == CResRef("00POTN01"));
+    CHECK(pCarried->GetUsageCount(0) == 2);
+    CHECK(pileHas(pLone->m_id, CResRef("00POTN01")) == 0);
+
+    // A container takes the item through its own slot list.
+    CGameContainer* pContainer = new CGameContainer(pArea, CRect(400, 400, 416, 416));
+    CAIAction stow;
+    stow.m_actionID = 82;
+    stow.m_string1 = "00GEM01";
+    ClearMessages();
+    pContainer->SetCurrAction(stow);
+    CHECK(pContainer->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    // The container takes the item through CMessageContainerAddItem.
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    REQUIRE(pContainer->GetNumItems() == 1);
+    REQUIRE(pContainer->GetItem(0) != NULL);
+    CHECK(pContainer->GetItem(0)->GetResRef() == CResRef("00GEM01"));
+
     ClearMessages();
 }
