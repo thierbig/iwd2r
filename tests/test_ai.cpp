@@ -2194,6 +2194,184 @@ TEST_CASE("ai: ExecuteAction 116/204 TakePartyItem takes the member's item or sp
     ClearMessages();
 }
 
+TEST_CASE("ai: ExecuteAction 220/226 TakeItemListParty takes 2DA-listed items from the party", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    // RNDTRES.2DA names an item in every row's first data column: row 0
+    // (RT01_L) 00ax1h01, row 1 (RT01_M) 00bows01. The default cell is "*",
+    // which names no item, so a 226 that takes nothing places no fallback.
+    auto carriedBlank = [](CGameSprite* pSprite) -> SHORT {
+        for (SHORT nSlot = 42; nSlot >= 15; nSlot--) {
+            if (pSprite->m_equipment.m_items[nSlot] == NULL) {
+                return nSlot;
+            }
+        }
+        return -1;
+    };
+    auto countItems = [](CGameSprite* pSprite) -> int {
+        int nCount = 0;
+        for (SHORT nSlot = 0; nSlot < 51; nSlot++) {
+            if (pSprite->m_equipment.m_items[nSlot] != NULL) {
+                nCount++;
+            }
+        }
+        return nCount;
+    };
+
+    CGameSprite* pTaker = MakeSprite();
+    pTaker->m_pArea = pArea;
+    pTaker->m_pos = CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX,
+        10 * CPathSearch::GRID_SQUARE_SIZEY);
+    CGameSprite* pMember = MakeSprite();
+    pMember->m_pArea = pArea;
+    pMember->m_pos = CPoint(11 * CPathSearch::GRID_SQUARE_SIZEX,
+        11 * CPathSearch::GRID_SQUARE_SIZEY);
+    // FindItemPersonal scans all 51 slots, so the member must carry no copy
+    // anywhere for the seeds below to be its first personal copies.
+    REQUIRE(pMember->FindItemPersonal(CString("00AX1H01"), 0, FALSE) == -1);
+    REQUIRE(pMember->FindItemPersonal(CString("00BOWS01"), 0, FALSE) == -1);
+    REQUIRE(pMember->m_equipment.m_items[18] == NULL);
+    REQUIRE(pMember->m_equipment.m_items[19] == NULL);
+
+    const SHORT nCharacters = pGame->m_nCharacters;
+    const LONG portrait = pGame->m_characterPortraits[0];
+    pGame->m_nCharacters = 1;
+    pGame->m_characterPortraits[0] = pMember->m_id;
+
+    // 220: every row is walked; the member's copy of row 0's item leaves
+    // through a CMessageRemoveItem and the taker gains it.
+    {
+        pMember->m_equipment.m_items[18] = new CItem(CResRef("00AX1H01"), 3, 0, 0, 0, 0);
+        const SHORT nTakerSlot = carriedBlank(pTaker);
+        REQUIRE(nTakerSlot != -1);
+
+        CAIAction takeList;
+        takeList.m_actionID = 220;
+        takeList.m_string1 = "RNDTRES";
+        pTaker->SetCurrAction(takeList);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pTaker->m_id);
+        CHECK(removed[0]->GetTarget() == pMember->m_id);
+
+        CItem* pGained = pTaker->m_equipment.m_items[nTakerSlot];
+        REQUIRE(pGained != NULL);
+        CHECK(pGained->GetResRef() == CResRef("00AX1H01"));
+        CHECK(pGained->GetUsageCount(0) == 3);
+
+        // Running the queued removal clears the member's slot.
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CHECK(pMember->m_equipment.m_items[18] == NULL);
+        ClearMessages();
+    }
+
+    // 226 spends one count per row that yielded anything: the count of 1
+    // ends the walk after row 0, so row 1's item stays with the member.
+    {
+        pMember->m_equipment.m_items[18] = new CItem(CResRef("00AX1H01"), 2, 0, 0, 0, 0);
+        pMember->m_equipment.m_items[19] = new CItem(CResRef("00BOWS01"), 4, 0, 0, 0, 0);
+        const SHORT nTakerSlot = carriedBlank(pTaker);
+        REQUIRE(nTakerSlot != -1);
+
+        CAIAction takeListNum;
+        takeListNum.m_actionID = 226;
+        takeListNum.m_string1 = "RNDTRES";
+        takeListNum.m_specificID = 1;
+        pTaker->SetCurrAction(takeListNum);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+
+        CItem* pGained = pTaker->m_equipment.m_items[nTakerSlot];
+        REQUIRE(pGained != NULL);
+        CHECK(pGained->GetResRef() == CResRef("00AX1H01"));
+        CHECK(pGained->GetUsageCount(0) == 2);
+
+        // Row 1 never ran: the member keeps its copy.
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CItem* pKept = pMember->m_equipment.m_items[19];
+        REQUIRE(pKept != NULL);
+        CHECK(pKept->GetResRef() == CResRef("00BOWS01"));
+        CHECK(pKept->GetUsageCount(0) == 4);
+        delete pKept;
+        pMember->m_equipment.m_items[19] = NULL;
+        ClearMessages();
+    }
+
+    // A 226 that takes nothing falls back to the 2DA's default cell, which
+    // names no item here: done, and nothing moves.
+    {
+        const int nMemberItems = countItems(pMember);
+        const int nTakerItems = countItems(pTaker);
+
+        CAIAction nothing;
+        nothing.m_actionID = 226;
+        nothing.m_string1 = "RNDTRES";
+        nothing.m_specificID = 1;
+        pTaker->SetCurrAction(nothing);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(countItems(pMember) == nMemberItems);
+        CHECK(countItems(pTaker) == nTakerItems);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessageAddItem>().empty());
+        ClearMessages();
+    }
+
+    // 220 naming a 2DA the game does not ship: the walk never runs and the
+    // action still reports done.
+    {
+        const int nMemberItems = countItems(pMember);
+        const int nTakerItems = countItems(pTaker);
+
+        CAIAction missing;
+        missing.m_actionID = 220;
+        missing.m_string1 = "T83NOEX";
+        pTaker->SetCurrAction(missing);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        CHECK(countItems(pMember) == nMemberItems);
+        CHECK(countItems(pTaker) == nTakerItems);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessageAddItem>().empty());
+    }
+
+    pGame->m_nCharacters = nCharacters;
+    pGame->m_characterPortraits[0] = portrait;
+    ClearMessages();
+}
+
 TEST_CASE("ai: ExecuteAction 141/165 give party gold and experience from a global", "[ai][data]")
 {
     REQUIRE_ENGINE();
