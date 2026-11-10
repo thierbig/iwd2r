@@ -639,7 +639,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 141:
         // GivePartyGoldGlobal
-        // TODO: 0x44EF53-0x44EF61 calls 0x465220 (not ported).
+        returnValue = GivePartyGoldGlobal();
         goto done;
     case 143:
         // OpenDoor
@@ -875,7 +875,7 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 165:
         // AddexperiencePartyGlobal
-        // TODO: 0x44FCBE-0x44FCCC calls 0x465D50 (not ported).
+        returnValue = AddexperiencePartyGlobal();
         goto done;
     case 167:
         returnValue = StartMovie();
