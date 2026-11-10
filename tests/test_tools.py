@@ -2118,6 +2118,20 @@ class CheckEvidenceTest(unittest.TestCase):
         self.assertIn('0x401000', r.stdout)
         self.assertNotIn('0x401020', r.stdout)
 
+    def test_slid_insertion_does_not_touch_the_unchanged_neighbour(self):
+        # git can align an inserted function whose tail matches the previous
+        # function's tail onto that tail (Task 83d: LeaveAreaLUAPanic after
+        # SetMusic 0x4668E0), so the hunk starts inside the neighbour; its
+        # text is the same at the base, which span_texts lets touched() see.
+        before = TWO_FUNCTIONS.splitlines()
+        after = TWO_FUNCTIONS.replace(
+            '\n// 0x401020', '\n// 0x401010\nint A::h(int x)\n{\n    return x;\n}\n'
+            '\n// 0x401020').splitlines()
+        old, new = check_evidence.span_texts(before), check_evidence.span_texts(after)
+        self.assertEqual(old[0x401000], new[0x401000])
+        self.assertNotIn(0x401010, old)
+        self.assertEqual(old[0x401020], new[0x401020])
+
     def test_body_change_with_exemption_passes(self):
         self.write('src/a.cpp', TWO_FUNCTIONS.replace('return x;',
                                                       'return x * 2;'))

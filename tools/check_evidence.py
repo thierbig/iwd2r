@@ -335,6 +335,7 @@ def touched(repo, base, worktree=False):
     ranges = changed_lines(diff)
     for path in untracked:
         ranges.setdefault(path, [])
+    point = git(repo, 'merge-base', base, 'HEAD').stdout.strip()
     result = []
     for path, changed in sorted(ranges.items()):
         if not path.endswith('.cpp') or (not changed and path not in untracked):
@@ -342,13 +343,32 @@ def touched(repo, base, worktree=False):
         lines = _source_lines(repo, path, worktree)
         if lines is None:
             continue
+        before = None
         for first, last, address, name in spans(lines):
             if path in untracked or any(
                     first <= lo and hi <= last if deletion
                     else lo <= last and first <= hi
                     for lo, hi, deletion in changed):
+                if path not in untracked:
+                    if before is None:
+                        r = git(repo, 'show', f'{point}:{path}', check=False)
+                        before = span_texts(r.stdout.splitlines()
+                                            if r.returncode == 0 else [])
+                    if before.get(address) == '\n'.join(lines[first:last + 1]):
+                        continue
                 result.append((path, address, name))
     return result
+
+
+def span_texts(lines):
+    """{address: source text} of each labelled function in `lines`.
+    touched() drops a function whose text is the same at the base: git can
+    align an inserted function whose tail matches the previous function's
+    tail onto that tail (seen with --minimal in a large file, Task 83d:
+    LeaveAreaLUAPanic after SetMusic), so the hunk starts inside an
+    unchanged neighbour."""
+    return {address: '\n'.join(lines[first:last + 1])
+            for first, last, address, _name in spans(lines)}
 
 
 def body_digest(repo, address, path=None):
