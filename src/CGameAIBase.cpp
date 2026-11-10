@@ -1187,6 +1187,9 @@ SHORT CGameAIBase::ExecuteAction()
         }
         bShare = TRUE;
         static_cast<CGameSprite*>(pTarget)->JumpToPoint(m_curAction.GetDest(), FALSE);
+        // The success tail jumps to 0x44E1DB, which ors the return value to
+        // ACTION_DONE before the release block runs.
+        returnValue = ACTION_DONE;
         goto release;
     case 266:
         // DisplayMessage
