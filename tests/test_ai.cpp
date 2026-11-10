@@ -191,6 +191,23 @@ void ClearMessages()
     }
 }
 
+// The messages of type T waiting in the handler's queue, in queue order,
+// without running them (tests/test_sprite_actions.cpp's helper).
+template <typename T>
+std::vector<T*> Queued()
+{
+    std::vector<T*> found;
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    POSITION pos = handler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* message = handler.m_messageList.GetNext(pos);
+        if (T* typed = dynamic_cast<T*>(message)) {
+            found.push_back(typed);
+        }
+    }
+    return found;
+}
+
 // An effect the way CMessageAddEffect decodes one: the AddEffect arms own
 // and delete it.
 CGameEffect* MakeDoorEffect(WORD effectID)
@@ -1798,5 +1815,168 @@ TEST_CASE("ai: ExecuteAction 82 CreateItem stores the new item or hands it to th
     REQUIRE(pContainer->GetItem(0) != NULL);
     CHECK(pContainer->GetItem(0)->GetResRef() == CResRef("00GEM01"));
 
+    ClearMessages();
+}
+
+TEST_CASE("ai: ExecuteAction 116/204 TakePartyItem takes the member's item or splits its stack", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    // The taker stands outside the party (PlaceItem hands a non-sprite's
+    // gains to a container or deletes them), so its copies land in the
+    // highest blank of the carried slots 15..42, PlaceItem's backward scan.
+    auto carriedBlank = [](CGameSprite* pSprite) -> SHORT {
+        for (SHORT nSlot = 42; nSlot >= 15; nSlot--) {
+            if (pSprite->m_equipment.m_items[nSlot] == NULL) {
+                return nSlot;
+            }
+        }
+        return -1;
+    };
+    auto countItems = [](CGameSprite* pSprite) -> int {
+        int nCount = 0;
+        for (SHORT nSlot = 0; nSlot < 51; nSlot++) {
+            if (pSprite->m_equipment.m_items[nSlot] != NULL) {
+                nCount++;
+            }
+        }
+        return nCount;
+    };
+
+    CGameSprite* pTaker = MakeSprite();
+    pTaker->m_pArea = pArea;
+    pTaker->m_pos = CPoint(10 * CPathSearch::GRID_SQUARE_SIZEX,
+        10 * CPathSearch::GRID_SQUARE_SIZEY);
+    CGameSprite* pMember = MakeSprite();
+    pMember->m_pArea = pArea;
+    pMember->m_pos = CPoint(11 * CPathSearch::GRID_SQUARE_SIZEX,
+        11 * CPathSearch::GRID_SQUARE_SIZEY);
+    // FindItemPersonal scans all 51 slots, so the member must carry no copy
+    // anywhere for the seed below to be its first personal copy.
+    REQUIRE(pMember->FindItemPersonal(CString("00POTN01"), 0, FALSE) == -1);
+    REQUIRE(pMember->m_equipment.m_items[18] == NULL);
+
+    const SHORT nCharacters = pGame->m_nCharacters;
+    const LONG portrait = pGame->m_characterPortraits[0];
+    pGame->m_nCharacters = 1;
+    pGame->m_characterPortraits[0] = pMember->m_id;
+
+    // 116: the first personal copy leaves the member and the taker gains it.
+    {
+        pMember->m_equipment.m_items[18] = new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0);
+        const SHORT nTakerSlot = carriedBlank(pTaker);
+        REQUIRE(nTakerSlot != -1);
+
+        CAIAction take;
+        take.m_actionID = 116;
+        take.m_string1 = "00POTN01";
+        pTaker->SetCurrAction(take);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        // The removal rides a CMessageRemoveItem aimed at the member's slot.
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        CHECK(removed[0]->GetSource() == pTaker->m_id);
+        CHECK(removed[0]->GetTarget() == pMember->m_id);
+
+        // The taker's copy is placed directly, charge count intact.
+        CItem* pGained = pTaker->m_equipment.m_items[nTakerSlot];
+        REQUIRE(pGained != NULL);
+        CHECK(pGained->GetResRef() == CResRef("00POTN01"));
+        CHECK(pGained->GetUsageCount(0) == 3);
+
+        // Running the queued removal clears the member's slot.
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CHECK(pMember->m_equipment.m_items[18] == NULL);
+        ClearMessages();
+    }
+
+    // 204: three charges of a five-charge stack splits it -- the taker keeps
+    // the reduced copy and the member gets the leftover two back.
+    {
+        pMember->m_equipment.m_items[18] = new CItem(CResRef("00POTN01"), 5, 0, 0, 0, 0);
+        const SHORT nTakerSlot = carriedBlank(pTaker);
+        REQUIRE(nTakerSlot != -1);
+
+        CAIAction takeNum;
+        takeNum.m_actionID = 204;
+        takeNum.m_string1 = "00POTN01";
+        takeNum.m_specificID = 3;
+        pTaker->SetCurrAction(takeNum);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        // The stack's removal and the remainder's add-back, both queued.
+        const std::vector<CMessageRemoveItem*> removed = Queued<CMessageRemoveItem>();
+        REQUIRE(removed.size() == 1);
+        CHECK(removed[0]->m_slot == 18);
+        const std::vector<CMessageAddItem*> added = Queued<CMessageAddItem>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->m_item.GetResRef() == CResRef("00POTN01"));
+        CHECK(added[0]->m_item.GetUsageCount(0) == 2);
+        CHECK(added[0]->GetSource() == pTaker->m_id);
+        CHECK(added[0]->GetTarget() == pMember->m_id);
+
+        // The taker's copy carries the reduced count.
+        CItem* pGained = pTaker->m_equipment.m_items[nTakerSlot];
+        REQUIRE(pGained != NULL);
+        CHECK(pGained->GetUsageCount(0) == 2);
+
+        // The FIFO drain clears slot 18 then refills it with the remainder.
+        g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+        CItem* pRemainder = pMember->m_equipment.m_items[18];
+        REQUIRE(pRemainder != NULL);
+        CHECK(pRemainder->GetResRef() == CResRef("00POTN01"));
+        CHECK(pRemainder->GetUsageCount(0) == 2);
+        ClearMessages();
+    }
+
+    // The party carries nothing named by the action: an error, with every
+    // inventory and message queue untouched.
+    {
+        REQUIRE(pMember->FindItemPersonal(CString("00GBGA01"), 0, FALSE) == -1);
+        const int nMemberItems = countItems(pMember);
+        const int nTakerItems = countItems(pTaker);
+
+        CAIAction none;
+        none.m_actionID = 116;
+        none.m_string1 = "00GBGA01";
+        pTaker->SetCurrAction(none);
+        CHECK(pTaker->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+        CHECK(countItems(pMember) == nMemberItems);
+        CHECK(countItems(pTaker) == nTakerItems);
+        CHECK(Queued<CMessageRemoveItem>().empty());
+        CHECK(Queued<CMessageAddItem>().empty());
+    }
+
+    pGame->m_nCharacters = nCharacters;
+    pGame->m_characterPortraits[0] = portrait;
     ClearMessages();
 }
