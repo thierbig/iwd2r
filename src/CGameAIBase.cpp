@@ -3199,8 +3199,8 @@ SHORT CGameAIBase::GivePartyGoldGlobal()
     CString sScope = m_curAction.GetString2();
     sScope.MakeUpper();
 
-    // The original leaves the amount in a stack slot the missing-area path
-    // below reads before any store; bounded to 0 here.
+    // Bounded to 0 on the missing-area path below, where the original reads a
+    // stack address instead (see the NOTE there).
     LONG nAmount = 0;
 
     if (strcmp(sScope, "GLOBAL") == 0) {
@@ -3238,9 +3238,11 @@ SHORT CGameAIBase::GivePartyGoldGlobal()
                 nAmount = pVariable->m_intValue;
             }
         } else {
-            // The original loads the amount from the uninitialized stack slot
-            // here (0x465416 reads [esp+0x14], a spill slot no path to this
-            // point has stored); bounded to the 0 above.
+            // NOTE: The original loads the amount from [esp+0x14] here (0x465416).
+            // That slot holds the address of the CString argument passed to
+            // GetArea (0x4653C8 stores esp into it), so the amount is a stack
+            // address: a large positive value. Not reproducible; bounded to
+            // the 0 above.
         }
     }
 
@@ -3361,8 +3363,8 @@ SHORT CGameAIBase::AddexperiencePartyGlobal()
     CString sScope = m_curAction.GetString2();
     sScope.MakeUpper();
 
-    // The original leaves the amount in a stack slot the missing-area path
-    // below reads before any store; bounded to 0 here.
+    // Bounded to 0 on the missing-area path below, where the original reads a
+    // stack address instead (see the NOTE there).
     LONG nAmount = 0;
 
     if (strcmp(sScope, "GLOBAL") == 0) {
@@ -3391,9 +3393,11 @@ SHORT CGameAIBase::AddexperiencePartyGlobal()
                 nAmount = pVariable->m_intValue;
             }
         } else {
-            // The original loads the amount from the uninitialized stack slot
-            // here (0x465ED5 reads [esp+0x14], a spill slot no path to this
-            // point has stored); bounded to the 0 above.
+            // NOTE: The original loads the amount from [esp+0x14] here (0x465ED5).
+            // That slot holds the address of the CString argument passed to
+            // GetArea (0x465E87 stores esp into it), so the amount is a stack
+            // address: a large positive value. Not reproducible; bounded to
+            // the 0 above.
         }
     }
 
