@@ -1494,11 +1494,26 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 296:
         // ChangeStoreMarkup
-        // TODO: 0x451DED-0x451E5F not ported.
+        // TODO: 0x451E3E calls 0x5C9C90 (not ported): applies the store
+        // markup change -- the original builds a CResRef from
+        // m_curAction.GetString1() (ctor 0x78A970 at 0x451E0C) and calls
+        // g_pBaldurChitin->GetObjectGame()->0x5C9C90(&resRef,
+        // GetSpecifics(), GetSpecifics2(), GetSpecifics3()); the temps are
+        // not materialized here because the call is unported. The original
+        // forces ACTION_DONE (0x451E57) and jumps to done without touching
+        // the target.
+        returnValue = ACTION_DONE;
         goto done;
     case 297:
         // ScreenShake
-        // TODO: 0x451E5F-0x451EAA not ported.
+        message = new CMessageScreenShake(m_curAction.GetSpecifics(),
+            m_curAction.GetSpecifics2(),
+            m_curAction.GetSpecifics3(),
+            1,
+            GetId(),
+            GetId());
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        returnValue = ACTION_DONE;
         goto done;
     case 298:
         // FaceSavedLocation: the sprite turns to its saved orientation
