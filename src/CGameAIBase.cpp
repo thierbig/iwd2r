@@ -1244,12 +1244,46 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 268:
         // ClearPartyEffects
-        // TODO: 0x450FBC-0x451096 not ported.
+        {
+            for (int nCharacter = 0;
+                 nCharacter < g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+                 nCharacter++) {
+                CGameObject* pObject;
+                LONG nCharacterId = g_pBaldurChitin->GetObjectGame()->GetCharacterId(nCharacter);
+                BYTE rc;
+
+                do {
+                    rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pObject,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) {
+                    // The flag test is m_flags bit 0x800 of the base stats.
+                    if ((static_cast<CGameSprite*>(pObject)->GetBaseStats()->m_flags & 0x800) != 0) {
+                        static_cast<CGameSprite*>(pObject)->sub_761990();
+                    }
+
+                    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 270:
         // ClearSpriteEffects
-        // TODO: 0x451096-0x4510C3 not ported.
-        goto done;
+        // Both paths jump to 0x44E1DB, which ors the return value to ACTION_DONE
+        // before the release block runs.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget != NULL) {
+            bShare = TRUE;
+            static_cast<CGameSprite*>(pTarget)->sub_761990();
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 271:
         // StopJoinRequests
         if (field_596 == 0) {
