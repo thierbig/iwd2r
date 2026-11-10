@@ -2639,3 +2639,89 @@ TEST_CASE("ai: ExecuteAction 260 266 267 and 268 without a target or party", "[a
 
     ClearMessages();
 }
+
+// Task 83e's ExecuteAction arms, driven through ExecuteAction as far as they
+// are observable without game data. 290/291/292 stop at GetTargetShareType's
+// null (no sprite or container resolves for a bare AI object's action), 295's
+// receiving-sprite resolver and 296's markup call are unported (the TODOs in
+// the arms record them), and 297 is fully ported.
+TEST_CASE("ai: ExecuteAction 290 291 292 spell-hit and chunk arms without a target", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+
+    // 290 SpellHitEffectPoint: neither a sprite nor a container resolves for
+    // the action's target, so the arm answers the entry default, the error
+    // code.
+    CAIAction spellHitPoint;
+    spellHitPoint.m_actionID = 290;
+    pCaller->SetCurrAction(spellHitPoint);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 291 SpellHitEffectSprite: no target sprite, same answer.
+    CAIAction spellHitSprite;
+    spellHitSprite.m_actionID = 291;
+    pCaller->SetCurrAction(spellHitSprite);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 292 ChunkCreature: no target sprite means no chunk effect is queued.
+    CAIAction chunk;
+    chunk.m_actionID = 292;
+    pCaller->SetCurrAction(chunk);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and screen shake",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+
+    // 294 XEquipItem without a target: the null test jumps to 0x44E1DB,
+    // which forces ACTION_DONE (like 270, unlike 290).
+    CAIAction equip;
+    equip.m_actionID = 294;
+    pCaller->SetCurrAction(equip);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // 295 TransferInventory: the receiving-sprite resolver (0x45C290) is not
+    // ported, so pTarget stays null and the arm answers the entry default.
+    CAIAction transfer;
+    transfer.m_actionID = 295;
+    pCaller->SetCurrAction(transfer);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 296 ChangeStoreMarkup: the markup call (0x5C9C90) is not ported; the
+    // original still forces ACTION_DONE after it.
+    CAIAction markup;
+    markup.m_actionID = 296;
+    pCaller->SetCurrAction(markup);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // 297 ScreenShake(5, 6, 7): the shake rides a CMessageScreenShake to
+    // self, override set, in the action's specifics order (duration, x, y).
+    CAIAction shake;
+    shake.m_actionID = 297;
+    shake.m_specificID = 5;
+    shake.m_specificID2 = 6;
+    shake.m_specificID3 = 7;
+    pCaller->SetCurrAction(shake);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageScreenShake*> shakes = Queued<CMessageScreenShake>();
+        REQUIRE(shakes.size() == 1);
+        CHECK(shakes[0]->m_duration == 5);
+        CHECK(shakes[0]->m_magnitudeX == 6);
+        CHECK(shakes[0]->m_magnitudeY == 7);
+        CHECK(shakes[0]->m_bOverride == 1);
+        CHECK(shakes[0]->m_sourceId == pCaller->m_id);
+        CHECK(shakes[0]->m_targetId == pCaller->m_id);
+    }
+
+    ClearMessages();
+}
