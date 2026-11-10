@@ -1019,7 +1019,8 @@ SHORT CGameAIBase::ExecuteAction()
         goto done;
     case 220:
     case 226:
-        // TODO: 0x45026E-0x45027C calls 0x464200 (not ported).
+        // TakeItemListParty, TakeItemListPartyNum
+        returnValue = TakeItemListParty();
         goto done;
     case 227:
         // CreateCreatureObject
