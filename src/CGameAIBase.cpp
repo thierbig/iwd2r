@@ -1022,8 +1022,11 @@ SHORT CGameAIBase::ExecuteAction()
         // TODO: 0x45026E-0x45027C calls 0x464200 (not ported).
         goto done;
     case 227:
-        // TODO: 0x44E23F-0x44E267 calls 0x460D70 (not ported).
-        goto done;
+        // CreateCreatureObject
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        bShare = TRUE;
+        returnValue = CreateCreatureObject(pTarget);
+        goto release;
     case 230:
         // RestParty
         g_pBaldurChitin->GetObjectGame()->RestParty(1, 1);
