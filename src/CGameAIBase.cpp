@@ -2880,6 +2880,8 @@ SHORT CGameAIBase::CreateItem()
 SHORT CGameAIBase::TakePartyItem()
 {
     CString sName = m_curAction.GetString1();
+    BOOL numbered = m_curAction.m_actionID == 204;
+    LONG number = numbered ? m_curAction.m_specificID : 1;
     BOOL ranged = m_curAction.m_actionID == 193;
     LONG range = ranged ? m_curAction.m_specificID : 0;
     CItem* lastItem = NULL;
@@ -2919,7 +2921,7 @@ SHORT CGameAIBase::TakePartyItem()
 
         if (inRange) {
             SHORT slot = pSprite->FindItemPersonal(sName, match, FALSE);
-            if (slot != -1) {
+            while (slot != -1) {
                 CItem* pTaken = new CItem(*pSprite->m_equipment.m_items[slot]);
                 lastItem = pTaken;
 
@@ -2940,14 +2942,70 @@ SHORT CGameAIBase::TakePartyItem()
                 ability.m_abilityNum = 2;
                 pSprite->CheckQuickLists(&ability, 0, TRUE, FALSE);
 
-                // TODO: 0x463E18 not ported.
-                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
-                    CGameObjectArray::THREAD_ASYNCH,
-                    INFINITE);
-                return ACTION_DONE;
+                // 204 counts charges. A non-stackable item spends one
+                // charge of the count; a stackable item holding more
+                // charges than remain is split: the taken copy is reduced
+                // to the leftover count and handed back to the member
+                // through a CMessageAddItem, while the taker's PlaceItem
+                // below still receives that same reduced copy -- both
+                // sides keep the remainder, an original quirk kept as-is.
+                if (numbered) {
+                    if (pTaken->GetMaxStackable() <= 1) {
+                        number--;
+                    } else {
+                        WORD usage = pTaken->GetUsageCount(0);
+                        if (usage > number) {
+                            pTaken->SetUsageCount(0, usage - number);
+                            number = 0;
+                            CMessage* messageAdd = new CMessageAddItem(*pTaken, m_id, pSprite->m_id);
+                            g_pBaldurChitin->GetMessageHandler()->AddMessage(messageAdd, FALSE);
+                        } else {
+                            number -= pTaken->GetUsageCount(0);
+                        }
+                    }
+                }
+
+                PlaceItem(pTaken, TRUE, TRUE, 1, TRUE);
+
+                // The action id is re-read after the take: 116 and 193
+                // stop at the first item; 188 empties this member; 204
+                // continues until the count is met.
+                if (m_curAction.m_actionID != 188 && m_curAction.m_actionID != 204) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return ACTION_DONE;
+                }
+
+                match++;
+                if (m_curAction.m_actionID == 204 && number <= 0) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return ACTION_DONE;
+                }
+
+                slot = pSprite->FindItemPersonal(sName, match, FALSE);
             }
 
-            // TODO: 0x463F54 not ported.
+            // The member has no more personal copies. The bags are
+            // drained while nothing personal was taken from anyone yet,
+            // for 188 outright, or while 204 still wants charges; the bag
+            // copies land as one freshly created stack of `taken`.
+            if (lastItem == NULL || m_curAction.m_actionID == 188
+                || (m_curAction.m_actionID == 204 && number > 0)) {
+                SHORT taken = pSprite->TakeItemBags(sName, number, -1);
+                if (taken > 0) {
+                    number -= taken;
+                    PlaceItem(new CItem(CResRef(sName), 1, 0, 0, 0, 0), TRUE, TRUE, taken, TRUE);
+                    if (m_curAction.m_actionID == 204 && number <= 0) {
+                        pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            INFINITE);
+                        return ACTION_DONE;
+                    }
+                }
+            }
         }
 
         pGame->GetObjectArray()->ReleaseShare(nCharacterId,
