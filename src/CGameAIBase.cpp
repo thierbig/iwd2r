@@ -2638,6 +2638,41 @@ SHORT CGameAIBase::CreateCreature()
     return ACTION_DONE;
 }
 
+// 0x460D70
+// The CreateCreatureObject action (227): builds a CGameSprite straight
+// from the CRE file named by the action's first string and places it on
+// the nearest open square around the TARGET object's position. Unlike
+// CreateCreature (0x4608A0), the destination is the target's position,
+// there is no exact-square variant, no second-string script name (the
+// sprite registers under whatever script name the CRE left), and
+// field_342 is not set.
+SHORT CGameAIBase::CreateCreatureObject(CGameObject* pTarget)
+{
+    // The instructions test the target before the CVariable constructor
+    // runs; a null target fails the action at once.
+    if (pTarget == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CVariable cVariable;
+    CPoint pos = pTarget->GetPos();
+
+    if (pos.x == -1 && pos.y == -1)
+        CProjectile::GetSourcePosition(m_id, pos, TRUE);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(CResRef(m_curAction.GetString1()), 1009, TRUE) == NULL) {
+        return ACTION_ERROR;
+    }
+
+    CCreatureFile creatureFile;
+
+    // NOTE: Uninline.
+    creatureFile.SetResRef(CResRef(m_curAction.GetString1()), TRUE, TRUE);
+
+    // TODO: 0x460F5A not ported.
+    return ACTION_ERROR;
+}
+
 // 0x462470
 // Applies the action's spell to the target: the resref comes from the
 // action's override string or, failing that, DecodeSpell on the spell id.

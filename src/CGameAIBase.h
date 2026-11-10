@@ -101,6 +101,7 @@ public:
     SHORT SmallWait();
     SHORT Shout();
     SHORT CreateCreature();
+    SHORT CreateCreatureObject(CGameObject* pTarget);
     void PutItemGround(CItem* pItem);
     SHORT CreateItem();
     SHORT TakePartyItem();
