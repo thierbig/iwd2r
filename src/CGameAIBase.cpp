@@ -3188,11 +3188,27 @@ SHORT CGameAIBase::TakeItemListParty()
                 INFINITE);
         }
 
-        // TODO: 0x46460F-0x46494A (the 226 per-row count) not ported.
+        // 226 spends one count per 2DA row that yielded anything -- not
+        // per item -- and is done as soon as the count runs out.
+        if (bTookSomething && m_curAction.m_actionID == 226) {
+            if (--remaining <= 0) {
+                return ACTION_DONE;
+            }
+        }
     }
 
-    // TODO: 0x464650-0x46494A (the default-item fallback for 226) not
-    // ported.
+    // A 226 that took nothing anywhere leaves `remaining` equal to the
+    // count the action carried. The 2DA's default cell then names a
+    // fallback item, created into this sprite's inventory when the item
+    // file exists.
+    if (remaining == m_curAction.m_specificID && m_curAction.m_actionID == 226) {
+        CString sDefault = t2DA.GetDefault();
+        sDefault.MakeUpper();
+        if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(CResRef(sDefault), 1005, TRUE) != NULL) {
+            PlaceItem(new CItem(CResRef(sDefault), 0, 0, 0, 0, 0), TRUE, TRUE, TRUE, TRUE);
+        }
+    }
+
     return ACTION_DONE;
 }
 
