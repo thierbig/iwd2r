@@ -2528,3 +2528,114 @@ TEST_CASE("ai: ExecuteAction 141/165 give party gold and experience from a globa
     pGame->m_characterPortraits[0] = portrait;
     ClearMessages();
 }
+
+// Task 83d's ExecuteAction arms, driven through ExecuteAction as far as they
+// are observable without game data: the return codes and the messages they
+// queue. The arms whose work needs rest state, a formed party with the export
+// flag set, or a loaded area (258 RestUntilHealed's RestParty walk, 267
+// ExportParty's and 268 ClearPartyEffects' per-character loops) stop at the
+// empty party here; the task report records why.
+TEST_CASE("ai: ExecuteAction 189 LeaveAreaLUAPanic 259 SetVisualRange and 270 ClearSpriteEffects",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+
+    // 189 LeaveAreaLUAPanic: without a network connection the hand-off is
+    // skipped and the action is done (0x466910).
+    CAIAction panic;
+    panic.m_actionID = 189;
+    pCaller->SetCurrAction(panic);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
+
+    // 259 SetVisualRange(14): a CMessage92 to self carries the range.
+    CAIAction setRange;
+    setRange.m_actionID = 259;
+    setRange.m_specificID = 14;
+    pCaller->SetCurrAction(setRange);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessage92*> ranges = Queued<CMessage92>();
+        REQUIRE(ranges.size() == 1);
+        CHECK(ranges[0]->field_C == 14);
+        CHECK(ranges[0]->m_sourceId == pCaller->m_id);
+        CHECK(ranges[0]->m_targetId == pCaller->m_id);
+    }
+    ClearMessages();
+
+    // 270 ClearSpriteEffects without a target: the arm jumps to 0x44E1DB,
+    // which ors the return value to ACTION_DONE before the release block, so
+    // the answer is done, not an error.
+    CAIAction clearSprite;
+    clearSprite.m_actionID = 270;
+    pCaller->SetCurrAction(clearSprite);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: ExecuteAction 260 266 267 and 268 without a target or party", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+
+    // 260 JumpToPointInstant without a target: 0x451451 loads ACTION_ERROR
+    // before the release block, so the answer is an error (unlike 270).
+    CAIAction jump;
+    jump.m_actionID = 260;
+    pCaller->SetCurrAction(jump);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 266 DisplayMessage(10309): the fetched text rides a CMessageDisplayText
+    // in the original's colors, to self, with no name.
+    CAIAction display;
+    display.m_actionID = 266;
+    display.m_specificID = 10309; // "You may not rest at this time."
+    pCaller->SetCurrAction(display);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageDisplayText*> shown = Queued<CMessageDisplayText>();
+        REQUIRE(shown.size() == 1);
+        CHECK(shown[0]->m_name.IsEmpty());
+        CHECK(shown[0]->m_text == "You may not rest at this time.");
+        CHECK(shown[0]->m_textColor == RGB(160, 200, 215));
+        CHECK(shown[0]->m_nameColor == RGB(160, 200, 215));
+        CHECK(shown[0]->m_marker == -1);
+        CHECK(shown[0]->m_sourceId == pCaller->m_id);
+        CHECK(shown[0]->m_targetId == pCaller->m_id);
+    }
+    ClearMessages();
+
+    // 267 ExportParty("t83d"): with no party the loop exports nothing and the
+    // header strref (26827) is posted to ids 0.
+    CAIAction exportParty;
+    exportParty.m_actionID = 267;
+    exportParty.m_string1 = "t83d";
+    pCaller->SetCurrAction(exportParty);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageDisplayTextRef*> refs = Queued<CMessageDisplayTextRef>();
+        REQUIRE(refs.size() == 1);
+        CHECK(refs[0]->m_name == static_cast<STRREF>(-1));
+        CHECK(refs[0]->m_text == 26827);
+        CHECK(refs[0]->m_nameColor == RGB(0, 0, 0));
+        CHECK(refs[0]->m_textColor == RGB(255, 255, 0));
+        CHECK(refs[0]->m_marker == -1);
+        CHECK(refs[0]->m_sourceId == 0);
+        CHECK(refs[0]->m_targetId == 0);
+    }
+    ClearMessages();
+
+    // 268 ClearPartyEffects with no party: the walk is empty and the action
+    // is done without a message.
+    CAIAction clearParty;
+    clearParty.m_actionID = 268;
+    pCaller->SetCurrAction(clearParty);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
+
+    ClearMessages();
+}
