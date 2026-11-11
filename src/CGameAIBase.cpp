@@ -1456,8 +1456,57 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 293:
         // UnHide
-        // TODO: 0x45197F-0x451D30 not ported.
-        goto done;
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // The original jumps to the done tail (0x4526F7) before bShare is
+            // set, keeping the ACTION_ERROR entry default.
+            goto done;
+        }
+        bShare = TRUE;
+        if (static_cast<CGameSprite*>(pTarget)->sub_453170() != 1) {
+            // A target that is not hiding jumps to the tail that forces
+            // ACTION_DONE (0x44E1DB) before the release block.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            pSprite->sub_453160(0);
+            pSprite->SetModalState(0, TRUE);
+            pSprite->SetStealthGreyOut(90);
+            // A party member's (portrait number != -1) toolbar is rebuilt:
+            // the selected button is reset to 100 (0x64) first, and the state
+            // stack is popped when the target is also the active engine's
+            // selected character and the state is none of the 16 below.
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(pSprite->GetId()) != -1) {
+                g_pBaldurChitin->GetObjectGame()->GetButtonArray()->SetSelectedButton(100);
+                if (g_pBaldurChitin->GetActiveEngine()->GetSelectedCharacter()
+                    == g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(pSprite->GetId())) {
+                    INT nState = g_pBaldurChitin->GetObjectGame()->GetButtonArray()->m_nState;
+                    if (nState != 102
+                        && nState != 101
+                        && nState != 104
+                        && nState != 103
+                        && nState != 105
+                        && nState != 112
+                        && nState != 115
+                        && nState != 116
+                        && nState != 117
+                        && nState != 118
+                        && nState != 119
+                        && nState != 120
+                        && nState != 121
+                        && nState != 122
+                        && nState != 123
+                        && nState != 106) {
+                        g_pBaldurChitin->GetObjectGame()->GetButtonArray()->ResetState();
+                    }
+                }
+            }
+            // TODO: 0x451C7B-0x451D30 not ported.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
     case 294:
         // XEquipItem
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
