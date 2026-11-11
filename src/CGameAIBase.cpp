@@ -1715,12 +1715,47 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 301:
-        // SetExtendedNight
-        // TODO: 0x4520ED-0x45216A not ported.
+        // SetExtendedNight (0x4520ED-0x45216A): set or clear bit 0x40 of
+        // the area header's area type, then mirror it into the infinity.
+        {
+            WORD areaType = m_pArea->GetHeader()->m_areaType;
+            if (m_curAction.GetSpecifics() != 0) {
+                areaType |= 0x40;
+            } else {
+                areaType &= 0xFFBF;
+            }
+            m_pArea->GetHeader()->m_areaType = areaType;
+            m_pArea->GetInfinity()->SetAreaType(areaType);
+            // 0x45212D: only the player-controlled side posts the update.
+            if (InControl()) {
+                message = new CMessageSetAreaType(areaType, GetId(), GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 303:
-        // SetRestEncounterChance
-        // TODO: 0x45216A-0x452253 not ported.
+        // SetRestEncounterChance (0x45216A-0x452253)
+        {
+            CAreaFileRestEncounter* pRestEncounter = m_pArea->GetHeaderRestEncounter();
+            if (pRestEncounter != NULL) {
+                // 0x45EA80 is the exe's min(const int&, const int&)
+                // instantiation; both chances clamp to 100.
+                LONG nDay = m_curAction.GetSpecifics();
+                LONG nNight = m_curAction.GetSpecifics2();
+                pRestEncounter->m_probDay = static_cast<WORD>(nDay < 100 ? nDay : 100);
+                pRestEncounter->m_probNight = static_cast<WORD>(nNight < 100 ? nNight : 100);
+            }
+            // 0x4521E7: only the player-controlled side posts the update,
+            // and the message re-reads the stored words (0x452211/0x45221A).
+            if (InControl()) {
+                message = new CMessageSetAreaRestEncounter(
+                    pRestEncounter->m_probDay, pRestEncounter->m_probNight,
+                    GetId(), GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 304:
         // AddHP
