@@ -22,6 +22,7 @@
 #include "CPathSearch.h"
 #include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
+#include "CScreenJournal.h"
 #include "CSpell.h"
 #include "CStore.h"
 #include "CVariableHash.h"
@@ -2861,6 +2862,123 @@ TEST_CASE("ai: ExecuteAction 293 UnHide clears hiding and reports the effect str
     pCaller->SetCurrAction(noTarget);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
     CHECK(Queued<CMessageAddEffect>().empty());
+    ClearMessages();
+}
+
+// Task 83h's case 243 IncrementGlobalOnce arm, driven through ExecuteAction.
+// The action's two strings are "SCOPE:name" pairs: string1 names the
+// once-guard variable, string2 the variable incremented the first time
+// through. The arm splits on ':', trims, and rejoins scope+name without the
+// colon -- the format SetGlobal and IncrementGlobal parse with their Left(6)
+// scope. The target variable is pre-set through the SetGlobal action: a
+// variable IncrementGlobal creates itself starts from an uninitialized
+// CVariable (the original's default constructor is empty too), so only the
+// increment of an existing variable is deterministic.
+TEST_CASE("ai: ExecuteAction 243 IncrementGlobalOnce fires once per guard variable",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+
+    CAIAction setTarget;
+    setTarget.m_actionID = 30;
+    setTarget.m_string1 = "GLOBALTARGET_83H";
+    setTarget.m_specificID = 10;
+    pCaller->SetCurrAction(setTarget);
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    ClearMessages();
+
+    CAIAction incrementOnce;
+    incrementOnce.m_actionID = 243;
+    incrementOnce.m_string1 = "GLOBAL:ONCE_83H";
+    incrementOnce.m_string2 = "GLOBAL:TARGET_83H";
+    incrementOnce.m_specificID = 7;
+    pCaller->SetCurrAction(incrementOnce);
+
+    // First run: the guard variable does not exist, so it is set to 1 and
+    // string2's variable is incremented by m_specificID. Both helpers report
+    // a CMessageSetVariable in queue order.
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CVariable* pGuard = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(CString("ONCE_83H"));
+    CVariable* pTarget = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(CString("TARGET_83H"));
+    REQUIRE(pGuard != NULL);
+    REQUIRE(pTarget != NULL);
+    CHECK(pGuard->m_intValue == 1);
+    CHECK(pTarget->m_intValue == 17);
+    const std::vector<CMessageSetVariable*> variables = Queued<CMessageSetVariable>();
+    REQUIRE(variables.size() == 2);
+    CHECK(variables[0]->m_sName == CString("ONCE_83H"));
+    CHECK(variables[0]->m_nValue == 1);
+    CHECK(variables[1]->m_sName == CString("TARGET_83H"));
+    CHECK(variables[1]->m_nValue == 17);
+
+    // Second run: the guard variable exists at 1, so the arm jumps straight
+    // to the tail -- nothing set, nothing incremented, nothing queued.
+    pCaller->SetCurrAction(incrementOnce);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pGuard->m_intValue == 1);
+    CHECK(pTarget->m_intValue == 17);
+    CHECK(Queued<CMessageSetVariable>().size() == 2);
+    ClearMessages();
+}
+
+// Task 83h's journal arms, driven through ExecuteAction on the game's
+// embedded journal. 245 JournalEntryDone flips the engine journal's current
+// chapter's quest entry (wType 1) to done (2); 244 DeleteJournalEntry
+// removes the entry whose STRREF text matches m_specificID from whichever
+// chapter holds it, returning before any other entry is touched. The
+// feedback line is muted as tests/test_gam.cpp's AddEntry test does.
+TEST_CASE("ai: ExecuteAction 244 and 245 journal delete and quest done", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameJournal* pJournal = g_pBaldurChitin->GetObjectGame()->GetJournal();
+    g_pBaldurChitin->m_pEngineJournal->m_nChapter = 0;
+
+    CGameOptions* pOptions = g_pBaldurChitin->GetObjectGame()->GetOptions();
+    const DWORD textLevel = pOptions->m_nEffectTextLevel;
+    pOptions->m_nEffectTextLevel = textLevel & ~0x10u;
+    // A quest entry (type 1) in the engine journal's chapter 0, a plain
+    // entry (type 4) in chapter 4: DeleteEntry scans all seven chapters.
+    REQUIRE(pJournal->AddEntry(2100, 0, 30, 1) == TRUE);
+    REQUIRE(pJournal->AddEntry(3100, 4, 40, 4) == TRUE);
+    pOptions->m_nEffectTextLevel = textLevel;
+    const WORD nEntries = pJournal->CountEntries();
+    REQUIRE(nEntries >= 2);
+
+    auto entryType = [pJournal](STRREF text) -> int {
+        for (INT nChapter = 0; nChapter < CGameJournal::NUM_CHAPTERS; nChapter++) {
+            POSITION pos = pJournal->m_aChapters[nChapter]->GetHeadPosition();
+            while (pos != NULL) {
+                CGameJournalEntry* pEntry = pJournal->m_aChapters[nChapter]->GetNext(pos);
+                if (pEntry->m_strText == text) {
+                    return pEntry->m_wType;
+                }
+            }
+        }
+        return -1;
+    };
+    REQUIRE(entryType(2100) == 1);
+
+    // 245: the quest entry in chapter 0 reads done.
+    CAIAction questDone;
+    questDone.m_actionID = 245;
+    questDone.m_specificID = 2100;
+    pCaller->SetCurrAction(questDone);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(entryType(2100) == 2);
+
+    // 244: the chapter-4 entry is gone and the quest entry survives intact.
+    CAIAction deleteEntry;
+    deleteEntry.m_actionID = 244;
+    deleteEntry.m_specificID = 3100;
+    pCaller->SetCurrAction(deleteEntry);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(entryType(3100) == -1);
+    CHECK(pJournal->CountEntries() == nEntries - 1);
+    CHECK(entryType(2100) == 2);
     ClearMessages();
 }
 
