@@ -1643,10 +1643,74 @@ SHORT CGameAIBase::ExecuteAction()
         // forces ACTION_DONE (0x44E1DB) before the release block.
         returnValue = ACTION_DONE;
         goto release;
-    case 284:
-        // SetScriptName
-        // TODO: 0x44DCDA-0x44E042 not ported.
+    case 284: {
+        // SetScriptName (0x44DCDA-0x44E042): the old name is the target's
+        // m_scriptName char[32] (0x44DCF4-0x44DD01, CString ctor with length
+        // 32), the new name is GetString1 with an empty string turned into
+        // "none" (0x44DD38). Nothing happens while the names match
+        // (CompareStrings 0x7E8182 is lstrcmpi; 0x44DD5A jumps to the tail).
+        // Each of the area and the game named-creature hashes drops the old
+        // name when it maps to the target's id (RemoveKey(old, TRUE, id) ==
+        // 1), each success queues part of a CMessageSetVariable named by the
+        // old name so remote machines do the same removal (m_dwFlags 2 = area
+        // scope, 4 = game scope) and registers the new name in the game hash
+        // (0x44DE37-0x44DE8B, 0x44DFAC-0x44DFF8). 0x44E03D jumps to the
+        // 0x4526F7 done tail: the original never sets bShare and never
+        // releases the shared target.
+        pTarget = GetTargetShareType(CGameObject::TYPE_AIBASE);
+        if (pTarget == NULL) {
+            // 0x45127A: ACTION_DONE without the release block.
+            returnValue = ACTION_DONE;
+            goto done;
+        }
+
+        CGameAIBase* pAIBase = static_cast<CGameAIBase*>(pTarget);
+        CString sOldName(pAIBase->m_scriptName, SCRIPTNAME_SIZE);
+        CString sNewName = m_curAction.GetString1();
+        if (strcmp(sNewName, "") == 0) {
+            sNewName = "none";
+        }
+
+        CMessageSetVariable* pSetVariable = NULL;
+        if (_stricmp(sOldName, sNewName) != 0) {
+            if (pTarget->m_pArea != NULL
+                && pTarget->m_pArea->GetNamedCreatures()->RemoveKey(sOldName, TRUE, pTarget->GetId()) == TRUE) {
+                CString sAreaRes;
+                pTarget->m_pArea->m_resRef.CopyToString(sAreaRes);
+                pSetVariable = new CMessageSetVariable(sAreaRes, sOldName,
+                    pTarget->GetId(), pTarget->GetId(), pTarget->GetId());
+                pSetVariable->m_dwFlags = 2;
+
+                CVariable varNewName;
+                varNewName.SetName(sNewName);
+                varNewName.m_intValue = pTarget->GetId();
+                g_pBaldurChitin->GetObjectGame()->m_namedCreatures.AddKey(varNewName);
+            }
+
+            if (g_pBaldurChitin->GetObjectGame()->GetNamedCreatures()->RemoveKey(sOldName, TRUE, pTarget->GetId()) == TRUE) {
+                if (pSetVariable == NULL) {
+                    pSetVariable = new CMessageSetVariable("GLOBAL", sOldName,
+                        pTarget->GetId(), pTarget->GetId(), pTarget->GetId());
+                    pSetVariable->m_dwFlags = 4;
+                } else {
+                    // 0x44DFA8: the game removal joins the area message.
+                    pSetVariable->m_dwFlags |= 4;
+                }
+
+                CVariable varNewName;
+                varNewName.SetName(sNewName);
+                varNewName.m_intValue = pTarget->GetId();
+                g_pBaldurChitin->GetObjectGame()->m_namedCreatures.AddKey(varNewName);
+            }
+
+            if (pSetVariable != NULL) {
+                message = pSetVariable;
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        returnValue = ACTION_DONE;
         goto done;
+    }
     case 286:
         // AllowAreaResting
         if (m_pArea == NULL) {
@@ -1659,10 +1723,59 @@ SHORT CGameAIBase::ExecuteAction()
         }
         returnValue = ACTION_DONE;
         goto done;
-    case 287:
-        // SetHPPercent
-        // TODO: 0x4514FB-0x451638 not ported.
-        goto done;
+    case 287: {
+        // SetHPPercent (0x4514FB-0x451638): share TYPE_SPRITE. A dead target
+        // is left alone - the derived m_generalState (0x451523) and the base
+        // m_generalState (0x451535) each test bit 0x800 = STATE_DEAD.
+        // specifics is clamped to [0,100] (0x451548-0x451580) and scaled to a
+        // fraction. With specifics2 == 0 the value is the derived
+        // m_nMaxHitPoints, but only stored when that times the fraction is
+        // above the base m_hitPoints (0x4515D7-0x4515E0 otherwise jumps to
+        // the release tail without a store); with specifics2 != 0 the value
+        // is the current base m_hitPoints itself. The store truncates through
+        // __ftol into the base m_hitPoints word (0x45161C-0x45162F).
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x45150E: the 0x44E1DB tail forces ACTION_DONE before the
+            // release block.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+        if ((pSprite->GetDerivedStats()->m_generalState & STATE_DEAD) != 0
+            || (pSprite->GetBaseStats()->m_generalState & STATE_DEAD) != 0) {
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+
+        float fPercent = static_cast<float>(m_curAction.GetSpecifics());
+        if (fPercent > 100.0f) {
+            fPercent = 100.0f;
+        } else if (fPercent < 0.0f) {
+            fPercent = 0.0f;
+        }
+        fPercent /= 100.0f;
+
+        float fValue;
+        if (m_curAction.GetSpecifics2() == 0) {
+            float fBaseHitPoints = static_cast<float>(pSprite->GetBaseStats()->m_hitPoints);
+            float fMaxHitPoints = static_cast<float>(pSprite->GetDerivedStats()->m_nMaxHitPoints);
+            if (fMaxHitPoints * fPercent <= fBaseHitPoints) {
+                // 0x4515E0: done without storing.
+                returnValue = ACTION_DONE;
+                goto release;
+            }
+            fValue = fMaxHitPoints;
+        } else {
+            fValue = static_cast<float>(pSprite->GetBaseStats()->m_hitPoints);
+        }
+
+        pSprite->GetBaseStats()->m_hitPoints = static_cast<SHORT>(fValue * fPercent);
+        returnValue = ACTION_DONE;
+        goto release;
+    }
     case 288: {
         // SetDoorFlag (0x451638-0x4516BE and the shared tail at
         // 0x4514DC-0x44E1DB): specifics1 is the flag mask on the target
