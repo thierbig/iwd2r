@@ -11481,6 +11481,47 @@ LONG CInfGame::GetAveragePartyLevel()
     return nAverageLevel / m_nCharacters;
 }
 
+// 0x5C9C90
+INT CInfGame::ChangeStoreMarkup(const CResRef& cResStore, LONG, LONG, LONG)
+{
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+        // NOTE: Verified instruction-by-instruction (0x5C9F5E-0x5C9FA7): the
+        // original re-marshals the store unchanged in a single-player game --
+        // the three markup arguments are never read on this path.
+        CStore cStore(cResStore);
+        cStore.Marshal(m_sTempDir);
+        return 1;
+    }
+
+    // A session: a single-player game runs this as the host. The host works
+    // on the server's copy of the store; a client asks the server for it
+    // first and works on its local copy.
+    CStore cStore;
+    if (g_pChitin->cNetwork.GetSessionHosting()) {
+        DemandServerStore(cResStore, TRUE);
+        cStore.SetResRef(cResStore);
+    } else {
+        cStore.SetResRef(cResStore);
+        if (!cStore.m_bLocalCopy || memcmp(cStore.m_pVersion, "STORV9.0", 8) != 0) {
+            if (!g_pBaldurChitin->GetBaldurMessage()->DemandResourceFromServer(cResStore.GetResRefStr(),
+                    1014,
+                    TRUE,
+                    TRUE,
+                    TRUE)) {
+                g_pChitin->cNetwork.CloseSession(TRUE);
+                return 0;
+            }
+
+            cStore.SetResRef(cResStore);
+        }
+    }
+
+    // TODO: 0x5C9DC7 (range 3) -- the store-demand message, the markup
+    // broadcast, the host's GetServerStore/UTIL_ASSERT markup writes and the
+    // client's InvalidateStore, each returning 1.
+    return 1;
+}
+
 // NOTE: Unclear why `nClass` is passed as pointer.
 // TODO: Move to `CRuleTables`.
 //

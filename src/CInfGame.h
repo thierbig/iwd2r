@@ -240,6 +240,7 @@ public:
     void DemandServerStore(const CResRef& store, BOOL bSaveToDisk);
     void ReleaseServerStore(const CResRef& store);
     CStore* GetServerStore(const CResRef& store);
+    INT ChangeStoreMarkup(const CResRef& store, LONG nBuyMarkUp, LONG nSellMarkDown, LONG nAdditionalMarkDown);
     void SwapCharacters(DWORD pos1, DWORD pos2);
     void UpdatePortrait(SHORT nPortrait, DWORD dwPanelId);
     void sub_5AF420(SHORT nPortrait, DWORD dwPanelId);
