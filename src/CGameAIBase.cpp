@@ -1129,7 +1129,38 @@ SHORT CGameAIBase::ExecuteAction()
         sName2.TrimLeft();
         sName2.TrimRight();
 
-        // TODO: 0x450487-0x450648 not ported.
+        // The guard: look string1's variable up -- in the game variables
+        // for GLOBAL, else in GetArea(sScope1)'s. Unlike SetGlobal this
+        // lookup has no LOCALS or MYAREA handling, and the original calls
+        // GetVariables on the area pointer without a null check.
+        CVariable* pVariable;
+        if (strcmp(sScope1, "GLOBAL") == 0) {
+            pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName1);
+        } else {
+            pVariable = g_pBaldurChitin->GetObjectGame()->GetArea(sScope1)->GetVariables()->FindKey(sName1);
+        }
+
+        // An existing guard variable holding 1 means the action already ran:
+        // the original jumps straight to the case tail, changing nothing.
+        if (pVariable == NULL || pVariable->m_intValue != 1) {
+            // Set the guard: string1 is rejoined as scope1+name1, m_specificID
+            // is forced to 1 and SetGlobal runs. (The original passes SetGlobal
+            // a by-value CString copy of the name that the callee never reads
+            // -- dead argument, not even set up on the area path -- so the
+            // in-tree SetGlobal() without it is the same function.)
+            LONG nSpecificID = m_curAction.m_specificID;
+            m_curAction.SetString1(sScope1 + sName1);
+            m_curAction.m_specificID = 1;
+            SetGlobal();
+
+            // Increment string2's variable by the saved m_specificID.
+            m_curAction.SetString1(sScope2 + sName2);
+            m_curAction.m_specificID = nSpecificID;
+            IncrementGlobal();
+        }
+
+        // Both helpers' return values are discarded; the tail forces
+        // ACTION_DONE (0x4505EB: or esi, -1 before the destructors).
         returnValue = ACTION_DONE;
         goto done;
     }
