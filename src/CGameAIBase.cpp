@@ -1738,13 +1738,56 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 312:
-        // SetApparentNameSTRREF
-        // TODO: 0x451EAA-0x451F37 not ported.
-        goto done;
+        // SetApparentNameSTRREF (0x451EAA-0x451F37)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x451EBD: a miss takes the tail that forces ACTION_DONE
+            // (0x44E1DB) before bShare is set.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+        {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            // 0x451EDB: an unchanged name skips the update message.
+            if (pSprite->GetBaseStats()->m_apparentName
+                == static_cast<DWORD>(m_curAction.GetSpecifics())) {
+                returnValue = ACTION_DONE;
+                goto release;
+            }
+            pSprite->GetBaseStats()->m_apparentName = m_curAction.GetSpecifics();
+            // 0x451F1A: the message's caller and target are both the
+            // target's id (GetId at 0x4530B0 read twice).
+            message = new CMessageSpriteUpdate(pSprite, pSprite->GetId(), pSprite->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 313:
-        // SetRegularNameSTRREF
-        // TODO: 0x451F37-0x451FA3 not ported.
-        goto done;
+        // SetRegularNameSTRREF (0x451F37-0x451FA3): the same arm against
+        // m_name (base stats offset 0); both arms share the tail at
+        // 0x451F12.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x451F4B: forced ACTION_DONE (0x44E1DB) before bShare.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+        {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            // 0x451F69: an unchanged name skips the update message.
+            if (pSprite->GetBaseStats()->m_name
+                == static_cast<DWORD>(m_curAction.GetSpecifics())) {
+                returnValue = ACTION_DONE;
+                goto release;
+            }
+            pSprite->GetBaseStats()->m_name = m_curAction.GetSpecifics();
+            message = new CMessageSpriteUpdate(pSprite, pSprite->GetId(), pSprite->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 314:
         // EndGame
         // TODO: 0x452253-0x4522F2 not ported.
