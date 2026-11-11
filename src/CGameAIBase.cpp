@@ -1166,11 +1166,18 @@ SHORT CGameAIBase::ExecuteAction()
     }
     case 244:
         // DeleteJournalEntry
-        // TODO: 0x450648-0x45066E not ported.
+        // Original: 0x450648-0x45066E: the game's embedded journal
+        // (chitin+0x1C54 game, journal at game+0x44C8) gets
+        // DeleteEntry(m_specificID); the tail forces ACTION_DONE.
+        g_pBaldurChitin->GetObjectGame()->GetJournal()->DeleteEntry(m_curAction.m_specificID);
+        returnValue = ACTION_DONE;
         goto done;
     case 245:
         // JournalEntryDone
-        // TODO: 0x45066E-0x450694 not ported.
+        // Original: 0x45066E-0x450694: SetQuestDone(m_specificID) on the
+        // same embedded journal; the tail forces ACTION_DONE.
+        g_pBaldurChitin->GetObjectGame()->GetJournal()->SetQuestDone(m_curAction.m_specificID);
+        returnValue = ACTION_DONE;
         goto done;
     case 247:
         // BitGlobal
