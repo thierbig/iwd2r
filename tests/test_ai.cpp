@@ -3403,3 +3403,215 @@ TEST_CASE("ai: ExecuteAction 301 303 312 313 314 and 315 area flags names endgam
     g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
+
+// CGameAIBase::ExecuteAction (0x44DC10) arms 83k (Task 83k): 316 AddFeat
+// (0x452318-0x4523BA), 242 ChangeStat (0x4523BA-0x45248C), 251
+// DropInventoryEX (0x45248C-0x452575), 318 SetCreatureAreaFlag
+// (0x452575-0x4525EA), 304 AddHP (0x45074B-0x4507E1) and 288 SetDoorFlag
+// (0x451638-0x4516C3), each driven through ExecuteAction on a real sprite
+// (and a real door for 288, whose share resolution type-checks the target
+// through the object's virtual type). AR1000 is loaded once for the drop
+// (the ground pile lives in the sprite's area) and the door.
+TEST_CASE("ai: ExecuteAction 316 242 251 318 304 and 288 feats stats drops area flags hp and door flags",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear, so a pump thread stands in for the display loop (the AR3000
+    // CreateCreature case above uses the same fixture).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 316 AddFeat: specifics1 names the feat. AEGIS_OF_RIME (0) is a plain
+    // feat, so sub_763A40's fall-through grants it (the arm passes 0 as the
+    // second argument, which skips the prerequisite table), and sub_71E240
+    // adds the feat's +5 cold resistance to the base stats. A second call
+    // finds the bit set, refuses the grant and still reports ACTION_DONE
+    // (0x452318: the refusal keeps the done return). A target that resolves
+    // to nothing takes the 0x451451 error tail.
+    pSprite->SetFeatValue(CGAMESPRITE_FEAT_AEGIS_OF_RIME, 0);
+    pSprite->m_baseStats.m_resistColdBase = 0;
+    pCaller->SetCurrAction(CAIAction(316, actee, CGAMESPRITE_FEAT_AEGIS_OF_RIME, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->GetFeatValue(CGAMESPRITE_FEAT_AEGIS_OF_RIME) == 1);
+    CHECK(pSprite->m_baseStats.m_resistColdBase == 5);
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(316, actee, CGAMESPRITE_FEAT_AEGIS_OF_RIME, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_resistColdBase == 5);
+    CAIAction featNobody;
+    featNobody.m_actionID = 316;
+    pCaller->SetCurrAction(featNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 242 ChangeStat: specifics1/2 and the low byte of specifics3 are the
+    // stat, the value and the modify flag, applied through SetAtOffset;
+    // STAT_MAXHITPOINTS writes both the base and the derived maximum. The
+    // message half runs only outside the null provider, but
+    // CMessageChangeStat is BROADCAST_FORCED_OTHERS: Broadcast's
+    // to-self-FALSE counterpart deletes it before the queue in every
+    // provider (the original hands it to the network marshal instead --
+    // omitted per docs/adr/0002-single-player-only.md), so both halves pin
+    // on the fields and an empty queue.
+    pSprite->SetAtOffset(STAT_MAXHITPOINTS, 20, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(242, actee, STAT_MAXHITPOINTS, 37, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_maxHitPointsBase == 37);
+    CHECK(pSprite->m_derivedStats.m_nMaxHitPoints == 37);
+    CHECK(Queued<CMessageChangeStat>().empty());
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(242, actee, STAT_MAXHITPOINTS, 41, 1));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_maxHitPointsBase == 78);
+    CHECK(pSprite->m_derivedStats.m_nMaxHitPoints == 78);
+    CHECK(Queued<CMessageChangeStat>().empty());
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    // A NULL target jumps straight to the done tail, returning the entry
+    // default ACTION_ERROR (0x452487) without releasing a share.
+    CAIAction statNobody;
+    statNobody.m_actionID = 242;
+    pCaller->SetCurrAction(statNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 251 DropInventoryEX: the target's whole inventory is dropped to a
+    // ground pile in its area, gold included (the pile item is MISC07);
+    // without an area DropInventory early-outs as ACTION_DONE with nothing
+    // touched. The equipment broadcast needs an open session, a target out
+    // of control and a running cutscene at once, which the test engine
+    // never has, so nothing queues either way.
+    pSprite->m_baseStats.m_gold = 25;
+    pCaller->SetCurrAction(CAIAction(251, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_gold == 25);
+    CHECK(Queued<CMessageSpriteEquipment>().empty());
+    pSprite->m_pArea = pArea1000;
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(251, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_gold == 0);
+    CHECK(Queued<CMessageSpriteEquipment>().empty());
+    pSprite->m_pArea = NULL;
+    CAIAction dropNobody;
+    dropNobody.m_actionID = 251;
+    pCaller->SetCurrAction(dropNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 318 SetCreatureAreaFlag: specifics1 is a mask on the target's
+    // base-stats flags; a non-zero specifics2 sets it, a zero clears it
+    // (0x452575).
+    pSprite->m_baseStats.m_flags = 0;
+    pCaller->SetCurrAction(CAIAction(318, actee, 0x10, 1, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_flags == 0x10);
+    pCaller->SetCurrAction(CAIAction(318, actee, 0x10, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_flags == 0);
+    CAIAction flagNobody;
+    flagNobody.m_actionID = 318;
+    pCaller->SetCurrAction(flagNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+
+    // 304 AddHP: m_specificID is added to the base hit points, clamped at
+    // the derived maximum (0x45074B). A dead target is skipped but still
+    // reports ACTION_DONE, and so does a target that resolves to nothing
+    // (0x44E1DB tail).
+    pSprite->SetAtOffset(STAT_MAXHITPOINTS, 20, FALSE);
+    pSprite->m_baseStats.m_hitPoints = 5;
+    pCaller->SetCurrAction(CAIAction(304, actee, 10, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 15);
+    pCaller->SetCurrAction(CAIAction(304, actee, 10, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 20);
+    pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+    pSprite->m_baseStats.m_hitPoints = 5;
+    pCaller->SetCurrAction(CAIAction(304, actee, 10, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 5);
+    pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+    CAIAction hpNobody;
+    hpNobody.m_actionID = 304;
+    pCaller->SetCurrAction(hpNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    // 288 SetDoorFlag: specifics1 is a mask on the resolved door's flags; a
+    // non-zero specifics2 sets it, a zero clears it, and the new status is
+    // always announced through CMessageDoorStatus with the caller's own id
+    // (0x451638). A target that resolves to nothing takes the ACTION_DONE
+    // tail (0x45164C).
+    CGameDoor* pDoor = NULL;
+    {
+        CTypedPtrList<CPtrList, int*>& list = pArea1000->m_lVertSort;
+        POSITION pos = list.GetHeadPosition();
+        while (pos != NULL && pDoor == NULL) {
+            LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(list.GetNext(pos)));
+            CGameObject* pObject;
+            if (pGame->GetObjectArray()->GetShare(id, CGameObjectArray::THREAD_ASYNCH,
+                    &pObject, INFINITE)
+                == CGameObjectArray::SUCCESS) {
+                if (pObject->GetObjectType() == CGameObject::TYPE_DOOR) {
+                    pDoor = static_cast<CGameDoor*>(pObject);
+                }
+                pGame->GetObjectArray()->ReleaseShare(id, CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+    }
+    REQUIRE(pDoor != NULL);
+    const DWORD dwFlagsBefore = pDoor->GetFlags();
+    const DWORD dwMask = 0x20000000;
+    REQUIRE((dwFlagsBefore & dwMask) == 0);
+    CAIObjectType doorActee(0, 0, 0, 0, 0, 0, 0, 0, pDoor->m_id, 0, 0);
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(288, doorActee, dwMask, 1, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pDoor->GetFlags() == (dwFlagsBefore | dwMask));
+    {
+        const std::vector<CMessageDoorStatus*> statuses = Queued<CMessageDoorStatus>();
+        REQUIRE(statuses.size() == 1);
+        CHECK(statuses[0]->m_dwFlags == (dwFlagsBefore | dwMask));
+    }
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(288, doorActee, dwMask, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pDoor->GetFlags() == dwFlagsBefore);
+    REQUIRE(Queued<CMessageDoorStatus>().size() == 1);
+    CAIAction doorNobody;
+    doorNobody.m_actionID = 288;
+    pCaller->SetCurrAction(doorNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
+    ClearMessages();
+}
