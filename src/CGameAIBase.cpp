@@ -1522,10 +1522,32 @@ SHORT CGameAIBase::ExecuteAction()
         // SetHPPercent
         // TODO: 0x4514FB-0x451638 not ported.
         goto done;
-    case 288:
-        // SetDoorFlag
-        // TODO: 0x451638-0x4516C3 not ported.
-        goto done;
+    case 288: {
+        // SetDoorFlag (0x451638-0x4516BE and the shared tail at
+        // 0x4514DC-0x44E1DB): specifics1 is the flag mask on the target
+        // door; a non-zero specifics2 sets the bits, a zero clears them.
+        // The door status is always announced to the message handler.
+        pTarget = GetTargetShareType(CGameObject::TYPE_DOOR);
+        if (pTarget == NULL) {
+            // 0x45164C jumps to the ACTION_DONE tail, not the error one.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+        CGameDoor* pDoor = static_cast<CGameDoor*>(pTarget);
+        DWORD dwFlags = pDoor->GetFlags();
+        if (m_curAction.GetSpecifics2() != 0) {
+            dwFlags |= static_cast<DWORD>(m_curAction.GetSpecifics());
+        } else {
+            dwFlags &= ~static_cast<DWORD>(m_curAction.GetSpecifics());
+        }
+        pDoor->SetFlags(dwFlags);
+        // The caller is this actor's own id, the target the door's.
+        message = new CMessageDoorStatus(pDoor, m_id, pDoor->GetId());
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        returnValue = ACTION_DONE;
+        goto release;
+    }
     case 289:
         // SpellCastEffect
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
@@ -1799,10 +1821,30 @@ SHORT CGameAIBase::ExecuteAction()
         }
         returnValue = ACTION_DONE;
         goto done;
-    case 304:
-        // AddHP
-        // TODO: 0x45074B-0x4507E1 not ported.
-        goto done;
+    case 304: {
+        // AddHP (0x45074B-0x4507DC): m_curAction.m_specificID is added to
+        // the target's base hit points, clamped at the derived maximum.
+        // A NULL or dead target still reports ACTION_DONE, doing nothing.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+        bShare = TRUE;
+        if ((pSprite->m_derivedStats.m_generalState & STATE_DEAD) == 0) {
+            if (pSprite->m_baseStats.m_hitPoints + m_curAction.m_specificID
+                >= pSprite->m_derivedStats.GetAtOffset(STAT_MAXHITPOINTS)) {
+                pSprite->m_baseStats.m_hitPoints
+                    = static_cast<SHORT>(pSprite->m_derivedStats.GetAtOffset(STAT_MAXHITPOINTS));
+            } else {
+                pSprite->m_baseStats.m_hitPoints
+                    = static_cast<SHORT>(m_curAction.m_specificID + pSprite->m_baseStats.m_hitPoints);
+            }
+        }
+        returnValue = ACTION_DONE;
+        goto release;
+    }
     case 305:
         // SetMyTarget (0x45139D-0x4513D8)
         pTarget = sub_45C290();
