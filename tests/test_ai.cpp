@@ -3948,3 +3948,272 @@ TEST_CASE("ai: ExecuteAction 233 235 278 282 283 and 325 hide sequence drop excl
     g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
+
+// CGameAIBase::ExecuteAction (0x44DC10) arms 83m (Task 83m): 185
+// SetMasterArea (0x44FDCF-0x44FED7) and 287 SetHPPercent
+// (0x4514FB-0x451638), each driven through ExecuteAction on a real sprite
+// with AR1000 loaded (185 needs the master-area 2DA and a loaded area; 287
+// reads the sprite's base and derived stats). 284 SetScriptName
+// (0x44DCDA-0x44E042) is here too: its hash edits are observable for names
+// that fill the char[32] exactly, and the test pins the original's quirks:
+// the padded old name misses shorter names' hash bucket (a no-op rename),
+// and m_scriptName is never written.
+// 199 TextScreen is NOT here: the arm's first act is the non-returning
+// UTIL_ASSERT(FALSE), so driving it kills the test process; the dead code
+// behind it is described in the source comment only.
+TEST_CASE("ai: ExecuteAction 185 287 and 284 master area hp percent and script name",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    const CGameArea* pCallerAreaBefore = pCaller->m_pArea;
+    CGameSprite* pSprite = MakeSprite();
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 185 SetMasterArea: the string must label a row of the MastArea 2DA
+    // (AR1000 does) and name a loaded area; only then does the master
+    // pointer move. A name outside the 2DA and a table name whose area is
+    // not loaded both error and leave the pointer alone.
+    CGameArea* pMasterBefore = pGame->m_pGameAreaMaster;
+    CAIAction master;
+    master.m_actionID = 185;
+    master.m_string1 = "AR9000"; // no 2DA row
+    pCaller->SetCurrAction(master);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pGame->m_pGameAreaMaster == pMasterBefore);
+
+    master.m_string1 = "AR5000"; // in the 2DA, not loaded
+    pCaller->SetCurrAction(master);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(pGame->m_pGameAreaMaster == pMasterBefore);
+
+    master.m_string1 = "AR1000";
+    pCaller->SetCurrAction(master);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pGame->m_pGameAreaMaster == pArea1000);
+    pGame->m_pGameAreaMaster = pMasterBefore;
+
+    // 287 SetHPPercent: specifics1 is the percent clamped to [0,100] and
+    // specifics2 picks the value scaled. With specifics2 zero the value is
+    // the derived max hit points, stored into the base hit points only
+    // when strictly above the current base; otherwise the base value
+    // itself is rescaled in place. A dead target (STATE_DEAD in either
+    // stats block) is left untouched. Every path reports ACTION_DONE.
+    const DWORD dwBaseStateBefore = pSprite->m_baseStats.m_generalState;
+    const DWORD dwDerivedStateBefore = pSprite->m_derivedStats.m_generalState;
+    const SHORT nHitPointsBefore = pSprite->m_baseStats.m_hitPoints;
+    const SHORT nMaxBefore = pSprite->m_derivedStats.m_nMaxHitPoints;
+    pSprite->m_baseStats.m_generalState &= ~STATE_DEAD;
+    pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+    pSprite->m_derivedStats.m_nMaxHitPoints = 40;
+
+    pSprite->m_baseStats.m_hitPoints = 10; // 40 * 0.5 > 10: stored
+    pCaller->SetCurrAction(CAIAction(287, actee, 50, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 20);
+
+    pSprite->m_baseStats.m_hitPoints = 30; // 40 * 0.5 <= 30: no store
+    pCaller->SetCurrAction(CAIAction(287, actee, 50, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 30);
+
+    // specifics2 != 0: the base value itself is scaled (30 * 0.5).
+    pCaller->SetCurrAction(CAIAction(287, actee, 50, 1, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 15);
+
+    // 150 clamps to 100: 40 * 1.0 = 40.
+    pSprite->m_baseStats.m_hitPoints = 10;
+    pCaller->SetCurrAction(CAIAction(287, actee, 150, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 40);
+
+    // Dead in the base stats: no store, still done.
+    pSprite->m_baseStats.m_hitPoints = 33;
+    pSprite->m_baseStats.m_generalState |= STATE_DEAD;
+    pCaller->SetCurrAction(CAIAction(287, actee, 50, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_hitPoints == 33);
+    pSprite->m_baseStats.m_generalState &= ~STATE_DEAD;
+
+    // An unresolved target takes the 0x44E1DB forced-done tail.
+    CAIAction percentNobody;
+    percentNobody.m_actionID = 287;
+    pCaller->SetCurrAction(percentNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    pSprite->m_baseStats.m_hitPoints = nHitPointsBefore;
+    pSprite->m_baseStats.m_generalState = dwBaseStateBefore;
+    pSprite->m_derivedStats.m_generalState = dwDerivedStateBefore;
+    pSprite->m_derivedStats.m_nMaxHitPoints = nMaxBefore;
+
+    // 284 SetScriptName: the old name is the target's m_scriptName -- read
+    // as CString(field, 32), NUL padding included (0x44DCF4) -- and the new
+    // one GetString1 (empty becomes "none"). Matching names
+    // (case-insensitive) change nothing. Otherwise each of the area and
+    // game named-creature hashes drops the old name when it maps to the
+    // target's id, registers the new name in the GAME hash (the arm never
+    // AddKeys into the area hash), and queues one CMessageSetVariable named
+    // by the OLD name (flags 2 = area scope, 4 = GLOBAL, both = joined).
+    // The target's m_scriptName is NEVER written. An unresolved target
+    // takes the 0x45127A no-release done tail.
+    //
+    // The padded read is why short names never match: the hash buckets a
+    // name by every byte of its GetLength (Hash 0x54FAD0 walks the full 32
+    // bytes, NULs included, and a NUL zeroes the product term), so the
+    // padded 32-byte lookup lands in a different bucket than the short
+    // name's registration and RemoveKey (0x5511C0) finds nothing. In the
+    // original the arm is therefore a no-op for any script name shorter
+    // than the full field: no removal, no message, no registration. Only a
+    // name that fills the char[32] exactly runs the body.
+    CAIAction scriptNobody;
+    scriptNobody.m_actionID = 284;
+    pCaller->SetCurrAction(scriptNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CAIAction rename;
+    rename.m_actionID = 284;
+    rename.m_acteeID = actee;
+
+    std::strncpy(pSprite->m_scriptName, "OLDNAME", SCRIPTNAME_SIZE - 1);
+    pSprite->m_scriptName[SCRIPTNAME_SIZE - 1] = '\0';
+    CVariable named;
+    named.SetName(CString("OLDNAME"));
+    named.m_intValue = pSprite->m_id;
+    pArea1000->GetNamedCreatures()->AddKey(named);
+    pGame->GetNamedCreatures()->AddKey(named);
+    pSprite->m_pArea = pArea1000;
+
+    // Short name: the padded old name hashes into another bucket, so
+    // nothing moves even though both hashes hold the name.
+    ClearMessages();
+    rename.m_string1 = "NEWNAME";
+    pCaller->SetCurrAction(rename);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetVariable>().empty());
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString("OLDNAME")) != NULL);
+    CHECK(pArea1000->GetNamedCreatures()->FindKey(CString("OLDNAME")) != NULL);
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString("NEWNAME")) == NULL);
+    CHECK(std::strcmp(pSprite->m_scriptName, "OLDNAME") == 0);
+
+    // A name that fills the field exactly carries no padding and hashes
+    // like its registration.
+    static constexpr char oldName[SCRIPTNAME_SIZE + 1] = "OLDNAME32CHARSXXXXXXXXXXXXXXXXXX";
+    static constexpr char newName[SCRIPTNAME_SIZE + 1] = "NEWNAME32CHARSXXXXXXXXXXXXXXXXXX";
+    static constexpr char unknownOld[SCRIPTNAME_SIZE + 1] = "ZZZUNKNOWN32CHARSXXXXXXXXXXXXXXX";
+    static constexpr char unknownNew[SCRIPTNAME_SIZE + 1] = "QQQNEWNAME32CHARSXXXXXXXXXXXXXXX";
+    static_assert(oldName[SCRIPTNAME_SIZE] == '\0' && oldName[SCRIPTNAME_SIZE - 1] != '\0',
+        "oldName must fill the script-name field exactly");
+    static_assert(newName[SCRIPTNAME_SIZE] == '\0' && newName[SCRIPTNAME_SIZE - 1] != '\0',
+        "newName must fill the script-name field exactly");
+    static_assert(unknownOld[SCRIPTNAME_SIZE] == '\0' && unknownOld[SCRIPTNAME_SIZE - 1] != '\0',
+        "unknownOld must fill the script-name field exactly");
+    static_assert(unknownNew[SCRIPTNAME_SIZE] == '\0' && unknownNew[SCRIPTNAME_SIZE - 1] != '\0',
+        "unknownNew must fill the script-name field exactly");
+    std::memcpy(pSprite->m_scriptName, oldName, SCRIPTNAME_SIZE);
+    CVariable named32;
+    named32.SetName(CString(oldName));
+    named32.m_intValue = pSprite->m_id;
+    pArea1000->GetNamedCreatures()->AddKey(named32);
+    pGame->GetNamedCreatures()->AddKey(named32);
+
+    // Matching name, different case: nothing moves.
+    ClearMessages();
+    rename.m_string1 = "oldname32charsxxxxxxxxxxxxxxxxxx";
+    pCaller->SetCurrAction(rename);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString(oldName)) != NULL);
+    CHECK(Queued<CMessageSetVariable>().empty());
+
+    // Rename: both hashes hold the old name, so both removals join one
+    // message (flags 2|4) scoped to the area resref.
+    rename.m_string1 = newName;
+    pCaller->SetCurrAction(rename);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageSetVariable*> sets = Queued<CMessageSetVariable>();
+        REQUIRE(sets.size() == 1);
+        CString sAreaRes;
+        pArea1000->m_resRef.CopyToString(sAreaRes);
+        CHECK(sets[0]->m_sScope == sAreaRes);
+        CHECK(sets[0]->m_sName == CString(oldName));
+        CHECK(sets[0]->m_nValue == pSprite->m_id);
+        CHECK(sets[0]->m_dwFlags == 6);
+    }
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString(oldName)) == NULL);
+    CHECK(pArea1000->GetNamedCreatures()->FindKey(CString(oldName)) == NULL);
+    {
+        CVariable* pRegistered = pGame->GetNamedCreatures()->FindKey(CString(newName));
+        REQUIRE(pRegistered != NULL);
+        CHECK(pRegistered->m_intValue == pSprite->m_id);
+    }
+    // The original never writes the target's script name.
+    CHECK(std::memcmp(pSprite->m_scriptName, oldName, SCRIPTNAME_SIZE) == 0);
+
+    // The arm never writes m_scriptName; whatever updates it in the live
+    // game runs elsewhere. With the field holding the registered name and
+    // the area hash empty of it, an empty new name ("none") fires only the
+    // game removal, as a fresh GLOBAL message.
+    ClearMessages();
+    std::memcpy(pSprite->m_scriptName, newName, SCRIPTNAME_SIZE);
+    rename.m_string1 = "";
+    pCaller->SetCurrAction(rename);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageSetVariable*> sets = Queued<CMessageSetVariable>();
+        REQUIRE(sets.size() == 1);
+        CHECK(sets[0]->m_sScope == CString("GLOBAL"));
+        CHECK(sets[0]->m_sName == CString(newName));
+        CHECK(sets[0]->m_dwFlags == 4);
+    }
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString(newName)) == NULL);
+    {
+        CVariable* pRegistered = pGame->GetNamedCreatures()->FindKey(CString("NONE"));
+        REQUIRE(pRegistered != NULL);
+        CHECK(pRegistered->m_intValue == pSprite->m_id);
+    }
+
+    // Old name unknown to both hashes: no message, no registration.
+    ClearMessages();
+    std::memcpy(pSprite->m_scriptName, unknownOld, SCRIPTNAME_SIZE);
+    rename.m_string1 = unknownNew;
+    pCaller->SetCurrAction(rename);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSetVariable>().empty());
+    CHECK(pGame->GetNamedCreatures()->FindKey(CString(unknownNew)) == NULL);
+
+    std::memset(pSprite->m_scriptName, 0, SCRIPTNAME_SIZE);
+
+    pSprite->m_pArea = NULL;
+    pCaller->m_pArea = const_cast<CGameArea*>(pCallerAreaBefore);
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
+    ClearMessages();
+}
