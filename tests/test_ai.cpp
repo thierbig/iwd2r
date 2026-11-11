@@ -2800,6 +2800,70 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
     ClearMessages();
 }
 
+// Task 83g's case 293 UnHide arm, driven through ExecuteAction on a live
+// sprite: the arm clears the target's hiding state, strips the invisible
+// effect off the timed list, greys out the stealth indicator, and reports a
+// remove-all-of-type effect to itself. The toolbar refresh is skipped: the
+// test sprite has no portrait, so GetCharacterPortraitNum answers -1.
+TEST_CASE("ai: ExecuteAction 293 UnHide clears hiding and reports the effect strip",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+
+    // Hiding, with one invisible effect riding the timed list.
+    pSprite->sub_453160(1);
+    ITEM_EFFECT invisible;
+    CGameEffect::ClearItemEffect(&invisible, CGAMEEFFECT_INVISIBLE);
+    CGameEffect* pInvisible = CGameEffect::DecodeEffect(&invisible,
+        CPoint(-1, -1),
+        -1,
+        CPoint(-1, -1));
+    pSprite->GetTimedEffectList()->AddTail(pInvisible);
+    REQUIRE(pSprite->GetTimedEffectList()->IsTypeOnList(CGAMEEFFECT_INVISIBLE) == TRUE);
+
+    CAIAction unHide;
+    unHide.m_actionID = 293;
+    unHide.m_acteeID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    pCaller->SetCurrAction(unHide);
+
+    REQUIRE(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+    CHECK(pSprite->m_bHiding == 0);
+    CHECK(pSprite->m_nStealthGreyOut == 90);
+    CHECK(pSprite->GetTimedEffectList()->IsTypeOnList(CGAMEEFFECT_INVISIBLE) == FALSE);
+
+    // The strip rides a remove-all-of-type effect to self, with the source
+    // and target ids both the acting object's own.
+    const std::vector<CMessageAddEffect*> messages = Queued<CMessageAddEffect>();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages[0]->m_sourceId == pCaller->m_id);
+    CHECK(messages[0]->m_targetId == pCaller->m_id);
+    CHECK(messages[0]->m_effect->m_effectID == 276); // ICEWIND_CGAMEEFFECT_REMOVEALLOFTYPE
+    CHECK(messages[0]->m_effect->m_dwFlags == CGAMEEFFECT_INVISIBLE);
+    CHECK(messages[0]->m_effect->m_effectAmount == 0);
+    ClearMessages();
+
+    // A target that is not hiding takes the tail that forces ACTION_DONE
+    // (0x44E1DB) before any of the effect work runs.
+    pCaller->SetCurrAction(unHide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    CHECK(pSprite->m_nStealthGreyOut == 90);
+
+    // A null target jumps to the done tail before bShare is set, keeping
+    // the ACTION_ERROR entry default -- unlike 294 and 270, which force
+    // ACTION_DONE on the same miss.
+    CAIAction noTarget = unHide;
+    noTarget.m_acteeID = CAIObjectType::NOONE;
+    pCaller->SetCurrAction(noTarget);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    ClearMessages();
+}
+
 // Task 83f's CInfGame::ChangeStoreMarkup (0x5C9C90) session arms, driven
 // through the member with the network flags faked (GetSessionOpen and
 // GetSessionHosting read plain members). The host broadcasts the markups and
