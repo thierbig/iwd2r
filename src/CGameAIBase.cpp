@@ -1412,9 +1412,16 @@ SHORT CGameAIBase::ExecuteAction()
         // TODO: 0x451427-0x4514FB not ported.
         goto done;
     case 281:
-        // MarkObject
-        // TODO: 0x451362-0x45139D not ported.
-        goto done;
+        // MarkObject (0x451362-0x45139D)
+        pTarget = sub_45C290();
+        if (pTarget != NULL) {
+            bShare = TRUE;
+            sub_4530F0(pTarget->GetAIType());
+        } else {
+            sub_4530F0(CAIObjectType::NOONE);
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 282:
         // OverrideAreaDifficulty
         // TODO: 0x44E042-0x44E12E not ported.
@@ -1626,11 +1633,11 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 295:
         // TransferInventory
-        // TODO: 0x451D81 calls 0x45C290 (not ported): resolves the receiving
-        // sprite (a __thiscall on this returning CGameSprite*). It is
-        // unresolved, so pTarget stays NULL and the arm takes the original's
-        // null path (ACTION_ERROR straight to release); the non-null branch
-        // below is kept for the original's structure.
+        // TODO: 0x451D81 calls 0x45C290 (sub_45C290, ported below): resolves
+        // the receiving sprite. This stub leaves it uncalled, so pTarget stays
+        // NULL and the arm takes the original's null path (ACTION_ERROR
+        // straight to release); the non-null branch below is kept for the
+        // original's structure.
         if (pTarget != NULL) {
             bShare = TRUE;
             CGameObject* pActee = m_curAction.GetActee2().sub_40CCA0(this, FALSE);
@@ -1692,9 +1699,16 @@ SHORT CGameAIBase::ExecuteAction()
         // TODO: 0x45074B-0x4507E1 not ported.
         goto done;
     case 305:
-        // SetMyTarget
-        // TODO: 0x45139D-0x4513D8 not ported.
-        goto done;
+        // SetMyTarget (0x45139D-0x4513D8)
+        pTarget = sub_45C290();
+        if (pTarget != NULL) {
+            bShare = TRUE;
+            sub_453110(pTarget->GetAIType());
+        } else {
+            sub_453110(CAIObjectType::NOONE);
+        }
+        returnValue = ACTION_DONE;
+        goto release;
     case 312:
         // SetApparentNameSTRREF
         // TODO: 0x451EAA-0x451F37 not ported.
@@ -5525,6 +5539,23 @@ CGameObject* CGameAIBase::GetTargetShareType(BYTE type)
                 return NULL;
             }
         }
+    }
+
+    SetTargetObject(pObject);
+    return pObject;
+}
+
+// 0x45C290
+CGameObject* CGameAIBase::sub_45C290()
+{
+    CGameObject* pObject = m_curAction.m_acteeID.sub_40CCA0(this, FALSE);
+    if (pObject != NULL
+        && pObject->GetObjectType() == CGameObject::TYPE_SPRITE
+        && static_cast<CGameSprite*>(pObject)->m_derivedStats.m_cImmunitiesAIType.OnList(m_typeAI)) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->m_id,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        pObject = NULL;
     }
 
     SetTargetObject(pObject);

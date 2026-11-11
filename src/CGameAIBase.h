@@ -151,6 +151,7 @@ public:
     SHORT CloseDoor(CGameDoor* pDoor);
     CGameObject* GetTargetShareType(BYTE type);
     CGameObject* GetTargetShareAIType(const CAIObjectType& typeAI, BYTE type);
+    CGameObject* sub_45C290();
 
     SCRIPTNAME& GetScriptName();
     void SetTrigger(const CAITrigger& trigger);
