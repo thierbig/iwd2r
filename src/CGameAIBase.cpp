@@ -1209,10 +1209,30 @@ SHORT CGameAIBase::ExecuteAction()
         // GlobalBitGlobal
         returnValue = GlobalBitGlobal();
         goto done;
-    case 251:
-        // DropInventoryEX
-        // TODO: 0x45248C-0x452575 not ported.
-        goto done;
+    case 251: {
+        // DropInventoryEX (0x45248C-0x452570): drop the target's whole
+        // inventory (non-critical items, no exceptions) and report the
+        // dropper's own return. The equipment message is broadcast only
+        // when a session is open, the target is not locally controlled and
+        // a cutscene is running.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x451451: ACTION_ERROR straight to release (entry default).
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+        returnValue = pSprite->DropInventory(FALSE, CString(""));
+        if (g_pChitin->cNetwork.GetSessionOpen() == TRUE
+            && pTarget->InControl() == FALSE
+            && g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_cutScene == TRUE) {
+            message = new CMessageSpriteEquipment(pSprite, pSprite->GetId(), pSprite->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE,
+                CMessage::BROADCAST_FORCED_OTHERS);
+        }
+        goto release;
+    }
     case 254:
         // SetHP
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
@@ -1896,10 +1916,26 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     }
-    case 318:
-        // SetCreatureAreaFlag
-        // TODO: 0x452575-0x4525EA not ported.
-        goto done;
+    case 318: {
+        // SetCreatureAreaFlag (0x452575-0x4525E5): specifics1 is the flag
+        // mask on the target's base-stats m_flags; a non-zero specifics2
+        // sets the bits, a zero clears them.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x451451: ACTION_ERROR straight to release (entry default).
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        returnValue = ACTION_DONE;
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+        if (m_curAction.GetSpecifics2() != 0) {
+            pSprite->GetBaseStats()->m_flags |= static_cast<DWORD>(m_curAction.GetSpecifics());
+        } else {
+            pSprite->GetBaseStats()->m_flags &= ~static_cast<DWORD>(m_curAction.GetSpecifics());
+        }
+        goto release;
+    }
     case 323:
         // WaitAnimation
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
