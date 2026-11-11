@@ -1063,9 +1063,9 @@ SHORT CGameAIBase::ExecuteAction()
             goto release;
         }
         {
-            // 0x85BBB0 is the head of the SEQ_* byte table; the bounds test
-            // reads its first (SEQ_ATTACK) and last (SEQ_SLEEP) entries as
-            // signed values.
+            // The bounds test reads two bytes of the SEQ_* value table at
+            // 0x85BBB0: index 0 (0, SEQ_ATTACK) and index 11 (0x11,
+            // SEQ_SLEEP).
             LONG nSequence = m_curAction.GetSpecifics();
             if (nSequence < CGAMESPRITE_SEQ_ATTACK || nSequence > CGAMESPRITE_SEQ_SLEEP) {
                 // Out of range also takes the forced-done tail (0x44E1DB).
