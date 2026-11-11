@@ -1035,9 +1035,24 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 233:
-        // HideCreature
-        // TODO: 0x452035-0x4520ED not ported.
-        goto done;
+        // HideCreature (0x452035-0x4520ED)
+        {
+            BYTE bHide = static_cast<BYTE>(m_curAction.GetSpecifics());
+            pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+            if (pTarget == NULL) {
+                // 0x452054 jumps straight to the epilogue, keeping the
+                // entry default (ACTION_ERROR).
+                returnValue = ACTION_ERROR;
+                goto done;
+            }
+            bShare = TRUE;
+            returnValue = static_cast<CGameSprite*>(pTarget)->sub_75F3D0(bHide);
+            if (g_pChitin->cNetwork.GetServiceProvider() != CNetwork::SERV_PROV_NULL) {
+                message = new CMessage90(pTarget->GetId(), pTarget->GetId(), bHide);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        goto release;
     case 235:
         // PlaySequence
         // TODO: 0x450B52-0x450BD9 not ported.
@@ -2040,8 +2055,27 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = SetMusic();
         goto done;
     case 325:
-        // SetAreaFlags
-        // TODO: 0x45262C-0x4526AA not ported.
+        // SetAreaFlags (0x45262C-0x4526AA): specifics2 picks the operation
+        // on the area header flags — 1 and, 2 or, 3 xor — with specifics as
+        // the mask. Every path keeps the entry default: the three write
+        // arms jump straight to the epilogue without touching the result
+        // register, so the action reports ACTION_ERROR even when it wrote
+        // the flags (mirrored from the listing).
+        {
+            LONG nOp = m_curAction.GetSpecifics2();
+            if (nOp == 1 || nOp == 2 || nOp == 3) {
+                DWORD dwMask = static_cast<DWORD>(m_curAction.GetSpecifics());
+                DWORD* pdwFlags = &GetArea()->GetHeader()->m_flags;
+                if (nOp == 1) {
+                    *pdwFlags &= dwMask;
+                } else if (nOp == 2) {
+                    *pdwFlags |= dwMask;
+                } else {
+                    *pdwFlags ^= dwMask;
+                }
+            }
+            returnValue = ACTION_ERROR;
+        }
         goto done;
     default:
         sError.Format("Error: Action number: %d not implemented", m_curAction.GetActionID());
