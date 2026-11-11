@@ -1054,9 +1054,32 @@ SHORT CGameAIBase::ExecuteAction()
         }
         goto release;
     case 235:
-        // PlaySequence
-        // TODO: 0x450B52-0x450BD9 not ported.
-        goto done;
+        // PlaySequence (0x450B52-0x450BD9)
+        pTarget = sub_45C290();
+        if (pTarget == NULL) {
+            // 0x450B5D jumps to the forced-done tail (0x44E1DB) with no
+            // message to send.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        {
+            // 0x85BBB0 is the head of the SEQ_* byte table; the bounds test
+            // reads its first (SEQ_ATTACK) and last (SEQ_SLEEP) entries as
+            // signed values.
+            LONG nSequence = m_curAction.GetSpecifics();
+            if (nSequence < CGAMESPRITE_SEQ_ATTACK || nSequence > CGAMESPRITE_SEQ_SLEEP) {
+                // Out of range also takes the forced-done tail (0x44E1DB).
+                returnValue = ACTION_DONE;
+                goto release;
+            }
+            bShare = TRUE;
+            message = new CMessageSetSequence(static_cast<BYTE>(nSequence), m_id, pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            // The AddMessage call site (0x44E1D6) falls into the tail that
+            // forces ACTION_DONE (0x44E1DB) before the release block.
+            returnValue = ACTION_DONE;
+        }
+        goto release;
     case 238:
         // AddXPVar (0x4508CE-0x450B52)
         {
@@ -1458,9 +1481,31 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 278:
-        // DropInventoryEXExclude
-        // TODO: 0x4512E9-0x451362 not ported.
-        goto done;
+        // DropInventoryEXExclude (0x4512E9-0x451362)
+        pTarget = sub_45C290();
+        if (pTarget == NULL) {
+            // 0x451451 sets ACTION_ERROR and jumps straight to the release.
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        if (pTarget->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            // The exception list rides as a by-value CString built from the
+            // action's second string (0x451312-0x45131C).
+            returnValue = static_cast<CGameSprite*>(pTarget)->DropInventory(FALSE,
+                m_curAction.GetString1());
+            goto release;
+        }
+        if (pTarget->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+            // TODO: 0x45134C calls 0x481D30 (not ported): the container drops
+            // its inventory except the items named by the action's second
+            // string; its result is the action return, which keeps the
+            // ACTION_ERROR entry default here.
+            goto release;
+        }
+        // Any other object type takes the 0x451451 ACTION_ERROR exit.
+        returnValue = ACTION_ERROR;
+        goto release;
     case 279:
         // AdvanceTime (0x4513D8-0x451427)
         g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->AdvanceCurrentTime(m_curAction.GetSpecifics());
