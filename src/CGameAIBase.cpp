@@ -1824,12 +1824,28 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 314:
-        // EndGame
-        // TODO: 0x452253-0x4522F2 not ported.
+        // EndGame (0x452253-0x4522F2)
+        g_pBaldurChitin->GetObjectGame()->ReadyCharacterTerminationSequence(
+            3, m_curAction.GetSpecifics());
+        {
+            // 0x452283: the message's caller and target are both the
+            // VISIBLE AREA's id (a byte), not this object's.
+            LONG nAreaId = g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->GetId();
+            message = new CMessageEndGame(3, m_curAction.GetSpecifics(), nAreaId, nAreaId);
+            // 0x4522C5 loads the comm-type table word at 0x84820C (3 =
+            // BROADCAST_OTHERS) inline rather than calling GetCommType,
+            // whose in-tree base is still the assert stub.
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(
+                message, FALSE, CMessage::BROADCAST_OTHERS);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 315:
-        // AddExperiencePartyCR
-        // TODO: 0x4522F2-0x452310 not ported.
+        // AddExperiencePartyCR (0x4522F2-0x452310): the CR flag is TRUE,
+        // unlike case 164's plain AddExperienceParty.
+        g_pBaldurChitin->GetObjectGame()->AddExperienceParty(
+            m_curAction.GetSpecifics(), FALSE, TRUE);
+        returnValue = ACTION_DONE;
         goto done;
     case 316:
         // AddFeat
