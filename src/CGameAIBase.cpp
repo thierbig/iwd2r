@@ -1367,12 +1367,30 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 273:
-        // HideGUI
-        // TODO: 0x45114E-0x4511D5 not ported.
+        // HideGUI (0x45114E-0x4511D5)
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+            if (!g_pBaldurChitin->GetScreenWorld()->GetManager()->m_bHidden) {
+                g_pBaldurChitin->GetScreenWorld()->HideInterface();
+                g_pBaldurChitin->GetScreenWorld()->sub_453790(TRUE);
+            }
+        } else {
+            message = new CMessageToggleInterface(TRUE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 274:
-        // UnhideGUI
-        // TODO: 0x4511D5-0x451282 not ported.
+        // UnhideGUI (0x4511D5-0x451282)
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+            if (g_pBaldurChitin->GetScreenWorld()->sub_453780()) {
+                g_pBaldurChitin->GetScreenWorld()->UnhideInterface();
+                g_pBaldurChitin->GetScreenWorld()->sub_453790(FALSE);
+            }
+        } else {
+            message = new CMessageToggleInterface(FALSE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        returnValue = ACTION_DONE;
         goto done;
     case 275:
         // SaveGame (0x451282-0x4512E9)
