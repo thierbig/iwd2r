@@ -1497,14 +1497,10 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 296:
         // ChangeStoreMarkup
-        // TODO: 0x451E3E calls 0x5C9C90 (not ported): applies the store
-        // markup change -- the original builds a CResRef from
-        // m_curAction.GetString1() (ctor 0x78A970 at 0x451E0C) and calls
-        // g_pBaldurChitin->GetObjectGame()->0x5C9C90(&resRef,
-        // GetSpecifics(), GetSpecifics2(), GetSpecifics3()); the temps are
-        // not materialized here because the call is unported. The original
-        // forces ACTION_DONE (0x451E57) and jumps to done without touching
-        // the target.
+        g_pBaldurChitin->GetObjectGame()->ChangeStoreMarkup(CResRef(m_curAction.GetString1()),
+            m_curAction.GetSpecifics(),
+            m_curAction.GetSpecifics2(),
+            m_curAction.GetSpecifics3());
         returnValue = ACTION_DONE;
         goto done;
     case 297:

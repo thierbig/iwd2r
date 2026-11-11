@@ -11482,7 +11482,10 @@ LONG CInfGame::GetAveragePartyLevel()
 }
 
 // 0x5C9C90
-INT CInfGame::ChangeStoreMarkup(const CResRef& cResStore, LONG, LONG, LONG)
+INT CInfGame::ChangeStoreMarkup(const CResRef& cResStore,
+    LONG nBuyMarkUp,
+    LONG nSellMarkDown,
+    LONG nAdditionalMarkDown)
 {
     if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
         // NOTE: Verified instruction-by-instruction (0x5C9F5E-0x5C9FA7): the
@@ -11496,6 +11499,7 @@ INT CInfGame::ChangeStoreMarkup(const CResRef& cResStore, LONG, LONG, LONG)
     // A session: a single-player game runs this as the host. The host works
     // on the server's copy of the store; a client asks the server for it
     // first and works on its local copy.
+    BOOL bStoreDemanded = FALSE;
     CStore cStore;
     if (g_pChitin->cNetwork.GetSessionHosting()) {
         DemandServerStore(cResStore, TRUE);
@@ -11513,12 +11517,42 @@ INT CInfGame::ChangeStoreMarkup(const CResRef& cResStore, LONG, LONG, LONG)
             }
 
             cStore.SetResRef(cResStore);
+            bStoreDemanded = TRUE;
         }
     }
 
-    // TODO: 0x5C9DC7 (range 3) -- the store-demand message, the markup
-    // broadcast, the host's GetServerStore/UTIL_ASSERT markup writes and the
-    // client's InvalidateStore, each returning 1.
+    // Unlike `AddItemToBag` (0x5C7B10), the original does not set
+    // `bStoreDemanded` here and does not release the store afterwards
+    // (verified at 0x5C9DC7-0x5C9E64).
+    if (g_pChitin->cNetwork.GetSessionHosting() == FALSE && bStoreDemanded == FALSE) {
+        CMessageStoreDemand* pDemandMessage = new CMessageStoreDemand(cResStore, -1, -1);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(pDemandMessage, FALSE);
+    }
+
+    // NOTE: The markup broadcast carries the local store's resref, not the
+    // parameter (0x5C9E64-0x5C9EA7).
+    CMessageStoreMarkup* pMarkupMessage = new CMessageStoreMarkup(cStore.m_resRef,
+        nBuyMarkUp,
+        nSellMarkDown,
+        nAdditionalMarkDown,
+        -1,
+        -1);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMarkupMessage, FALSE);
+
+    if (g_pChitin->cNetwork.GetSessionHosting()) {
+        CStore* pStore = GetServerStore(cStore.m_resRef);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\InfGame.cpp
+        // __LINE__: 23329
+        UTIL_ASSERT(pStore != NULL);
+
+        pStore->m_header.m_nBuyMarkUp = nBuyMarkUp;
+        pStore->m_header.m_nSellMarkDown = nSellMarkDown;
+        pStore->m_header.m_nAdditionalMarkDown = nAdditionalMarkDown;
+    } else {
+        CStore::InvalidateStore(cStore.m_resRef);
+    }
+
     return 1;
 }
 

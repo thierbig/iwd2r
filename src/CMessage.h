@@ -132,6 +132,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_TOGGLE_INTERFACE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_107;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_MARKUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_PICKED_DIALOG_RESPONSE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_TYPE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_REST_ENCOUNTER;
@@ -1879,6 +1880,30 @@ public:
     void Run() override;
 
     CResRef m_store;
+};
+
+// NOTE: The name is inferred - the original symbol is unknown;
+// `CInfGame::ChangeStoreMarkup` (0x5C9C90) constructs it to broadcast a
+// store's new markups to the session.
+class CMessageStoreMarkup : public CMessage {
+public:
+    CMessageStoreMarkup(const CResRef& store,
+        LONG nBuyMarkUp,
+        LONG nSellMarkDown,
+        LONG nAdditionalMarkDown,
+        LONG caller,
+        LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    CResRef m_store;
+    /* 0014 */ LONG m_nBuyMarkUp;
+    /* 0018 */ LONG m_nSellMarkDown;
+    /* 001C */ LONG m_nAdditionalMarkDown;
 };
 
 class CMessage101 : public CMessage {

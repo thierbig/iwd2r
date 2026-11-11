@@ -388,6 +388,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_TOGGLE_INTERFACE = 106;
 // 0x84CF42
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_107 = 107;
 
+// 0x84CF43
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_MARKUP = 108;
+
 // 0x84CF44
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_AREA_TYPE = 109;
 
@@ -20155,6 +20158,104 @@ void CMessageStoreDemand::Run()
     if (g_pChitin->cNetwork.GetSessionHosting()) {
         g_pBaldurChitin->GetObjectGame()->DemandServerStore(m_store, FALSE);
     }
+}
+
+// NOTE: The class name is inferred - the original symbol is unknown;
+// `CInfGame::ChangeStoreMarkup` (0x5C9C90) constructs it to broadcast a
+// store's new markups to the session.
+CMessageStoreMarkup::CMessageStoreMarkup(const CResRef& store,
+    LONG nBuyMarkUp,
+    LONG nSellMarkDown,
+    LONG nAdditionalMarkDown,
+    LONG caller,
+    LONG target)
+    : CMessage(caller, target)
+{
+    m_store = store;
+    m_nBuyMarkUp = nBuyMarkUp;
+    m_nSellMarkDown = nSellMarkDown;
+    m_nAdditionalMarkDown = nAdditionalMarkDown;
+}
+
+// 0x4536E0
+SHORT CMessageStoreMarkup::GetCommType()
+{
+    return BROADCAST_FORCED;
+}
+
+// 0x40A0E0
+BYTE CMessageStoreMarkup::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x4F6EE0
+BYTE CMessageStoreMarkup::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_MARKUP;
+}
+
+// 0x515BA0
+void CMessageStoreMarkup::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 31382
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    *dwSize = RESREF_SIZE + 3 * sizeof(LONG);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 31387
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+
+    memcpy(*pData + cnt, m_store.GetResRef(), RESREF_SIZE);
+    cnt += RESREF_SIZE;
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = m_nBuyMarkUp;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = m_nSellMarkDown;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = m_nAdditionalMarkDown;
+    cnt += sizeof(LONG);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 31400
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x515C50
+BOOL CMessageStoreMarkup::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 31408
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    m_store = pData + cnt;
+    cnt += RESREF_SIZE;
+
+    m_nBuyMarkUp = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    m_nSellMarkDown = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    m_nAdditionalMarkDown = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    // NOTE: Missing trailing guard.
+
+    return TRUE;
+}
+
+// TODO: 0x515CC0 not ported
+void CMessageStoreMarkup::Run()
+{
 }
 
 // -----------------------------------------------------------------------------
