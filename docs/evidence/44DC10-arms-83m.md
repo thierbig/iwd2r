@@ -125,3 +125,14 @@ callees per function budget is untouched: zero new.
   for the abort above. The [ai] tag run's known order-dependent flake
   family (test_sprite_actions.cpp) is pre-existing per the 83e/83g/83h
   records; the new test was run by name filter, not the full tag.
+
+- Reviewer note (284, open question): the two "no area-message" paths
+  load the pending-message register from the frame, not from zero --
+  0x44DEA0 (no area or area RemoveKey failed) and 0x44DFFC (names equal)
+  both do `mov esi, [esp+0x30]`, and 0x44E000 posts whatever is there
+  when non-null. [esp+0x30] is the CString the prologue seeds with
+  afxEmptyString (0x44DC45) and the shared tail destructs (0x4526FF), so
+  in the exe those paths would hand AddMessage 0x4F7500 a string data
+  pointer. The port treats them as "no message" (NULL). Not reproduced
+  because it is undefined behavior; revisit if a same-name SetScriptName
+  is ever observed to crash or not crash in the original.
