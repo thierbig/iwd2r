@@ -1495,13 +1495,65 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 282:
-        // OverrideAreaDifficulty
-        // TODO: 0x44E042-0x44E12E not ported.
+        // OverrideAreaDifficulty (0x44E042-0x44E12E)
+        {
+            CString sArea = m_curAction.GetString1();
+            if (!sArea.IsEmpty() && m_curAction.m_specificID != 0) {
+                LONG nLevel = m_curAction.m_specificID;
+                if (nLevel > 1) {
+                    nLevel = 1;
+                } else if (nLevel < -1) {
+                    nLevel = -1;
+                }
+
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+                // 0x452F80: find the entry by area name (case-insensitive).
+                CInfGameAreaLevel* pAreaLevel = NULL;
+                POSITION pos = pGame->field_4BDC.GetHeadPosition();
+                while (pos != NULL) {
+                    CInfGameAreaLevel* pCurrent = pGame->field_4BDC.GetNext(pos);
+                    if (pCurrent != NULL && pCurrent->m_sArea.CompareNoCase(sArea) == 0) {
+                        pAreaLevel = pCurrent;
+                        break;
+                    }
+                }
+                if (pAreaLevel == NULL) {
+                    pAreaLevel = new CInfGameAreaLevel(sArea);
+                    pGame->field_4BDC.AddTail(pAreaLevel);
+                }
+                // Clear the absolute bit and set the additive bit; the
+                // consumer (CGameArea) reads both.
+                pAreaLevel->m_dwFlags = (pAreaLevel->m_dwFlags & ~0x1) | 0x2;
+                pAreaLevel->m_nLevel = static_cast<BYTE>(nLevel);
+            }
+            returnValue = ACTION_DONE;
+        }
         goto done;
     case 283:
-        // SetCriticalPathObject
-        // TODO: 0x44E12E-0x44E223 not ported.
-        goto done;
+        // SetCriticalPathObject (0x44E12E-0x44E223)
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x44E1DB forces ACTION_DONE before the release block.
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        bShare = TRUE;
+        if (m_curAction.m_specificID != 0) {
+            static_cast<CGameSprite*>(pTarget)->GetBaseStats()->m_flags |= 0x2000;
+        } else {
+            static_cast<CGameSprite*>(pTarget)->GetBaseStats()->m_flags &= ~0x2000;
+        }
+        if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL
+            || g_pChitin->cNetwork.m_idLocalPlayer == pTarget->m_remotePlayerID) {
+            message = new CMessageSpriteUpdate(static_cast<CGameSprite*>(pTarget),
+                pTarget->GetId(),
+                pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        // The AddMessage call site (0x44E1D6) falls into the tail that
+        // forces ACTION_DONE (0x44E1DB) before the release block.
+        returnValue = ACTION_DONE;
+        goto release;
     case 284:
         // SetScriptName
         // TODO: 0x44DCDA-0x44E042 not ported.

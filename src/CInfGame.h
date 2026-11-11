@@ -161,6 +161,9 @@ void UpgradeCreatureFileToV22(BYTE** ppCreature, LONG* plSize, BYTE* pOldCreatur
 // record (`CInfGame::Marshal`, `CInfGame::Unmarshal`).
 class CInfGameAreaLevel {
 public:
+    CInfGameAreaLevel();
+    CInfGameAreaLevel(const CString& sArea);
+
     /* 0000 */ CString m_sArea;
     /* 0004 */ DWORD m_dwFlags;
     /* 0008 */ BYTE m_nLevel;

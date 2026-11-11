@@ -11838,6 +11838,25 @@ void CInfGame::SetCurrentChapter(INT nChapter)
     }
 }
 
+// No standalone address: the original inlines the default construction at
+// each `new` site (e.g. CInfGame::Unmarshal zeroing m_dwFlags, m_nLevel and
+// field_9 right after the allocation).
+CInfGameAreaLevel::CInfGameAreaLevel()
+{
+    m_dwFlags = 0;
+    m_nLevel = 0;
+    memset(field_9, 0, sizeof(field_9));
+}
+
+// 0x452F50
+CInfGameAreaLevel::CInfGameAreaLevel(const CString& sArea)
+{
+    m_sArea = sArea;
+    m_dwFlags = 0;
+    m_nLevel = 0;
+    memset(field_9, 0, sizeof(field_9));
+}
+
 // 0x452FD0
 CInfButtonArray* CInfGame::GetButtonArray()
 {
