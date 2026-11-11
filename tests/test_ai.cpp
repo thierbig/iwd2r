@@ -23,6 +23,7 @@
 #include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
 #include "CSpell.h"
+#include "CStore.h"
 #include "CVariableHash.h"
 #include "ScreenLayout.h"
 #include "data_view.h"
@@ -30,10 +31,14 @@
 #include "platform/window.h"
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <string>
@@ -41,6 +46,12 @@
 #include <vector>
 
 namespace {
+
+namespace fs = std::filesystem;
+
+// The private view of the install this process's engine runs on (set by
+// StartEngine; as tests/test_rest_store.cpp does).
+fs::path g_view;
 
 // The engine in this process, as iwd2r_main builds it, without a game
 // loaded: the game object, its variables, object array and message handler
@@ -69,6 +80,7 @@ bool StartEngine(std::string& error)
     if (install != nullptr && *install != '\0') {
         const std::string original = install;
         view = std::make_unique<DataView>(original);
+        g_view = view->Path();
 #ifdef _WIN32
         _putenv_s("IWD2_DATA", view->Path().c_str());
 #else
@@ -206,6 +218,39 @@ std::vector<T*> Queued()
         }
     }
     return found;
+}
+
+std::string Lower(std::string text)
+{
+    for (char& c : text)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
+// The bytes of a file in the view's temp folder; empty when there is none
+// (as tests/test_rest_store.cpp's helper).
+std::vector<char> TempFile(const char* name)
+{
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(g_view, ec)) {
+        if (Lower(entry.path().filename().string()) != "temp") {
+            continue;
+        }
+        for (const auto& file : fs::directory_iterator(entry.path(), ec)) {
+            if (Lower(file.path().filename().string()) == Lower(name)) {
+                std::ifstream in(file.path(), std::ios::binary);
+                return std::vector<char>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            }
+        }
+    }
+    return std::vector<char>();
+}
+
+uint32_t Dword(const std::vector<char>& d, size_t at)
+{
+    uint32_t value;
+    std::memcpy(&value, d.data() + at, sizeof(value));
+    return value;
 }
 
 // An effect the way CMessageAddEffect decodes one: the AddEffect arms own
@@ -2643,8 +2688,8 @@ TEST_CASE("ai: ExecuteAction 260 266 267 and 268 without a target or party", "[a
 // Task 83e's ExecuteAction arms, driven through ExecuteAction as far as they
 // are observable without game data. 290/291/292 stop at GetTargetShareType's
 // null (no sprite or container resolves for a bare AI object's action), 295's
-// receiving-sprite resolver and 296's markup call are unported (the TODOs in
-// the arms record them), and 297 is fully ported.
+// receiving-sprite resolver is unported (the TODO in the arm records it), and
+// 297 is fully ported. Task 83f ported 296's markup call.
 TEST_CASE("ai: ExecuteAction 290 291 292 spell-hit and chunk arms without a target", "[ai][data]")
 {
     REQUIRE_ENGINE();
@@ -2696,12 +2741,41 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
     pCaller->SetCurrAction(transfer);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
 
-    // 296 ChangeStoreMarkup: the markup call (0x5C9C90) is not ported; the
-    // original still forces ACTION_DONE after it.
+    // 296 ChangeStoreMarkup("20EMMA", 333, 444, 55) with no network
+    // connection: the single-player arm re-marshals the store unchanged --
+    // the markups are never read on this path (verified at 0x5C9F5E-0x5C9FA7)
+    // -- and the arm still forces ACTION_DONE. The store's own markups go to
+    // the temp file at header+0xC/0x10/0x14, not the action's specifics.
+    DWORD nBuyBefore;
+    DWORD nSellBefore;
+    DWORD nAdditionalBefore;
+    {
+        CStore before(CResRef("20EMMA"));
+        nBuyBefore = before.m_header.m_nBuyMarkUp;
+        nSellBefore = before.m_header.m_nSellMarkDown;
+        nAdditionalBefore = before.m_header.m_nAdditionalMarkDown;
+    }
     CAIAction markup;
     markup.m_actionID = 296;
+    markup.SetString1("20EMMA");
+    markup.m_specificID = 333;
+    markup.m_specificID2 = 444;
+    markup.m_specificID3 = 55;
     pCaller->SetCurrAction(markup);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageStoreMarkup>().empty());
+    CHECK(Queued<CMessageStoreDemand>().empty());
+    {
+        const std::vector<char> marshalled = TempFile("20EMMA.STO");
+        REQUIRE(marshalled.size() >= 8 + 0x1C + sizeof(DWORD));
+        CHECK(std::memcmp(marshalled.data(), "STORV9.0", 8) == 0);
+        CHECK(Dword(marshalled, 8 + 0xC) == nBuyBefore);
+        CHECK(Dword(marshalled, 8 + 0x10) == nSellBefore);
+        CHECK(Dword(marshalled, 8 + 0x14) == nAdditionalBefore);
+        CHECK(Dword(marshalled, 8 + 0xC) != 333);
+        CHECK(Dword(marshalled, 8 + 0x10) != 444);
+        CHECK(Dword(marshalled, 8 + 0x14) != 55);
+    }
 
     // 297 ScreenShake(5, 6, 7): the shake rides a CMessageScreenShake to
     // self, override set, in the action's specifics order (duration, x, y).
@@ -2721,6 +2795,88 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
         CHECK(shakes[0]->m_bOverride == 1);
         CHECK(shakes[0]->m_sourceId == pCaller->m_id);
         CHECK(shakes[0]->m_targetId == pCaller->m_id);
+    }
+
+    ClearMessages();
+}
+
+// Task 83f's CInfGame::ChangeStoreMarkup (0x5C9C90) session arms, driven
+// through the member with the network flags faked (GetSessionOpen and
+// GetSessionHosting read plain members). The host broadcasts the markups and
+// applies them to its server-side copy; a client that already owns a local
+// copy of the store is the replay gate: it broadcasts a store demand with
+// the markups and invalidates its local copy.
+TEST_CASE("ai: ChangeStoreMarkup host and client arms with a session", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CNetwork& network = g_pChitin->cNetwork;
+    const BOOLEAN bConnectionBefore = network.m_bConnectionEstablished;
+    const BOOLEAN bHostBefore = network.m_bIsHost;
+
+    // Host: the markups land in the server store's header.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(pGame->ChangeStoreMarkup(CResRef("53HEGGR"), 150, 250, 10) == 1);
+    {
+        const std::vector<CMessageStoreMarkup*> markups = Queued<CMessageStoreMarkup>();
+        REQUIRE(markups.size() == 1);
+        CHECK(markups[0]->m_store == CResRef("53HEGGR"));
+        CHECK(markups[0]->m_nBuyMarkUp == 150);
+        CHECK(markups[0]->m_nSellMarkDown == 250);
+        CHECK(markups[0]->m_nAdditionalMarkDown == 10);
+        CHECK(markups[0]->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_STORE_MARKUP);
+    }
+    // The host already owns the store: no store demand is queued.
+    CHECK(Queued<CMessageStoreDemand>().empty());
+    {
+        CStore* pServerStore = NULL;
+        for (int cnt = 0; cnt < 12; cnt++) {
+            if (pGame->m_aServerStore[cnt] != NULL && pGame->m_aServerStore[cnt]->m_resRef == CResRef("53HEGGR")) {
+                pServerStore = pGame->m_aServerStore[cnt];
+            }
+        }
+        REQUIRE(pServerStore != NULL);
+        CHECK(pServerStore->m_header.m_nBuyMarkUp == 150);
+        CHECK(pServerStore->m_header.m_nSellMarkDown == 250);
+        CHECK(pServerStore->m_header.m_nAdditionalMarkDown == 10);
+    }
+    // Unlike 0x5C9C90's sibling AddItemToBag, no release follows inside the
+    // function; give the slot back while the session flags still hold.
+    pGame->ReleaseServerStore(CResRef("53HEGGR"));
+    // Nothing runs the broadcast in a test: drop it so the client part sees
+    // only its own messages.
+    ClearMessages();
+
+    // Client that owns a local copy: the demand is the replay gate's, not a
+    // fetch (which would need a live connection), and the local copy is
+    // invalidated.
+    {
+        CStore local(CResRef("50NYM"));
+        local.Marshal(pGame->m_sTempDir);
+    }
+    network.m_bIsHost = FALSE;
+    CHECK(pGame->ChangeStoreMarkup(CResRef("50NYM"), 111, 222, 3) == 1);
+    {
+        const std::vector<CMessageStoreDemand*> demands = Queued<CMessageStoreDemand>();
+        REQUIRE(demands.size() == 1);
+        CHECK(demands[0]->m_store == CResRef("50NYM"));
+        const std::vector<CMessageStoreMarkup*> markups = Queued<CMessageStoreMarkup>();
+        REQUIRE(markups.size() == 1);
+        CHECK(markups[0]->m_store == CResRef("50NYM"));
+        CHECK(markups[0]->m_nBuyMarkUp == 111);
+        CHECK(markups[0]->m_nSellMarkDown == 222);
+        CHECK(markups[0]->m_nAdditionalMarkDown == 3);
+    }
+    network.m_bConnectionEstablished = bConnectionBefore;
+    network.m_bIsHost = bHostBefore;
+
+    // InvalidateStore cut the local copy to an 8-byte "STOOV9.0".
+    {
+        const std::vector<char> invalidated = TempFile("50NYM.STO");
+        REQUIRE(invalidated.size() == 8);
+        CHECK(std::memcmp(invalidated.data(), "STOOV9.0", 8) == 0);
     }
 
     ClearMessages();
