@@ -1405,12 +1405,42 @@ SHORT CGameAIBase::ExecuteAction()
         // TODO: 0x4512E9-0x451362 not ported.
         goto done;
     case 279:
-        // AdvanceTime
-        // TODO: 0x4513D8-0x451427 not ported.
+        // AdvanceTime (0x4513D8-0x451427)
+        g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->AdvanceCurrentTime(m_curAction.GetSpecifics());
+        g_pBaldurChitin->GetObjectGame()->FeedBack(CInfGame::FEEDBACK_TIMEPASSEDREST,
+            m_curAction.GetSpecifics(),
+            TRUE);
+        returnValue = ACTION_DONE;
         goto done;
     case 280:
-        // TODO: 0x451427-0x4514FB not ported.
-        goto done;
+        // AdvanceTime (0x451427-0x4514FB): with a resolved sprite target and
+        // empty specifics, decodes a cleared item effect (id 0x5D, amount
+        // GetSpecifics2(), flags 1, duration type 1) at this sprite's
+        // position and broadcasts it as CMessageAddEffect.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        if (m_curAction.GetSpecifics() != 0) {
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        {
+            ITEM_EFFECT effect;
+            CGameEffect::ClearItemEffect(&effect, 0x5D);
+            effect.effectAmount = m_curAction.GetSpecifics2();
+            effect.dwFlags = 1;
+            effect.durationType = 1;
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect, m_pos, GetId(), CPoint(-1, -1));
+            message = new CMessageAddEffect(pEffect, GetId(), pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            // The AddMessage call site (0x44E1D6) falls into the tail that
+            // forces ACTION_DONE (0x44E1DB) before the release block.
+            returnValue = ACTION_DONE;
+        }
+        goto release;
     case 281:
         // MarkObject (0x451362-0x45139D)
         pTarget = sub_45C290();
