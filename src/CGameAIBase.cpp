@@ -907,10 +907,31 @@ SHORT CGameAIBase::ExecuteAction()
     case 183:
         returnValue = MultiPlayerSync();
         goto done;
-    case 185:
-        // SetMasterArea
-        // TODO: 0x44FDCF-0x44FED7 not ported.
+    case 185: {
+        // SetMasterArea (0x44FDCF-0x44FED7): the action string must be
+        // found in the masterArea 2DA (m_ruleTables.m_tMasterArea, label
+        // search, CInfGame+0xA60); only then is the named loaded area
+        // looked up once via CInfGame::GetArea and stored into
+        // m_pGameAreaMaster (CInfGame+0x3812) with ACTION_DONE. A name
+        // missing from the 2DA concatenates the original's literal
+        // (0x8A7F90) into the never-read sError; an unloaded area errors
+        // silently; both return ACTION_ERROR without touching pTarget.
+        CString sArea = m_curAction.GetString1();
+        CPoint ptLocation(-1, -1);
+        if (g_pBaldurChitin->GetObjectGame()->m_ruleTables.m_tMasterArea.Find(sArea, ptLocation, TRUE) == FALSE) {
+            sError = m_curAction.GetString1() + ": That's no master area, that's my wife!";
+            returnValue = ACTION_ERROR;
+        } else {
+            CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(m_curAction.GetString1());
+            if (pArea == NULL) {
+                returnValue = ACTION_ERROR;
+            } else {
+                g_pBaldurChitin->GetObjectGame()->m_pGameAreaMaster = pArea;
+                returnValue = ACTION_DONE;
+            }
+        }
         goto done;
+    }
     case 265:
         // ExpansionEndCredits
         CInfGame::byte_8E7528 = TRUE;
@@ -949,8 +970,16 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = MoveGlobal(static_cast<CGameSprite*>(pTarget));
         goto release;
     case 199:
-        // TextScreen
-        // TODO: 0x44FFB9-0x450093 not ported.
+        // TextScreen (0x44FFB9-0x450093): the arm opens with
+        // UTIL_ASSERT(FALSE) (original CGameAIBase.cpp:1439); UtilAssert
+        // never returns, so the message post below is dead code in the
+        // original too -- ported faithfully. Would-be behavior: build
+        // CMessageStartTextScreen from GetString1() with this sprite's id
+        // as both source and target, post it, and return ACTION_DONE.
+        UTIL_ASSERT(FALSE);
+        message = new CMessageStartTextScreen(CResRef(m_curAction.GetString1()), m_id, m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        returnValue = ACTION_DONE;
         goto done;
     case 201:
         // DetectSecretDoor
