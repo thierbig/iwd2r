@@ -1101,9 +1101,31 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 242:
-        // ChangeStat
-        // TODO: 0x4523BA-0x45248C not ported.
-        goto done;
+        // ChangeStat (0x4523BA-0x452487): specifics1 is the stat,
+        // specifics2 the value and the low byte of specifics3 the modify
+        // flag, applied to the target sprite. A NULL target jumps straight
+        // to the done tail, so the entry default ACTION_ERROR is returned
+        // and the share is never released.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            goto done;
+        }
+        {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+            DWORD nStat = static_cast<DWORD>(m_curAction.GetSpecifics());
+            DWORD nValue = static_cast<DWORD>(m_curAction.GetSpecifics2());
+            BOOL bModify = static_cast<BYTE>(m_curAction.GetSpecifics3());
+            pSprite->SetAtOffset(nStat, nValue, bModify);
+            returnValue = ACTION_DONE;
+            if (g_pChitin->cNetwork.GetServiceProvider() != CNetwork::SERV_PROV_NULL) {
+                // The caller and target are both the target's own id.
+                message = new CMessageChangeStat(static_cast<WORD>(nStat), nValue,
+                    static_cast<BOOLEAN>(bModify), pSprite->GetId(), pSprite->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+            // 0x452487 jumps to the done tail (0x4526F7); no release.
+            goto done;
+        }
     case 243: {
         // IncrementGlobalOnce
         // Original: 0x450299-0x450648. Both action strings are split on ':'
@@ -1847,10 +1869,33 @@ SHORT CGameAIBase::ExecuteAction()
             m_curAction.GetSpecifics(), FALSE, TRUE);
         returnValue = ACTION_DONE;
         goto done;
-    case 316:
-        // AddFeat
-        // TODO: 0x452318-0x4523BA not ported.
-        goto done;
+    case 316: {
+        // AddFeat (0x452318-0x4523B5): specifics1 names the feat. When
+        // sub_763A40 refuses the upgrade the arm still reports ACTION_DONE,
+        // without granting anything.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        if (pTarget == NULL) {
+            // 0x451451: ACTION_ERROR straight to release (entry default).
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        bShare = TRUE;
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pTarget);
+        UINT nFeat = static_cast<UINT>(m_curAction.GetSpecifics());
+        if (pSprite->sub_763A40(nFeat, 0) == 0) {
+            returnValue = ACTION_DONE;
+            goto release;
+        }
+        // A copy of the current base stats is taken first; the upgraded feat
+        // is then diffed against it by sub_71E240 to apply stat side-effects.
+        CCreatureFileHeader oldBaseStats = *pSprite->GetBaseStats();
+        pSprite->SetFeatValue(nFeat, pSprite->GetFeatValue(nFeat) + 1);
+        pSprite->sub_71E240(oldBaseStats, *pSprite->GetDerivedStats());
+        pSprite->sub_4531B0();
+        pSprite->ProcessEffectList();
+        returnValue = ACTION_DONE;
+        goto release;
+    }
     case 318:
         // SetCreatureAreaFlag
         // TODO: 0x452575-0x4525EA not ported.
