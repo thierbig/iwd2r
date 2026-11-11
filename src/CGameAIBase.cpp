@@ -36,6 +36,7 @@
 #include "CUtil.h"
 #include "CVariableHash.h"
 #include "CWeather.h"
+#include "IcewindCGameEffects.h"
 
 // 0x8485C4
 const SHORT CGameAIBase::ACTION_DONE = -1;
@@ -1503,7 +1504,26 @@ SHORT CGameAIBase::ExecuteAction()
                     }
                 }
             }
-            // TODO: 0x451C7B-0x451D30 not ported.
+            // The invisible effect comes off the target's timed list, with
+            // the equipped list's current position left in place; the
+            // remove-all-of-type effect that follows is reported to self.
+            pSprite->GetTimedEffectList()->RemoveAllOfType(pSprite,
+                CGAMEEFFECT_INVISIBLE,
+                pSprite->GetEquipedEffectList()->GetPosCurrent(),
+                -1);
+            ITEM_EFFECT effect;
+            CGameEffect::ClearItemEffect(&effect, ICEWIND_CGAMEEFFECT_REMOVEALLOFTYPE);
+            effect.dwFlags = CGAMEEFFECT_INVISIBLE;
+            effect.effectAmount = 0;
+            // NOTE: The source position is the target's id packed into a
+            // CPoint (0x452B00); the message's caller and target are both
+            // this object's id ([ebx+0x5C] pushed twice at 0x451D1E).
+            CGameEffect* pEffect = CGameEffect::DecodeEffect(&effect,
+                CPoint(pSprite->GetId()),
+                pSprite->GetId(),
+                CPoint(-1, -1));
+            message = new CMessageAddEffect(pEffect, GetId(), GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
             returnValue = ACTION_DONE;
             goto release;
         }
