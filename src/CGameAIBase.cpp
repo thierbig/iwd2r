@@ -1104,10 +1104,35 @@ SHORT CGameAIBase::ExecuteAction()
         // ChangeStat
         // TODO: 0x4523BA-0x45248C not ported.
         goto done;
-    case 243:
+    case 243: {
         // IncrementGlobalOnce
-        // TODO: 0x450299-0x450648 not ported.
+        // Original: 0x450299-0x450648. Both action strings are split on ':'
+        // and trimmed. String1 names the once-guard variable (its scope and
+        // name), string2 the variable incremented when the guard fires.
+        CString sString1 = m_curAction.GetString1();
+        sString1.MakeUpper();
+        int nColon1 = sString1.Find(':');
+        CString sScope1 = sString1.Left(nColon1);
+        sScope1.TrimLeft();
+        sScope1.TrimRight();
+        CString sName1 = sString1.Right(sString1.GetLength() - nColon1 - 1);
+        sName1.TrimLeft();
+        sName1.TrimRight();
+
+        CString sString2 = m_curAction.GetString2();
+        sString2.MakeUpper();
+        int nColon2 = sString2.Find(':');
+        CString sScope2 = sString2.Left(nColon2);
+        sScope2.TrimLeft();
+        sScope2.TrimRight();
+        CString sName2 = sString2.Right(sString2.GetLength() - nColon2 - 1);
+        sName2.TrimLeft();
+        sName2.TrimRight();
+
+        // TODO: 0x450487-0x450648 not ported.
+        returnValue = ACTION_DONE;
         goto done;
+    }
     case 244:
         // DeleteJournalEntry
         // TODO: 0x450648-0x45066E not ported.
