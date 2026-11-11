@@ -1663,11 +1663,9 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 295:
         // TransferInventory
-        // TODO: 0x451D81 calls 0x45C290 (sub_45C290, ported below): resolves
-        // the receiving sprite. This stub leaves it uncalled, so pTarget stays
-        // NULL and the arm takes the original's null path (ACTION_ERROR
-        // straight to release); the non-null branch below is kept for the
-        // original's structure.
+        // 0x451D81: the receiving sprite; a NULL result takes 0x451451
+        // (ACTION_ERROR straight to release), as the entry default does here.
+        pTarget = sub_45C290();
         if (pTarget != NULL) {
             bShare = TRUE;
             CGameObject* pActee = m_curAction.GetActee2().sub_40CCA0(this, FALSE);
