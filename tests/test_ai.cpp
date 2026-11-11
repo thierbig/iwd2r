@@ -23,6 +23,7 @@
 #include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
 #include "CScreenJournal.h"
+#include "CScreenWorld.h"
 #include "CSpell.h"
 #include "CStore.h"
 #include "CVariableHash.h"
@@ -2689,8 +2690,8 @@ TEST_CASE("ai: ExecuteAction 260 266 267 and 268 without a target or party", "[a
 // Task 83e's ExecuteAction arms, driven through ExecuteAction as far as they
 // are observable without game data. 290/291/292 stop at GetTargetShareType's
 // null (no sprite or container resolves for a bare AI object's action), 295's
-// receiving-sprite resolver is unported (the TODO in the arm records it), and
-// 297 is fully ported. Task 83f ported 296's markup call.
+// arm is still a TODO stub (its receiving-sprite resolver 0x45C290 is in tree
+// from Task 83i), and 297 is fully ported. Task 83f ported 296's markup call.
 TEST_CASE("ai: ExecuteAction 290 291 292 spell-hit and chunk arms without a target", "[ai][data]")
 {
     REQUIRE_ENGINE();
@@ -2735,8 +2736,8 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
     pCaller->SetCurrAction(equip);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
 
-    // 295 TransferInventory: the receiving-sprite resolver (0x45C290) is not
-    // ported, so pTarget stays null and the arm answers the entry default.
+    // 295 TransferInventory: the arm is still a TODO stub (its resolver
+    // 0x45C290 is in tree from Task 83i), so it answers the entry default.
     CAIAction transfer;
     transfer.m_actionID = 295;
     pCaller->SetCurrAction(transfer);
@@ -3061,5 +3062,157 @@ TEST_CASE("ai: ChangeStoreMarkup host and client arms with a session", "[ai][dat
         CHECK(std::memcmp(invalidated.data(), "STOOV9.0", 8) == 0);
     }
 
+    ClearMessages();
+}
+
+// Task 83i's ExecuteAction arms, driven through ExecuteAction where the
+// effect is observable without a world screen or a session: the marked and
+// set AI types the 281/305 arms store, the world-timer move 279 makes, the
+// fatigue effect 280 queues, and the 273/274 split between the queued
+// CMessageToggleInterface (a provider is set) and the world screen's
+// auto-unhide counter (the null provider's direct path, where the engine
+// tests' missing visible area stops HideInterface/UnhideInterface at their
+// first guard).
+TEST_CASE("ai: ExecuteAction 273 274 279 280 281 and 305 hide unhide rest fatigue mark and target",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+
+    // 281 MarkObject / 305 SetMyTarget: the resolved actee's AI type lands
+    // in field_342 / field_37E; an actee nobody resolves for stores NOONE.
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    pCaller->SetCurrAction(CAIAction(281, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCaller->field_342.Equal(pSprite->GetAIType()));
+    CHECK(!pCaller->field_342.Equal(CAIObjectType::NOONE));
+
+    pCaller->SetCurrAction(CAIAction(305, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCaller->field_37E.Equal(pSprite->GetAIType()));
+
+    CAIAction markNobody;
+    markNobody.m_actionID = 281;
+    pCaller->SetCurrAction(markNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCaller->field_342.Equal(CAIObjectType::NOONE));
+
+    CAIAction targetNobody;
+    targetNobody.m_actionID = 305;
+    pCaller->SetCurrAction(targetNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pCaller->field_37E.Equal(CAIObjectType::NOONE));
+
+    // 279 AdvanceTime: the specifics are a time of day; 3600 ms past the
+    // current one moves the world timer by exactly 3600 (AdvanceCurrentTime
+    // applies the delta when it clears 900, and without a session the plain
+    // add is the only step). FeedBack gets 3600, under the hour that its
+    // FEEDBACK_TIMEPASSEDREST branch displays at, so nothing else moves.
+    CTimerWorld* pWorldTimer = g_pBaldurChitin->GetObjectGame()->GetWorldTimer();
+    const ULONG nTimeBefore = pWorldTimer->m_gameTime;
+    CAIAction rest;
+    rest.m_actionID = 279;
+    rest.m_specificID = static_cast<LONG>(nTimeBefore % CTimerWorld::TIMESCALE_MSEC_PER_DAY) + 3600;
+    pCaller->SetCurrAction(rest);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorldTimer->m_gameTime == nTimeBefore + 3600);
+
+    // 280 AdvanceTime (the second one): with a resolved sprite and empty
+    // specifics it decodes a fatigue effect carrying specifics2 as its
+    // amount and queues it; the caller is the source, the sprite the target.
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(280, actee, 0, 25, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageAddEffect*> adds = Queued<CMessageAddEffect>();
+        REQUIRE(adds.size() == 1);
+        CHECK(adds[0]->m_sourceId == pCaller->m_id);
+        CHECK(adds[0]->m_targetId == pSprite->m_id);
+        REQUIRE(adds[0]->m_effect != NULL);
+        CHECK(dynamic_cast<CGameEffectFatigue*>(adds[0]->m_effect) != NULL);
+        std::unique_ptr<ITEM_EFFECT> pEffect(adds[0]->m_effect->GetItemEffect());
+        REQUIRE(pEffect != NULL);
+        CHECK(pEffect->effectID == CGAMEEFFECT_FATIGUE);
+        CHECK(pEffect->effectAmount == 25);
+        CHECK(pEffect->dwFlags == 1);
+        CHECK(pEffect->durationType == 1);
+    }
+
+    // The same arm answers the entry default and queues nothing when the
+    // specifics are non-zero (the rest is refused) or no sprite resolves.
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(280, actee, 1, 25, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CAIAction fatigueNobody;
+    fatigueNobody.m_actionID = 280;
+    pCaller->SetCurrAction(fatigueNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(Queued<CMessageAddEffect>().empty());
+
+    // 273/274 HideGUI/UnhideGUI: with a service provider the arms queue the
+    // message the session side runs, addressed to the acting object itself.
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    ClearMessages();
+    CAIAction hide;
+    hide.m_actionID = 273;
+    pCaller->SetCurrAction(hide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageToggleInterface*> toggles = Queued<CMessageToggleInterface>();
+        REQUIRE(toggles.size() == 1);
+        CHECK(toggles[0]->m_bHide == TRUE);
+        CHECK(toggles[0]->m_sourceId == pCaller->m_id);
+        CHECK(toggles[0]->m_targetId == pCaller->m_id);
+    }
+    ClearMessages();
+    CAIAction unhide;
+    unhide.m_actionID = 274;
+    pCaller->SetCurrAction(unhide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageToggleInterface*> toggles = Queued<CMessageToggleInterface>();
+        REQUIRE(toggles.size() == 1);
+        CHECK(toggles[0]->m_bHide == FALSE);
+    }
+
+    // The null provider drives the world screen directly. HideInterface and
+    // UnhideInterface stop at their field_4A24 guard without a visible area,
+    // and the UI manager's hidden flag never flips, so what stays observable
+    // is the auto-unhide counter: each HideGUI counts one in, UnhideGUI acts
+    // only while the counter sub_453780 reads is above zero and counts it
+    // back out.
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    CScreenWorld* pWorld = g_pBaldurChitin->GetScreenWorld();
+    REQUIRE(pWorld != NULL);
+    const INT nAutoUnhideBefore = pWorld->m_nAutoUnhideInterface;
+    const int nField4A24 = g_pBaldurChitin->field_4A24;
+    g_pBaldurChitin->field_4A24 = 0;
+    pWorld->m_nAutoUnhideInterface = 0;
+    ClearMessages();
+
+    pCaller->SetCurrAction(hide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorld->m_nAutoUnhideInterface == 1);
+    pCaller->SetCurrAction(hide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorld->m_nAutoUnhideInterface == 2);
+    CHECK(Queued<CMessageToggleInterface>().empty());
+
+    pCaller->SetCurrAction(unhide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorld->m_nAutoUnhideInterface == 1);
+    pCaller->SetCurrAction(unhide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorld->m_nAutoUnhideInterface == 0);
+    pCaller->SetCurrAction(unhide);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pWorld->m_nAutoUnhideInterface == 0);
+
+    pWorld->m_nAutoUnhideInterface = nAutoUnhideBefore;
+    g_pBaldurChitin->field_4A24 = nField4A24;
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
