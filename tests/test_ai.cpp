@@ -3216,3 +3216,190 @@ TEST_CASE("ai: ExecuteAction 273 274 279 280 281 and 305 hide unhide rest fatigu
     g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
+
+// Task 83j's ExecuteAction arms, driven through ExecuteAction where the
+// effect is observable without a session or a video stack: the name strrefs
+// 312/313 store on the resolved sprite (with the unchanged-strref skip),
+// the area header words 301/303 rewrite and mirror (the update messages
+// these and 312/313/314 post are to-others broadcasts, which the
+// single-player handler consumes without queueing -- the original drops
+// them on its to-self-FALSE path at 0x4F77BF -- so the queue staying empty
+// is itself the pinned behavior), and the party experience effect 315
+// queues on the challenge-rating path.
+TEST_CASE("ai: ExecuteAction 301 303 312 313 314 and 315 area flags names endgame and party CR xp",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+
+    // 312 SetApparentNameSTRREF / 313 SetRegularNameSTRREF: the resolved
+    // sprite's base-stats name takes the specifics; the sprite update the
+    // arm posts is a to-others broadcast, so nothing stays local. An
+    // unchanged strref skips the message entirely; a target that resolves
+    // to nothing takes the miss tail that forces ACTION_DONE.
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    const DWORD nApparent = pSprite->m_baseStats.m_apparentName + 7;
+    const DWORD nName = pSprite->m_baseStats.m_name + 7;
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(312, actee, nApparent, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_apparentName == nApparent);
+    CHECK(Queued<CMessageSpriteUpdate>().empty());
+    // The same strref again: stored value unchanged, nothing posted.
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(312, actee, nApparent, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_apparentName == nApparent);
+    CHECK(Queued<CMessageSpriteUpdate>().empty());
+    CAIAction renameNobody;
+    renameNobody.m_actionID = 312;
+    pCaller->SetCurrAction(renameNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageSpriteUpdate>().empty());
+
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(313, actee, nName, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_name == nName);
+    CHECK(Queued<CMessageSpriteUpdate>().empty());
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(313, actee, nName, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pSprite->m_baseStats.m_name == nName);
+    CHECK(Queued<CMessageSpriteUpdate>().empty());
+
+    // 301 SetExtendedNight / 303 SetRestEncounterChance: the caller's area
+    // header is rewritten and mirrored into the infinity, in control or
+    // out (the update messages post only in control, and being
+    // to-others broadcasts they never queue locally either way). A
+    // constructed CGameArea is its header, rest-encounter block and
+    // infinity with the constructor's inits, which is all these arms touch.
+    CGameArea* pArea = new CGameArea(0);
+    CGameArea* pAreaBefore = pCaller->m_pArea;
+    pCaller->m_pArea = pArea;
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    CAIAction night;
+    night.m_actionID = 301;
+    CAIAction restChance;
+    restChance.m_actionID = 303;
+
+    pArea->m_header.m_areaType = 0x1205;
+    night.m_specificID = 1;
+    pCaller->SetCurrAction(night);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pArea->m_header.m_areaType == 0x1245);
+    CHECK(pArea->m_cInfinity.m_areaType == 0x1245);
+    CHECK(Queued<CMessageSetAreaType>().empty());
+    // Specifics zero clears the bit again.
+    ClearMessages();
+    night.m_specificID = 0;
+    pCaller->SetCurrAction(night);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pArea->m_header.m_areaType == 0x1205);
+    CHECK(pArea->m_cInfinity.m_areaType == 0x1205);
+    CHECK(Queued<CMessageSetAreaType>().empty());
+
+    // 303's both chances clamp at 100 (the min inline at 0x45EA80).
+    ClearMessages();
+    restChance.m_specificID = 150;
+    restChance.m_specificID2 = 30;
+    pCaller->SetCurrAction(restChance);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pArea->m_headerRestEncounter.m_probDay == 100);
+    CHECK(pArea->m_headerRestEncounter.m_probNight == 30);
+    CHECK(Queued<CMessageSetAreaRestEncounter>().empty());
+
+    // Out of control (another provider, a remote player that is not this
+    // object): the fields still change, and still nothing queues.
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    const PLAYER_ID idLocalBefore = g_pChitin->cNetwork.m_idLocalPlayer;
+    g_pChitin->cNetwork.m_idLocalPlayer = pCaller->m_remotePlayerID + 1;
+    ClearMessages();
+    night.m_specificID = 1;
+    pCaller->SetCurrAction(night);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pArea->m_header.m_areaType == 0x1245);
+    CHECK(Queued<CMessageSetAreaType>().empty());
+    g_pChitin->cNetwork.m_idLocalPlayer = idLocalBefore;
+    // 315's effect travels by Send, which queues only for the local
+    // player's objects or under the null provider; put the null provider
+    // back for it.
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+
+    // 314 EndGame: the arm runs ReadyCharacterTerminationSequence on the
+    // game, reads the VISIBLE area's id for the EndGame message it posts
+    // (a to-others broadcast, consumed by the single-player handler like
+    // the others), and takes the done tail. The termination body needs the
+    // object cursor and video stack the engine tests never build
+    // (SetCursor derefs the current video mode), so the game-save guard
+    // suppresses it here and the pins are: no termination state touched,
+    // no message left local, ACTION_DONE. The area must be registered or
+    // GetVisibleArea returns NULL and the arm would crash reading its id.
+    CGameArea* pEndArea = new CGameArea(9);
+    const BYTE nVisibleArea = pGame->m_visibleArea;
+    CGameArea* pVisibleBefore = pGame->m_gameAreas[nVisibleArea];
+    const int nTermGuard = pGame->m_gameSave.field_1AC;
+    const DWORD nModeBefore = pGame->m_gameSave.m_mode;
+    pGame->m_gameAreas[nVisibleArea] = pEndArea;
+    pGame->m_gameSave.field_1AC = 1;
+    ClearMessages();
+    CAIAction endGame;
+    endGame.m_actionID = 314;
+    endGame.m_specificID = 42;
+    pCaller->SetCurrAction(endGame);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pGame->m_nCharacterTerminationSequenceDelay == 0);
+    CHECK(pGame->m_gameSave.m_mode == nModeBefore);
+    CHECK(Queued<CMessageEndGame>().empty());
+    pGame->m_gameSave.field_1AC = nTermGuard;
+    pGame->m_gameAreas[nVisibleArea] = pVisibleBefore;
+
+    // 315 AddExperiencePartyCR: the CR flag is what separates it from case
+    // 164. A party of one living member receives one experience effect
+    // (104); the amount is the challenge-rating share, table-driven through
+    // MoncRate, so the assertion compares it with a direct
+    // AddExperienceParty(specifics, FALSE, TRUE) call rather than a number.
+    // The sprite also needs a class level matching m_nLevel: the share
+    // calls GetMulticlassingPenalty, whose second-chance loop only
+    // re-picks iBestClass from classes with a non-zero level and then
+    // asserts in CDerivedStats::GetClassLevel when iBestClass is still 0 --
+    // a levelled character without class levels cannot exist in the
+    // original, so seed a level-3 fighter.
+    pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+    pSprite->m_derivedStats.m_nLevel = 3;
+    pSprite->m_derivedStats.m_nClassLevels[CAIOBJECTTYPE_C_FIGHTER - 1] = 3;
+    const SHORT nCharacters = pGame->m_nCharacters;
+    const LONG portrait0 = pGame->m_characterPortraits[0];
+    pGame->m_nCharacters = 1;
+    pGame->m_characterPortraits[0] = pSprite->m_id;
+    ClearMessages();
+    CAIAction award;
+    award.m_actionID = 315;
+    award.m_specificID = 150;
+    pCaller->SetCurrAction(award);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    LONG nArmAmount = -1;
+    {
+        const std::vector<CMessageAddEffect*> adds = Queued<CMessageAddEffect>();
+        REQUIRE(adds.size() == 1);
+        CHECK(adds[0]->m_sourceId == pSprite->m_id);
+        CHECK(adds[0]->m_targetId == pSprite->m_id);
+        REQUIRE(adds[0]->m_effect != NULL);
+        std::unique_ptr<ITEM_EFFECT> pXP(adds[0]->m_effect->GetItemEffect());
+        REQUIRE(pXP != NULL);
+        CHECK(pXP->effectID == CGAMEEFFECT_XP);
+        nArmAmount = pXP->effectAmount;
+    }
+    ClearMessages();
+    CHECK(nArmAmount == pGame->AddExperienceParty(150, FALSE, TRUE));
+    pGame->m_nCharacters = nCharacters;
+    pGame->m_characterPortraits[0] = portrait0;
+
+    pCaller->m_pArea = pAreaBefore;
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
+    ClearMessages();
+}
