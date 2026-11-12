@@ -7693,6 +7693,93 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nCount > triggerCopy.GetSpecifics();
         }
         break;
+    case 0x40B7:
+        // TotalItemCntLT(object, n): the walk of 0x40B5 above, against n by
+        // less.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    CString sResRef = pItem->GetResRef().GetResRefStr();
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(""));
+                    } else {
+                        CString sLeft = sResRef.Left(7);
+                        if (sub_45B290(&sResRef, "00FIST")
+                            && sub_45B290(&sLeft, "00MFIST")
+                            && (pItem->GetFlagsFile() & 0x44) != 0x40) {
+                            nCount += 1;
+                        }
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(""));
+            }
+
+            bResult = nCount < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40C1:
+        // TotalItemCntExclude(object, n, excluded): the count of 0x40B5
+        // above with the named resref left out, against n by equal. The
+        // sprite walk is the exclude family's own: the excluded resref is
+        // skipped before the stack test, a bag counts through
+        // GetNumberOfItemsInBag(resref, excluded) -- not "" -- and a plain
+        // item counts one with no fist test. A container still counts
+        // CountItemExcept(""): of the exclude family only 0x40C2 hands the
+        // container the excluded name. The original repeats this walk in
+        // full for 0x40C2 and 0x40C3 as well.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    if (pItem->GetResRef() == triggerCopy.GetString1()) {
+                        continue;
+                    }
+
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(triggerCopy.GetString1()));
+                    } else {
+                        nCount += 1;
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(""));
+            }
+
+            bResult = nCount == triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
