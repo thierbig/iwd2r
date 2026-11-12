@@ -122,6 +122,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_92;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_PROTAGONIST;
     static const BYTE MSG_SUBTYPE_CMESSAGE_START_COMBAT_MUSIC;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_95;
     static const BYTE MSG_SUBTYPE_CMESSAGE_96;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
@@ -1569,6 +1570,31 @@ public:
 
     /* 000C */ LONG m_summonedId;
     /* 0010 */ LONG m_masterId;
+};
+
+// The link message of IcewindCGameEffectDominate (opcode 263, 0x5645A0;
+// vtable 0x84D37C, 0x14 bytes). The effect allocates it inline at 0x56485D
+// with the dominated sprite's id in +0x04, +0x08 and +0x0C and the
+// controlling sprite's id in +0x10, then calls AddMessage. On the receiving
+// machine Run registers the pair with the dismissed-summon table
+// (Icewind586B70::sub_586F20) and changes no object itself. The original
+// C++ class name is unrecovered; the tree names it by its verified subtype
+// 95 (getter 0x4F6BB0), like CMessage89/CMessage96/CMessage97.
+class CMessage95 : public CMessage {
+public:
+    // NOTE: Out-of-line ctor 0x4F6B80; the effect's copy at 0x56485D is the
+    // same store sequence inlined. Arg order: both link ids, then caller and
+    // target for CMessage.
+    CMessage95(LONG link1Id, LONG link2Id, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ LONG m_link1Id;
+    /* 0010 */ LONG m_link2Id;
 };
 
 // The SaveGame action's message (vtable 0x84888C): saves the game under a
