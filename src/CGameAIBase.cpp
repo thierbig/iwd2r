@@ -1594,10 +1594,11 @@ SHORT CGameAIBase::ExecuteAction()
             goto release;
         }
         if (pTarget->GetObjectType() == CGameObject::TYPE_CONTAINER) {
-            // TODO: 0x45134C calls 0x481D30 (not ported): the container drops
-            // its inventory except the items named by the action's second
-            // string; its result is the action return, which keeps the
-            // ACTION_ERROR entry default here.
+            // 0x45134C: the container drops its inventory except the items
+            // named by the action's second string; the drop's result is the
+            // action return.
+            returnValue = static_cast<CGameContainer*>(pTarget)->DropInventoryEXExclude(
+                m_curAction.GetString1());
             goto release;
         }
         // Any other object type takes the 0x451451 ACTION_ERROR exit.
