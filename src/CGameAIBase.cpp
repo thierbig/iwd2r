@@ -497,9 +497,34 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto done;
     case 68:
-        // CallLightning
-        // TODO: 0x44E7A1-0x44E885 (the effect message) not ported.
-        goto done;
+        // CallLightning (0x44E7A1-0x44E885): strikes the target sprite's
+        // position with lightning in this object's area infinity, then
+        // queues a death effect (id 13, amount 0, flags 0x100) on the
+        // target by message. A null target skips both; either way the arm
+        // lands in the tail that forces ACTION_DONE (0x44E1DB).
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL) {
+            const CPoint& pos = pTarget->GetPos();
+            m_pArea->GetInfinity()->CallLightning(pos.x, pos.y);
+            // NOTE: both allocation-failure branches are dead in tree
+            // (throwing new): the effect new's failure jump (0x44E808)
+            // zeroes the pointer and the next store (0x44E832)
+            // dereferences it, and a failed message new posts NULL
+            // (0x44E870). The buffer is owned by the message. The default
+            // CGameEffectDeath construction covers the inlined writes
+            // (vtable 0x8487E8, m_effectID 13 at +0xC, field_18C 0 at
+            // +0x18C).
+            CGameEffectDeath* pEffect = new CGameEffectDeath();
+            pEffect->m_effectAmount = 0;
+            pEffect->m_dwFlags = 0x100;
+            message = new CMessageAddEffect(pEffect, GetId(), pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        // The AddMessage call site (0x44E1D6) falls into the tail that
+        // forces ACTION_DONE (0x44E1DB) before the release block.
+        returnValue = ACTION_DONE;
+        goto release;
     case 82:
         // CreateItem
         returnValue = CreateItem();
