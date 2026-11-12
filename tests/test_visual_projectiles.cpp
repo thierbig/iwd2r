@@ -4189,6 +4189,89 @@ TEST_CASE("visual projectiles: the rebounding bolt decodes to its flight", "[vis
     CHECK(direct.m_speed == plain.m_speed * 2);
 }
 
+// CProjectile84DE94::Fire (0x530010): every launch spawns exactly one
+// rebounding bolt (ctor 0x57D390, the type-207 child), copies this shot's
+// effect list into the child (each effect through its Copy slot, stamped
+// with the child's own projectile type — still 0 on a fresh ctor — and
+// appended to the child's list; the parent's list keeps its originals),
+// hands m_nBounces over, and launches the child with the source id in both
+// id slots. The body has no branch and draws no random numbers: the ctor's
+// -1 and the decoder's 0/1/6 all travel through the same copy.
+TEST_CASE("visual projectiles: the searing light launches a rebounding bolt with its effects and bounces", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    CGameSprite* pSprite = world.pCharacter;
+    CGameSprite* pGoblin = AddCreature(pArea, "00GOB",
+        CPoint(world.pCharacter->GetPos().x + 70, world.pCharacter->GetPos().y + 20));
+    REQUIRE(pGoblin != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    const LONG kBounceArms[] = { 0, 1, 6 };
+    for (LONG nBounces : kBounceArms) {
+        INFO("bounces " << nBounces);
+        CProjectile84DE94 light;
+        light.m_projectileType = 205; // the type-206 decoder's stamp
+        light.m_nBounces = nBounces;
+        std::unique_ptr<CGameEffect> pFirstEffect = DecodeAt(CGAMEEFFECT_AC, 0, 0x11,
+            pSprite->GetPos(), pSprite->GetId(), pSprite->GetPos());
+        REQUIRE(pFirstEffect != nullptr);
+        light.AddEffect(pFirstEffect.release());
+        std::unique_ptr<CGameEffect> pSecondEffect = DecodeAt(CGAMEEFFECT_AC, 0, 0x22,
+            pSprite->GetPos(), pSprite->GetId(), pSprite->GetPos());
+        REQUIRE(pSecondEffect != nullptr);
+        light.AddEffect(pSecondEffect.release());
+        REQUIRE(light.m_effectList.GetCount() == 2);
+        CHECK(light.m_effectList.GetHead()->m_projectileType == 205);
+
+        // The target argument is the goblin; the body never reads it.
+        light.Fire(pArea, pSprite->GetId(), pGoblin->GetId(), pGoblin->GetPos(), 7, 3);
+
+        // Exactly one child per call, registered by its own Fire.
+        CProjectileReboundingBolt* pChild = AddedOne<CProjectileReboundingBolt>(pArea);
+        REQUIRE(pChild != NULL);
+        CHECK(pChild->GetId() != CGameObjectArray::INVALID_INDEX);
+        CHECK(pChild->m_sourceId == pSprite->GetId());
+        CHECK(pChild->m_targetId == pSprite->GetId());
+        CHECK(pChild->m_targetId != pGoblin->GetId());
+        CHECK(pChild->m_pArea == pArea);
+
+        // The bounce hand-off: parent +0x2A0 to child +0x2B2.
+        CHECK(pChild->m_nBounces == nBounces);
+        // The child ctor's own stamps are untouched by the hand-off.
+        CHECK(pChild->m_nDuration == 60);
+
+        // The copies: two new effects, in the parent's order, stamped with
+        // the child's type (0), while the parent keeps its own.
+        REQUIRE(light.m_effectList.GetCount() == 2);
+        REQUIRE(pChild->m_effectList.GetCount() == 2);
+        CHECK(pChild->m_effectList.GetHead() != light.m_effectList.GetHead());
+        POSITION parentPos = light.m_effectList.GetHeadPosition();
+        POSITION childPos = pChild->m_effectList.GetHeadPosition();
+        const LONG kEffectAmounts[] = { 0x11, 0x22 };
+        for (int n = 0; n < 2; n++) {
+            CGameEffect* pParentEffect = light.m_effectList.GetNext(parentPos);
+            CGameEffect* pChildEffect = pChild->m_effectList.GetNext(childPos);
+            CHECK(pParentEffect != pChildEffect);
+            CHECK(pParentEffect->m_effectID == CGAMEEFFECT_AC);
+            CHECK(pChildEffect->m_effectID == CGAMEEFFECT_AC);
+            CHECK(pParentEffect->m_effectAmount == kEffectAmounts[n]);
+            CHECK(pChildEffect->m_effectAmount == kEffectAmounts[n]);
+            CHECK(pParentEffect->m_projectileType == 205);
+            CHECK(pChild->m_projectileType == 0);
+            CHECK(pChildEffect->m_projectileType == 0);
+        }
+
+        // The parent is not registered or removed by its own Fire.
+        CHECK(light.GetId() == CGameObjectArray::INVALID_INDEX);
+
+        pChild->RemoveSelf();
+        pArea->SortLists();
+        ClearMessages();
+    }
+}
+
 TEST_CASE("visual projectiles: the whirlwind decodes to its wander", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);

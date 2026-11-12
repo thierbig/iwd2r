@@ -3515,6 +3515,34 @@ CProjectile84DE94::CProjectile84DE94()
     m_nBounces = CGameObjectArray::INVALID_INDEX;
 }
 
+// 0x530010
+// The searing light launches one wall-rebounding bolt per call (the child
+// ctor 0x57D390, type 207). The body then copies every effect of this shot
+// into the child — each through the effect's own Copy vtable slot, stamped
+// with the child's projectile type (still 0 on a fresh ctor: the exe reads
+// [child+0x6E]) and appended to the child's effect list; this shot keeps
+// its own list — hands m_nBounces (+0x2A0) to the child's +0x2B2, and
+// launches the child with the source id in BOTH id slots (the original
+// never reads the target argument), the same target point, height and type.
+// The child's dispatch is its own slot 0x6C (0x57D700 in the exe, parked
+// here; ours inherits CProjectileSingleTarget::Fire).
+void CProjectile84DE94::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)target;
+
+    CProjectileReboundingBolt* pChild = new CProjectileReboundingBolt();
+
+    POSITION pos = m_effectList.GetHeadPosition();
+    while (pos != NULL) {
+        CGameEffect* pEffect = m_effectList.GetNext(pos)->Copy();
+        pEffect->m_projectileType = pChild->m_projectileType;
+        pChild->m_effectList.AddTail(pEffect);
+    }
+
+    pChild->m_nBounces = m_nBounces;
+    pChild->Fire(pArea, source, source, targetPos, nHeight, nType);
+}
+
 // 0x531360
 CProjectileBolt::CProjectileBolt()
     : CProjectileBAM(CResRef("BOLT"))
@@ -4956,7 +4984,7 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
 // base binds the cell, the strike tracker's ctor 0x55ACC0 runs as the
 // implicit member init at +0x2B6, then the retune: the bolt starts
 // unbounced (-1 — the type-207 decode stamps 1, and the searing light's
-// parked Fire 0x530010 hands its own count down per rebound), sequence 0,
+// Fire 0x530010 hands its own count down per rebound), sequence 0,
 // render flag 8, both height gates cleared, 16 directions, TRA_09b fire
 // sound, the speed doubled with a native WORD shift, a 60-tick duration,
 // and the tracker armed (strike interval 33, service period 2, range 50).

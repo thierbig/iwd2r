@@ -192,7 +192,7 @@ public:
 // The rebounding bolt (vtable 0x85101C, sizeof 0x2EC): the older,
 // wall-rebounding LightnT carrier. DecodeProjectile's type 207 stops it at
 // its first wall (the ctor starts it unbounced), and the searing light's
-// parked Fire 0x530010 spawns one of these per rebound with its own count in
+// Fire 0x530010 spawns one of these per rebound with its own count in
 // m_nBounces. WillScarlettOhara models the family as CProjectileReboundingBolt
 // < IcewindCProjectileTravellingVFX < CProjectileTravelling; the exe ctor
 // 0x57D390 bases it on CProjectileSingleTarget (0x578110) with

@@ -256,9 +256,7 @@ public:
 // hands that count over as the child's m_nBounces (+0x2B2). Against the
 // CProjectileBAM vtable (0x84D9C4) the exe overrides exactly two slots —
 // the deleting dtor 0x52FED0 (over the base's 0x52B010; ours is implicit)
-// and Fire 0x530010 (the bounce hand-off above; not in-tree, undeclared
-// per the IcewindCProjectileScorcher precedent — a declared-but-undefined
-// virtual would become the key function and leave the vtable unemitted).
+// and Fire 0x530010 (the bounce hand-off above).
 // An earlier reading diffed against CProjectile's 0x84D7B8 and counted
 // the base's own AIUpdate 0x52B900, Render 0x52B190, GetField_E6
 // 0x5297D0 and UpdateBasedOnTargetPoint 0x52BD20 as this class's too;
@@ -274,6 +272,10 @@ public:
     // 0x52FE90 (plain ret — no stack args; the cell is hardcoded in the
     // ctor body rather than passed by the decoder)
     CProjectile84DE94();
+    // 0x530010: spawns one CProjectileReboundingBolt (ctor 0x57D390), copies
+    // this shot's effects into it, hands over m_nBounces, and launches the
+    // child with the source id in both id slots.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
 };
 
 // The invisible projectile an area projectile fires at each target, type 79
