@@ -449,6 +449,7 @@ public:
 
     void AddBlood(SHORT nHeight, SHORT nDirection, SHORT nType);
     void RemoveReplacementFromArea();
+    void sub_6F3B80(CGameArea* pNewArea, CPoint pos, LONG posZ, BYTE listType, POSITION posVertList, BOOLEAN bInfravision);
     void AIUpdateWalk();
     void SetPath(LONG* pPath, SHORT nPath);
     void ComputeWaypoint(CPoint& result, LONG** ppPath, SHORT* pnPath, SHORT delay, BYTE* pReachedEnd);

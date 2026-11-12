@@ -3064,30 +3064,34 @@ BOOLEAN CBaldurMessage::OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DW
         pSprite->m_remoteObjectID = nOldRemoteObject;
         pSprite->m_remotePlayerID = nOldRemotePlayer;
 
-        // TODO: 0x6F3B80 not ported: the sprite's re-placement in the old
-        // area (area, position, z, list type, vert list position, infravision).
-        (void)pOldArea;
-        (void)ptOldPos;
-        (void)nOldPosZ;
-        (void)nOldVertListType;
-        (void)posOldVertList;
-        (void)bOldInfravision;
+        // The g_pBaldurChitin->GetBaldurMessage() guard around the placement
+        // (0x42EE72/0x42EE7E) keeps the helper's ObjectAdd out of the reply.
+        if (pOldArea != NULL) {
+            m_bInOnObjectAdd = TRUE;
+            pSprite->sub_6F3B80(pOldArea,
+                ptOldPos,
+                nOldPosZ,
+                nOldVertListType,
+                posOldVertList,
+                bOldInfravision);
+            m_bInOnObjectAdd = FALSE;
 
-        // NOTE: The BYTE at 0x85BBBD is 10.
-        if (nOldSequence != 10) {
-            BYTE nSequence = static_cast<BYTE>(nOldSequence);
-            pSprite->CheckSequence(nSequence);
-            pSprite->SetSequence(nSequence);
-            pSprite->SetDirection(nOldDirection);
-        }
+            // NOTE: The BYTE at 0x85BBBD is 10.
+            if (nOldSequence != 10) {
+                BYTE nSequence = static_cast<BYTE>(nOldSequence);
+                pSprite->CheckSequence(nSequence);
+                pSprite->SetSequence(nSequence);
+                pSprite->SetDirection(nOldDirection);
+            }
 
-        CPoint ptOldGrid(ptOldPos.x / CPathSearch::GRID_SQUARE_SIZEX,
-            ptOldPos.y / CPathSearch::GRID_SQUARE_SIZEY);
-        CPoint ptNewGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
-            pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
-        if ((ptOldGrid.x != ptNewGrid.x || ptOldGrid.y != ptNewGrid.y)
-            && nOldHitPoints > 0) {
-            pSprite->JumpToPoint(ptOldPos, FALSE);
+            CPoint ptOldGrid(ptOldPos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                ptOldPos.y / CPathSearch::GRID_SQUARE_SIZEY);
+            CPoint ptNewGrid(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY);
+            if ((ptOldGrid.x != ptNewGrid.x || ptOldGrid.y != ptNewGrid.y)
+                && nOldHitPoints > 0) {
+                pSprite->JumpToPoint(ptOldPos, FALSE);
+            }
         }
 
         if (bOldSelected) {
