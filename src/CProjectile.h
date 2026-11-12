@@ -122,10 +122,17 @@ public:
 // the deleting dtor (0x57F360 — the ICF fold shares this thunk with
 // CProjectile85112C's; the scalar half 0x57F380 is a jmp straight to
 // CProjectile's 0x51E9B0; ours implicit, the CProjectile84DAD4 precedent)
-// and Fire (0x57F390, not in tree, left undeclared per the same precedent).
+// and Fire (0x57F390, the four-bolt spread declared below).
 class CProjectile85133C : public CProjectile {
 public:
     CProjectile85133C();
+    // 0x57F390. Fires four LightningBolt carriers at the corners of the
+    // rectangle whose diagonal is the source-to-target line: the target
+    // itself, then source + (dx, -dy), source + (-dx, dy) and source +
+    // (-dx, -dy). Each carrier is retuned to a 300-long rake (range 50,
+    // speed 20, 16 directions, TRA_09) and receives a copy of this
+    // projectile's effects before it launches.
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
 };
 
 #endif /* CPROJECTILE_H_ */

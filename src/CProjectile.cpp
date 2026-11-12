@@ -710,8 +710,8 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         pProjectile = pArea;
         break;
     case 312:
-        // A memberless leaf straight on CProjectile; its only real
-        // override is Fire (0x57F390, not in tree).
+        // A memberless leaf straight on CProjectile; its Fire (0x57F390)
+        // throws the four LightningBolt spread.
         pProjectile = new CProjectile85133C();
         break;
     case 313:
@@ -5040,6 +5040,69 @@ CProjectile85133C::CProjectile85133C()
     // stores — the instruction-level match of this same inlined body is
     // recorded in docs/evidence/530790.md for ctor 0x530790. The class
     // adds no members, so there is nothing further to construct.
+}
+
+// 0x57F390
+// The four-bolt spread: with the source held, take its position and build
+// the four corners of the rectangle whose diagonal is source->targetPos.
+// The target itself is the first; the other three are built from the source
+// position along (dx, -dy), (-dx, dy) and (-dx, -dy), each scaled to the
+// source-target distance. Then, once per corner, news a LightningBolt,
+// copies this projectile's effects into it, retunes it (a 300-long rake,
+// 50 range, speed 20, 16 directions, TRA_09) and launches it through its
+// own Fire with the source's area/id and no target object. The share is
+// dropped after the fourth launch.
+void CProjectile85133C::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)pArea;
+    (void)target;
+    (void)nHeight;
+    (void)nType;
+
+    CGameObject* pSource;
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(
+            source, CGameObjectArray::THREAD_ASYNCH, &pSource, INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    const CPoint& sourcePos = pSource->GetPos();
+    LONG dx = targetPos.x - sourcePos.x;
+    LONG dy = targetPos.y - sourcePos.y;
+    // The exe takes CUtil_Hypotenuse (sqrt) straight into __ftol, which
+    // truncates; there is no +0.5 rounding here.
+    LONG nDistance = static_cast<LONG>(sqrt(static_cast<double>(dx * dx + dy * dy)));
+
+    CPoint points[4];
+    points[0] = targetPos;
+    points[1] = IcewindMisc::sub_5847B0(sourcePos, dx, -dy, nDistance);
+    points[2] = IcewindMisc::sub_5847B0(sourcePos, -dx, dy, nDistance);
+    points[3] = IcewindMisc::sub_5847B0(sourcePos, -dx, -dy, nDistance);
+
+    for (int i = 0; i < 4; i++) {
+        CProjectileLightningBolt* pBolt = new CProjectileLightningBolt("LightnT");
+        // The exe inlines the bolt ctor 0x5806C0 (base ctor, tracker and
+        // its owner/period/interval arm) and then overrides the rake.
+        pBolt->m_beamRange = 300;
+        pBolt->m_targetMap.m_nRange = 50;
+        pBolt->m_speed = 20;
+        pBolt->field_1D8 = 16;
+        pBolt->m_visualEffect.sub_586A90(TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+        pBolt->m_bHasHeight = TRUE;
+        pBolt->field_1C2 = TRUE;
+        pBolt->m_fireSoundRef = "TRA_09";
+
+        POSITION pos = m_effectList.GetHeadPosition();
+        while (pos != NULL) {
+            CGameEffect* effect = m_effectList.GetNext(pos);
+            pBolt->AddEffect(effect->Copy());
+        }
+
+        pBolt->Fire(pSource->m_pArea, pSource->m_id, CGameObjectArray::INVALID_INDEX, points[i], 0, 0);
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(
+        source, CGameObjectArray::THREAD_ASYNCH, INFINITE);
 }
 
 // 0x57F640
