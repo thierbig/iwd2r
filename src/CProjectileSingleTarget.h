@@ -331,10 +331,11 @@ public:
 // (its scalar body 0x5803E0 is the compiler's member teardown: the loop
 // sound's CSound dtor first at +0x310, then the wall tracker's map at
 // +0x2B4, spelled implicitly by ours), slot 0x0C AIUpdate 0x580550, slot
-// 0x6C Fire 0x580600, and slot 0x70 OnArrival 0x5820B0. Those three are
-// not ported and none of the four is declared — a declared-but-undefined
-// virtual would become the key function and leave the vtable unemitted —
-// so the class inherits the base virtuals for them.
+// 0x6C Fire 0x580600, and slot 0x70 OnArrival 0x5820B0 (ported below,
+// shared with the Wall of Fire). AIUpdate and Fire are not ported and are
+// not declared — a declared-but-undefined virtual would become the key
+// function and leave the vtable unemitted — so the class inherits the base
+// virtuals for them.
 class CProjectileWallOfMoonlight : public CProjectileSingleTarget {
 public:
     // 0x5802B0. Binds the WoMoonX wall through the base, constructs the
@@ -348,6 +349,13 @@ public:
     // gates cleared along with field_1DE and the byte at +0x2A0, and the
     // AFT_P21 fire sound looped.
     CProjectileWallOfMoonlight();
+
+    // 0x5820B0 (the same function the Wall of Fire's vtable carries at
+    // 0x70). On arrival the wall starts its ARE_P22 loop once — fire and
+    // forget on channel 15 of the area, at the wall's position — and
+    // latches the byte at +0x2B2 with field_1DE; a second arrival only
+    // re-latches both.
+    /* 0070 */ void OnArrival() override;
 
     // The wall tracker the ctor arms (the derived wall map, not the base:
     // owner +0x2B8, service period +0x2CC, per-victim cap +0x2D8, range
@@ -427,10 +435,9 @@ public:
 // wall tracker's map walk at +0x2B4, spelled implicitly by ours), slot
 // 0x0C AIUpdate 0x581F40, slot 0x6C Fire 0x581FF0, and slot 0x70
 // OnArrival 0x5820B0 — the same shared override the moonlight wall
-// carries. Those three are not ported and none of the four is declared —
-// a declared-but-undefined virtual would become the key function and
-// leave the vtable unemitted — so the class inherits the base virtuals
-// for them.
+// carries. AIUpdate and Fire are not ported and are not declared — a
+// declared-but-undefined virtual would become the key function and leave
+// the vtable unemitted — so the class inherits the base virtuals for them.
 class CProjectileWallOfFire : public CProjectileSingleTarget {
 public:
     // 0x581CA0. Statement-for-statement the moonlight wall's ctor with
@@ -444,6 +451,11 @@ public:
     // visual effect, both height gates cleared along with field_1DE, and
     // the AFT_P21 fire sound looped.
     CProjectileWallOfFire();
+
+    // 0x5820B0, the same body as the moonlight wall's (see
+    // CProjectileWallOfMoonlight::OnArrival); both vtables hold this one
+    // function at slot 0x70.
+    /* 0070 */ void OnArrival() override;
 
     // The wall tracker the ctor arms (the derived wall map, not the base:
     // owner +0x2B8, service period +0x2CC, strike interval +0x2D4,
