@@ -1759,6 +1759,38 @@ SHORT CGameContainer::DropInventoryEXExclude(CString sItem)
     return ACTION_DONE;
 }
 
+// RemoveItem: the slot's item goes to the game's disposable list, the slot
+// leaves the list, and - on the AR6051 endgame area - sub_480480 clears the
+// slot's render state too. The area resref is read without a null check, as
+// the original does. The container-add message that follows carries a
+// default-constructed item, not the removed one, and goes out even when the
+// slot number found nothing.
+//
+// 0x481EB0
+void CGameContainer::RemoveItem(SHORT nSlotNum)
+{
+    POSITION pos = m_lstItems.FindIndex(nSlotNum);
+    if (pos != NULL) {
+        CItem* pItem = m_lstItems.GetAt(pos);
+        if (pItem != NULL) {
+            g_pBaldurChitin->GetObjectGame()->AddDisposableItem(pItem);
+        }
+
+        if (m_pArea->m_resRef == RESREF_AR6051) {
+            sub_480480(nSlotNum, NULL);
+        }
+
+        m_lstItems.RemoveAt(pos);
+    }
+
+    CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(CItem(),
+        0x7FFF,
+        TRUE,
+        m_id,
+        m_id);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+}
+
 // FIXME: `scriptRes` should be reference.
 //
 // 0x45FE90
