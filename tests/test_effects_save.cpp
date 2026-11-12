@@ -1114,6 +1114,388 @@ TEST_CASE("OnAddSpecific: regeneration caps its time (0x4B65B0), charm forgets i
     delete pGoblin;
 }
 
+// Dominate (opcode 263, 0x5645A0): the first pass takes the source's
+// allegiance (or the stored one on later passes), a non-zero effect amount
+// gates the target's general type, a PC source goes through the summon
+// registry and queues the ATTACKREEVALUATE action, and the five-way switch
+// on m_dwFlags (exe +0x1c) checks m_durationType (exe +0x20) in every arm.
+// Its source-success arm also posts the CMessage95 target/source pair
+// (vtable 0x84D37C); the first-pass section checks its exact payload.
+TEST_CASE("Dominate (0x5645A0): the first pass takes the source's allegiance and the later passes replay it", "[effects][checksave][data]")
+{
+    PROBE_OR_SKIP(pProbe);
+    CGameSprite* pGoblin = MakeGoblin();
+    Icewind586B70* pTable = Icewind586B70::Instance();
+
+    // pProbe is shared by every case in this file. Snapshot the bytes and
+    // states this effect can change and put them back exactly.
+    const BYTE probeEnemyAlly = pProbe->m_typeAI.m_nEnemyAlly;
+    const BYTE probeSubRace = pProbe->m_typeAI.m_nSubRace;
+    const BYTE probeLiveEnemyAlly = pProbe->m_liveTypeAI.m_nEnemyAlly;
+    const BYTE probeLiveSubRace = pProbe->m_liveTypeAI.m_nSubRace;
+    const BYTE probeStartEnemyAlly = pProbe->m_startTypeAI.m_nEnemyAlly;
+    const BYTE probeStartSubRace = pProbe->m_startTypeAI.m_nSubRace;
+    const DWORD probeDerived = pProbe->m_derivedStats.m_generalState;
+    const DWORD probeBase = pProbe->m_baseStats.m_generalState;
+
+    const CAIObjectType before(pGoblin->GetAIType());
+    const CAIObjectType beforeLive(pGoblin->m_liveTypeAI);
+    const CAIObjectType beforeStart(pGoblin->m_startTypeAI);
+    const DWORD beforeDerived = pGoblin->m_derivedStats.m_generalState;
+    const DWORD beforeBase = pGoblin->m_baseStats.m_generalState;
+    const BOOL beforeInterrupt = pGoblin->m_interrupt;
+
+    auto resetProbe = [&]() {
+        pProbe->m_typeAI.m_nEnemyAlly = probeEnemyAlly;
+        pProbe->m_typeAI.m_nSubRace = probeSubRace;
+        pProbe->m_liveTypeAI.m_nEnemyAlly = probeLiveEnemyAlly;
+        pProbe->m_liveTypeAI.m_nSubRace = probeLiveSubRace;
+        pProbe->m_startTypeAI.m_nEnemyAlly = probeStartEnemyAlly;
+        pProbe->m_startTypeAI.m_nSubRace = probeStartSubRace;
+        pProbe->m_derivedStats.m_generalState = probeDerived;
+        pProbe->m_baseStats.m_generalState = probeBase;
+    };
+
+    auto resetTarget = [&]() {
+        pGoblin->m_typeAI.Set(before);
+        pGoblin->m_liveTypeAI.Set(beforeLive);
+        pGoblin->m_startTypeAI.Set(beforeStart);
+        pGoblin->m_derivedStats.m_generalState = beforeDerived;
+        pGoblin->m_baseStats.m_generalState = beforeBase;
+        pGoblin->m_interrupt = beforeInterrupt;
+        while (!pGoblin->m_queuedActions.IsEmpty()) {
+            delete pGoblin->m_queuedActions.RemoveHead();
+        }
+    };
+
+    auto cleanup = [&]() {
+        resetProbe();
+        resetTarget();
+        pTable->Clear();
+        ClearMessages();
+    };
+
+    SECTION("decodes to the dominate class and copies as one")
+    {
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, CGameObjectArray::INVALID_INDEX);
+        REQUIRE(dynamic_cast<IcewindCGameEffectDominate*>(pEffect.get()) != nullptr);
+        std::unique_ptr<CGameEffect> pCopy(pEffect->Copy());
+        REQUIRE(dynamic_cast<IcewindCGameEffectDominate*>(pCopy.get()) != nullptr);
+    }
+
+    SECTION("a non-zero effect amount only dominates its general type")
+    {
+        pGoblin->m_typeAI.m_nGeneral = 1;
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 2, CGameObjectArray::INVALID_INDEX);
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+        CHECK(pEffect->m_done == TRUE);
+        CHECK(pEffect->m_numDice == static_cast<DWORD>(-1));
+        CHECK(pEffect->m_diceSize == static_cast<DWORD>(-1));
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == before.m_nEnemyAlly);
+        CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == beforeLive.m_nEnemyAlly);
+        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+        CHECK(pGoblin->m_derivedStats.m_generalState == beforeDerived);
+        CHECK(pGoblin->m_baseStats.m_generalState == beforeBase);
+        CHECK(pGoblin->m_queuedActions.IsEmpty());
+    }
+
+    SECTION("the first pass from a PC source shares it, links it and queues the action")
+    {
+        resetProbe();
+        pGoblin->m_typeAI.m_nGeneral = 1;
+        pProbe->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_PC;
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, pProbe->GetId());
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+        // The source is a PC (not an enemy), so the pre-switch allegiance is
+        // zero; flags 0 turns it into EA_0x847C3A. The goblin has no
+        // portrait, so this is not a party charm.
+        CHECK(pEffect->m_done == FALSE);
+        CHECK(pEffect->m_numDice == CAIObjectType::EA_0x847C3A);
+        CHECK(pEffect->m_diceSize == 0);
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == CAIObjectType::EA_0x847C3A);
+        CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == CAIObjectType::EA_0x847C3A);
+        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+        CHECK((pGoblin->m_derivedStats.m_generalState & STATE_CHARMED) != 0);
+        CHECK((pGoblin->m_baseStats.m_generalState & STATE_CHARMED) == 0);
+        CHECK(pGoblin->m_interrupt == TRUE);
+
+        CHECK(pTable->mEntries[0].field_0 == pGoblin->GetId());
+        CHECK(pTable->mEntries[0].field_4 == pProbe->GetId());
+        CHECK(pTable->mEntries[0].field_8 == true);
+
+        REQUIRE(!pGoblin->m_queuedActions.IsEmpty());
+        CAIAction* pAction = pGoblin->m_queuedActions.GetHead();
+        REQUIRE(pAction != nullptr);
+        CHECK(pAction->m_actionID == CAIAction::ATTACKREEVALUATE);
+        CHECK(pAction->m_acteeID.m_nEnemyAlly == 0);
+        CHECK(pAction->m_specificID == 45);
+        CHECK(pAction->m_specificID2 == -1);
+        CHECK(pAction->m_specificID3 == 0);
+        CHECK(pAction->m_string1 == "");
+        CHECK(pAction->m_string2 == "");
+        CHECK(pAction->m_dest == CPoint(-1, -1));
+        CHECK(pAction->m_internalFlags == 0);
+
+        std::vector<CMessage95*> links;
+        for (CMessage* pCurrent : Messages()) {
+            if (CMessage95* pLink = dynamic_cast<CMessage95*>(pCurrent)) {
+                links.push_back(pLink);
+            }
+        }
+        REQUIRE(links.size() == 1);
+        CMessage95* pMessage = links[0];
+        REQUIRE(pMessage != nullptr);
+        CHECK(pMessage->m_link1Id == pGoblin->GetId());
+        CHECK(pMessage->m_link2Id == pProbe->GetId());
+        CHECK(pMessage->GetSource() == pGoblin->GetId());
+        CHECK(pMessage->GetTarget() == pGoblin->GetId());
+    }
+
+    SECTION("an enemy source is remapped, but the action keeps the pre-switch type")
+    {
+        resetProbe();
+        pGoblin->m_typeAI.m_nGeneral = 1;
+        pProbe->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_ENEMY;
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, pProbe->GetId());
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+        CHECK(pEffect->m_done == FALSE);
+        CHECK(pEffect->m_numDice == CAIObjectType::EA_CHARMED_PC);
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == CAIObjectType::EA_CHARMED_PC);
+        CHECK(pTable->mEntries[0].field_0 == 0);
+
+        REQUIRE(!pGoblin->m_queuedActions.IsEmpty());
+        CHECK(pGoblin->m_queuedActions.GetHead()->m_acteeID.m_nEnemyAlly == CAIObjectType::EA_ENEMY);
+    }
+
+    SECTION("a full summon registry finishes the first pass without linking or changing the sprite")
+    {
+        resetProbe();
+        pGoblin->m_typeAI.m_nGeneral = 1;
+        pProbe->m_typeAI.m_nEnemyAlly = CAIObjectType::EA_PC;
+        for (int index = 0; index < 6; index++) {
+            pTable->mEntries[index] = Icewind586B70::Entry(1000 + index, 2000 + index);
+        }
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, pProbe->GetId());
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+        CHECK(pEffect->m_done == TRUE);
+        CHECK(pEffect->m_numDice == static_cast<DWORD>(-1));
+        CHECK(pEffect->m_diceSize == static_cast<DWORD>(-1));
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == before.m_nEnemyAlly);
+        CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == beforeLive.m_nEnemyAlly);
+        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+        CHECK(pGoblin->m_derivedStats.m_generalState == beforeDerived);
+        CHECK(pGoblin->m_baseStats.m_generalState == beforeBase);
+        CHECK(pGoblin->m_queuedActions.IsEmpty());
+    }
+
+    SECTION("no source takes the flags defaults")
+    {
+        pGoblin->m_typeAI.m_nGeneral = 1;
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, CGameObjectArray::INVALID_INDEX);
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+        CHECK(pEffect->m_done == FALSE);
+        CHECK(pEffect->m_numDice == CAIObjectType::EA_0x847C3A);
+        CHECK(pEffect->m_diceSize == 0);
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == CAIObjectType::EA_0x847C3A);
+        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+        CHECK((pGoblin->m_derivedStats.m_generalState & STATE_CHARMED) != 0);
+        CHECK(pGoblin->m_queuedActions.IsEmpty());
+    }
+
+    SECTION("a stored temporary allegiance replays without a source")
+    {
+        pGoblin->m_typeAI.m_nGeneral = 1;
+
+        std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 0, 0, CGameObjectArray::INVALID_INDEX);
+        pEffect->m_durationType = 0;
+        pEffect->OnAddSpecific(pGoblin);
+        pEffect->m_numDice = CAIObjectType::EA_ENEMY;
+        pEffect->m_diceSize = 1;
+        CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+        CHECK(pEffect->m_done == FALSE);
+        CHECK(pEffect->m_numDice == CAIObjectType::EA_CHARMED_PC);
+        CHECK(pEffect->m_diceSize == 1);
+        CHECK(pGoblin->GetAIType().m_nEnemyAlly == CAIObjectType::EA_CHARMED_PC);
+        CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == CAIObjectType::EA_CHARMED_PC);
+        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+        CHECK((pGoblin->m_derivedStats.m_generalState & STATE_CHARMED) != 0);
+        CHECK((pGoblin->m_baseStats.m_generalState & STATE_CHARMED) == 0);
+        CHECK(pGoblin->m_queuedActions.IsEmpty());
+    }
+
+    // Each jump-table arm, with m_duration deliberately opposite to the
+    // duration type: an implementation that reads m_duration (+0x24) or uses
+    // durationType as the switch index fails here.
+    SECTION("each jump-table arm separates m_dwFlags from m_durationType and m_duration")
+    {
+        for (DWORD flags = 0; flags <= 4; flags++) {
+            for (DWORD durationType = 0; durationType <= 1; durationType++) {
+                resetTarget();
+                pTable->Clear();
+                ClearMessages();
+                pGoblin->m_typeAI.m_nGeneral = 1;
+
+                std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, flags, 0, CGameObjectArray::INVALID_INDEX);
+                pEffect->m_durationType = durationType;
+                pEffect->m_duration = durationType == 1 ? 0 : 1;
+                pEffect->OnAddSpecific(pGoblin);
+                pEffect->m_numDice = CAIObjectType::EA_ALLY;
+                pEffect->m_diceSize = 0;
+                CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+                INFO("flags=" << flags << " durationType=" << durationType);
+                CHECK(pEffect->m_duration == (durationType == 1 ? 0 : 1));
+                CHECK(pEffect->m_numDice == CAIObjectType::EA_ALLY);
+                CHECK(pGoblin->GetAIType().m_nEnemyAlly == CAIObjectType::EA_ALLY);
+                CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == CAIObjectType::EA_ALLY);
+
+                if (durationType == 1) {
+                    CHECK(pEffect->m_done == TRUE);
+                    CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == CAIObjectType::EA_ALLY);
+                    CHECK((pGoblin->m_baseStats.m_generalState & STATE_CHARMED) != 0);
+                } else {
+                    CHECK(pEffect->m_done == FALSE);
+                    if (flags == 1 || flags == 3 || flags == 4) {
+                        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == CAIObjectType::EA_EVILCUTOFF);
+                    } else {
+                        CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+                    }
+                    CHECK((pGoblin->m_baseStats.m_generalState & STATE_CHARMED) == 0);
+                }
+
+                CHECK((pGoblin->m_derivedStats.m_generalState & STATE_CHARMED) != 0);
+            }
+        }
+    }
+
+    SECTION("the zero default is 7 for flags 0 and 1, 5 for flags 2 to 4")
+    {
+        for (DWORD flags = 0; flags <= 4; flags++) {
+            resetTarget();
+            pTable->Clear();
+            ClearMessages();
+            pGoblin->m_typeAI.m_nGeneral = 1;
+
+            std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, flags, 0, CGameObjectArray::INVALID_INDEX);
+            pEffect->m_durationType = 0;
+            pEffect->m_duration = 1;
+            pEffect->OnAddSpecific(pGoblin);
+            pEffect->m_numDice = 0;
+            pEffect->m_diceSize = 0;
+            CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+            const BYTE expected = flags <= 1 ? CAIObjectType::EA_0x847C3A : CAIObjectType::EA_CONTROLLED;
+            INFO("flags=" << flags);
+            CHECK(pEffect->m_duration == 1);
+            CHECK(pEffect->m_done == FALSE);
+            CHECK(pEffect->m_numDice == expected);
+            CHECK(pGoblin->GetAIType().m_nEnemyAlly == expected);
+            CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == expected);
+            if (flags == 1 || flags == 3 || flags == 4) {
+                CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == CAIObjectType::EA_EVILCUTOFF);
+            } else {
+                CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+            }
+        }
+    }
+
+    SECTION("a party charm leaves the start type and m_done alone in flags 1, 3 and 4")
+    {
+        const DWORD arms[] = { 1, 3, 4 };
+        for (DWORD flags : arms) {
+            resetTarget();
+            pTable->Clear();
+            ClearMessages();
+            pGoblin->m_typeAI.m_nGeneral = 1;
+
+            std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, flags, 0, CGameObjectArray::INVALID_INDEX);
+            pEffect->m_durationType = 0;
+            pEffect->m_duration = 1;
+            pEffect->OnAddSpecific(pGoblin);
+            pEffect->m_numDice = CAIObjectType::EA_ENEMY;
+            pEffect->m_diceSize = 1;
+            CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+            INFO("flags=" << flags);
+            CHECK(pEffect->m_done == FALSE);
+            CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+            CHECK(pEffect->m_numDice == (flags == 1 ? CAIObjectType::EA_CHARMED_PC : CAIObjectType::EA_ENEMY));
+        }
+    }
+
+    SECTION("a portrait also leaves the start type and m_done alone in flags 1, 3 and 4")
+    {
+        const DWORD arms[] = { 1, 3, 4 };
+        for (DWORD flags : arms) {
+            resetProbe();
+            pProbe->m_typeAI.m_nGeneral = 1;
+
+            std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, flags, 0, CGameObjectArray::INVALID_INDEX);
+            pEffect->m_durationType = 0;
+            pEffect->m_duration = 1;
+            pEffect->OnAddSpecific(pProbe);
+            pEffect->m_numDice = CAIObjectType::EA_ENEMY;
+            pEffect->m_diceSize = 0;
+            CHECK(pEffect->ApplyEffect(pProbe) == TRUE);
+
+            INFO("flags=" << flags);
+            CHECK(pEffect->m_done == FALSE);
+            CHECK(pProbe->m_startTypeAI.m_nEnemyAlly == probeStartEnemyAlly);
+            CHECK(pEffect->m_numDice == (flags == 1 ? CAIObjectType::EA_CHARMED_PC : CAIObjectType::EA_ENEMY));
+        }
+    }
+
+    SECTION("flags above 4 skip the switch and the AI-type update, but still write the state")
+    {
+        for (DWORD durationType = 0; durationType <= 1; durationType++) {
+            resetTarget();
+            pTable->Clear();
+            ClearMessages();
+            pGoblin->m_typeAI.m_nGeneral = 1;
+
+            std::unique_ptr<CGameEffect> pEffect = Decode(ICEWIND_CGAMEEFFECT_DOMINATE, 5, 0, CGameObjectArray::INVALID_INDEX);
+            pEffect->m_durationType = durationType;
+            pEffect->m_duration = durationType == 1 ? 0 : 1;
+            pEffect->OnAddSpecific(pGoblin);
+            pEffect->m_numDice = 0;
+            pEffect->m_diceSize = 0;
+            CHECK(pEffect->ApplyEffect(pGoblin) == TRUE);
+
+            INFO("durationType=" << durationType);
+            CHECK(pEffect->m_duration == (durationType == 1 ? 0 : 1));
+            CHECK(pEffect->m_numDice == 0);
+            CHECK(pGoblin->GetAIType().m_nEnemyAlly == before.m_nEnemyAlly);
+            CHECK(pGoblin->m_liveTypeAI.m_nEnemyAlly == beforeLive.m_nEnemyAlly);
+            CHECK(pGoblin->m_startTypeAI.m_nEnemyAlly == beforeStart.m_nEnemyAlly);
+            CHECK((pGoblin->m_derivedStats.m_generalState & STATE_CHARMED) != 0);
+            CHECK(((pGoblin->m_baseStats.m_generalState & STATE_CHARMED) != 0) == (durationType == 1));
+        }
+    }
+
+    cleanup();
+    delete pGoblin;
+}
+
 TEST_CASE("Slippery Mind's OnRemove (0x4A5EF0): a made save breaks the charm, a failed one keeps it", "[effects][checksave][data]")
 {
     PROBE_OR_SKIP(pProbe);
