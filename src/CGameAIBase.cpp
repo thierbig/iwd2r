@@ -7780,6 +7780,85 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nCount == triggerCopy.GetSpecifics();
         }
         break;
+    case 0x40C2:
+        // TotalItemCntExcludeGT(object, n, excluded): the walk of 0x40C1
+        // above, against n by greater -- and the one arm of the family
+        // whose container count takes the excluded name instead of "".
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    if (pItem->GetResRef() == triggerCopy.GetString1()) {
+                        continue;
+                    }
+
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(triggerCopy.GetString1()));
+                    } else {
+                        nCount += 1;
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(triggerCopy.GetString1()));
+            }
+
+            bResult = nCount > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40C3:
+        // TotalItemCntExcludeLT(object, n, excluded): the walk of 0x40C1
+        // above, against n by less.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    if (pItem->GetResRef() == triggerCopy.GetString1()) {
+                        continue;
+                    }
+
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(triggerCopy.GetString1()));
+                    } else {
+                        nCount += 1;
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(""));
+            }
+
+            bResult = nCount < triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
