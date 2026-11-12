@@ -4217,3 +4217,58 @@ TEST_CASE("ai: ExecuteAction 185 287 and 284 master area hp percent and script n
     g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
     ClearMessages();
 }
+
+// Task 83n: case 133 ClearActions. The arm resolves the actee through the
+// shared preamble (ExecuteActionGetActee): a missing actee keeps the
+// entry-default error, and a sprite immune to the caller's AI type is
+// released and dropped the same way. A live target has its queue cleared
+// (CMessageClearActions) and a NO_ACTION queued in its place
+// (CMessageAddAction) so it stops whatever it was doing.
+TEST_CASE("ai: ExecuteAction 133 ClearActions clears the target queue and queues NO_ACTION",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // A missing actee: the entry-default error, and nothing is queued.
+    CAIObjectType missing(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id + 1000, 0, 0);
+    pCaller->SetCurrAction(CAIAction(133, missing, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
+
+    // A sprite immune to the caller's AI type is released and dropped: the
+    // same error, still nothing queued.
+    pSprite->m_derivedStats.m_cImmunitiesAIType.AddTail(new CAIObjectType(pCaller->m_typeAI));
+    pCaller->SetCurrAction(CAIAction(133, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
+    delete pSprite->m_derivedStats.m_cImmunitiesAIType.RemoveTail();
+
+    // A live target: the queue-clear message and the replacement NO_ACTION,
+    // both from the caller to the target sprite.
+    pCaller->SetCurrAction(CAIAction(133, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageClearActions*> cleared = Queued<CMessageClearActions>();
+        REQUIRE(cleared.size() == 1);
+        CHECK(cleared[0]->GetSource() == pCaller->m_id);
+        CHECK(cleared[0]->GetTarget() == pSprite->m_id);
+    }
+    {
+        const std::vector<CMessageAddAction*> added = Queued<CMessageAddAction>();
+        REQUIRE(added.size() == 1);
+        CHECK(added[0]->GetSource() == pCaller->m_id);
+        CHECK(added[0]->GetTarget() == pSprite->m_id);
+        CHECK(added[0]->m_action.m_actionID == CAIAction::NO_ACTION);
+        CHECK(added[0]->m_action.m_specificID == 0);
+        CHECK(added[0]->m_action.m_specificID2 == -1);
+        CHECK(added[0]->m_action.m_dest.x == -1);
+        CHECK(added[0]->m_action.m_dest.y == -1);
+    }
+
+    ClearMessages();
+}
