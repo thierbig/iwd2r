@@ -1682,6 +1682,83 @@ SHORT CGameContainer::CountItemExcept(CString sItem)
     return nCount;
 }
 
+// DropInventoryEXExclude: every item whose resref does not equal sItem moves
+// to the container's ground pile; the named item stays. A missing area or an
+// empty list is nothing to drop; a ground pile that cannot be acquired fails
+// the action. A dropped slot is compressed away while the slot counter still
+// advances, so the item shifted into a dropped slot is skipped - the exe
+// walks it that way, and so does this port.
+//
+// 0x481D30
+SHORT CGameContainer::DropInventoryEXExclude(CString sItem)
+{
+    if (m_pArea == NULL) {
+        return ACTION_DONE;
+    }
+
+    if (m_lstItems.GetCount() <= 0) {
+        return ACTION_DONE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    BOOL bDenied = FALSE;
+    CGameContainer* pGroundPile = NULL;
+    LONG nGroundPileId = 0;
+
+    // The list count is re-read every pass, so the loop ends once the
+    // compressed list catches up with the slot counter.
+    for (SHORT nSlotNum = 0; nSlotNum < m_lstItems.GetCount(); nSlotNum++) {
+        if (!bDenied) {
+            nGroundPileId = pGame->GetGroundPile(m_id);
+            if (nGroundPileId == CGameObjectArray::INVALID_INDEX) {
+                return ACTION_ERROR;
+            }
+
+            if (pGame->GetObjectArray()->GetDeny(nGroundPileId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pGroundPile),
+                    INFINITE)
+                != CGameObjectArray::SUCCESS) {
+                return ACTION_ERROR;
+            }
+
+            bDenied = TRUE;
+        }
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CGameContainer.cpp
+        // __LINE__: 1791
+        UTIL_ASSERT(nSlotNum >= 0);
+
+        POSITION pos = m_lstItems.FindIndex(nSlotNum);
+        CItem* pItem = (pos != NULL) ? m_lstItems.GetAt(pos) : NULL;
+
+        BOOL bCompress = TRUE;
+        if (pItem != NULL) {
+            if (pItem->GetResRef() != sItem) {
+                pGroundPile->PlaceItemInBlankSlot(pItem, TRUE, 0x7FFF);
+                SetItem(nSlotNum, NULL);
+            } else {
+                // 0x481E42: the named item stays, and the list is not
+                // compressed for it.
+                bCompress = FALSE;
+            }
+        }
+
+        if (bCompress) {
+            CompressContainer();
+        }
+    }
+
+    if (bDenied) {
+        pGame->GetObjectArray()->ReleaseDeny(nGroundPileId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    return ACTION_DONE;
+}
+
 // FIXME: `scriptRes` should be reference.
 //
 // 0x45FE90
