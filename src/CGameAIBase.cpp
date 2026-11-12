@@ -1890,11 +1890,14 @@ SHORT CGameAIBase::ExecuteAction()
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
         if (pTarget != NULL) {
             bShare = TRUE;
-            // TODO: 0x4517A8 calls 0x7624F0 (not ported): the target sprite
-            // takes the spell-hit effect at the action's destination
-            // (m_curAction.GetDest(), source id 0, m_curAction.GetSpecifics(),
-            // GetSpecifics2()); its result is the action return, which keeps
-            // the ACTION_ERROR entry default here.
+            // 0x4517A8: the target sprite takes the spell-hit effect at the
+            // action's destination (source id 0 in the fifth argument slot).
+            returnValue = static_cast<CGameSprite*>(pTarget)->SpellHitEffect(
+                static_cast<CGameSprite*>(pTarget),
+                m_curAction.GetDest(),
+                0,
+                m_curAction.GetSpecifics(),
+                m_curAction.GetSpecifics2());
         } else {
             pTarget = GetTargetShareType(CGameObject::TYPE_CONTAINER);
             if (pTarget != NULL) {
@@ -1927,11 +1930,14 @@ SHORT CGameAIBase::ExecuteAction()
                 // without releasing the share sub_40CB20 acquired.
                 returnValue = ACTION_ERROR;
             } else {
-                // TODO: 0x451882 calls 0x7624F0 (not ported): the target
-                // sprite takes the spell-hit effect at the actee's position
-                // and id (pActee->GetPos(), pActee->GetId(),
-                // GetSpecifics(), GetSpecifics2()); its result is the action
-                // return, which keeps the ACTION_ERROR entry default here.
+                // 0x451882: the target sprite takes the spell-hit effect at
+                // the actee's position and id.
+                returnValue = static_cast<CGameSprite*>(pTarget)->SpellHitEffect(
+                    static_cast<CGameSprite*>(pTarget),
+                    pActee->GetPos(),
+                    pActee->GetId(),
+                    m_curAction.GetSpecifics(),
+                    m_curAction.GetSpecifics2());
                 g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
                     CGameObjectArray::THREAD_ASYNCH,
                     INFINITE);

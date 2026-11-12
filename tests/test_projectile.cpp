@@ -7,6 +7,7 @@
 #include "CGameSprite.h"
 #include "CInfGame.h"
 #include "CMessage.h"
+#include "CNetwork.h"
 #include "CProjectile.h"
 #include "CProjectile850F9C.h"
 #include "CProjectileArea.h"
@@ -1030,4 +1031,124 @@ TEST_CASE("projectile: Magic Missile fires its missiles at the target with copie
 
     ClearMessages();
     pSprite->GetArea()->SortLists();
+}
+
+// CMessageSpellHitEffectSecondaryProjectile (vtable 0x84D4F4): the ctor
+// stores the type it receives plus one; MarshalMessage writes 35 bytes,
+// UnmarshalMessage reads them back in the same order, and Run decodes the
+// message's type and fires it at the staged projectile target. The remote
+// array maps the sprite's remote ids back to its local id so the round trip
+// can compare the object-id fields.
+TEST_CASE("projectile: the secondary spell-hit message round-trips its wire fields", "[projectile][data]")
+{
+    PROBE_OR_SKIP(pSprite);
+    ClearMessages();
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameRemoteObjectArray* pRemotes = pGame->GetRemoteObjectArray();
+    REQUIRE(pRemotes != NULL);
+
+    const PLAYER_ID nSavedPlayer = pSprite->m_remotePlayerID;
+    const LONG nSavedObject = pSprite->m_remoteObjectID;
+    pSprite->m_remotePlayerID = 7;
+    pSprite->m_remoteObjectID = 0x00010001;
+
+    // The remote object array's Find reads a node out of the bucket for the
+    // upper half of the remote object id (1 here); stage one for the sprite.
+    CGameRemoteObjectListEntry* pSavedEntry = pRemotes->m_pArray[1];
+    auto* pEntry = new CGameRemoteObjectListEntry();
+    pEntry->remotePlayerID = pSprite->m_remotePlayerID;
+    pEntry->remoteObjectID = pSprite->m_remoteObjectID;
+    pEntry->localObjectID = pSprite->GetId();
+    pEntry->pNext = NULL;
+    pRemotes->m_pArray[1] = pEntry;
+
+    const CPoint ptTarget(321, 654);
+    CMessageSpellHitEffectSecondaryProjectile sent(0x1000,
+        pSprite->GetId(),
+        ptTarget,
+        45,
+        pSprite->GetId(),
+        pSprite->GetId(),
+        9);
+    // The ctor adds one: 0x1000 + 1 is the spell-hit type 0's real type.
+    CHECK(sent.m_projectileType == 0x1001);
+    CHECK(sent.m_projectileTargetId == pSprite->GetId());
+    CHECK(sent.m_height == 45);
+    CHECK(sent.field_1E == 9);
+    CHECK(sent.field_20 == 0);
+
+    BYTE buffer[3 + 35] = { };
+    BYTE* pData = buffer + CNetwork::SPEC_MSG_HEADER_LENGTH;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pData, &dwSize);
+    CHECK(dwSize == 35);
+
+    CMessageSpellHitEffectSecondaryProjectile received(0, 0, CPoint(-1, -1), 0, 0, 0, 0);
+    CHECK(received.UnmarshalMessage(buffer, dwSize + CNetwork::SPEC_MSG_HEADER_LENGTH) == TRUE);
+    CHECK(received.m_targetId == pSprite->GetId());
+    CHECK(received.m_projectileType == sent.m_projectileType);
+    CHECK(received.m_projectileTargetId == sent.m_projectileTargetId);
+    CHECK(received.m_projectileTarget == ptTarget);
+    CHECK(received.m_height == sent.m_height);
+    CHECK(received.field_1E == sent.field_1E);
+    CHECK(received.field_20 == sent.field_20);
+
+    pRemotes->m_pArray[1] = pSavedEntry;
+    delete pEntry;
+    pSprite->m_remotePlayerID = nSavedPlayer;
+    pSprite->m_remoteObjectID = nSavedObject;
+}
+
+TEST_CASE("projectile: the secondary spell-hit message Run fires its decoded projectile", "[projectile][data]")
+{
+    PROBE_OR_SKIP(pSprite);
+    ClearMessages();
+    REQUIRE(pSprite->GetArea() != NULL);
+
+    CGameObjectArray* pArray = g_pBaldurChitin->GetObjectGame()->GetObjectArray();
+    const SHORT nNextObjectIdBefore = pArray->m_nNextObjectId;
+    auto objectListCount = [pSprite]() {
+        CGameArea* pArea = pSprite->GetArea();
+        return pArea->m_lVertSortAdd.GetCount() + pArea->m_lVertSortBackAdd.GetCount()
+            + pArea->m_lVertSortFlightAdd.GetCount();
+    };
+    const INT nObjectsBefore = objectListCount();
+
+    // The ctor stores 0x1002, which DecodeProjectile routes to the spell-hit
+    // table as type 1 (its own type then reads 0x1001).
+    CMessageSpellHitEffectSecondaryProjectile message(0x1001,
+        pSprite->GetId(),
+        CPoint(300, 400),
+        0,
+        pSprite->GetId(),
+        pSprite->GetId(),
+        0);
+    message.Run();
+
+    // CProjectileSpellHit::Fire adds the decoded projectile to the object
+    // array and to the area's flight list.
+    CHECK(pArray->m_nNextObjectId == nNextObjectIdBefore + 1);
+    CHECK(objectListCount() == nObjectsBefore + 1);
+
+    CProjectile* pFired = NULL;
+    for (SHORT n = 0; n <= pArray->m_nMaxArrayIndex; n++) {
+        const int nObjectId = pArray->m_pArray[n].m_objectId;
+        if (nObjectId < static_cast<int>(nNextObjectIdBefore)
+            || nObjectId >= static_cast<int>(pArray->m_nNextObjectId)) {
+            continue;
+        }
+        CGameObject* pObject = NULL;
+        const LONG nId = static_cast<LONG>(nObjectId) | (static_cast<LONG>(n) << 16);
+        if (pArray->GetShare(nId, CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE)
+            == CGameObjectArray::SUCCESS) {
+            pArray->ReleaseShare(nId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+            pFired = dynamic_cast<CProjectile*>(pObject);
+        }
+    }
+    REQUIRE(pFired != NULL);
+    CHECK(pFired->m_projectileType == 0x1001);
+    pFired->RemoveSelf();
+
+    ClearMessages();
 }

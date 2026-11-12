@@ -60,6 +60,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_EXIT_DIALOG_MODE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_EXIT_STORE_MODE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FIRE_PROJECTILE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_SPELL_HIT_EFFECT_SECONDARY_PROJECTILE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_INSERT_ACTION;
     static const BYTE MSG_SUBTYPE_CMESSAGE_INSERT_RESPONSE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_LEAVE_PARTY;
@@ -1791,6 +1792,28 @@ public:
 class CMessageFireProjectile : public CMessage {
 public:
     CMessageFireProjectile(WORD projectileType, LONG projectileTargetId, const CPoint& projectileTarget, LONG height, LONG caller, LONG target, unsigned char a7);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ WORD m_projectileType;
+    /* 000E */ LONG m_projectileTargetId;
+    /* 0012 */ CPoint m_projectileTarget;
+    /* 001A */ LONG m_height;
+    /* 001E */ unsigned char field_1E;
+    /* 0020 */ int field_20;
+};
+
+// The spell-hit projectile a sprite reports to the other players' machines
+// (vtable 0x84D4F4, subtype 115). Its ctor stores the projectile type it
+// receives plus one, so the message carries 0x1001+n for a spell-hit type n
+// and 0xD3 for the reserved 0xD2, the two forms DecodeProjectile understands.
+class CMessageSpellHitEffectSecondaryProjectile : public CMessage {
+public:
+    CMessageSpellHitEffectSecondaryProjectile(WORD projectileType, LONG projectileTargetId, const CPoint& projectileTarget, LONG height, LONG caller, LONG target, unsigned char a7);
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
