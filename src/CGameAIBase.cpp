@@ -624,9 +624,21 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 133:
-        // ClearActions
-        // TODO: 0x44EC0A-0x44EE8B not ported.
-        goto done;
+        // ClearActions (0x44EC0A-0x44EE8B): clear the actee's action queue,
+        // then queue a NO_ACTION on it so it stops whatever it was doing.
+        pTarget = ExecuteActionGetActee(this);
+        bShare = TRUE;
+        if (pTarget == NULL) {
+            // 0x451451: ACTION_ERROR straight to release (entry default).
+            returnValue = ACTION_ERROR;
+            goto release;
+        }
+        returnValue = ClearActions(pTarget);
+        message = new CMessageAddAction(CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1),
+            m_id,
+            pTarget->m_id);
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        goto release;
     case 136:
         // UnlockScroll
         g_pBaldurChitin->m_pEngineWorld->m_scrollLockId = CGameObjectArray::INVALID_INDEX;
