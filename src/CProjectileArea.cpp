@@ -856,6 +856,333 @@ void CProjectileArea84FEA4::ApplyToTargets(std::list<LONG>& targets)
 
 // -----------------------------------------------------------------------------
 
+// 0x571A60
+// The level budget Circle of Death spends: one d4 per sorcerer/wizard level
+// of the source (eleven d4 when the source is not a sprite), from the
+// source's derived stats. The return is 0 only for a level count at or below
+// zero, which neither path produces.
+LONG CProjectileCircleOfDeath::sub_571A60() // re-lint: disable RE004 (address-named; original name unknown)
+{
+    CGameObject* pSource;
+
+    if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pSource,
+            INFINITE)
+        != CGameObjectArray::SUCCESS) {
+        // NOTE: The original asserts FALSE here (IcewindCProjectileAreas.cpp
+        // :395) and then reads the unset pointer. UtilAssert never returns,
+        // so that read is unreachable there; ours returns no budget instead.
+        UTIL_ASSERT(FALSE);
+        return 0;
+    }
+
+    LONG nLevels;
+    if (pSource->GetObjectType() == CGameObject::TYPE_SPRITE) {
+        nLevels = static_cast<CGameSprite*>(pSource)->GetDerivedStats()->SumSorcererWizardLevels();
+    } else {
+        nLevels = 11;
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    if (nLevels <= 0) {
+        return 0;
+    }
+
+    LONG nBudget = 0;
+    for (LONG n = 0; n < nLevels; n++) {
+        nBudget += rand() % 4 + 1;
+    }
+
+    return nBudget;
+}
+
+// 0x571B30
+// Vtable slot 0x94 of 0x84F448: the level budget's worth of sprites in list
+// order, each of level 9 or less, spent until the budget runs out. The
+// budget is tested at the top of every iteration, so a target that takes it
+// to exactly 0 stays and the next one is not looked at.
+void CProjectileCircleOfDeath::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nBudget = sub_571A60(); // re-lint: disable RE004 (address-named; original name unknown)
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        if (nBudget <= 0) {
+            break;
+        }
+
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        BYTE nLevel = static_cast<CGameSprite*>(pObject)->GetDerivedStats()->GetLevel();
+        if (nLevel <= nBudget && nLevel <= 9) {
+            nBudget -= nLevel;
+            affected.push_back(*it);
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+}
+
+// 0x572960
+// Vtable slot 0x94 of 0x84F88C: one d4 for the number of animals, then every
+// sprite in list order is kept and the walk stops at the Nth animal — a
+// sprite that is not an animal before it was already kept and is not taken
+// back out.
+void CProjectileHoldAnimal::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nAnimals = rand() % 4 + 1;
+    LONG nFound = 0;
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        affected.push_back(*it);
+
+        if (IcewindMisc::IsAnimal(static_cast<CGameSprite*>(pObject)) == TRUE) {
+            nFound++;
+            if (nFound == nAnimals) {
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                break;
+            }
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+}
+
+// 0x572C60
+// Vtable slot 0x94 of 0x84F928: one d4 for the number of living creatures.
+// The undead are the exclusion: IsUndead true drops the sprite, every other
+// sprite is kept in list order until the count is reached. The original
+// releases the stopping target once more after the strike (0x572DD1); with
+// THREAD_ASYNCH ReleaseShare returns before reading the id, and on list
+// exhaustion that call reads the sentinel's value, so it has no observable
+// effect — ours repeats it only for a real node.
+void CProjectileHoldMonster::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nMonsters = rand() % 4 + 1;
+    LONG nFound = 0;
+
+    std::list<LONG>::iterator it = targets.begin();
+    for (; it != targets.end(); ++it) {
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        if (IcewindMisc::IsUndead(static_cast<CGameSprite*>(pObject)) == TRUE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        affected.push_back(*it);
+
+        nFound++;
+        if (nFound == nMonsters) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            break;
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+
+    if (it != targets.end()) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
+// 0x573290
+// Vtable slot 0x94 of 0x84FA60: one d4 for the number of undead, then every
+// sprite in list order is kept up to and including the Nth undead; sprites
+// that are not undead before it stay in the kept list.
+void CProjectileHaltUndead::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nUndead = rand() % 4 + 1;
+    LONG nFound = 0;
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        affected.push_back(*it);
+
+        if (IcewindMisc::IsUndead(static_cast<CGameSprite*>(pObject)) == TRUE) {
+            nFound++;
+            if (nFound == nUndead) {
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                break;
+            }
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+}
+
+// 0x573FC0
+// Vtable slot 0x94 of 0x84FD6C: 200 hit points of budget, keeping sprites
+// with 100 hit points or fewer in list order while their hit points fit.
+void CProjectilePowerWordKill::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nBudget = 200;
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        SHORT nHitPoints = static_cast<CGameSprite*>(pObject)->m_baseStats.m_hitPoints;
+        if (nHitPoints <= 100 && nHitPoints <= nBudget) {
+            nBudget -= nHitPoints;
+            affected.push_back(*it);
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+}
+
+// 0x5779A0
+// Vtable slot 0x94 of 0x850B70: 150 hit points of budget, keeping sprites in
+// list order while their hit points fit.
+void CProjectileSymbolOfDeath::ApplyToTargets(std::list<LONG>& targets)
+{
+    std::list<LONG> affected;
+    LONG nBudget = 150;
+
+    for (std::list<LONG>::iterator it = targets.begin(); it != targets.end(); ++it) {
+        CGameObject* pObject;
+        if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE)
+            != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        if (pObject->GetObjectType() != CGameObject::TYPE_SPRITE) {
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        SHORT nHitPoints = static_cast<CGameSprite*>(pObject)->m_baseStats.m_hitPoints;
+        if (nHitPoints <= nBudget) {
+            nBudget -= nHitPoints;
+            affected.push_back(*it);
+        }
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(*it,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    CProjectileArea::ApplyToTargets(affected);
+}
+
+// -----------------------------------------------------------------------------
+
 // 0x5747A0
 CProjectileArea84FFDC::CProjectileArea84FFDC()
     // NOTE: The radius is the WORD at 0x84F1BC (256), then 150.

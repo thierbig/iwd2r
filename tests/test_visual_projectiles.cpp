@@ -3444,6 +3444,505 @@ TEST_CASE("visual projectiles: Sleep takes the sprites below level 5 while their
 
 namespace {
 
+// The id of the first object of `type` in the area's sorted or background
+// lists (the walk tests/test_ai.cpp uses for its door and container).
+LONG FirstObjectIdOfType(CGameArea* pArea, BYTE type)
+{
+    CTypedPtrList<CPtrList, int*>* lists[2] = { &pArea->m_lVertSort,
+        &pArea->m_lVertSortBack };
+    for (CTypedPtrList<CPtrList, int*>* list : lists) {
+        POSITION pos = list->GetHeadPosition();
+        while (pos != NULL) {
+            LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(list->GetNext(pos)));
+            CGameObject* pObject;
+            if (g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(id,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE)
+                == CGameObjectArray::SUCCESS) {
+                const LONG nObjectId = pObject->GetId();
+                const BYTE nObjectType = pObject->GetObjectType();
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(id,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                if (nObjectType == type) {
+                    return nObjectId;
+                }
+            }
+        }
+    }
+    return CGameObjectArray::INVALID_INDEX;
+}
+
+// Takes a case's sprites back out of the area's lists so a later case's
+// range gathers do not see them.
+void RemoveGoblins(CGameArea* pArea, const std::vector<CGameSprite*>& goblins)
+{
+    for (CGameSprite* pGoblin : goblins) {
+        pGoblin->RemoveFromArea();
+    }
+    pArea->SortLists();
+}
+
+}
+
+// Circle of Death's summation helper and level budget (CDerivedStats::
+// SumSorcererWizardLevels 0x4478C0, CProjectileCircleOfDeath::sub_571A60
+// 0x571A60): the helper sums the sorcerer and wizard class-level bytes and
+// has a floor of 1 (unlike GetSorcererWizardLevel, which returns 0 when
+// neither class bit is set); the budget is one d4 per level, drawn before
+// the target walk, and eleven d4 when the source is not a sprite.
+TEST_CASE("visual projectiles: Circle of Death's level budget is one d4 per sorcerer or wizard level", "[visualprojectile][data]")
+{
+    {
+        CDerivedStats stats;
+
+        // Outside 0x600 no class level counts.
+        stats.m_classMask = CLASSMASK_WIZARD;
+        stats.m_wizardLevel = 7;
+        stats.m_barbarianLevel = 9;
+        CHECK(stats.SumSorcererWizardLevels() == 7);
+        CHECK(stats.GetSorcererWizardLevel() == 7);
+
+        // No class bit at all: the helper's floor is 1.
+        stats.m_classMask = 0;
+        stats.m_wizardLevel = 7;
+        stats.m_sorcererLevel = 3;
+        CHECK(stats.SumSorcererWizardLevels() == 1);
+        CHECK(stats.GetSorcererWizardLevel() == 0);
+
+        // The bit set with a zero level is still below the floor.
+        stats.m_classMask = CLASSMASK_SORCERER;
+        stats.m_sorcererLevel = 0;
+        stats.m_wizardLevel = 4;
+        CHECK(stats.SumSorcererWizardLevels() == 1);
+        CHECK(stats.GetSorcererWizardLevel() == 0);
+
+        // Both classes add.
+        stats.m_classMask = CLASSMASK_SORCERER | CLASSMASK_WIZARD;
+        stats.m_sorcererLevel = 3;
+        stats.m_wizardLevel = 2;
+        CHECK(stats.SumSorcererWizardLevels() == 5);
+        CHECK(stats.GetSorcererWizardLevel() == 5);
+    }
+
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 2);
+    REQUIRE(goblins.size() == 2);
+    CGameSprite* pSource = goblins[0];
+    const LONG nSourceId = pSource->GetId();
+
+    std::unique_ptr<Recording<CProjectileCircleOfDeath>> pCircle(new Recording<CProjectileCircleOfDeath>());
+    pCircle->m_sourceId = nSourceId;
+
+    // A wizard of level 3: three d4, each 1 to 4, so 3 to 12.
+    pSource->GetDerivedStats()->m_classMask = CLASSMASK_WIZARD;
+    pSource->GetDerivedStats()->m_wizardLevel = 3;
+    bool seen[13] = { };
+    for (unsigned int seed = 1; seed <= 200; seed++) {
+        INFO("seed " << seed);
+        iwd2r_srand(seed);
+        const LONG nBudget = pCircle->sub_571A60();
+        CHECK(Draws(seed, iwd2r_rand_state()) == 3);
+        LONG nExpected = 0;
+        for (int k = 1; k <= 3; k++) {
+            nExpected += RandAt(seed, k) % 4 + 1;
+        }
+        CHECK(nBudget == nExpected);
+        seen[nBudget] = true;
+    }
+    CHECK((!seen[0] && !seen[1] && !seen[2] && seen[3]));
+
+    // Neither sorcerer nor wizard: the helper floor is one d4.
+    pSource->GetDerivedStats()->m_classMask = 0;
+    for (unsigned int seed = 1; seed <= 8; seed++) {
+        INFO("seed " << seed);
+        iwd2r_srand(seed);
+        CHECK(pCircle->sub_571A60() == RandAt(seed, 1) % 4 + 1);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 1);
+    }
+
+    // A source that is not a sprite: eleven d4.
+    const LONG nContainerId = FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER);
+    REQUIRE(nContainerId != CGameObjectArray::INVALID_INDEX);
+    pCircle->m_sourceId = nContainerId;
+    for (unsigned int seed = 1; seed <= 8; seed++) {
+        INFO("seed " << seed);
+        iwd2r_srand(seed);
+        const LONG nBudget = pCircle->sub_571A60();
+        CHECK(Draws(seed, iwd2r_rand_state()) == 11);
+        LONG nExpected = 0;
+        for (int k = 1; k <= 11; k++) {
+            nExpected += RandAt(seed, k) % 4 + 1;
+        }
+        CHECK(nBudget == nExpected);
+    }
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Circle of Death (CProjectileCircleOfDeath::ApplyToTargets 0x571B30): the
+// budget helper's draws come first, then the sprites in list order with
+// level <= 9 and level <= what is left; ids that cannot be shared and
+// non-sprites are skipped, and the target that spends the last point stays
+// while the next is not looked at.
+TEST_CASE("visual projectiles: Circle of Death spends its level budget on level 9 or less", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 6);
+    REQUIRE(goblins.size() == 6);
+    CGameSprite* pSource = goblins[0];
+    const BYTE levels[] = { 2, 10, 3, 4, 1, 9 };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->GetDerivedStats()->m_nLevel = levels[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    // Two wizard levels: a budget of 2 to 8. The level 10 goblin never
+    // qualifies (the level 9 cap), and the 4s spend the budget so the
+    // remainder decides how many of them fit.
+    pSource->GetDerivedStats()->m_classMask = CLASSMASK_WIZARD;
+    pSource->GetDerivedStats()->m_wizardLevel = 2;
+    std::unique_ptr<Recording<CProjectileCircleOfDeath>> pCircle(new Recording<CProjectileCircleOfDeath>());
+    pCircle->m_sourceId = pSource->GetId();
+    bool seen[9] = { };
+    for (unsigned int seed = 1; seed <= 200; seed++) {
+        INFO("seed " << seed);
+        const LONG nBudget = RandAt(seed, 1) % 4 + 1 + (RandAt(seed, 2) % 4 + 1);
+        seen[nBudget] = true;
+        LONG nLeft = nBudget;
+        std::vector<LONG> expected;
+        for (size_t n = 0; n < goblins.size(); n++) {
+            if (nLeft <= 0) {
+                break;
+            }
+            if (levels[n] <= nLeft && levels[n] <= 9) {
+                expected.push_back(goblins[n]->GetId());
+                nLeft -= levels[n];
+            }
+        }
+        CHECK((nBudget >= 2 && nBudget <= 8));
+
+        std::unique_ptr<Recording<CProjectileCircleOfDeath>> pWalk(new Recording<CProjectileCircleOfDeath>());
+        pWalk->m_sourceId = pSource->GetId();
+        std::list<LONG> list = targets;
+        iwd2r_srand(seed);
+        pWalk->ApplyToTargets(list);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 2);
+        CHECK(pWalk->m_secondaries == expected);
+        // Level 10 is always out. The exact walk: budget 2 takes only the
+        // level 2; 3 or 4 take the level 2 and the later level 1; 5 takes
+        // the level 2 and 3 and leaves nothing for the level 1; 6 to 8 also
+        // fit the level 1 after them.
+        CHECK(std::find(expected.begin(), expected.end(), goblins[1]->GetId()) == expected.end());
+        if (nBudget == 2) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId() });
+        } else if (nBudget == 3 || nBudget == 4) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[4]->GetId() });
+        } else if (nBudget == 5) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[2]->GetId() });
+        } else {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[2]->GetId(), goblins[4]->GetId() });
+        }
+    }
+    for (int nBudget = 2; nBudget <= 8; nBudget++) {
+        INFO("budget " << nBudget);
+        CHECK(seen[nBudget]);
+    }
+
+    // Six wizard levels (6 to 24) still leave the level 10 goblin out: the
+    // level cap is independent of the budget.
+    pSource->GetDerivedStats()->m_wizardLevel = 6;
+    for (unsigned int seed = 1; seed <= 24; seed++) {
+        INFO("seed " << seed);
+        std::unique_ptr<Recording<CProjectileCircleOfDeath>> pBig(new Recording<CProjectileCircleOfDeath>());
+        pBig->m_sourceId = pSource->GetId();
+        std::list<LONG> list = targets;
+        iwd2r_srand(seed);
+        pBig->ApplyToTargets(list);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 6);
+        CHECK(std::find(pBig->m_secondaries.begin(), pBig->m_secondaries.end(), goblins[1]->GetId()) == pBig->m_secondaries.end());
+    }
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Hold Animal (CProjectileHoldAnimal::ApplyToTargets 0x572960): one d4 for
+// the number of animals; every sprite in list order is inserted, and the
+// walk stops at the Nth animal — so a sprite that is not an animal before
+// the last counted one stays in the list.
+TEST_CASE("visual projectiles: Hold Animal keeps the sprites up to the first to fourth animal", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 5);
+    REQUIRE(goblins.size() == 5);
+    const BYTE generals[] = { CAIObjectType::G_MONSTER,
+        CAIObjectType::G_ANIMAL,
+        CAIObjectType::G_ANIMAL,
+        CAIObjectType::G_MONSTER,
+        CAIObjectType::G_ANIMAL };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->m_typeAI.m_nGeneral = generals[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    for (unsigned int seed = 1; seed <= 24; seed++) {
+        INFO("seed " << seed);
+        const LONG nAnimals = RandAt(seed, 1) % 4 + 1;
+        LONG nFound = 0;
+        std::vector<LONG> expected;
+        for (size_t n = 0; n < goblins.size(); n++) {
+            expected.push_back(goblins[n]->GetId());
+            if (generals[n] == CAIObjectType::G_ANIMAL && ++nFound == nAnimals) {
+                break;
+            }
+        }
+
+        std::unique_ptr<Recording<CProjectileHoldAnimal>> pWalk(new Recording<CProjectileHoldAnimal>());
+        std::list<LONG> list = targets;
+        iwd2r_srand(seed);
+        pWalk->ApplyToTargets(list);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 1);
+        CHECK(pWalk->m_secondaries == expected);
+
+        // The non-animal first sprite is retained when the first animal
+        // ends the walk; two animals keep it and both animals.
+        if (nAnimals == 1) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId() });
+        } else if (nAnimals == 2) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId(), goblins[2]->GetId() });
+        } else {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId(), goblins[2]->GetId(), goblins[3]->GetId(), goblins[4]->GetId() });
+        }
+    }
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Hold Monster (CProjectileHoldMonster::ApplyToTargets 0x572C60): one d4
+// for the number of living creatures; the undead are the exclusion, and
+// every other sprite is kept in list order until the count is reached.
+TEST_CASE("visual projectiles: Hold Monster excludes the undead up to the first to fourth living sprite", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 5);
+    REQUIRE(goblins.size() == 5);
+    const BYTE generals[] = { CAIObjectType::G_UNDEAD,
+        CAIObjectType::G_MONSTER,
+        CAIObjectType::G_HUMANOID,
+        CAIObjectType::G_UNDEAD,
+        CAIObjectType::G_MONSTER };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->m_typeAI.m_nGeneral = generals[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    for (unsigned int seed = 1; seed <= 24; seed++) {
+        INFO("seed " << seed);
+        const LONG nMonsters = RandAt(seed, 1) % 4 + 1;
+        LONG nFound = 0;
+        std::vector<LONG> expected;
+        for (size_t n = 0; n < goblins.size(); n++) {
+            if (generals[n] == CAIObjectType::G_UNDEAD) {
+                continue;
+            }
+            expected.push_back(goblins[n]->GetId());
+            if (++nFound == nMonsters) {
+                break;
+            }
+        }
+
+        std::unique_ptr<Recording<CProjectileHoldMonster>> pWalk(new Recording<CProjectileHoldMonster>());
+        std::list<LONG> list = targets;
+        iwd2r_srand(seed);
+        pWalk->ApplyToTargets(list);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 1);
+        CHECK(pWalk->m_secondaries == expected);
+
+        // No undead is ever kept, and the second undead does not count.
+        CHECK(std::find(pWalk->m_secondaries.begin(), pWalk->m_secondaries.end(), goblins[0]->GetId()) == pWalk->m_secondaries.end());
+        CHECK(std::find(pWalk->m_secondaries.begin(), pWalk->m_secondaries.end(), goblins[3]->GetId()) == pWalk->m_secondaries.end());
+        if (nMonsters == 1) {
+            CHECK(expected == std::vector<LONG> { goblins[1]->GetId() });
+        } else if (nMonsters == 2) {
+            CHECK(expected == std::vector<LONG> { goblins[1]->GetId(), goblins[2]->GetId() });
+        } else {
+            CHECK(expected == std::vector<LONG> { goblins[1]->GetId(), goblins[2]->GetId(), goblins[4]->GetId() });
+        }
+    }
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Halt Undead (CProjectileHaltUndead::ApplyToTargets 0x573290): one d4 for
+// the number of undead; every sprite in list order is inserted up to and
+// including the Nth undead, so a living sprite before it stays.
+TEST_CASE("visual projectiles: Halt Undead keeps the sprites up to the first to fourth undead", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 4);
+    REQUIRE(goblins.size() == 4);
+    const BYTE generals[] = { CAIObjectType::G_MONSTER,
+        CAIObjectType::G_UNDEAD,
+        CAIObjectType::G_HUMANOID,
+        CAIObjectType::G_UNDEAD };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->m_typeAI.m_nGeneral = generals[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    for (unsigned int seed = 1; seed <= 24; seed++) {
+        INFO("seed " << seed);
+        const LONG nUndead = RandAt(seed, 1) % 4 + 1;
+        LONG nFound = 0;
+        std::vector<LONG> expected;
+        for (size_t n = 0; n < goblins.size(); n++) {
+            expected.push_back(goblins[n]->GetId());
+            if (generals[n] == CAIObjectType::G_UNDEAD && ++nFound == nUndead) {
+                break;
+            }
+        }
+
+        std::unique_ptr<Recording<CProjectileHaltUndead>> pWalk(new Recording<CProjectileHaltUndead>());
+        std::list<LONG> list = targets;
+        iwd2r_srand(seed);
+        pWalk->ApplyToTargets(list);
+        CHECK(Draws(seed, iwd2r_rand_state()) == 1);
+        CHECK(pWalk->m_secondaries == expected);
+
+        // The living sprite before the first undead is retained.
+        if (nUndead == 1) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId() });
+        } else if (nUndead == 2) {
+            CHECK(expected == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId(), goblins[2]->GetId(), goblins[3]->GetId() });
+        } else {
+            CHECK(expected.size() == goblins.size());
+        }
+    }
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Power Word Kill (CProjectilePowerWordKill::ApplyToTargets 0x573FC0): no
+// rand draws; 200 hit points of budget, and a sprite is kept in list order
+// only while it has 100 hit points or fewer and fits what is left.
+TEST_CASE("visual projectiles: Power Word Kill spends 200 hit points on sprites of 100 or less", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 6);
+    REQUIRE(goblins.size() == 6);
+    const SHORT hitPoints[] = { 50, 101, 100, 20, 200, 60 };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->m_baseStats.m_hitPoints = hitPoints[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    std::unique_ptr<Recording<CProjectilePowerWordKill>> pWalk(new Recording<CProjectilePowerWordKill>());
+    std::list<LONG> list = targets;
+    iwd2r_srand(1);
+    pWalk->ApplyToTargets(list);
+    CHECK(Draws(1, iwd2r_rand_state()) == 0);
+    // 50 fits (150 left); 101 is over the cap; 100 fits (50 left); 20 fits
+    // (30 left); 200 is over the cap; 60 is over what is left.
+    CHECK(pWalk->m_secondaries == std::vector<LONG> { goblins[0]->GetId(), goblins[2]->GetId(), goblins[3]->GetId() });
+
+    // The budget guard: four 60s spend 180 and the fourth does not fit.
+    for (CGameSprite* pGoblin : goblins) {
+        pGoblin->m_baseStats.m_hitPoints = 60;
+    }
+    std::unique_ptr<Recording<CProjectilePowerWordKill>> pBudget(new Recording<CProjectilePowerWordKill>());
+    std::list<LONG> budgetList = targets;
+    pBudget->ApplyToTargets(budgetList);
+    CHECK(pBudget->m_secondaries == std::vector<LONG> { goblins[0]->GetId(), goblins[1]->GetId(), goblins[2]->GetId() });
+
+    // The hit point cap is independent of the budget: 101 is out first.
+    for (CGameSprite* pGoblin : goblins) {
+        pGoblin->m_baseStats.m_hitPoints = 101;
+    }
+    goblins[5]->m_baseStats.m_hitPoints = 1;
+    std::unique_ptr<Recording<CProjectilePowerWordKill>> pCap(new Recording<CProjectilePowerWordKill>());
+    std::list<LONG> capList = targets;
+    pCap->ApplyToTargets(capList);
+    CHECK(pCap->m_secondaries == std::vector<LONG> { goblins[5]->GetId() });
+
+    RemoveGoblins(pArea, goblins);
+}
+
+// Symbol of Death (CProjectileSymbolOfDeath::ApplyToTargets 0x5779A0): no
+// rand draws; 150 hit points of budget, and a sprite is kept in list order
+// only while its hit points fit what is left.
+TEST_CASE("visual projectiles: Symbol of Death spends 150 hit points in list order", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(world.pCharacter->GetPos().x + 80, world.pCharacter->GetPos().y + 30), 6);
+    REQUIRE(goblins.size() == 6);
+    const SHORT hitPoints[] = { 151, 100, 60, 40, 10, 5 };
+    for (size_t n = 0; n < goblins.size(); n++) {
+        goblins[n]->m_baseStats.m_hitPoints = hitPoints[n];
+    }
+    std::list<LONG> targets;
+    targets.push_back(CGameObjectArray::INVALID_INDEX);
+    targets.push_back(FirstObjectIdOfType(pArea, CGameObject::TYPE_CONTAINER));
+    for (CGameSprite* pGoblin : goblins) {
+        targets.push_back(pGoblin->GetId());
+    }
+
+    std::unique_ptr<Recording<CProjectileSymbolOfDeath>> pWalk(new Recording<CProjectileSymbolOfDeath>());
+    std::list<LONG> list = targets;
+    iwd2r_srand(1);
+    pWalk->ApplyToTargets(list);
+    CHECK(Draws(1, iwd2r_rand_state()) == 0);
+    // 151 is out; 100 fits (50 left); 60 is out; 40 fits (10 left); 10 fits
+    // (0 left); 5 is out.
+    CHECK(pWalk->m_secondaries == std::vector<LONG> { goblins[1]->GetId(), goblins[3]->GetId(), goblins[4]->GetId() });
+
+    // Exactly 150 spends the whole budget and the next point is out.
+    goblins[0]->m_baseStats.m_hitPoints = 150;
+    for (size_t n = 1; n < goblins.size(); n++) {
+        goblins[n]->m_baseStats.m_hitPoints = 1;
+    }
+    std::unique_ptr<Recording<CProjectileSymbolOfDeath>> pBudget(new Recording<CProjectileSymbolOfDeath>());
+    std::list<LONG> budgetList = targets;
+    pBudget->ApplyToTargets(budgetList);
+    CHECK(pBudget->m_secondaries == std::vector<LONG> { goblins[0]->GetId() });
+
+    RemoveGoblins(pArea, goblins);
+}
+
+namespace {
+
 // The add-effect messages the handler holds, drained (the caller owns and
 // deletes them; each one owns its effect).
 std::vector<CMessageAddEffect*> AddEffectMessages()
