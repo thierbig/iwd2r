@@ -18202,6 +18202,80 @@ BOOL CGameEffectTimeStop::ApplyEffect(CGameSprite* pSprite)
 
 // -----------------------------------------------------------------------------
 
+// 0x4C3AA0
+CGameEffectDisguise::~CGameEffectDisguise()
+{
+    // Only a disguise that came from an equipped item (field_188, set by
+    // CItem::Equip) is undone here. The class does not override OnRemove -
+    // the original's vtable 0x84B520 has CGameEffect::OnRemove (0x4A51D0) in
+    // slot 0x24 - so the restore happens here and nowhere else.
+    if (field_188 != 0) {
+        if (!g_pBaldurChitin->GetObjectGame()->m_bInDestroyGame) {
+            // The wearer is the effect's source, not a sprite handed in.
+            LONG sourceId = m_sourceID;
+
+            CGameObject* pObject;
+            BYTE rc;
+            do {
+                rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(sourceId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+
+                pSprite->UnequipAll(TRUE);
+
+                // Take the disguising animation's footprint out of the search
+                // bitmap before the animation changes.
+                if (pSprite->GetArea() != NULL) {
+                    if (pSprite->GetAnimation()->GetListType() != CGameObject::LIST_FLIGHT) {
+                        pSprite->GetArea()->m_search.RemoveObject(CPoint(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                                                                      pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY),
+                            pSprite->GetAIType().m_nEnemyAlly,
+                            pSprite->GetAnimation()->GetPersonalSpace(),
+                            pSprite->field_54A8,
+                            pSprite->field_7430);
+                    }
+                }
+
+                // A dead sprite keeps the animation it died in; the
+                // equipment is still re-applied and it is still re-placed.
+                if ((pSprite->GetBaseStats()->m_generalState & STATE_DEAD) == 0) {
+                    // The animation from before the disguise (field_18C).
+                    if (field_18C != -1) {
+                        // NOTE: Inlined CGameAnimation::SetAnimationType.
+                        pSprite->GetAnimation()->SetAnimationType(field_18C,
+                            pSprite->GetBaseStats()->m_colors,
+                            pSprite->GetDirection());
+                    }
+
+                    if (pSprite->GetArea() != NULL) {
+                        if (pSprite->GetAnimation()->GetListType() != CGameObject::LIST_FLIGHT) {
+                            pSprite->GetArea()->m_search.AddObject(CPoint(pSprite->GetPos().x / CPathSearch::GRID_SQUARE_SIZEX,
+                                                                       pSprite->GetPos().y / CPathSearch::GRID_SQUARE_SIZEY),
+                                pSprite->GetAIType().m_nEnemyAlly,
+                                pSprite->GetAnimation()->GetPersonalSpace(),
+                                pSprite->field_54A8,
+                                pSprite->field_7430);
+                        }
+                    }
+                }
+
+                pSprite->JumpToPoint(pSprite->GetPos(), TRUE);
+                pSprite->SetIdleSequence();
+                pSprite->EquipAll(TRUE);
+
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(sourceId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+    }
+}
+
 // 0x49D860
 CGameEffectDisguise::CGameEffectDisguise(ITEM_EFFECT* effect, const CPoint& source, LONG sourceID, CPoint target)
     : CGameEffect(effect, source, sourceID, target, FALSE)
