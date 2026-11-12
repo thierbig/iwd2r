@@ -634,10 +634,41 @@ SHORT CGameAIBase::ExecuteAction()
         returnValue = ACTION_DONE;
         goto release;
     case 131:
-        // Kill
-        // TODO: 0x44EA6E-0x44EB32 (CGameSprite::sub_761650 and the effect
-        // message) not ported.
-        goto done;
+        // Kill (0x44EA6E-0x44EB32): a null target or one already dead
+        // (STATE_DEAD in the derived m_generalState, CGameSprite+0x920) is
+        // left alone; both jumps go to the tail that forces ACTION_DONE
+        // (0x44E1DB). Otherwise CGameSprite::sub_761650 (0x761650) runs on
+        // the target and a death effect (id 13, amount 0, flags 4,
+        // field_18C 1, sourced to the target's id) is queued on it by
+        // message.
+        pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
+        bShare = TRUE;
+        if (pTarget != NULL
+            && (static_cast<CGameSprite*>(pTarget)->m_derivedStats.m_generalState
+                   & STATE_DEAD)
+                == 0) {
+            static_cast<CGameSprite*>(pTarget)->sub_761650();
+            // NOTE: both allocation-failure branches are dead in tree
+            // (throwing new): the effect new's failure jump (0x44EAC4)
+            // zeroes the pointer and the next store (0x44EAE4)
+            // dereferences it, and a failed message new posts NULL
+            // (0x44EB2B). The buffer is owned by the message. The default
+            // CGameEffectDeath construction covers the inlined writes
+            // (vtable 0x8487E8, m_effectID 13 at +0xC); field_18C is
+            // then set to 1 (+0x18C).
+            CGameEffectDeath* pEffect = new CGameEffectDeath();
+            pEffect->m_effectAmount = 0;
+            pEffect->m_dwFlags = 4;
+            pEffect->m_sourceID = pTarget->GetId();
+            pEffect->field_18C = 1;
+            message = new CMessageAddEffect(pEffect, GetId(), pTarget->GetId());
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+        // The AddMessage call site (0x44E1D6, reached through 0x44E1C7)
+        // falls into the tail that forces ACTION_DONE (0x44E1DB) before the
+        // release block.
+        returnValue = ACTION_DONE;
+        goto release;
     case 132:
         // VerbalConstant
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
