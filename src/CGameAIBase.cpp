@@ -7027,6 +7027,16 @@ SHORT CGameAIBase::CloseDoor(CGameDoor* pDoor)
     return ACTION_DONE;
 }
 
+// 0x45B290
+// TRUE when the two names differ (the neg/sbb/neg tail normalizes
+// strcmp's result to "not equal"): the TotalItemCnt trio's fist test
+// (0x458BCF) and its "00MFIST" prefix test (0x458C09) both ask "is this
+// NOT the default fist?".
+static BOOL sub_45B290(const CString* psName, LPCTSTR szName)
+{
+    return strcmp(static_cast<LPCTSTR>(*psName), szName) != 0;
+}
+
 // 0x453840
 BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 {
@@ -7593,6 +7603,95 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
     case 0x40EF:
         // InCutsceneMode
         bResult = g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_mode == 0x142;
+        break;
+    case 0x40B5:
+        // TotalItemCnt(object, n): the count of the items the named object
+        // carries against n, by equal. A sprite's equipment counts each
+        // stackable by its charges, each bag (item type 0x3A) by the game's
+        // count of that bag's contents, and everything else as one item --
+        // except the default fists ("00FIST", or any "00MFIST*" by its
+        // seven-letter prefix, with file flags 0x40 without 0x4). A
+        // container counts its whole list. The original repeats this walk
+        // in full for each of the five other TotalItemCnt arms; this file
+        // keeps the repetitions instead of sharing a helper.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    CString sResRef = pItem->GetResRef().GetResRefStr();
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(""));
+                    } else {
+                        CString sLeft = sResRef.Left(7);
+                        if (sub_45B290(&sResRef, "00FIST")
+                            && sub_45B290(&sLeft, "00MFIST")
+                            && (pItem->GetFlagsFile() & 0x44) != 0x40) {
+                            nCount += 1;
+                        }
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(""));
+            }
+
+            bResult = nCount == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40B6:
+        // TotalItemCntGT(object, n): the walk of 0x40B5 above, against n by
+        // greater.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                return FALSE;
+            }
+
+            LONG nCount = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+                for (INT nSlot = CGameSpriteEquipment::NUM_SLOT - 1; nSlot >= 0; nSlot--) {
+                    CItem* pItem = pSprite->GetEquipment()->m_items[nSlot];
+                    if (pItem == NULL) {
+                        continue;
+                    }
+
+                    CString sResRef = pItem->GetResRef().GetResRefStr();
+                    if (pItem->GetMaxStackable() > 1) {
+                        nCount += pItem->GetUsageCount(0);
+                    } else if (pItem->GetItemType() == 0x3A) {
+                        nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(
+                            pItem->GetResRef(), CString(""));
+                    } else {
+                        CString sLeft = sResRef.Left(7);
+                        if (sub_45B290(&sResRef, "00FIST")
+                            && sub_45B290(&sLeft, "00MFIST")
+                            && (pItem->GetFlagsFile() & 0x44) != 0x40) {
+                            nCount += 1;
+                        }
+                    }
+                }
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItemExcept(CString(""));
+            }
+
+            bResult = nCount > triggerCopy.GetSpecifics();
+        }
         break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
