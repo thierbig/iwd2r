@@ -3886,10 +3886,10 @@ TEST_CASE("ai: ExecuteAction 233 235 278 282 283 and 325 hide sequence drop excl
     pCaller->SetCurrAction(dropNobody);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
 
-    // A container target reaches the unported 0x481D30 TODO and keeps the
-    // ACTION_ERROR entry default; any other type (the door) errors at
-    // 0x451451. Both ids come from the vert-sort walk the 288
-    // SetDoorFlag test above uses, over the sorted and background lists.
+    // A container target now reaches the ported 0x481D30; any other type
+    // (the door) errors at 0x451451. Both ids come from the vert-sort walk
+    // the 288 SetDoorFlag test above uses, over the sorted and background
+    // lists.
     auto findTypeId = [pGame, pArea1000](BYTE type) -> LONG {
         CTypedPtrList<CPtrList, int*>* lists[2] = { &pArea1000->m_lVertSort,
             &pArea1000->m_lVertSortBack };
@@ -3915,8 +3915,62 @@ TEST_CASE("ai: ExecuteAction 233 235 278 282 283 and 325 hide sequence drop excl
     const LONG nContainerId = findTypeId(CGameObject::TYPE_CONTAINER);
     REQUIRE(nContainerId != CGameObjectArray::INVALID_INDEX);
     CAIObjectType containerActee(0, 0, 0, 0, 0, 0, 0, 0, nContainerId, 0, 0);
-    pCaller->SetCurrAction(CAIAction(278, containerActee, 0, 0, 0));
-    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_ERROR);
+    CGameObject* pContainerObject;
+    REQUIRE(pGame->GetObjectArray()->GetShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                &pContainerObject, INFINITE)
+        == CGameObjectArray::SUCCESS);
+    CGameContainer* pContainer = static_cast<CGameContainer*>(pContainerObject);
+
+    // 0x481D30 through case 278: a resref nothing matches drops every item
+    // to the container's ground pile. CompressContainer runs (this harness
+    // is InControl), so the emptied slots leave the list.
+    CAIAction containerDrop(278, containerActee, 0, 0, 0);
+    containerDrop.m_string1 = "00NOMATCH";
+    pCaller->SetCurrAction(containerDrop);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pContainer->GetNumItems() == 0);
+
+    // The named item stays and the other one moves to the pile.
+    CItem* pKeep = new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0);
+    CItem* pLose = new CItem(CResRef("00POTN02"), 1, 0, 0, 0, 0);
+    REQUIRE(pKeep->GetUsageCount(0) == 3); // the ctor's first usage count is the stack
+    pContainer->m_lstItems.AddTail(pKeep);
+    pContainer->m_lstItems.AddTail(pLose);
+    containerDrop.m_string1 = "00POTN01";
+    pCaller->SetCurrAction(containerDrop);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pContainer->GetNumItems() == 1);
+    REQUIRE(pContainer->GetItem(0) != NULL);
+    CHECK(pContainer->GetItem(0)->GetResRef() == CResRef("00POTN01"));
+
+    REQUIRE(pGame->GetObjectArray()->ReleaseShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                INFINITE)
+        == CGameObjectArray::SUCCESS);
+
+    // 0x481C50 and 0x481EB0 have no ExecuteAction path: they are driven
+    // directly, on a fresh container whose list has no NULL slots (the
+    // exe's count walk stops at the first one).
+    CGameContainer* pCounted = new CGameContainer(pArea1000, CRect(400, 400, 416, 416));
+    CItem* pStack = new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0);
+    CItem* pSingle = new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+    pCounted->m_lstItems.AddTail(pStack);
+    pCounted->m_lstItems.AddTail(pSingle);
+    // The named resref counts nothing, the stack counts its charges, the
+    // gem counts one.
+    CHECK(pCounted->CountItemExcept(CString("00POTN01")) == 1);
+    CHECK(pCounted->CountItemExcept(CString("00GEM01")) == 3);
+
+    // 0x481EB0: the slot's item leaves for the game's disposable list and
+    // the add message goes out whether or not the slot held one.
+    ClearMessages();
+    pCounted->RemoveItem(0);
+    CHECK(pCounted->GetNumItems() == 1);
+    REQUIRE(pCounted->GetItem(0) != NULL);
+    CHECK(pCounted->GetItem(0)->GetResRef() == CResRef("00GEM01"));
+    pCounted->RemoveItem(0);
+    CHECK(pCounted->GetNumItems() == 0);
+    pCounted->RemoveItem(0); // empty list - the message still goes out
+    CHECK(Queued<CMessageContainerAddItem>().size() == 3);
 
     const LONG nDoorId = findTypeId(CGameObject::TYPE_DOOR);
     REQUIRE(nDoorId != CGameObjectArray::INVALID_INDEX);
