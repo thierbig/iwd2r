@@ -58,7 +58,9 @@ The arms are jumptable targets of the dispatcher itself (0x44DC10).
   0x45C290 (miss: 0x451451), bShare, virtual GetObjectType: TYPE_SPRITE
   (0x84C507) calls DropInventory 0x754EE0(0, GetString1()) into esi;
   TYPE_CONTAINER (0x84C502) calls 0x481D30 (381 bytes, not ported -- TODO
-  in the arm, which keeps ACTION_ERROR where the exe stores its result);
+  in the arm, which keeps ACTION_ERROR where the exe stores its result)
+  -- ported since as CGameContainer::DropInventoryEXExclude and wired in
+  35eb6fc3, its return now the action return;
   any other type takes 0x451451. Release at 0x44E1DE.
 - 235 PlaySequence (0x450B52-0x450BD9, fe8e8e20) -- sub_45C290 (miss:
   0x44E1DB), GetSpecifics bounds-checked against the zero-extended bytes
