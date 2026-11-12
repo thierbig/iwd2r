@@ -2866,6 +2866,105 @@ TEST_CASE("ai: ExecuteAction 293 UnHide clears hiding and reports the effect str
     ClearMessages();
 }
 
+// Task 83o's case 68 CallLightning and case 131 Kill arms, driven through
+// ExecuteAction on a live sprite. Case 68 aims the caller's area infinity at
+// the target's position and queues a death effect (flags 0x100); case 131
+// leaves already-dead targets alone and otherwise queues one sourced to the
+// target (flags 4, field_18C 1). The caller's area is zeroed storage, as
+// MakeDoor gives its doors: CallLightning only writes CInfinity members, so
+// no area file is needed.
+TEST_CASE("ai: ExecuteAction 68 CallLightning and 131 Kill death-effect arms",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+
+    auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+    std::memset(area, 0, sizeof(CGameArea));
+    pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+    CInfinity* pInfinity = pCaller->m_pArea->GetInfinity();
+
+    pSprite->m_pos = CPoint(111, 222);
+    CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 68 CallLightning: the strike is aimed at the target's position and the
+    // death effect (id 13, amount 0, flags 0x100) rides CMessageAddEffect
+    // with the caller as source and the sprite as target.
+    pCaller->SetCurrAction(CAIAction(68, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pInfinity->m_bStartLightning == TRUE);
+    CHECK(pInfinity->bRenderCallLightning == TRUE);
+    CHECK(pInfinity->nRenderLightningTimer == 30);
+    CHECK(pInfinity->cLightningPoint.x == 111);
+    CHECK(pInfinity->cLightningPoint.y == 222);
+    {
+        const std::vector<CMessageAddEffect*> adds = Queued<CMessageAddEffect>();
+        REQUIRE(adds.size() == 1);
+        CHECK(adds[0]->m_sourceId == pCaller->m_id);
+        CHECK(adds[0]->m_targetId == pSprite->m_id);
+        REQUIRE(adds[0]->m_effect != NULL);
+        CHECK(dynamic_cast<CGameEffectDeath*>(adds[0]->m_effect) != NULL);
+        CHECK(adds[0]->m_effect->m_effectID == CGAMEEFFECT_DEATH);
+        CHECK(adds[0]->m_effect->m_effectAmount == 0);
+        CHECK(adds[0]->m_effect->m_dwFlags == 0x100);
+    }
+
+    // 68 with no target: the miss jumps to the tail that forces
+    // ACTION_DONE (0x44E1DB) -- no strike, no effect.
+    ClearMessages();
+    pInfinity->bRenderCallLightning = FALSE;
+    pInfinity->cLightningPoint = CPoint(-1, -1);
+    CAIAction strikeNobody;
+    strikeNobody.m_actionID = 68;
+    strikeNobody.m_acteeID = CAIObjectType::NOONE;
+    pCaller->SetCurrAction(strikeNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pInfinity->bRenderCallLightning == FALSE);
+    CHECK(pInfinity->cLightningPoint.x == -1);
+    CHECK(pInfinity->cLightningPoint.y == -1);
+    CHECK(Queued<CMessageAddEffect>().empty());
+
+    // 131 Kill on a live target: the in-tree sub_761650 stub runs, and the
+    // death effect carries flags 4, field_18C 1 and the target's own id as
+    // its source.
+    ClearMessages();
+    pCaller->SetCurrAction(CAIAction(131, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    {
+        const std::vector<CMessageAddEffect*> adds = Queued<CMessageAddEffect>();
+        REQUIRE(adds.size() == 1);
+        CHECK(adds[0]->m_sourceId == pCaller->m_id);
+        CHECK(adds[0]->m_targetId == pSprite->m_id);
+        CGameEffectDeath* pDeath = dynamic_cast<CGameEffectDeath*>(adds[0]->m_effect);
+        REQUIRE(pDeath != NULL);
+        CHECK(pDeath->m_effectID == CGAMEEFFECT_DEATH);
+        CHECK(pDeath->m_effectAmount == 0);
+        CHECK(pDeath->m_dwFlags == 4);
+        CHECK(pDeath->m_sourceID == pSprite->m_id);
+        CHECK(pDeath->field_18C == 1);
+    }
+
+    // 131 on an already-dead target (STATE_DEAD in the derived general
+    // state): no second effect, still ACTION_DONE -- the miss jumps to the
+    // same 0x44E1DB tail.
+    ClearMessages();
+    pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+    pCaller->SetCurrAction(CAIAction(131, actee, 0, 0, 0));
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageAddEffect>().empty());
+
+    // 131 with no target: same forced ACTION_DONE, nothing queued.
+    CAIAction killNobody;
+    killNobody.m_actionID = 131;
+    killNobody.m_acteeID = CAIObjectType::NOONE;
+    pCaller->SetCurrAction(killNobody);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageAddEffect>().empty());
+    ClearMessages();
+}
+
 // Task 83h's case 243 IncrementGlobalOnce arm, driven through ExecuteAction.
 // The action's two strings are "SCOPE:name" pairs: string1 names the
 // once-guard variable, string2 the variable incremented the first time
