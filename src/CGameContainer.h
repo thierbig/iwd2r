@@ -46,6 +46,9 @@ public:
     void SetDrawPoly(SHORT time);
     SHORT FindItemSlot(const CResRef& res);
     SHORT CountItem(const CResRef& res);
+    SHORT CountItemExcept(CString sItem);
+    SHORT DropInventoryEXExclude(CString sItem);
+    void RemoveItem(SHORT nSlotNum);
 
     SHORT SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget, LONG targetId,
         DWORD nType, LONG nHeight);

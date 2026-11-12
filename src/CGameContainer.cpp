@@ -1646,6 +1646,42 @@ void CGameContainer::FillPoly(CGameArea* pArea, CVidMode* pVidMode, INT nSurface
     }
 }
 
+// Counts the items whose resref does NOT equal sItem: a stackable item adds
+// its usage count, a bag-type item (0x3A) adds the number of items inside
+// the bag, everything else adds one, and the named item adds nothing.
+// EvaluateStatusTrigger (0x453840) reads this in its container arms.
+//
+// 0x481C50
+SHORT CGameContainer::CountItemExcept(CString sItem)
+{
+    SHORT nCount = 0;
+
+    POSITION pos = m_lstItems.GetHeadPosition();
+    while (pos != NULL) {
+        CItem* pItem = m_lstItems.GetNext(pos);
+        if (pItem == NULL) {
+            // 0x481C83: a NULL entry ends the walk.
+            break;
+        }
+
+        if (pItem->GetResRef() == sItem) {
+            // 0x481C9D: the named item counts nothing.
+            continue;
+        }
+
+        if (pItem->GetMaxStackable() > 1) {
+            nCount += pItem->GetUsageCount(0);
+        } else if (pItem->GetItemType() == 0x3A) {
+            nCount += g_pBaldurChitin->GetObjectGame()->GetNumberOfItemsInBag(pItem->GetResRef(),
+                CString(""));
+        } else {
+            nCount++;
+        }
+    }
+
+    return nCount;
+}
+
 // FIXME: `scriptRes` should be reference.
 //
 // 0x45FE90
