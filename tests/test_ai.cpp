@@ -4425,3 +4425,154 @@ TEST_CASE("ai: ExecuteAction 133 ClearActions clears the target queue and queues
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x40B5 0x40B6 0x40B7 0x40C1 0x40C2 and 0x40C3 total item counts",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The area load waits for m_bDisplayStale to clear, so a pump thread
+    // stands in for the display loop (the harness of the 233/235 case).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+
+    // The vert-sort walk of the 278 case: the id of the first registered
+    // object of the wanted type over the sorted and background lists.
+    auto findTypeId = [pGame, pArea1000](BYTE type) -> LONG {
+        CTypedPtrList<CPtrList, int*>* lists[2] = { &pArea1000->m_lVertSort,
+            &pArea1000->m_lVertSortBack };
+        for (CTypedPtrList<CPtrList, int*>* list : lists) {
+            POSITION pos = list->GetHeadPosition();
+            while (pos != NULL) {
+                LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(list->GetNext(pos)));
+                CGameObject* pObject;
+                if (pGame->GetObjectArray()->GetShare(id, CGameObjectArray::THREAD_ASYNCH,
+                        &pObject, INFINITE)
+                    == CGameObjectArray::SUCCESS) {
+                    const LONG nId = pObject->GetId();
+                    pGame->GetObjectArray()->ReleaseShare(id, CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    if (pObject->GetObjectType() == type) {
+                        return nId;
+                    }
+                }
+            }
+        }
+        return CGameObjectArray::INVALID_INDEX;
+    };
+
+    // Container half: a registered AR1000 container emptied and seeded with
+    // a stack of three potions and a single gem. CountItemExcept("") counts
+    // both -- 3 for the stack's charges, 1 for the gem.
+    const LONG nContainerId = findTypeId(CGameObject::TYPE_CONTAINER);
+    REQUIRE(nContainerId != CGameObjectArray::INVALID_INDEX);
+    CGameObject* pContainerObject;
+    REQUIRE(pGame->GetObjectArray()->GetShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                &pContainerObject, INFINITE)
+        == CGameObjectArray::SUCCESS);
+    CGameContainer* pContainer = static_cast<CGameContainer*>(pContainerObject);
+    while (pContainer->GetNumItems() > 0) {
+        pContainer->RemoveItem(0);
+    }
+    ClearMessages();
+    pContainer->m_lstItems.AddTail(new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0));
+    pContainer->m_lstItems.AddTail(new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0));
+
+    CAIObjectType containerCause(0, 0, 0, 0, 0, 0, 0, 0, nContainerId, 0, 0);
+    // 0x40B5 TotalItemCnt: the container's whole list is 4.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B5, containerCause, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B5, containerCause, 5)) == FALSE);
+    // 0x40B6 TotalItemCntGT: strictly above 3, not above 4.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B6, containerCause, 3)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B6, containerCause, 4)) == FALSE);
+    // 0x40B7 TotalItemCntLT: strictly under 5, not under 4.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B7, containerCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B7, containerCause, 4)) == FALSE);
+
+    // The exclude family against a container: 0x40C1 and 0x40C3 hand
+    // CountItemExcept the empty string, so the excluded name changes
+    // nothing (still 4); 0x40C2 alone passes the name, dropping the potion
+    // stack (1, the gem alone). The m_string1 member is what the arms read.
+    CAITrigger excludeContainer(0x40C1, containerCause, 4);
+    excludeContainer.m_string1 = "00POTN01";
+    CHECK(pCaller->EvaluateStatusTrigger(excludeContainer) == TRUE);
+    excludeContainer.m_triggerID = 0x40C3; // LT: 4 < 5
+    excludeContainer.m_specificID = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeContainer) == TRUE);
+    excludeContainer.m_triggerID = 0x40C2; // GT: 1 > 0, but not > 1
+    excludeContainer.m_specificID = 0;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeContainer) == TRUE);
+    excludeContainer.m_specificID = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeContainer) == FALSE);
+
+    REQUIRE(pGame->GetObjectArray()->ReleaseShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                INFINITE)
+        == CGameObjectArray::SUCCESS);
+
+    // Sprite half: a sprite whose 51 slots hold only the seeded pair, so
+    // the walk's total is the pair's alone. The potion is stackable, so it
+    // counts its charges (3); the gem counts one.
+    CGameSprite* pSprite = MakeSprite();
+    for (INT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        pSprite->m_equipment.m_items[nSlot] = NULL;
+    }
+    CItem* pPotion = new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0);
+    REQUIRE(pPotion->GetMaxStackable() > 1); // the stack branch is the one taken
+    REQUIRE(pPotion->GetUsageCount(0) == 3);
+    pSprite->m_equipment.m_items[18] = pPotion;
+    pSprite->m_equipment.m_items[19] = new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    // The trio over the sprite's equipment: 3 + 1.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B5, spriteCause, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B6, spriteCause, 3)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B7, spriteCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B5, spriteCause, 4 - 1)) == FALSE);
+
+    // The exclude family over the sprite: the excluded potion is skipped
+    // before the stack test, so only the gem's 1 counts.
+    CAITrigger excludeSprite(0x40C1, spriteCause, 1);
+    excludeSprite.m_string1 = "00POTN01";
+    CHECK(pCaller->EvaluateStatusTrigger(excludeSprite) == TRUE);
+    excludeSprite.m_triggerID = 0x40C2; // GT: 1 > 0, but not > 1
+    excludeSprite.m_specificID = 0;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeSprite) == TRUE);
+    excludeSprite.m_specificID = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeSprite) == FALSE);
+    excludeSprite.m_triggerID = 0x40C3; // LT: 1 < 2, but not < 1
+    excludeSprite.m_specificID = 2;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeSprite) == TRUE);
+    excludeSprite.m_specificID = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(excludeSprite) == FALSE);
+
+    // An unresolved cause object answers FALSE on every arm (the arms'
+    // early return before any counting).
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B5, CAIObjectType::NOONE, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C1, CAIObjectType::NOONE, 0)) == FALSE);
+
+    ClearMessages();
+}
