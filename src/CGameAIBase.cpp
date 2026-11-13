@@ -7303,6 +7303,12 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4017:
+        // Race(object, race): the decoded cause's race byte against the
+        // trigger's specifics.
+        triggerCopy.Decode(this);
+        bResult = triggerCopy.GetCause().GetRace() == triggerCopy.GetSpecifics();
+        break;
     case 0x4018:
         // Range(object, range, mode): the squared search-grid distance to
         // the object (a door's nearer walk-to point) against (range + 1)
@@ -7369,6 +7375,13 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
             sub_4530F0(pObject2->GetAIType());
         }
+        break;
+    case 0x401D:
+        // Specifics(object, specifics): the decoded cause's specific byte
+        // against the trigger's specifics, through the same equality tail
+        // (0x454F87) the Race arm jumps to.
+        triggerCopy.Decode(this);
+        bResult = triggerCopy.GetCause().GetSpecific() == triggerCopy.GetSpecifics();
         break;
     case 0x400D:
         // Exists
@@ -7599,6 +7612,16 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 bResult = dy * dy + dx * dx <= nRange * nRange;
             }
         }
+        break;
+    case 0x40AE:
+        // IsHeartOfFuryModeOn(): the nightmare-mode option's value itself is
+        // the answer, not a normalized 0 or 1.
+        bResult = g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nNightmareMode;
+        break;
+    case 0x40EE:
+        // IsExtendedNight(): bit 0x40 of the area type word; the raw value
+        // is the answer, not 0 or 1.
+        bResult = m_pArea->GetHeader()->m_areaType & 0x40;
         break;
     case 0x40EF:
         // InCutsceneMode
