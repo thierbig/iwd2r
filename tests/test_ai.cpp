@@ -4576,3 +4576,92 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x40B5 0x40B6 0x40B7 0x40C1 0x40C2 and 0x40
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x4017 0x401D 0x40AE 0x40EE 0x4083 0x4084 0x4085 0x4086 race specifics and area state",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The area load waits for m_bDisplayStale to clear, so a pump thread
+    // stands in for the display loop (the harness of the 233/235 case).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea1000;
+
+    const CAIObjectType emptyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+    // 0x4017 Race: the cause's race byte (ctor's third) against the
+    // specifics. An empty-name, instance-less cause stays as built.
+    const CAIObjectType raceCause(0, 0, 5, 0, 0, 0, 0, 0, -1, 0, 0);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4017, raceCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4017, raceCause, 6)) == FALSE);
+
+    // 0x401D Specifics: the cause's specific byte (ctor's sixth).
+    const CAIObjectType specCause(0, 0, 0, 0, 0, 7, 0, 0, -1, 0, 0);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401D, specCause, 7)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401D, specCause, 8)) == FALSE);
+
+    // 0x40AE IsHeartOfFuryModeOn: the option's value itself.
+    CGameOptions* pOptions = pGame->GetOptions();
+    const INT nOldNightmareMode = pOptions->m_nNightmareMode;
+    pOptions->m_nNightmareMode = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AE, emptyCause, 0)) == TRUE);
+    pOptions->m_nNightmareMode = 0;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AE, emptyCause, 0)) == FALSE);
+    pOptions->m_nNightmareMode = nOldNightmareMode;
+
+    // 0x40EE IsExtendedNight: bit 0x40 of the area type word, answered raw.
+    const WORD nOldAreaType = pArea1000->m_header.m_areaType;
+    pArea1000->m_header.m_areaType = 0x0044;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EE, emptyCause, 0)) == 0x40);
+    pArea1000->m_header.m_areaType = 0x0024;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EE, emptyCause, 0)) == FALSE);
+
+    // 0x4083/0x4084/0x4085 (unnamed in TRIGGER.IDS): the area's battle song
+    // counter against the specifics, by equal, less and greater.
+    const INT nOldBattleSongCounter = pArea1000->m_nBattleSongCounter;
+    pArea1000->m_nBattleSongCounter = 7;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4083, emptyCause, 7)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4083, emptyCause, 8)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4084, emptyCause, 8)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4084, emptyCause, 7)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4085, emptyCause, 6)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4085, emptyCause, 7)) == FALSE);
+
+    // 0x4086: the area type word AND the low word of the specifics, raw;
+    // the high word of the specifics is dropped before the AND.
+    pArea1000->m_header.m_areaType = 0x0045;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4086, emptyCause, 0x40)) == 0x40);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4086, emptyCause, 0x20)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4086, emptyCause, 0x45)) == 0x45);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4086, emptyCause, 0x10040)) == 0x40);
+
+    pArea1000->m_header.m_areaType = nOldAreaType;
+    pArea1000->m_nBattleSongCounter = nOldBattleSongCounter;
+
+    ClearMessages();
+}
