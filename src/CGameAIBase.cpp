@@ -7613,6 +7613,26 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4083:
+    case 0x4084:
+    case 0x4085:
+    case 0x4086:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089): the
+        // area's battle song counter against the trigger's specifics, by
+        // equal (0x4083), less (0x4084, jumping to the setl tail 0x456AA3)
+        // and greater (0x4085, jumping to the setg tail 0x459A21); 0x4086
+        // answers the area type word AND the low word of the specifics,
+        // raw, not 0 or 1.
+        if (triggerCopy.m_triggerID == 0x4083) {
+            bResult = m_pArea->GetBattleSongCounter() == triggerCopy.GetSpecifics();
+        } else if (triggerCopy.m_triggerID == 0x4084) {
+            bResult = m_pArea->GetBattleSongCounter() < triggerCopy.GetSpecifics();
+        } else if (triggerCopy.m_triggerID == 0x4085) {
+            bResult = m_pArea->GetBattleSongCounter() > triggerCopy.GetSpecifics();
+        } else {
+            bResult = m_pArea->GetHeader()->m_areaType & (triggerCopy.GetSpecifics() & 0xFFFF);
+        }
+        break;
     case 0x40AE:
         // IsHeartOfFuryModeOn(): the nightmare-mode option's value itself is
         // the answer, not a normalized 0 or 1.
