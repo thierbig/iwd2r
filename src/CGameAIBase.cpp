@@ -10635,9 +10635,10 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = FALSE;
             if (nDistanceSq <= nRangeSq) {
                 bResult = m_pArea->CheckLOS(pObject->GetPos(),
-                    GetPos(),
-                    GetVisibleTerrainTable(),
-                    nOrderable) != FALSE;
+                              GetPos(),
+                              GetVisibleTerrainTable(),
+                              nOrderable)
+                    != FALSE;
             }
             bResult = bResult != FALSE && pObject->GetArea() == m_pArea;
             if (bResult == FALSE) {
