@@ -8015,14 +8015,16 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = Icewind586B70::Instance()->GetCount() > triggerCopy.GetSpecifics();
         }
         break;
+    case 0x4094:
     case 0x4095:
     case 0x4096:
-        // LevelGT, LevelLT(object, level): the trigger sprite's combined
-        // class level -- GetClassMaskLevel over the full class mask 0xFFF,
-        // the sum of its class levels -- against the specifics. The two
-        // arms share the same loads; 0x4095 answers greater through the
-        // setg tail 0x459A21 and 0x4096 less through the setl tail
-        // 0x456AA3. As in HP (0x4010), a null sprite leaves through the
+        // Level, LevelGT, LevelLT(object, level): the trigger sprite's
+        // combined class level -- GetClassMaskLevel over the full class mask
+        // 0xFFF, the sum of its class levels -- against the specifics. The
+        // three arms share the same loads; 0x4094 answers equal through the
+        // sub/neg/sbb/inc idiom (as Happiness 0x4065), 0x4095 greater
+        // through the setg tail 0x459A21 and 0x4096 less through the setl
+        // tail 0x456AA3. As in HP (0x4010), a null sprite leaves through the
         // early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
@@ -8037,8 +8039,10 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             LONG nLevel = pSprite->GetDerivedStats()->GetClassMaskLevel(0xFFF);
             if (triggerCopy.m_triggerID == 0x4095) {
                 bResult = nLevel > triggerCopy.GetSpecifics();
-            } else {
+            } else if (triggerCopy.m_triggerID == 0x4096) {
                 bResult = nLevel < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel == triggerCopy.GetSpecifics();
             }
         }
         break;
@@ -8141,12 +8145,17 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         bResult = _stricmp(triggerCopy.m_string1,
             reinterpret_cast<const char*>(m_pArea->m_header.m_areaName));
         break;
+    case 0x40DB:
+    case 0x40DC:
     case 0x40DD:
-        // HPLostLT(object, n): the trigger sprite's lost hit points -- the
-        // derived max (m_nMaxHitPoints) minus the base current
-        // (m_hitPoints), both sign-extended shorts -- against the
-        // specifics by less (the shared setl tail 0x4551AF, which other
-        // arms jump into as 0x4551AB). As in HP (0x4010), a null sprite
+        // HPLost, HPLostGT, HPLostLT(object, n): the trigger sprite's lost
+        // hit points -- the derived max (m_nMaxHitPoints) minus the base
+        // current (m_hitPoints), both sign-extended shorts -- against the
+        // specifics. The three arms share the same loads; 0x40DB answers
+        // equal through the sub/neg/sbb/inc idiom (as Happiness 0x4065),
+        // 0x40DC greater through its own setg (cmp edi,eax; setg cl) and
+        // 0x40DD less through the shared setl tail 0x4551AF, which other
+        // arms jump into as 0x4551AB. As in HP (0x4010), a null sprite
         // leaves through the early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
@@ -8160,20 +8169,28 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
             LONG nHPLost = pSprite->GetDerivedStats()->m_nMaxHitPoints
                 - pSprite->GetBaseStats()->m_hitPoints;
-            bResult = nHPLost < triggerCopy.GetSpecifics();
+            if (triggerCopy.m_triggerID == 0x40DB) {
+                bResult = nHPLost == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x40DC) {
+                bResult = nHPLost > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nHPLost < triggerCopy.GetSpecifics();
+            }
         }
         break;
+    case 0x40E9:
     case 0x40EA:
     case 0x40EB:
-        // LevelInClassGT, LevelInClassLT(object, level, class): the
-        // trigger sprite's level in the trigger's class (int1,
+        // LevelInClass, LevelInClassGT, LevelInClassLT(object, level,
+        // class): the trigger sprite's level in the trigger's class (int1,
         // m_specific2) -- CDerivedStats::GetClassLevel, whose UTIL_ASSERT
         // fires for a class of 0 or less, as in the original -- against
-        // the specifics. The two arms share the same loads; 0x40EA
-        // answers greater through the setg tail 0x459A21 and 0x40EB less
-        // through the setl tail 0x456AA3 (both tails are LevelGT/LT's,
-        // 0x4095/0x4096). As in HP (0x4010), a null sprite leaves through
-        // the early epilogue (0x45AB7A).
+        // the specifics. The three arms share the same loads; 0x40E9
+        // answers equal through the sub/neg/sbb/inc idiom (as Happiness
+        // 0x4065), 0x40EA greater through the setg tail 0x459A21 and
+        // 0x40EB less through the setl tail 0x456AA3 (both tails are
+        // LevelGT/LT's, 0x4095/0x4096). As in HP (0x4010), a null sprite
+        // leaves through the early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
@@ -8187,8 +8204,10 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             LONG nLevel = pSprite->GetDerivedStats()->GetClassLevel(triggerCopy.GetInt1());
             if (triggerCopy.m_triggerID == 0x40EA) {
                 bResult = nLevel > triggerCopy.GetSpecifics();
-            } else {
+            } else if (triggerCopy.m_triggerID == 0x40EB) {
                 bResult = nLevel < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel == triggerCopy.GetSpecifics();
             }
         }
         break;
