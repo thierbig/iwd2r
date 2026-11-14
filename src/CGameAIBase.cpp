@@ -8798,15 +8798,6 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // compare: 0x403C sub/neg/sbb/inc (0x455540), 0x403D setg
         // (0x4555B7), 0x403E setl (0x45562C).
         {
-            // TODO: 0x455500 (likewise 0x455570 and 0x4555E5) calls
-            // 0x45D560 (not ported): it computes the sprite's reaction
-            // byte (base +0x590 with word modifiers +0x97E/+0x994, a
-            // base-stats table lookup, and a hated-race adjustment via
-            // CRuleTables::IsHatedRace); the arm feeds that byte to
-            // pSprite->FeedBack(29, reaction, 0, 0, -1, 0, 0) before the
-            // compare. Without the callee there is no reaction to
-            // compare, so the result stays FALSE for all three
-            // triggers.
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
             pObject = pSprite;
@@ -8814,6 +8805,16 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 // NOTE: The original leaves through its early epilogue
                 // (0x45AB7A) without releasing anything; nothing is shared.
                 return FALSE;
+            }
+
+            BYTE nReaction = GetReaction(pSprite);
+            pSprite->FeedBack(29, nReaction, 0, 0, -1, 0, 0);
+            if (triggerCopy.m_triggerID == 0x403C) {
+                bResult = nReaction == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x403D) {
+                bResult = static_cast<LONG>(nReaction) > triggerCopy.GetSpecifics();
+            } else {
+                bResult = static_cast<LONG>(nReaction) < triggerCopy.GetSpecifics();
             }
         }
         break;
@@ -9052,6 +9053,38 @@ BOOL CGameAIBase::GetTriggerSprite(CAITrigger& trigger, CGameSprite** ppSprite)
     }
 
     return FALSE;
+}
+
+// 0x45D560
+BYTE CGameAIBase::GetReaction(CGameSprite* pSprite)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const CAIObjectType& typeAI = pSprite->GetAIType();
+
+    SHORT nReputationBand;
+    if (typeAI.m_nEnemyAlly == CAIObjectType::EA_PC) {
+        nReputationBand = pGame->m_nReputation / 10;
+    } else {
+        nReputationBand = pSprite->m_derivedStats.m_nReputation;
+    }
+
+    BYTE nReaction = static_cast<BYTE>(m_reactionRoll
+        + pGame->GetRuleTables().m_tReactionModCharisma.GetAtLong(
+            CPoint(pSprite->m_derivedStats.m_nCHR - 1, 0))
+        + pGame->GetRuleTables().m_tReactionModReputation.GetAtLong(
+            CPoint(nReputationBand - 1, 0)));
+
+    if (GetObjectType() == CGameObject::TYPE_SPRITE
+        && (typeAI.m_nClassMask & CLASSMASK_RANGER) != 0
+        && pGame->GetRuleTables().IsHatedRace(
+            typeAI, static_cast<CGameSprite*>(this)->m_baseStats)) {
+        if (nReaction < 4) {
+            return 0;
+        }
+        nReaction = static_cast<BYTE>(nReaction - 4);
+    }
+
+    return nReaction;
 }
 
 // 0x44DAC0
