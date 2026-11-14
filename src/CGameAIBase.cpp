@@ -7726,10 +7726,13 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = (static_cast<CGameSprite*>(pObject)->GetSpecialization() & nKit) == nKit;
         }
         break;
+    case 0x40E6:
     case 0x40E7:
     case 0x40E8:
-        // CheckSkillGT, CheckSkillLT: the object's skill m_specific2
-        // against the specifics.
+        // CheckSkill, CheckSkillGT, CheckSkillLT: the object's skill
+        // m_specific2 against the specifics. The 0x40E6 arm (0x455EDD) and
+        // 0x40E7's (0x455F32) are back to back and identical through the
+        // movsx skill load; only the final setcc differs (sete, setg, setl).
         {
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
@@ -7742,7 +7745,9 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
             // NOTE: The skill index is not checked, as in the original.
             INT nSkill = pSprite->GetDerivedStats()->m_nSkills[triggerCopy.m_specific2];
-            if (triggerCopy.m_triggerID == 0x40E7) {
+            if (triggerCopy.m_triggerID == 0x40E6) {
+                bResult = nSkill == triggerCopy.m_specificID;
+            } else if (triggerCopy.m_triggerID == 0x40E7) {
                 bResult = nSkill > triggerCopy.m_specificID;
             } else {
                 bResult = nSkill < triggerCopy.m_specificID;
@@ -8092,6 +8097,25 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
 
             bResult = pSprite->GetHappiness() > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4067:
+        // HappinessLT(object, n): the trigger sprite's happiness against the
+        // specifics by less (sete is 0x4065, setg 0x4066; this arm compares
+        // in place at 0x4567F7 and jumps to the common epilogue rather than
+        // entering the NumInParty tail as 0x4066 does). As in HP (0x4010), a
+        // null sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() < triggerCopy.GetSpecifics();
         }
         break;
     case 0x406A:
@@ -11041,9 +11065,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
     default:
         // Trigger IDs outside the table (the byte table 0x45B0C4 indexes
         // 0x400A-0x40F7 into the jump table 0x45AE40) and the table entries
-        // that point at 0x45AD4C answer FALSE, as in the original. The two
-        // arms still unported are 0x4067 HappinessLT (0x4567C0) and 0x40E6
-        // CheckSkill (0x455EDD); they answer FALSE until they are ported.
+        // that point at 0x45AD4C answer FALSE, as in the original.
         bResult = FALSE;
         break;
     }
