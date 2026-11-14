@@ -6663,3 +6663,79 @@ TEST_CASE("ai: EvaluateStatusTrigger 84g BitGlobal HelpEx NumCreaturesLTMyLevel 
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84h IsOverMe 0x4090 unnamed party-slot",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x407D IsOverMe: the caller must itself be a trigger object (the
+    // type gate at 0x456C17). An AI object and a sprite both answer FALSE
+    // before the trigger is even decoded. The remaining paths need a real
+    // CGameTrigger with a loaded area -- the IsOverActivate call through
+    // the trigger vtable and the area search for the cause -- which the
+    // unit harness does not load; they are not driven.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x407D, spriteCause, 0)) == FALSE);
+    CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x407D, spriteCause, 0)) == FALSE);
+
+    // The party slots are cleared so a leftover m_characters entry cannot
+    // alias the sprite's id.
+    LONG nOldCharacters[6];
+    for (SHORT nSlot = 0; nSlot < 6; nSlot++) {
+        nOldCharacters[nSlot] = pGame->m_characters[nSlot];
+        pGame->m_characters[nSlot] = CGameObjectArray::INVALID_INDEX;
+    }
+
+    // 0x4090 (unnamed; TRIGGER.IDS jumps 0x4089 -> 0x4094): the character
+    // occupying fixed-order portrait slot `specifics` must be the
+    // trigger's object and must not be dead. Every exit is a direct
+    // return.
+    {
+        // Instance path: GetFixedOrderCharacterPortraitNum maps the cause's
+        // instance to its slot; an empty party maps every instance to -1,
+        // which matches no specifics, answering FALSE before any share.
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4090, spriteCause, 0)) == FALSE);
+
+        pGame->m_characters[2] = pSprite->m_id;
+        // The sprite in slot 2: the live sprite answers TRUE (the share is
+        // taken and released by the instance), a wrong slot answers FALSE.
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4090, spriteCause, 2)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4090, spriteCause, 1)) == FALSE);
+
+        // STATE_DEAD in the derived stats flips the same slot to FALSE.
+        pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4090, spriteCause, 2)) == FALSE);
+        pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+    }
+
+    {
+        // No-instance path: the specifics name the slot directly through
+        // m_characters (CInfGame::sub_45B610). A slot of six or more answers
+        // INVALID_INDEX, the share fails and the arm answers FALSE without
+        // releasing; a slot holding the live sprite answers TRUE with an
+        // all-zero cause (EA_ALL, every other field unset -- OfType skips
+        // every gate for it, where a NOONE cause matches nothing); dead
+        // flips it to FALSE.
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4090, CAIObjectType::NOONE, 7)) == FALSE);
+
+        CAIObjectType anyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+        CAITrigger slot3(0x4090, anyCause, 3);
+        pGame->m_characters[3] = pSprite->m_id;
+        CHECK(pCaller->EvaluateStatusTrigger(slot3) == TRUE);
+
+        pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(slot3) == FALSE);
+        pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+    }
+
+    for (SHORT nSlot = 0; nSlot < 6; nSlot++) {
+        pGame->m_characters[nSlot] = nOldCharacters[nSlot];
+    }
+
+    ClearMessages();
+}
