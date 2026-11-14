@@ -8603,7 +8603,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // else it is the base-stats reputation byte (+0x3C,
         // zero-extended). Only the final compare differs -- 0x4019 an
         // inline sete (0x4549EF-0x4549F3), 0x401A the shared setg tail,
-        // 0x401B setl (0x454AD2). A null sprite leaves through the
+        // 0x401B setl (0x454AF9). A null sprite leaves through the
         // early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
