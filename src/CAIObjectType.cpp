@@ -1674,6 +1674,12 @@ CGameObject* CAIObjectType::sub_40D050(CGameAIBase* caller, BYTE type, BOOL chec
 {
     CGameObject* pObject = sub_40D0F0(caller, checkBackList);
 
+    // 0x40D062: a resolver that answers nothing (NOONE, or a share that
+    // never succeeds) returns unchanged, without the type gate.
+    if (pObject == NULL) {
+        return NULL;
+    }
+
     if ((pObject->GetObjectType() != type
             && type != CGameObject::TYPE_AIBASE
             && type != CGameObject::TYPE_NONE)
