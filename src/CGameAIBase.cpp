@@ -8449,6 +8449,90 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nPercent == triggerCopy.GetSpecifics();
         }
         break;
+    case 0x400A:
+        // Alignment(object, mask): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, not
+        // CAITrigger::Decode), then read the spec's alignment byte
+        // (m_nAlignment, +0x15). Six specifics values are mask tests
+        // -- 1, 2, 3, 0x10, 0x20 and 0x30, the ALIGNMNT masks --
+        // answered as (m_nAlignment & low byte of the specifics) !=
+        // 0; every other value is a straight 32-bit equality of the
+        // byte (zero-extended) against the specifics. Nothing was
+        // resolved, so the arm jumps straight to the release tail.
+        triggerCopy.m_triggerCause.Decode(this);
+        {
+            LONG nAlignment = triggerCopy.GetSpecifics();
+            if (nAlignment == 1 || nAlignment == 2 || nAlignment == 3
+                || nAlignment == 0x10 || nAlignment == 0x20 || nAlignment == 0x30) {
+                bResult = (triggerCopy.m_triggerCause.m_nAlignment & nAlignment) != 0;
+            } else {
+                bResult = triggerCopy.m_triggerCause.m_nAlignment == nAlignment;
+            }
+        }
+        break;
+    case 0x40AC: // unnamed in TRIGGER.IDS; the jump table sends both IDs
+                 // to the same arm, as with 0x40E1/0x40F4
+    case 0x40AD:
+        // CheckSpellState(object, n): the trigger sprite's derived
+        // spell-state bit -- the std::bitset<256> m_spellStates at
+        // +0xEC, bit number GetSpecifics(). The arm's two callees
+        // 0x45E380/0x45E390 are the compiler's std::bitset<256>::test
+        // helpers (0x45E380 builds the {bitset, index} pair, 0x45E390
+        // returns the bit); the tree's own bitset member supplies
+        // both. A null sprite leaves through the early epilogue
+        // (0x45AB7A), as in HP (0x4010).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetDerivedStats()->m_spellStates.test(
+                triggerCopy.GetSpecifics());
+        }
+        break;
+    case 0x40D9:
+        // IsFacingSavedRotation(object): the sprite the decoded cause
+        // resolves to (sub_40CB20 with TYPE_SPRITE, the byte
+        // 0x84C507): its base-stats saved facing (the byte at +0x2E8,
+        // zero-extended) against its current direction (GetDirection,
+        // 0x45B720) by equal (sub si,ax; neg/sbb/inc on the 16-bit
+        // result). A cause that resolves to nothing jumps straight to
+        // the release tail 0x45AD4C with the result still zero from
+        // dispatch, as in IsRotation (0x40D8).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            CGameSprite* pFacing = static_cast<CGameSprite*>(pObject2);
+            bResult = pFacing->GetBaseStats()->field_2E8 == pFacing->GetDirection();
+        }
+        break;
+    case 0x40ED:
+        // InTrap(object): decode the trigger, and if THIS object is a
+        // trigger (GetObjectType against TYPE_TRIGGER), resolve the
+        // decoded cause with the back-list check on (sub_40CCA0 --
+        // the arm passes the byte 0x84C507, TYPE_SPRITE/0x31, as the
+        // checkBackList BOOL, which is nonzero). With an object in
+        // hand the answer is this trigger's IsOverActivate at that
+        // object's position (vtable 0xB8, GetPos at 0x1C). Without
+        // one -- a caller that is not a trigger, or a cause that
+        // resolves to nothing -- the original stores 0xFFFFFFFE (-2,
+        // still TRUE for a BOOL) and jumps to the release tail.
+        triggerCopy.Decode(this);
+        if (GetObjectType() == CGameObject::TYPE_TRIGGER) {
+            pObject2 = triggerCopy.GetCause().sub_40CCA0(this, TRUE);
+        }
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(
+                pObject2->GetPos());
+        } else {
+            bResult = -2;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
