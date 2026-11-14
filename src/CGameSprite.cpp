@@ -26296,8 +26296,9 @@ SHORT CGameSprite::LeaveArea()
 
     if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
         if (g_pChitin->cNetwork.m_bIsHost != TRUE) {
-            // NOTE: The client asks the host (CBaldurMessage 0x435150, not
-            // ported) and stops here.
+            // The client asks the host to start the map world and stops here;
+            // the host's answer comes back through OnMapWorldStartRequest.
+            g_pBaldurChitin->GetBaldurMessage()->SendMapWorldStartRequest(nDirection);
             return ACTION_DONE;
         }
 

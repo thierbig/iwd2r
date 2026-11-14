@@ -210,6 +210,7 @@ public:
     static const BYTE MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE;
 
     static const BYTE MSG_TYPE_MAPWORLD;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_START_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS;
     static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
@@ -362,6 +363,7 @@ public:
     BOOLEAN SendMapWorldCancelRequestToServer();
     BOOLEAN SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID idController, LONG nLeavingEdge);
     BOOLEAN SendMapWorldRevealArea(CString sAreaResRef);
+    BOOLEAN SendMapWorldStartRequest(SHORT nDirection);
     BOOLEAN OnMapWorldStartRequest(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendMovieRequestToServer(CResRef cResMovie);
     BOOLEAN MovieAnnounceStatus(CResRef cResMovie);

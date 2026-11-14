@@ -587,6 +587,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE = 110;
 // 0x84CF8B
 const BYTE CBaldurMessage::MSG_TYPE_MAPWORLD = 109;
 
+// 0x84CF8C
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_START_REQUEST = 114;
+
 // 0x84CF8D
 const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST = 99;
 
@@ -5107,6 +5110,49 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
         MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS,
         pByteMessage,
         nLength + sizeof(BYTE) + sizeof(BYTE));
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
+// 0x435150
+BOOLEAN CBaldurMessage::SendMapWorldStartRequest(SHORT nDirection)
+{
+    // The client's half of the map-world start: only a connected machine that
+    // does not host the session asks. The host branch of the caller skips this
+    // and announces the start itself (SendMapWorldAnnounceStatus 0x4354E0);
+    // the host side of the exchange is OnMapWorldStartRequest (0x4352A0).
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // NOTE: The original reads the host player's name straight out of the
+    // session (name array chitin+0x1088 indexed by chitin+0x10E0), the same
+    // GetHostPlayerName the neighbouring senders use.
+    CString sHostName;
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    BYTE* pByteMessage = CreateBuffer(sizeof(DWORD));
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    // The body is the leaving edge as a sign-extended DWORD; the host reads it
+    // back as a SHORT in OnMapWorldStartRequest.
+    *reinterpret_cast<DWORD*>(pByteMessage) = nDirection;
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_MAPWORLD,
+        MSG_SUBTYPE_MAPWORLD_START_REQUEST,
+        pByteMessage,
+        sizeof(DWORD));
 
     DestroyBuffer(pByteMessage);
 

@@ -262,6 +262,64 @@ TEST_CASE("CBaldurMessage::SendMapWorldCancelRequestToServer sends the MapWorld 
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
+// CBaldurMessage::SendMapWorldStartRequest (0x435150): the client's map-world
+// start request, carrying the leaving edge as a sign-extended DWORD.
+// CGameSprite::LeaveArea (0x74C0D0) calls it on the client branch with the
+// sprite's direction; the host answers through OnMapWorldStartRequest
+// (0x4352A0). Same wire shape as the cancel request above, plus the payload.
+TEST_CASE("msg: CBaldurMessage::SendMapWorldStartRequest sends the leaving edge to the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+    BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+
+    network.m_nHostPlayer = 0;
+    network.m_psPlayerName[0] = "host";
+    network.m_pbPlayerVisible[0] = TRUE;
+    network.m_pPlayerID[0] = 1;
+
+    // Not connected: the first guard answers FALSE and the buffer is untouched.
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    memset(pBuffer, 0xCD, 8);
+    CHECK(message.SendMapWorldStartRequest(7) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A host announces the start itself (0x4354E0); it does not send this.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.SendMapWorldStartRequest(7) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client with no host name stops at the name guard.
+    network.m_bIsHost = FALSE;
+    network.m_nHostPlayer = -1;
+    CHECK(message.SendMapWorldStartRequest(7) == FALSE);
+    CHECK(pBuffer[0] == 0xCD);
+
+    // A client with the host named sends type/subtype 109/114 and the edge
+    // (the send itself fails without DirectPlay, but the wire bytes land).
+    network.m_nHostPlayer = 0;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    memset(pBuffer, 0xCD, 8);
+    CHECK(message.SendMapWorldStartRequest(-2) == TRUE);
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == 109);
+    CHECK(pBuffer[2] == 114);
+    // The leaving edge travels sign-extended as a DWORD (the caller's movsx).
+    DWORD nEdge = 0;
+    memcpy(&nEdge, pBuffer + 3, sizeof(nEdge));
+    CHECK(nEdge == 0xFFFFFFFE);
+    CHECK(pBuffer[7] == 0xCD);
+    CHECK(CBaldurMessage::MSG_SUBTYPE_MAPWORLD_START_REQUEST == 114);
+
+    // Leave the embedded CNetwork closed (see the cancel-request test).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
 // The movie pair: CBaldurMessage::SendMovieRequestToServer (0x436690) is the
 // client's request, addressed to the host by name, and
 // CBaldurMessage::MovieAnnounceStatus (0x4369E0) the host's announce to every
