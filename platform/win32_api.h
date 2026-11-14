@@ -549,6 +549,7 @@ struct sockaddr_in {
 
 // The socket constants the GameSpy code uses, with the Win32 values.
 constexpr int AF_INET = 2;
+constexpr int SOCK_STREAM = 1;
 constexpr int SOCK_DGRAM = 2;
 constexpr int IPPROTO_UDP = 17;
 constexpr long FIONBIO = 0x8004667E;
