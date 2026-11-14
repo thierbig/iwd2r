@@ -20,6 +20,7 @@
 #include "CInfGame.h"
 #include "CMessage.h"
 #include "CPathSearch.h"
+#include "CProjectile.h"
 #include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
 #include "CScreenJournal.h"
@@ -4662,6 +4663,168 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x4017 0x401D 0x40AE 0x40EE 0x4083 0x4084 0
 
     pArea1000->m_header.m_areaType = nOldAreaType;
     pArea1000->m_nBattleSongCounter = nOldBattleSongCounter;
+
+    ClearMessages();
+}
+
+// 0x7624F0 through the 290/291 arms: the target sprite decodes the
+// projectile named by the action's specifics -- the plain 0xD3 for the
+// reserved 0xD2 and the spell-hit table otherwise, with the sprite itself as
+// the hit object -- posts the secondary-projectile message for the other
+// machines and fires it at the arm's point. The helper returns the global
+// ACTION_DONE, so both arms answer done.
+TEST_CASE("ai: ExecuteAction 290 and 291 fire the target sprite's spell hit", "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The area load waits for m_bDisplayStale to clear (the AR3000 pump the
+    // CreateCreatureObject test uses).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea;
+    pCaller->m_pos = CPoint(7 * CPathSearch::GRID_SQUARE_SIZEX,
+        7 * CPathSearch::GRID_SQUARE_SIZEY);
+
+    CGameSprite* pTarget = MakeSprite();
+    pTarget->m_pArea = pArea;
+    pTarget->m_pos = CPoint(9 * CPathSearch::GRID_SQUARE_SIZEX,
+        9 * CPathSearch::GRID_SQUARE_SIZEY);
+
+    CGameSprite* pActee = MakeSprite();
+    pActee->m_pArea = pArea;
+    pActee->m_pos = CPoint(11 * CPathSearch::GRID_SQUARE_SIZEX,
+        10 * CPathSearch::GRID_SQUARE_SIZEY);
+
+    CAIObjectType targetType(0, 0, 0, 0, 0, 0, 0, 0, pTarget->m_id, 0, 0);
+    CAIObjectType acteeType(0, 0, 0, 0, 0, 0, 0, 0, pActee->m_id, 0, 0);
+
+    CGameObjectArray* pArray = pGame->GetObjectArray();
+    auto findSecondaryMessage = []() -> CMessageSpellHitEffectSecondaryProjectile* {
+        CMessageSpellHitEffectSecondaryProjectile* pFound = NULL;
+        CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+        POSITION pos = handler.m_messageList.GetHeadPosition();
+        while (pos != NULL) {
+            CMessage* pMessage = handler.m_messageList.GetNext(pos);
+            auto* pSecondary = dynamic_cast<CMessageSpellHitEffectSecondaryProjectile*>(pMessage);
+            if (pSecondary != NULL) {
+                CHECK(pFound == NULL);
+                pFound = pSecondary;
+            }
+        }
+        return pFound;
+    };
+    auto removeNewProjectiles = [pArray](SHORT nNextObjectIdBefore) {
+        std::vector<LONG> newIds;
+        for (SHORT n = 0; n <= pArray->m_nMaxArrayIndex; n++) {
+            const int nObjectId = pArray->m_pArray[n].m_objectId;
+            if (nObjectId >= static_cast<int>(nNextObjectIdBefore)
+                && nObjectId < static_cast<int>(pArray->m_nNextObjectId)) {
+                newIds.push_back(static_cast<LONG>(nObjectId) | (static_cast<LONG>(n) << 16));
+            }
+        }
+        for (LONG nId : newIds) {
+            CGameObject* pObject = NULL;
+            if (pArray->GetShare(nId, CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE)
+                != CGameObjectArray::SUCCESS) {
+                continue;
+            }
+            pArray->ReleaseShare(nId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+            if (dynamic_cast<CProjectile*>(pObject) != NULL) {
+                static_cast<CProjectile*>(pObject)->RemoveSelf();
+            }
+        }
+    };
+
+    const LONG nHeightPoint = 55;
+    const LONG nHeightSprite = 60;
+
+    // 290 SpellHitEffectPoint, type 0xD2: the helper decodes the plain 0xD3
+    // projectile (the acid-storm cloud) from the hit object and posts type
+    // 0xD3 (the ctor's +1).
+    {
+        SHORT nNextObjectIdBefore = pArray->m_nNextObjectId;
+        CAIAction point;
+        point.m_actionID = 290;
+        point.m_acteeID = targetType;
+        point.m_dest = CPoint(123, 456);
+        point.m_specificID = 0xD2;
+        point.m_specificID2 = nHeightPoint;
+        pCaller->SetCurrAction(point);
+        CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        auto* pMessage = findSecondaryMessage();
+        REQUIRE(pMessage != NULL);
+        CHECK(pMessage->GetCommType() == CMessage::BROADCAST_FORCED);
+        CHECK(pMessage->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(pMessage->GetMsgSubType()
+            == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_HIT_EFFECT_SECONDARY_PROJECTILE);
+        CHECK(pMessage->GetMsgSubType() == 115);
+        CHECK(pMessage->m_targetId == pTarget->m_id);
+        CHECK(pMessage->m_sourceId == pTarget->m_id);
+        CHECK(pMessage->m_projectileType == 0xD3);
+        CHECK(pMessage->m_projectileTargetId == 0);
+        CHECK(pMessage->m_projectileTarget == CPoint(123, 456));
+        CHECK(pMessage->m_height == nHeightPoint);
+        CHECK(pMessage->field_1E == 0);
+        CHECK(pMessage->field_20 == 0);
+
+        ClearMessages();
+        removeNewProjectiles(nNextObjectIdBefore);
+    }
+
+    // 291 SpellHitEffectSprite, type 1: the helper decodes through the
+    // spell-hit table with the target sprite as the hit object, and posts
+    // 0x1000 + 1 = 0x1001 plus the ctor's one, 0x1002. The point and id are
+    // the actee's.
+    {
+        SHORT nNextObjectIdBefore = pArray->m_nNextObjectId;
+        CAIAction sprite;
+        sprite.m_actionID = 291;
+        sprite.m_acteeID = targetType;
+        sprite.m_acteeID2 = acteeType;
+        sprite.m_specificID = 1;
+        sprite.m_specificID2 = nHeightSprite;
+        pCaller->SetCurrAction(sprite);
+        CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+
+        auto* pMessage = findSecondaryMessage();
+        REQUIRE(pMessage != NULL);
+        CHECK(pMessage->m_targetId == pTarget->m_id);
+        CHECK(pMessage->m_sourceId == pTarget->m_id);
+        CHECK(pMessage->m_projectileType == 0x1002);
+        CHECK(pMessage->m_projectileTargetId == pActee->m_id);
+        CHECK(pMessage->m_projectileTarget == pActee->GetPos());
+        CHECK(pMessage->m_height == nHeightSprite);
+        CHECK(pMessage->field_1E == 0);
+        CHECK(pMessage->field_20 == 0);
+
+        ClearMessages();
+        removeNewProjectiles(nNextObjectIdBefore);
+    }
 
     ClearMessages();
 }

@@ -27621,6 +27621,52 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
     return ACTION_DONE;
 }
 
+// 0x7624F0
+// The SpellHitEffectPoint (290) and SpellHitEffectSprite (291) executor, run
+// on the target sprite: it decodes the projectile named by the action's
+// specifics and fires it at the point the arm resolved.  The reserved type
+// 0xD2 decodes the plain 0xD3 projectile from the hit object itself; every
+// other type goes through the spell-hit table, which also receives the
+// sprite as the hit object.  The message posted for the other machines
+// carries the type the decoder understands (0x1000 + n, or 0xD3), and the
+// return is the global ACTION_DONE word the container sibling reports too.
+SHORT CGameSprite::SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget,
+    LONG targetId, DWORD nType, LONG nHeight)
+{
+    WORD projectileType;
+    CProjectile* pProjectile;
+
+    // The 0x76250F test: the 0xD2 branch keeps the type in the message; the
+    // other branch reports it offset by 0x1000.
+    if (nType != 0xd2) {
+        pProjectile = CProjectile::DecodeSpellHitProjectile(nType,
+            static_cast<CGameSprite*>(pHitObject),
+            FALSE);
+        projectileType = static_cast<WORD>(nType + 0x1000);
+    } else {
+        pProjectile = CProjectile::DecodeProjectile(0xd3, pHitObject, 0);
+        projectileType = static_cast<WORD>(nType);
+    }
+
+    // At 0x762554 a failed allocation still posts the NULL message.
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageSpellHitEffectSecondaryProjectile(projectileType,
+            targetId,
+            ptTarget,
+            nHeight,
+            m_id,
+            m_id,
+            0),
+        FALSE);
+
+    // At 0x7625AF Fire is called through vtable slot 0x6C with the point
+    // copied by value.
+    pProjectile->Fire(m_pArea, m_id, targetId, ptTarget, nHeight, static_cast<SHORT>(nType));
+
+    // At 0x7625D2 the action return is the global ACTION_DONE word.
+    return ACTION_DONE;
+}
+
 // 0x746480
 // The UseItem (34) executor: use an equipped item on an AI object. Unlike
 // UseItemPoint, a live sprite's reach includes both sprites' personal space,

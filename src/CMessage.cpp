@@ -19,6 +19,7 @@
 #include "CItem.h"
 #include "CPathSearch.h"
 #include "CProjectile.h"
+#include "CProjectileSingleTarget.h"
 #include "CRes.h"
 #include "CResArea.h"
 #include "CResGame.h"
@@ -408,6 +409,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PICKED_DIALOG_RESPONSE = 113;
 
 // 0x84CF49
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_AREA_EXPLORED = 114;
+
+// 0x84CF4A
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_HIT_EFFECT_SECONDARY_PROJECTILE = 115;
 
 // 0x84CF4B
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CHANGE_STAT = 116;
@@ -19195,6 +19199,248 @@ void CMessageFireProjectile::Run()
         // TODO: The original stores field_20 in the projectile's +0x356
         // member, a member of the class DecodeProjectile builds for type 305
         // (not ported yet).
+    }
+
+    pProjectile->Fire(pObject->GetArea(),
+        pObject->GetId(),
+        m_projectileTargetId,
+        m_projectileTarget,
+        m_height,
+        0);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x500960
+CMessageSpellHitEffectSecondaryProjectile::CMessageSpellHitEffectSecondaryProjectile(WORD projectileType, LONG projectileTargetId, const CPoint& projectileTarget, LONG height, LONG caller, LONG target, unsigned char a7)
+    : CMessage(caller, target)
+{
+    // The stored type is the real projectile type: the helper passes
+    // 0x1000 + n for a spell-hit type n and 0xD2 for the plain one.
+    m_projectileType = projectileType + 1;
+    m_projectileTargetId = projectileTargetId;
+    m_projectileTarget = projectileTarget;
+    m_height = height;
+    field_1E = a7;
+    field_20 = 0;
+}
+
+// 0x43E170
+SHORT CMessageSpellHitEffectSecondaryProjectile::GetCommType()
+{
+    return BROADCAST_FORCED;
+}
+
+// 0x40A0E0
+BYTE CMessageSpellHitEffectSecondaryProjectile::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x5009B0
+BYTE CMessageSpellHitEffectSecondaryProjectile::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPELL_HIT_EFFECT_SECONDARY_PROJECTILE;
+}
+
+// 0x5009C0
+void CMessageSpellHitEffectSecondaryProjectile::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 12584
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+    PLAYER_ID remotePlayerID;
+    LONG remoteObjectID;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    remotePlayerID = pObject->m_remotePlayerID;
+    remoteObjectID = pObject->m_remoteObjectID;
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(WORD)
+        + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(CPoint)
+        + sizeof(LONG) + sizeof(int) + sizeof(unsigned char);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 12613
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+    cnt += sizeof(PLAYER_ID);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<WORD*>(*pData + cnt) = m_projectileType;
+    cnt += sizeof(WORD);
+
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_projectileTargetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        remotePlayerID = pObject->m_remotePlayerID;
+        remoteObjectID = pObject->m_remoteObjectID;
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_projectileTargetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    } else {
+        remotePlayerID = 0;
+        remoteObjectID = CGameObjectArray::INVALID_INDEX;
+    }
+
+    *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+    cnt += sizeof(PLAYER_ID);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<CPoint*>(*pData + cnt) = m_projectileTarget;
+    cnt += sizeof(CPoint);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = m_height;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<int*>(*pData + cnt) = field_20;
+    cnt += sizeof(int);
+
+    *reinterpret_cast<unsigned char*>(*pData + cnt) = field_1E;
+    cnt += sizeof(unsigned char);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 12677
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x500BB0
+BOOL CMessageSpellHitEffectSecondaryProjectile::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 12705
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+            remoteObjectID,
+            localObjectID)
+        == TRUE) {
+        m_targetId = localObjectID;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    m_projectileType = *reinterpret_cast<WORD*>(pData + cnt);
+    cnt += sizeof(WORD);
+
+    remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+            remoteObjectID,
+            localObjectID)
+        != TRUE) {
+        if (remotePlayerID != 0 || remoteObjectID != CGameObjectArray::INVALID_INDEX) {
+            return FALSE;
+        }
+        localObjectID = CGameObjectArray::INVALID_INDEX;
+    }
+    m_projectileTargetId = localObjectID;
+
+    m_projectileTarget = *reinterpret_cast<CPoint*>(pData + cnt);
+    cnt += sizeof(CPoint);
+
+    m_height = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    field_20 = *reinterpret_cast<int*>(pData + cnt);
+    cnt += sizeof(int);
+
+    field_1E = *reinterpret_cast<unsigned char*>(pData + cnt);
+    cnt += sizeof(unsigned char);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 12771
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
+}
+
+// 0x500CE0
+void CMessageSpellHitEffectSecondaryProjectile::Run()
+{
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    if (pObject->GetArea() == NULL) {
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+        return;
+    }
+
+    CProjectile* pProjectile;
+    if ((pObject->GetObjectType() & CGameObject::TYPE_AIBASE) != 0) {
+        pProjectile = CProjectile::DecodeProjectile(m_projectileType,
+            static_cast<CGameAIBase*>(pObject),
+            field_1E);
+    } else {
+        pProjectile = CProjectile::DecodeProjectile(m_projectileType,
+            NULL,
+            field_1E);
+    }
+
+    if (pProjectile->m_projectileType == 304) {
+        // DecodeProjectile stamps m_projectileType with the requested type
+        // minus one, so the 305 decode (the wandering tornado) is the one
+        // that lands here; its MP-replicated wander seed sits at +0x356.
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = field_20;
     }
 
     pProjectile->Fire(pObject->GetArea(),
