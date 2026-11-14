@@ -6806,3 +6806,123 @@ TEST_CASE("ai: EvaluateStatusTrigger 84i Detect 0x4074 0x4092 unnamed cone",
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84j TriggerSetGlobal 0x40C9 InParty 0x4043",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType anyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+    // Empty the party seats so a leftover portrait entry cannot alias the
+    // sprite's id.
+    const SHORT nOldCharacters = pGame->m_nCharacters;
+    LONG nOldPortraits[6];
+    for (SHORT nSeat = 0; nSeat < 6; nSeat++) {
+        nOldPortraits[nSeat] = pGame->m_characterPortraits[nSeat];
+        pGame->m_characterPortraits[nSeat] = CGameObjectArray::INVALID_INDEX;
+    }
+    pGame->m_nCharacters = 0;
+
+    // 0x40C9 TriggerSetGlobal: GLOBAL creates the missing variable named by
+    // everything past the six-character scope, uppercased, with the
+    // specifics as the value, answers TRUE and queues exactly one
+    // CMessageSetVariable (caller and target both the setter).
+    {
+        CAITrigger set(0x40C9, anyCause, 42);
+        set.m_string1 = "globalxyz";
+        CHECK(pCaller->EvaluateStatusTrigger(set) == TRUE);
+        CVariable* pVariable = pGame->GetVariables()->FindKey(CString("XYZ"));
+        REQUIRE(pVariable != NULL);
+        CHECK(pVariable->m_intValue == 42);
+        const std::vector<CMessageSetVariable*> sets = Queued<CMessageSetVariable>();
+        REQUIRE(sets.size() == 1);
+        CHECK(sets[0]->m_sScope == CString("GLOBAL"));
+        CHECK(sets[0]->m_sName == CString("XYZ"));
+        CHECK(sets[0]->m_nValue == 42);
+        CHECK(sets[0]->m_bIncrement == FALSE);
+        CHECK(sets[0]->m_sourceId == pCaller->m_id);
+        CHECK(sets[0]->m_targetId == pCaller->m_id);
+        ClearMessages();
+
+        // The found path overwrites in place.
+        CAITrigger again(0x40C9, anyCause, 7);
+        again.m_string1 = "GLOBALXYZ";
+        CHECK(pCaller->EvaluateStatusTrigger(again) == TRUE);
+        CHECK(pGame->GetVariables()->FindKey(CString("XYZ"))->m_intValue == 7);
+        REQUIRE(Queued<CMessageSetVariable>().size() == 1);
+        CHECK(Queued<CMessageSetVariable>()[0]->m_nValue == 7);
+        ClearMessages();
+    }
+
+    // LOCALS on a non-sprite caller: the original breaks through the
+    // release tail with esi still TRUE (0x459EB3), reporting success
+    // without setting or posting anything -- kept verbatim.
+    {
+        CAITrigger set(0x40C9, anyCause, 5);
+        set.m_string1 = "LOCALSABC";
+        CHECK(pCaller->EvaluateStatusTrigger(set) == TRUE);
+        CHECK(Queued<CMessageSetVariable>().empty());
+        ClearMessages();
+    }
+
+    // A named area that is not loaded keeps the TRUE the same way.
+    {
+        CAITrigger set(0x40C9, anyCause, 5);
+        set.m_string1 = "AR1234XYZ";
+        CHECK(pCaller->EvaluateStatusTrigger(set) == TRUE);
+        CHECK(Queued<CMessageSetVariable>().empty());
+        ClearMessages();
+    }
+
+    // LOCALS on a sprite caller sets the sprite's own variable.
+    {
+        CAITrigger set(0x40C9, anyCause, 9);
+        set.m_string1 = "LOCALSABC";
+        CHECK(pSprite->EvaluateStatusTrigger(set) == TRUE);
+        CVariable* pVariable = pSprite->GetLocalVariables()->FindKey(CString("ABC"));
+        REQUIRE(pVariable != NULL);
+        CHECK(pVariable->m_intValue == 9);
+        const std::vector<CMessageSetVariable*> sets = Queued<CMessageSetVariable>();
+        REQUIRE(sets.size() == 1);
+        CHECK(sets[0]->m_sScope == CString("LOCALS"));
+        ClearMessages();
+    }
+
+    // 0x4043 InParty: a cause instance without a portrait skips the party
+    // loop for the character-overflow scan, which is empty here: FALSE.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, spriteCause, 0)) == FALSE);
+
+    // Seating the sprite gives it a portrait: the instance path shares it
+    // once, alive answers TRUE, STATE_DEAD flips it to FALSE.
+    {
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        pGame->m_nCharacters = 1;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, spriteCause, 0)) == TRUE);
+        pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, spriteCause, 0)) == FALSE);
+        pSprite->m_derivedStats.m_generalState &= ~STATE_DEAD;
+
+        // No-instance path: the party loop shares each seat; the all-zero
+        // cause matches the living sprite, NOONE matches nothing.
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, anyCause, 0)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, CAIObjectType::NOONE, 0)) == FALSE);
+        pGame->m_characterPortraits[0] = CGameObjectArray::INVALID_INDEX;
+        pGame->m_nCharacters = 0;
+
+        // No instance, no seats: the empty party and overflow scans answer
+        // FALSE for the all-zero cause too.
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4043, anyCause, 0)) == FALSE);
+    }
+
+    pGame->m_nCharacters = nOldCharacters;
+    for (SHORT nSeat = 0; nSeat < 6; nSeat++) {
+        pGame->m_characterPortraits[nSeat] = nOldPortraits[nSeat];
+    }
+
+    ClearMessages();
+}
