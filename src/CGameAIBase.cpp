@@ -9100,6 +9100,106 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x40B0:
+        // OnIsland(object): whether the trigger's sprite stands on the
+        // island of the AR1600 layout. GetTriggerSprite resolves the
+        // cause; a sprite that does not resolve answers TRUE through
+        // the 0x45AD47 tail (which sets esi to 1 before releasing,
+        // 0x458636), as does a sprite that is dead in either stat
+        // block -- the base file header's state (+0x18, GetBaseStats
+        // 0x453190) or the derived stats (+0, GetDerivedStats
+        // 0x4531A0), both tested for STATE_DEAD (test ch,8). A live
+        // sprite's position (GetPos vtable+0x1C, called once per
+        // coordinate at 0x458667 / 0x458672) then walks the exe's
+        // decision chain (0x458675-0x4586D5), in which every test
+        // answers at once:
+        //   x > 0x403               FALSE   (0x45867E)
+        //   y < 0x69                FALSE   (0x458687)
+        //   y > 0x24E               FALSE   (0x458692)
+        //   x < 0x2B4 && y < 0x24E  TRUE    (0x4586A5)
+        //   x < 0x3FA && y < 0x1CB  TRUE    (0x4586B8)
+        //   x >= 0x403              FALSE   (0x4586C4)
+        //   y >= 0x12D              FALSE   (0x4586CF)
+        //   otherwise               TRUE    (0x4586D5)
+        // (net island: the x band 0x3FA-0x403 with y 0x69-0x12D,
+        // flanked by two wider x bands that allow taller y.)
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original jumps to 0x45AD47, which answers
+                // TRUE; pObject is NULL, so the release tail is empty.
+                bResult = TRUE;
+                break;
+            }
+            if ((pSprite->GetBaseStats()->m_generalState & STATE_DEAD) != 0
+                || (pSprite->GetDerivedStats()->m_generalState & STATE_DEAD) != 0) {
+                bResult = TRUE;
+                break;
+            }
+            CPoint pt = pSprite->GetPos();
+            if (pt.x > 0x403) {
+                bResult = FALSE;
+            } else if (pt.y < 0x69) {
+                bResult = FALSE;
+            } else if (pt.y > 0x24E) {
+                bResult = FALSE;
+            } else if (pt.x < 0x2B4 && pt.y < 0x24E) {
+                bResult = TRUE;
+            } else if (pt.x < 0x3FA && pt.y < 0x1CB) {
+                bResult = TRUE;
+            } else if (pt.x >= 0x403) {
+                bResult = FALSE;
+            } else if (pt.y >= 0x12D) {
+                bResult = FALSE;
+            } else {
+                bResult = TRUE;
+            }
+        }
+        break;
+    case 0x40F0:
+        // HasItemInSlot(object, item, slot): decode the trigger and
+        // resolve its cause with the sprite-typed resolver (sub_40CB20
+        // with the byte 0x31 at 0x84C507); a cause that resolves to
+        // nothing answers FALSE through the release tail (je 0x45AD4C
+        // at 0x45A672), as do specifics of 24 or more (the word 24 at
+        // 0x855128, signed jge 0x45A68C). The slot number is the full
+        // LONG specifics; only its upper bound is checked, so a
+        // negative slot passes the guard and reads before m_items --
+        // a vanilla quirk this port keeps by indexing unchecked. The
+        // slot is read from the sprite's equipment (GetEquipment
+        // 0x45B740): an occupied slot answers whether the item's
+        // resref (CResHelper::GetResRef 0x4699E0) equals the
+        // trigger's string1 (CResRef::operator== 0x78ABA0), an empty
+        // slot whether the empty CString does (the global at
+        // 0x8C5CF8, CString operator== 0x45B270). The original reads
+        // GetSpecifics and GetEquipment twice each (0x45A692 /
+        // 0x45A6B9); the values cannot differ, so this port reads
+        // them once.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 == NULL) {
+            break;
+        }
+        {
+            LONG nSlot = triggerCopy.GetSpecifics();
+            if (nSlot >= 24) {
+                break;
+            }
+            CItem* pItem = static_cast<CGameSprite*>(pObject2)
+                               ->GetEquipment()
+                               ->m_items[nSlot];
+            if (pItem == NULL) {
+                // NOTE: The empty side is the exe's global empty
+                // CString at 0x8C5CF8.
+                bResult = CString("") == triggerCopy.GetString1();
+            } else {
+                bResult = pItem->GetResRef() == triggerCopy.GetString1();
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
