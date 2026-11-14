@@ -8242,6 +8242,59 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x40B2:
+    case 0x40B4:
+        // SummoningLimit, SummoningLimitLT(object, n): the summon
+        // registry's count of occupied slots (Icewind586B70::GetCount)
+        // against the specifics. The two arms share the same loads
+        // (count first, then the specifics) and differ only in the
+        // normalizer: 0x40B2 answers the equality idiom sub/neg/sbb/inc
+        // (as Happiness 0x4065) and 0x40B4 the signed setl. As in
+        // SummoningLimitGT (0x40B3), the sprite is resolved first only so
+        // the epilogue can release it; a null sprite leaves through the
+        // early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            int nCount = Icewind586B70::Instance()->GetCount();
+            if (triggerCopy.m_triggerID == 0x40B2) {
+                bResult = nCount == triggerCopy.GetSpecifics();
+            } else {
+                bResult = nCount < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40E1:
+    case 0x40F4:
+        // SetLastMarkedObject, SetSpellTarget(object): resolve the decoded
+        // cause through sub_40CCA0 -- no type check, as in
+        // IsPathCriticalObject (0x40F5) -- and store its AI type in the
+        // last-marked-object slot (sub_4530F0 -> field_342, the slot action
+        // 281 MarkObject writes) or the spell-target slot (sub_45B6E0 ->
+        // field_3BA); a cause that resolves to nothing stores the constant
+        // NOONE (0x8C7708). The two arms are identical except for that
+        // final callee, and both always answer TRUE (the shared tail
+        // 0x45AD47 sets the result to 1 before the release block).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        {
+            const CAIObjectType& type = pObject2 != NULL ? pObject2->GetAIType()
+                                                         : CAIObjectType::NOONE;
+            if (triggerCopy.m_triggerID == 0x40E1) {
+                sub_4530F0(type);
+            } else {
+                sub_45B6E0(type);
+            }
+        }
+        bResult = TRUE;
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
