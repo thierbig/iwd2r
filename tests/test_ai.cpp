@@ -15,6 +15,7 @@
 #include "CGameDoor.h"
 #include "CGameEffect.h"
 #include "CGameObjectArray.h"
+#include "CGameSave.h"
 #include "CGameSprite.h"
 #include "CGameTrigger.h"
 #include "CInfGame.h"
@@ -4825,6 +4826,100 @@ TEST_CASE("ai: ExecuteAction 290 and 291 fire the target sprite's spell hit", "[
         ClearMessages();
         removeNewProjectiles(nNextObjectIdBefore);
     }
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x4027 0x404E 0x404F 0x4050 0x4066 0x406A 0x406B 0x406C delay gold happiness party size",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The area load waits for m_bDisplayStale to clear, so a pump thread
+    // stands in for the display loop (the harness of the 233/235 case);
+    // GetTriggerSprite's resolution walks the loaded game's object array.
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea1000;
+
+    const CAIObjectType emptyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+    // 0x4027 Delay: this sprite's AI round counter modulo the delay against
+    // the offscreen rounds counter, both signed (idiv and C++ agree on the
+    // remainder's sign).
+    const int nOldRounds = pCaller->field_54C;
+    const short nOldOffscreen = pCaller->field_550;
+    pCaller->field_54C = 23;
+    pCaller->field_550 = 3;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4027, emptyCause, 10)) == TRUE); // 23 % 10 = 3 <= 3
+    pCaller->field_550 = 2;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4027, emptyCause, 10)) == FALSE); // 3 <= 2 fails
+    pCaller->field_54C = -23;
+    pCaller->field_550 = -2;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4027, emptyCause, 10)) == TRUE); // -3 <= -2
+    pCaller->field_550 = -4;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4027, emptyCause, 10)) == FALSE); // -3 <= -4 fails
+    pCaller->field_54C = nOldRounds;
+    pCaller->field_550 = nOldOffscreen;
+
+    // 0x404E/0x404F/0x4050 PartyGold trio: the save's party gold dword
+    // against the specifics, by equal, greater and less.
+    CGameSave* pSave = pGame->GetGameSave();
+    const DWORD nOldPartyGold = pSave->m_nPartyGold;
+    pSave->m_nPartyGold = 100;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x404E, emptyCause, 100)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x404E, emptyCause, 101)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x404F, emptyCause, 99)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x404F, emptyCause, 100)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4050, emptyCause, 101)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4050, emptyCause, 100)) == FALSE);
+    pSave->m_nPartyGold = nOldPartyGold;
+
+    // 0x406A/0x406B/0x406C NumInParty trio: the game's character count,
+    // sign-extended from GetNumCharacters' short.
+    const SHORT nOldCharacters = pGame->m_nCharacters;
+    pGame->m_nCharacters = 4;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406A, emptyCause, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406A, emptyCause, 5)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406B, emptyCause, 3)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406B, emptyCause, 4)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406C, emptyCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x406C, emptyCause, 4)) == FALSE);
+    pGame->m_nCharacters = nOldCharacters;
+
+    // 0x4066 HappinessGT: the trigger sprite's happiness strictly greater
+    // than the specifics; an unresolved cause answers FALSE through the
+    // early epilogue before any compare.
+    CGameSprite* pSprite = MakeSprite();
+    pSprite->m_nHappiness = 80;
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, spriteCause, 79)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, spriteCause, 80)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, CAIObjectType::NOONE, 0)) == FALSE);
 
     ClearMessages();
 }
