@@ -6739,3 +6739,70 @@ TEST_CASE("ai: EvaluateStatusTrigger 84h IsOverMe 0x4090 unnamed party-slot",
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84i Detect 0x4074 0x4092 unnamed cone",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CGameAIBase* pTarget = AddAIObject();
+    CAIObjectType targetCause(0, 0, 0, 0, 0, 0, 0, 0, pTarget->m_id, 0, 0);
+    CAIObjectType bogusCause(0, 0, 0, 0, 0, 0, 0, 0, 0x12345678, 0, 0);
+
+    // 0x4074 Detect: a cause whose instance does not seat fails the
+    // share inside sub_40CCA0 and breaks FALSE through the release tail
+    // with nothing shared (0x454DD8).
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4074, bogusCause, 0)) == FALSE);
+    CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x4074, bogusCause, 0)) == FALSE);
+
+    // The seated paths need the caller's area: GetVisualRange reads
+    // m_pArea->m_visibility before the range compare (0x454E55). Over a
+    // zeroed CGameArea the visual range is zero, so a far target's
+    // squared grid distance skips the LOS block outright (0x454E6E) and
+    // the same-area test cannot rescue the FALSE -- the share releases
+    // inline and the arm breaks FALSE (0x454EB8 through 0x456E71). The
+    // in-range LOS and the TRUE bookkeeping need a loaded area's
+    // CheckLOS; not driven.
+    //
+    // No-instance path: the search runs on the caller's area. Over the
+    // zeroed CGameArea the front-list GetNearest (0x46B160) takes the
+    // caller's share, sees the fresh caller's negative position and
+    // answers INVALID_INDEX; the back-list sub_46DAE0 rejects the
+    // negative position before touching any member. Both break FALSE
+    // through the tail (0x454CBD) sharing nothing.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        reinterpret_cast<CGameArea*>(area)->m_pGame = g_pBaldurChitin->GetObjectGame();
+
+        pTarget->m_pos = CPoint(100000, 100000);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4074, targetCause, 0)) == FALSE);
+
+        CAIObjectType anyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4074, anyCause, 0)) == FALSE);
+
+        pCaller->m_listType = CGameObject::LIST_BACK;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4074, anyCause, 0)) == FALSE);
+        pCaller->m_listType = CGameObject::LIST_FRONT;
+        pCaller->m_pArea = NULL;
+    }
+
+    // 0x4092 (unnamed; TRIGGER.IDS jumps 0x4089 -> 0x4094): both
+    // objects resolve before any math. A cause whose instance does not
+    // seat answers FALSE through the direct cleanup 0x457755.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4092, bogusCause, 0)) == FALSE);
+    CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x4092, bogusCause, 0)) == FALSE);
+
+    // A seated cause contributes its position and releases; the named
+    // object (string1, empty here) then resolves through the
+    // no-instance search sub_40CED0, which cannot search an arealess
+    // caller and answers INVALID_INDEX -- the share fails and the arm
+    // answers FALSE through the same cleanup. The angle math and the
+    // guards need two seated objects at driving positions; not driven.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4092, targetCause, 0)) == FALSE);
+
+    ClearMessages();
+}
