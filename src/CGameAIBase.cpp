@@ -7681,6 +7681,46 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4066:
+        // HappinessGT(object, n): the trigger sprite's happiness against n
+        // by greater. As in HP (0x4010), a null sprite leaves through the
+        // early epilogue (0x45AB7A); the original then jumps straight into
+        // the setl/setg tail of the NumInParty arms below (0x45683F) with
+        // ax holding GetHappiness' short, so the greater-than compare is
+        // that other arm's code, entered with a different ax.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x406A:
+    case 0x406B:
+    case 0x406C:
+        // NumInParty, NumInPartyGT, NumInPartyLT: GetNumCharacters' short
+        // (sign-extended, movsx) against the trigger's specifics. The three
+        // arms share the same loads; 0x406A answers equality through the
+        // sub/neg/sbb/inc sequence (1 iff the difference is zero), 0x406B
+        // and 0x406C compare that difference's operands directly (setg,
+        // setl).
+        {
+            LONG nNumInParty = g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+            if (triggerCopy.m_triggerID == 0x406A) {
+                bResult = nNumInParty == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x406B) {
+                bResult = nNumInParty > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nNumInParty < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
     case 0x40B5:
         // TotalItemCnt(object, n): the count of the items the named object
         // carries against n, by equal. A sprite's equipment counts each
