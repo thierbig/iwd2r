@@ -8614,6 +8614,104 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nReputation > triggerCopy.GetSpecifics();
         }
         break;
+    case 0x4097:
+        // TimerActive(n): walk this object's timer list (m_timers at
+        // +0x44E; the head-position read 0x45B210 and the walk
+        // 0x409800 are the list's GetHeadPosition/GetNext) and answer
+        // TRUE when a live timer's id (GetId, a zero-extended byte)
+        // equals the specifics. The original does not break out on a
+        // match -- it keeps scanning, which cannot change the answer
+        // once it is set -- and skips NULL node data. Nothing is
+        // resolved, so both release slots stay NULL and the arm jumps
+        // to the release tail; an empty list takes that jump from the
+        // head-position zero test with the result still zero.
+        {
+            POSITION pos = m_timers.GetHeadPosition();
+            while (pos != NULL) {
+                CGameTimer* pTimer = m_timers.GetNext(pos);
+                if (pTimer != NULL && pTimer->GetId() == triggerCopy.GetSpecifics()) {
+                    bResult = TRUE;
+                }
+            }
+        }
+        break;
+    case 0x407F:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089):
+        // decode the trigger and resolve its cause with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501, which accepts any
+        // object); when the object is a sprite (GetObjectType against
+        // TYPE_SPRITE -- anything else answers FALSE untouched),
+        // FindItemPersonal on the trigger's string1 with count 0 and
+        // no equipped-only flag, TRUE when a slot (not -1) comes
+        // back. A cause that resolves to nothing leaves through the
+        // early epilogue (0x45AB7A) with nothing shared; the sprite
+        // path releases the share inline (0x4570A3) before jumping to
+        // the release tail -- the same net effect as leaving pObject2
+        // set for the release label.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            bResult = static_cast<CGameSprite*>(pObject2)->FindItemPersonal(
+                          triggerCopy.GetString1(), 0, FALSE)
+                != -1;
+        }
+        break;
+    case 0x40C7:
+        // CheckAreaDiffLevel(n): which side of the current area's
+        // party-level band the party is on. The band is the area
+        // header's field_4C (lower bound) and field_4D (upper bound),
+        // the party level the header's field_4E -- the fields
+        // CGameArea stores from GetAveragePartyLevel and the spawn
+        // load tests with the same band idiom (0x460E9F).
+        // Specifics 1 answers party < lower; 2 answers lower <= party
+        // < upper (the original re-tests the lower bound inside);
+        // 3 answers upper <= party (its TRUE comes from jumping to
+        // the release tail's mov esi,1 at 0x45AD47). Any other value
+        // -- and a NULL area -- answers FALSE through the release
+        // tail. Nothing is resolved.
+        if (m_pArea != NULL) {
+            LONG nLevel = triggerCopy.GetSpecifics();
+            if (nLevel >= 1 && nLevel <= 3) {
+                CAreaFileHeader* pHeader = m_pArea->GetHeader();
+                INT nPartyLevel = pHeader->field_4E;
+                if (nPartyLevel < pHeader->field_4C) {
+                    bResult = nLevel == 1;
+                } else if (nPartyLevel < pHeader->field_4D) {
+                    bResult = nLevel == 2;
+                } else {
+                    bResult = nLevel == 3;
+                }
+            }
+        }
+        break;
+    case 0x40D0:
+        // IsScriptName(s, object): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, as in
+        // Alignment 0x400A) and resolve it with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501, which accepts any
+        // object), then compare the object's script name
+        // (m_scriptName, +0x554, the 32-byte SCRIPTNAME) against the
+        // trigger's string1, case-insensitively. The original builds
+        // a CString of explicit length 32 from the script name only
+        // to marshal both buffers to CompareStrings (0x7E8182,
+        // lstrcmpi); the temps change nothing, so the answer is
+        // _stricmp == 0, as in the area-name arm 0x407E. A cause that
+        // resolves to nothing jumps straight to the release tail
+        // 0x45AD4C with the result still zero, as in
+        // IsFacingSavedRotation (0x40D9).
+        triggerCopy.m_triggerCause.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = _stricmp(triggerCopy.m_string1,
+                          static_cast<CGameAIBase*>(pObject2)->m_scriptName)
+                == 0;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
