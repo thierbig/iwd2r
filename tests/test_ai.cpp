@@ -5907,3 +5907,175 @@ TEST_CASE("ai: EvaluateStatusTrigger 84b Reaction ReactionGT ReactionLT NumDead 
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84c HasItem NumItemsLT NumItemsParty NumItemsPartyGT NumItemsPartyLT Frame", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // One gem in equipment slot 3 drives the sprite paths; the counts are
+    // read back through the same helpers the arms call (the stack rules of
+    // a gem are the item file's business, not the trigger's).
+    CItem* pOldItem = pSprite->m_equipment.m_items[3];
+    pSprite->m_equipment.m_items[3] = new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0);
+    const SHORT nSpriteCount = pSprite->CountItemPersonal("00GEM01");
+    REQUIRE(nSpriteCount > 0);
+
+    // 0x4061 HasItem: a sprite answers whether it holds string1 personally
+    // or in a bag (case-insensitive); a container answers FindItemSlot on
+    // the resref built from string1; any other resolved type, and a cause
+    // that resolves to nothing, answer FALSE.
+    {
+        CAITrigger miss(0x4061, spriteCause, 0);
+        miss.m_string1 = "00POTN01";
+        CHECK(pCaller->EvaluateStatusTrigger(miss) == FALSE);
+        CAITrigger hit(0x4061, spriteCause, 0);
+        hit.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(hit) == TRUE);
+        CAITrigger hitLower(0x4061, spriteCause, 0);
+        hitLower.m_string1 = "00gem01";
+        CHECK(pCaller->EvaluateStatusTrigger(hitLower) == TRUE);
+        CAITrigger notSpriteOrContainer(0x4061, callerCause, 0);
+        notSpriteOrContainer.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(notSpriteOrContainer) == FALSE);
+        CAITrigger noOne(0x4061, CAIObjectType::NOONE, 0);
+        noOne.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) == FALSE);
+
+        // The container path: a heap ground pile over a zeroed area, as
+        // the Contains test makes, holding two gems.
+        auto* areaBytes = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(areaBytes, 0, sizeof(CGameArea));
+        auto* pArea = reinterpret_cast<CGameArea*>(areaBytes);
+        pArea->m_pGame = g_pBaldurChitin->GetObjectGame();
+        CGameContainer* pContainer = new CGameContainer(pArea, CRect(8, 8, 24, 24));
+        CAIObjectType containerCause(0, 0, 0, 0, 0, 0, 0, 0, pContainer->m_id, 0, 0);
+        CAITrigger containerMiss(0x4061, containerCause, 0);
+        containerMiss.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(containerMiss) == FALSE);
+        pContainer->m_lstItems.AddTail(new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0));
+        pContainer->m_lstItems.AddTail(new CItem(CResRef("00POTN01"), 0, 0, 0, 0, 0));
+        CAITrigger containerHit(0x4061, containerCause, 0);
+        containerHit.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(containerHit) == TRUE);
+        containerHit.m_string1 = "00POTN01";
+        CHECK(pCaller->EvaluateStatusTrigger(containerHit) == TRUE);
+
+        // 0x4079 NumItemsLT shares the resolution and dispatch: the
+        // sprite's or container's count, strictly below the specifics.
+        CAITrigger spriteLt(0x4079, spriteCause, nSpriteCount + 1);
+        spriteLt.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(spriteLt) == TRUE);
+        spriteLt.SetSpecifics(nSpriteCount);
+        CHECK(pCaller->EvaluateStatusTrigger(spriteLt) == FALSE);
+        spriteLt.SetSpecifics(0);
+        CHECK(pCaller->EvaluateStatusTrigger(spriteLt) == FALSE);
+
+        const SHORT nContainerCount = pContainer->CountItem(CResRef("00GEM01"));
+        REQUIRE(nContainerCount > 0);
+        CAITrigger containerLt(0x4079, containerCause, nContainerCount + 1);
+        containerLt.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(containerLt) == TRUE);
+        containerLt.SetSpecifics(nContainerCount);
+        CHECK(pCaller->EvaluateStatusTrigger(containerLt) == FALSE);
+
+        CAITrigger otherType(0x4079, callerCause, 1);
+        otherType.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(otherType) == FALSE);
+        CAITrigger noOneLt(0x4079, CAIObjectType::NOONE, 1);
+        noOneLt.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(noOneLt) == FALSE);
+
+        // Takes the pile out of the object array and deletes it (its items
+        // with it).
+        pContainer->RemoveFromArea();
+        ::operator delete(areaBytes);
+    }
+
+    // 0x407A/0x407B/0x407C NumItemsParty family: the party's total count,
+    // compared by equal, greater and less. The harness game starts with no
+    // party (total 0); with the sprite seated as the sole member the total
+    // is its personal count of string1.
+    {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+        CAITrigger eq(0x407A, CAIObjectType::NOONE, 0);
+        eq.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        eq.SetSpecifics(1);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+        CAITrigger gt(0x407B, CAIObjectType::NOONE, 0);
+        gt.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == FALSE);
+        gt.SetSpecifics(-1);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == TRUE);
+        CAITrigger lt(0x407C, CAIObjectType::NOONE, 1);
+        lt.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == TRUE);
+        lt.SetSpecifics(0);
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == FALSE);
+
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        eq.SetSpecifics(nSpriteCount);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        eq.SetSpecifics(nSpriteCount + 1);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+        gt.SetSpecifics(nSpriteCount - 1);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == TRUE);
+        gt.SetSpecifics(nSpriteCount);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == FALSE);
+        lt.SetSpecifics(nSpriteCount + 1);
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == TRUE);
+        lt.SetSpecifics(nSpriteCount);
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == FALSE);
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x40DA Frame: the resolved object's current animation frame inside
+    // the closed band of the two bounds, in either order. The sprite's
+    // frame is read through the same getter the arm uses; a cause that
+    // resolves to nothing and a resolved non-static non-sprite answer
+    // FALSE. The static path (the vid cell's frame id) is not driven: it
+    // needs a live CGameStatic with a loaded cell, which the harness
+    // cannot build without an area file.
+    {
+        CAITrigger noOne(0x40DA, CAIObjectType::NOONE, 0);
+        noOne.m_specific2 = 10;
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) == FALSE);
+        CAITrigger otherType(0x40DA, callerCause, 0);
+        otherType.m_specific2 = 10;
+        CHECK(pCaller->EvaluateStatusTrigger(otherType) == FALSE);
+
+        const SHORT nFrame = pSprite->GetAnimation()->GetCurrentFrame();
+        CAITrigger inside(0x40DA, spriteCause, nFrame - 1);
+        inside.m_specific2 = nFrame + 1;
+        CHECK(pCaller->EvaluateStatusTrigger(inside) == TRUE);
+        // The bounds work reversed as well (the exe takes min and max).
+        CAITrigger reversed(0x40DA, spriteCause, nFrame + 1);
+        reversed.m_specific2 = nFrame - 1;
+        CHECK(pCaller->EvaluateStatusTrigger(reversed) == TRUE);
+        // The band is closed: the frame at either bound answers TRUE.
+        CAITrigger atBound(0x40DA, spriteCause, nFrame);
+        atBound.m_specific2 = nFrame;
+        CHECK(pCaller->EvaluateStatusTrigger(atBound) == TRUE);
+        // Above and below the band answer FALSE.
+        CAITrigger above(0x40DA, spriteCause, nFrame + 1);
+        above.m_specific2 = nFrame + 2;
+        CHECK(pCaller->EvaluateStatusTrigger(above) == FALSE);
+        CAITrigger below(0x40DA, spriteCause, nFrame - 2);
+        below.m_specific2 = nFrame - 1;
+        CHECK(pCaller->EvaluateStatusTrigger(below) == FALSE);
+    }
+
+    delete pSprite->m_equipment.m_items[3];
+    pSprite->m_equipment.m_items[3] = pOldItem;
+
+    ClearMessages();
+}
