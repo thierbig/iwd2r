@@ -5271,6 +5271,53 @@ SHORT CInfGame::GetFixedOrderCharacterPortraitNum(LONG nCharacterId)
     return -1;
 }
 
+// 0x5AF540
+void CInfGame::TakeFamiliarResRef(BYTE nLevel, BYTE nAlignment, CString& sResult)
+{
+    if (nLevel < 1) {
+        nLevel = 1;
+    } else if (nLevel > 9) {
+        nLevel = 9;
+    }
+
+    if (nAlignment == 0) {
+        sResult = "";
+        return;
+    }
+
+    // The alignment byte of the caster's live AI type (0x11..0x33, one value
+    // per alignment axis) folds onto the nine familiar pools 0..8 through
+    // the byte wrap of this grid formula; every other value misses.
+    BYTE nIndex = static_cast<BYTE>(((nAlignment >> 4) + 0x54) * 3 + (nAlignment & 0xF));
+    if (nIndex >= 9) {
+        sResult = "";
+        return;
+    }
+
+    CTypedPtrList<CPtrList, CResRef*>& familiarList = m_familiarResRefs[nIndex][nLevel - 1];
+
+    if (familiarList.GetCount() == 0) {
+        // No familiar of this alignment and level was stored: the pool's
+        // chapter default names it.
+        CResRef resRef(m_defaultFamiliarResRefs[nIndex]);
+        resRef.CopyToString(sResult);
+        return;
+    }
+
+    POSITION pos = familiarList.FindIndex(rand() % familiarList.GetCount());
+    CResRef* pResRef = familiarList.GetAt(pos);
+    familiarList.RemoveAt(pos);
+
+    pResRef->CopyToString(sResult);
+
+    // Announce the removal so the pools survive a save without the taken
+    // familiar; the message carries the pool coordinates it came from.
+    CMessageFamiliarRemoveResRef* pMessage = new CMessageFamiliarRemoveResRef(*pResRef, nIndex, nLevel - 1, -1, -1);
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+    delete pResRef;
+}
+
 // 0x5AF700
 void CInfGame::RemoveFamiliarResRef(const CResRef& resRef, BYTE nAlignment, BYTE nLevel)
 {

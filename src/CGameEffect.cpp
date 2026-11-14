@@ -16591,14 +16591,16 @@ BOOL CGameEffectFindFamiliar::ApplyEffect(CGameSprite* pSprite)
         return TRUE;
     }
 
-    // TODO: Incomplete (0x5AF540). The CInfGame helper that picks and pops the
-    // familiar resref for the caster's class/level is not ported: it reads the
-    // resref lists at +0x390c (the ported CInfGame layout has +0x3928) and
-    // posts an unidentified message class (vtbl 0x84d1a0). Until then the name
-    // stays empty. The original trips its UtilAssert(0x47fc, "FALSE") on an
-    // empty resref and continues; asserts are not ported, so neither is the
-    // call.
+    // 0x4b9f63: pick the familiar for the caster by their sorcerer/wizard
+    // level and the alignment of their live AI type: the helper pops a
+    // stored resref from the game's familiar pool (or names the pool's
+    // default) and broadcasts the removal. The original then trips its
+    // UtilAssert(0x47fc, "FALSE") when the name comes back empty and
+    // continues; asserts are not ported.
     CString sFamiliar;
+    pGame->TakeFamiliarResRef(static_cast<BYTE>(pSprite->m_derivedStats.GetSorcererWizardLevel()),
+        pSprite->GetAIType().m_nAlignment,
+        sFamiliar);
 
     CCreatureFile cfile;
     CResRef tempResRef(sFamiliar);
