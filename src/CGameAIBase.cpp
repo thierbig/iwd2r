@@ -8927,6 +8927,116 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x407D:
+        // IsOverMe(object) (0x456C17-0x456EAA): only a trigger object
+        // takes this arm at all -- any other caller type answers FALSE
+        // through the early epilogue (0x456C24, the byte 0x84C509 is
+        // TYPE_TRIGGER). The trigger is decoded, then the cause resolves
+        // two ways. A cause carrying an instance goes through the
+        // resolver sub_40CCA0 (0x456DDE); a cause resolving to nothing
+        // answers FALSE through the release tail (0x456DE9). A cause
+        // without an instance asks the caller's area to find it: on the
+        // front vert list (GetVertListType against the byte 0x84C50C)
+        // the nine-argument GetNearest from m_id over the visual range
+        // and visible-terrain table, LOS checked and see-invisible BOTH
+        // hardcoded TRUE here (0x456C64/0x456C66 -- unlike sub_40CED0,
+        // which passes GetCanSeeInvisible), sleeping and dead not
+        // ignored, nearest index zero; any other vert-list type takes
+        // the point search sub_46DAE0 from m_pos with the same values.
+        // No hit (INVALID_INDEX, 0x456CD0) or an unshareable hit
+        // (0x456D16) answers FALSE through the early epilogue,
+        // releasing nothing; the share loop is the usual retry while
+        // SHARED/DENIED. The answer is then this trigger's
+        // IsOverActivate (vtable 0xB8 -- CGameTrigger's slot; the type
+        // gate above is what makes the cast safe) at the cause's
+        // position (GetPos vtable 0x1C). A hit records the cause in
+        // m_lTrigger (SetAndReturn 0x45B370) and posts a
+        // CMessageSetLastObject with type 0, caller and target both m_id
+        // (0x456D72/0x456E3D). The share is released inline either way
+        // and pObject nulled before the break -- the search path by the
+        // found id (0x456DA0), the instance path by the object's own
+        // GetId (0x456E71, the tail 0x4075 Contains jumps into as
+        // well) -- so the release tail only carries bResult.
+        if (GetObjectType() != CGameObject::TYPE_TRIGGER) {
+            return FALSE;
+        }
+
+        triggerCopy.Decode(this);
+
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                break;
+            }
+
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(pObject->GetPos());
+            if (bResult != FALSE) {
+                m_lTrigger.Set(pObject->GetAIType());
+                CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), 0, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        } else {
+            LONG nId;
+            if (GetVertListType() == CGameObject::LIST_FRONT) {
+                nId = m_pArea->GetNearest(m_id,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    FALSE,
+                    0,
+                    FALSE);
+            } else {
+                nId = m_pArea->sub_46DAE0(m_pos.x,
+                    m_pos.y,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    0,
+                    0);
+            }
+
+            if (nId == CGameObjectArray::INVALID_INDEX) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            BYTE rc;
+            do {
+                rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(pObject->GetPos());
+            if (bResult != FALSE) {
+                m_lTrigger.Set(pObject->GetAIType());
+                CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), 0, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        }
+        break;
     case 0x403C:
     case 0x403D:
     case 0x403E:
@@ -9521,6 +9631,85 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nTotal < triggerCopy.GetSpecifics();
         }
         break;
+    case 0x4090:
+        // unnamed in TRIGGER.IDS (the file jumps 0x4089 -> 0x4094): the
+        // party-member check behind InPartySlot-style scripts -- the
+        // object in the trigger must be the character occupying
+        // fixed-order portrait slot `specifics`, and that character must
+        // not be dead. Every exit from this arm is a direct return; it
+        // never reaches the release tail. With an instance on the cause
+        // (0x457466), GetFixedOrderCharacterPortraitNum 0x5AF510 maps it
+        // to its slot and a slot mismatch answers FALSE at once
+        // (0x4574E9, nothing shared yet); a matching slot takes ONE
+        // GetShare whose return code is never checked (0x4574B9) and
+        // reads STATE_DEAD out of the sprite's derived stat block
+        // (GetDerivedStats 0x4531A0, first dword). Not dead releases
+        // the share by the instance and answers TRUE (0x457584 through
+        // the TRUE tail 0x457A85); dead releases the same way and
+        // answers FALSE (0x4574E2). With no instance (0x45761A), the
+        // specifics name the slot directly through CInfGame::sub_45B610
+        // (m_characters lookup, INVALID_INDEX past six), one GetShare
+        // whose failure answers FALSE WITHOUT a release (0x457687), then
+        // the sprite must pass OfType against the decoded cause
+        // (0x40AFE0 with FALSE, FALSE) AND carry no STATE_DEAD bit --
+        // both hold for the TRUE exit, either failing for the FALSE one
+        // (0x4576BB). The original re-derives the slot id before each
+        // release; the value cannot differ, so this port reads it once.
+        triggerCopy.Decode(this);
+
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            INT nInstance = triggerCopy.GetCause().GetInstance();
+            SHORT nSlot = g_pBaldurChitin->GetObjectGame()->GetFixedOrderCharacterPortraitNum(nInstance);
+            if (nSlot != triggerCopy.GetSpecifics()) {
+                return FALSE;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject2,
+                INFINITE);
+
+            if ((static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->m_generalState & STATE_DEAD) == 0) {
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nInstance,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return TRUE;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            return FALSE;
+        }
+
+        {
+            LONG nId = g_pBaldurChitin->GetObjectGame()->sub_45B610(static_cast<SHORT>(triggerCopy.GetSpecifics()));
+            BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject2,
+                INFINITE);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; the failed share
+                // holds nothing to release.
+                return FALSE;
+            }
+
+            if (pObject2->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)) {
+                if ((static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->m_generalState & STATE_DEAD) == 0) {
+                    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return TRUE;
+                }
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            return FALSE;
+        }
     case 0x40DA:
         // Frame(object, start, end): decode the trigger and resolve its
         // cause with the untyped resolver sub_40CCA0 (a NOONE cause
