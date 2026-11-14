@@ -9016,6 +9016,90 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4071:
+    case 0x4072:
+    case 0x4073:
+        // NumDead / NumDeadGT / NumDeadLT(object, name, n): the engine
+        // keeps dead-count globals under the name "_DEAD" + the
+        // trigger's string1 (the global CString at 0x8D1408,
+        // DEAD_GLOBAL_PREFIX, concatenated 0x45689C). The name is
+        // looked up in the game's variable hash (CInfGame::
+        // GetVariables 0x4286A0, FindKey vtable+4); a hit reads
+        // CVariable::GetIntValue and compares it with the specifics --
+        // 0x4071 for equality (sub/neg/sbb/inc, 0x456926), 0x4072 with
+        // setg (0x4569E8), 0x4073 with setl (0x456AB0) -- and a miss
+        // answers from the specifics alone: 0x4071 specifics == 0
+        // (0x45693D), 0x4072 specifics < 0 (setl, 0x456A01), 0x4073
+        // specifics > 0 (setg, 0x456AC7). The three arms are
+        // byte-identical apart from those compare tails (0x456885 /
+        // 0x456947 / 0x456A0D); this port shares the body and picks
+        // the compare by trigger ID, the way the NumCreature trio
+        // does.
+        {
+            CString sName = DEAD_GLOBAL_PREFIX + triggerCopy.GetString1();
+            // The original calls sName.Left(32) and destroys the
+            // result without reading it (0x4568D5); the look-up below
+            // takes the untruncated name.
+            sName.Left(32);
+            CVariable* pVariable = g_pBaldurChitin->GetObjectGame()
+                                       ->GetVariables()
+                                       ->FindKey(sName);
+            if (pVariable != NULL) {
+                LONG nValue = pVariable->GetIntValue();
+                if (triggerCopy.m_triggerID == 0x4071) {
+                    bResult = nValue == triggerCopy.GetSpecifics();
+                } else if (triggerCopy.m_triggerID == 0x4072) {
+                    bResult = nValue > triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nValue < triggerCopy.GetSpecifics();
+                }
+            } else {
+                LONG nSpecifics = triggerCopy.GetSpecifics();
+                if (triggerCopy.m_triggerID == 0x4071) {
+                    bResult = nSpecifics == 0;
+                } else if (triggerCopy.m_triggerID == 0x4072) {
+                    bResult = nSpecifics < 0;
+                } else {
+                    bResult = nSpecifics > 0;
+                }
+            }
+        }
+        break;
+    case 0x4075:
+        // Contains(object, item): decode the trigger and resolve its
+        // cause with the unfiltered resolver (sub_40CCA0, no type
+        // byte, 0x456AEA); a cause that resolves to nothing leaves
+        // through the early epilogue (0x45AB7A). The resolved object
+        // must be a container (the byte 0x11 at 0x84C502, 0x456B02)
+        // holding at least one item (GetNumItems 0x45B930, test ax,ax
+        // / jle 0x456B1A); anything else answers FALSE through the
+        // release tail. The walk visits every slot (GetItem 0x4802B0,
+        // bound re-read with movsx each iteration at 0x456B4A), skips
+        // the NULL ones, and stops at the first item whose resref
+        // (CResHelper::GetResRef 0x4699E0 into CResRef::operator==
+        // 0x78ABA0 with the trigger's string1) matches -- TRUE through
+        // the 0x456E7B tail; an exhausted walk leaves the entry FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+            CGameContainer* pContainer = static_cast<CGameContainer*>(pObject2);
+            for (SHORT i = 0; i < pContainer->GetNumItems(); i++) {
+                CItem* pItem = pContainer->GetItem(i);
+                if (pItem == NULL) {
+                    continue;
+                }
+                if (pItem->GetResRef() == triggerCopy.GetString1()) {
+                    bResult = TRUE;
+                    break;
+                }
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
