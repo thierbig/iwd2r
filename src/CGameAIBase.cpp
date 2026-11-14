@@ -8065,6 +8065,70 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = (static_cast<CGameSprite*>(pObject2)->GetBaseStats()->m_flags & 0x2000) != 0;
         }
         break;
+    case 0x4037:
+    case 0x4038:
+        // StateCheck, NotStateCheck(object, state): the trigger's state
+        // mask (the specifics) AND the trigger sprite's derived general
+        // state word. The two arms share the same loads; 0x4037 answers
+        // the nonzero test (neg/sbb/neg tail) and 0x4038 the zero test
+        // (neg/sbb/inc tail). As in HP (0x4010), a null sprite leaves
+        // through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            DWORD dwState = triggerCopy.GetSpecifics()
+                & pSprite->GetDerivedStats()->m_generalState;
+            if (triggerCopy.m_triggerID == 0x4037) {
+                bResult = dwState != 0;
+            } else {
+                bResult = dwState == 0;
+            }
+        }
+        break;
+    case 0x4064:
+        // HasWeaponEquiped(object): the trigger sprite's selected weapon
+        // slot (the equipment byte at +0xCC) against SLOT_FIST (10, the
+        // byte 0x85BD83), setne. As in HP (0x4010), a null sprite leaves
+        // through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetEquipment()->m_selectedWeapon
+                != CGameSpriteEquipment::SLOT_FIST;
+        }
+        break;
+    case 0x4065:
+        // Happiness(object, n): the trigger sprite's happiness against the
+        // specifics by equal (sub/neg/sbb/inc). The loads are HappinessGT's
+        // (0x4066); only the normalizer differs. As in HP (0x4010), a null
+        // sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() == triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
