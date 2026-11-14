@@ -10152,6 +10152,215 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x40A5:
+        // BitGlobal(name, mask, op) (0x457B5A-0x457DC4): the variable
+        // named by the first string, scope prefix and all -- MakeUpper
+        // runs over the whole string before the colon split, so the
+        // name is uppercased too, unlike the GlobalTimer arms, which
+        // take scope and name from separate strings; there is no
+        // trimming, unlike the IncrementGlobalOnce action. A missing
+        // variable in a scope that was found answers as though its
+        // value were zero (specifics == 0, 0x457C4F); a scope naming
+        // no area answers FALSE outright. The bit operation is chosen
+        // by int1 in the compare block at 0x457D40: every mode compare
+        // is a jne to the release tail, so a mode other than 1 (AND)
+        // releases FALSE before the OR and XOR blocks are ever
+        // reached -- the original's OR (2) and XOR (3) paths are dead
+        // code, mirrored below.
+        {
+            sString = triggerCopy.GetString1();
+            sString.MakeUpper();
+            int nColon = sString.Find(':');
+            sScope = sString.Left(nColon);
+            sName = sString.Right(sString.GetLength() - nColon - 1);
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = triggerCopy.GetSpecifics() == 0;
+                break;
+            }
+
+            if (triggerCopy.GetInt1() != 1) {
+                break;
+            }
+            if ((pVariable->GetIntValue() & triggerCopy.GetSpecifics()) != 0) {
+                bResult = TRUE;
+                break;
+            }
+            if (triggerCopy.GetInt1() == 2
+                && (pVariable->GetIntValue() | triggerCopy.GetSpecifics()) != 0) {
+                // Dead in the original: int1 is 1 here, and a mode-2
+                // trigger released FALSE at the first compare.
+                bResult = TRUE;
+                break;
+            }
+            if (triggerCopy.GetInt1() == 3) {
+                // Dead in the original, as above.
+                bResult = (pVariable->GetIntValue() ^ triggerCopy.GetSpecifics()) != 0;
+            }
+        }
+        break;
+    case 0x40A8:
+        // HelpEx(object, field) (0x458318-0x4584EC): whether the
+        // trigger sprite's AI-type field named by the specifics (1 EA,
+        // 2 general, 3 race, 4 class, 5 specific, 6 gender, 7 alignment
+        // -- jump table 0x45B1C4) still matches the same field of
+        // m_lHelp, the object type of the last help shout this object
+        // took; the checked field of m_lHelp is then set to 0xFF, so
+        // the match can fire only once. Every field but class compares
+        // for equality (sub/neg/sbb/inc); class answers the raw AND of
+        // the two class bytes, as the area type word does in 0x4086.
+        // A specifics outside 1-7 jumps straight to the release tail
+        // with the result still FALSE.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            switch (triggerCopy.GetSpecifics()) {
+            case 1:
+                bResult = pSprite->GetAIType().GetEnemyAlly() == m_lHelp.GetEnemyAlly();
+                m_lHelp.SetEnemyAlly(0xFF);
+                break;
+            case 2:
+                bResult = pSprite->GetAIType().GetGeneral() == m_lHelp.GetGeneral();
+                m_lHelp.SetGeneral(0xFF);
+                break;
+            case 3:
+                bResult = pSprite->GetAIType().GetRace() == m_lHelp.GetRace();
+                m_lHelp.SetRace(0xFF);
+                break;
+            case 4:
+                bResult = pSprite->GetAIType().GetClass() & m_lHelp.GetClass();
+                m_lHelp.SetClass(0xFF);
+                break;
+            case 5:
+                bResult = pSprite->GetAIType().GetSpecific() == m_lHelp.GetSpecific();
+                m_lHelp.SetSpecific(0xFF);
+                break;
+            case 6:
+                bResult = pSprite->GetAIType().GetGender() == m_lHelp.GetGender();
+                m_lHelp.SetGender(0xFF);
+                break;
+            case 7:
+                bResult = pSprite->GetAIType().GetAlignment() == m_lHelp.GetAlignment();
+                m_lHelp.SetAlignment(0xFF);
+                break;
+            }
+        }
+        break;
+    case 0x40CA:
+    case 0x40CB:
+    case 0x40CC:
+        // NumCreaturesLTMyLevel, NumCreaturesATMyLevel and
+        // NumCreaturesGTMyLevel (object) (0x459B45-0x459D59): the area
+        // finds everything around this sprite for the trigger's
+        // decoded cause (CAITrigger::Decode runs first, unlike the
+        // NumCreature trio 0x4028-0x402A, which passes the raw spec)
+        // over the visual range and visible-terrain table, with line
+        // of sight checked and non-sprites not filtered; when this
+        // sprite is on the area's front vert list (GetVertListType()
+        // == 0, the byte at 0x84C50C) the search goes through the
+        // eight-argument GetAllInRange (0x46CD20) from its vert-list
+        // position, and is skipped entirely when that position is
+        // NULL, leaving an empty list. With a specifics of zero the
+        // list count itself is compared against this sprite's level
+        // (GetLevel 0x7238A0, the class-level sum); otherwise the
+        // count only gates the walk (a non-positive count answers
+        // FALSE at once), every shared list member that is a sprite
+        // adds its level to the sum, and the sum is compared: less for
+        // 0x40CA, equal for 0x40CB, greater for 0x40CC (the arm reads
+        // its own trigger id back through 0x452B80 for those three
+        // compares). A member that cannot be shared is skipped
+        // without a release, as in AnyPCSeesEnemy (0x40F6); a member
+        // that was shared is always released.
+        {
+            if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                break;
+            }
+            if (m_pArea == NULL) {
+                break;
+            }
+            triggerCopy.Decode(this);
+
+            CTypedPtrList<CPtrList, LONG*> targets;
+            if (GetVertListType() == 0) {
+                POSITION posVertList = GetVertListPos();
+                if (posVertList != NULL) {
+                    m_pArea->GetAllInRange(posVertList, m_pos, triggerCopy.GetCause(),
+                        GetVisualRange(), GetVisibleTerrainTable(), targets, TRUE, FALSE);
+                }
+            } else {
+                m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                    GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            }
+
+            int nSum = targets.GetCount();
+            if (nSum <= 0) {
+                break;
+            }
+
+            LONG nMyLevel = static_cast<CGameSprite*>(this)->GetLevel();
+
+            if (triggerCopy.GetSpecifics() != 0) {
+                nSum = 0;
+
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+                POSITION pos = targets.GetHeadPosition();
+                while (pos != NULL) {
+                    LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(targets.GetNext(pos)));
+
+                    CGameObject* pMember;
+                    if (pGame->GetObjectArray()->GetShare(nId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            &pMember,
+                            INFINITE)
+                        == CGameObjectArray::SUCCESS) {
+                        if (pMember->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                            nSum += static_cast<CGameSprite*>(pMember)->GetLevel();
+                        }
+
+                        pGame->GetObjectArray()->ReleaseShare(nId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            INFINITE);
+                    }
+                }
+            }
+
+            if (triggerCopy.m_triggerID == 0x40CA) {
+                bResult = nSum < nMyLevel;
+            } else if (triggerCopy.m_triggerID == 0x40CB) {
+                bResult = nSum == nMyLevel;
+            } else {
+                bResult = nSum > nMyLevel;
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
