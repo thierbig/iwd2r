@@ -8015,6 +8015,56 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = Icewind586B70::Instance()->GetCount() > triggerCopy.GetSpecifics();
         }
         break;
+    case 0x4095:
+    case 0x4096:
+        // LevelGT, LevelLT(object, level): the trigger sprite's combined
+        // class level -- GetClassMaskLevel over the full class mask 0xFFF,
+        // the sum of its class levels -- against the specifics. The two
+        // arms share the same loads; 0x4095 answers greater through the
+        // setg tail 0x459A21 and 0x4096 less through the setl tail
+        // 0x456AA3. As in HP (0x4010), a null sprite leaves through the
+        // early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nLevel = pSprite->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+            if (triggerCopy.m_triggerID == 0x4095) {
+                bResult = nLevel > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40D5:
+        // IsCreatureHiddenInShadows(object): the resolved sprite's hide
+        // flag (sub_453170, m_bHiding) taken raw as the answer. As in
+        // IsActive (0x40D7), a cause that resolves to nothing zeroes
+        // bResult (0x45AB39) and falls into the release tail.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameSprite*>(pObject2)->sub_453170();
+        }
+        break;
+    case 0x40F5:
+        // IsPathCriticalObject(object): bit 0x2000 of the resolved
+        // object's base stats flags (the flag action 283
+        // SetCriticalPathObject sets and clears) shifted down and masked
+        // to 0/1. NOTE: as in the original, the object is not type-checked
+        // -- whatever sub_40CCA0 returns is read as a sprite.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            bResult = (static_cast<CGameSprite*>(pObject2)->GetBaseStats()->m_flags & 0x2000) != 0;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
