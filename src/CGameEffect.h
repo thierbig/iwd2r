@@ -1995,6 +1995,7 @@ public:
 class CGameEffectDisguise : public CGameEffect {
 public:
     CGameEffectDisguise(ITEM_EFFECT* effect, const CPoint& source, LONG sourceID, CPoint target);
+    ~CGameEffectDisguise() override;
     CGameEffect* Copy() override;
     BOOL ApplyEffect(CGameSprite* pSprite) override;
 
