@@ -7137,6 +7137,76 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x40C9:
+        // TriggerSetGlobal: set the named variable to the specifics, then
+        // post a CMessageSetVariable. The arm enters with TRUE (esi is 1
+        // from 0x459EAF) and never clears it, so even the two give-up
+        // exits below answer TRUE.
+        bResult = TRUE;
+        sString = triggerCopy.GetString1();
+        sString.MakeUpper();
+        sScope = sString.Left(6);
+        sName = sString.Right(sString.GetLength() - 6);
+        if (strcmp(sScope, "GLOBAL") == 0) {
+            CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                g_pBaldurChitin->GetObjectGame()->GetVariables()->AddKey(variable);
+            }
+        } else if (strcmp(sScope, "LOCALS") == 0) {
+            if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                // NOTE: The original breaks through the release tail with
+                // esi still TRUE, reporting success without setting or
+                // posting anything.
+                break;
+            }
+
+            CVariable* pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                static_cast<CGameSprite*>(this)->GetLocalVariables()->AddKey(variable);
+            }
+        } else {
+            if (strcmp(sScope, "MYAREA") == 0) {
+                // NOTE: The area's name is read as a C string from the start
+                // of the area (its header's RESREF), as the original does.
+                sScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+            }
+
+            CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+            if (pArea == NULL) {
+                // NOTE: The original breaks through the release tail with
+                // esi still TRUE, reporting success without setting or
+                // posting anything.
+                break;
+            }
+
+            CVariable* pVariable = pArea->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                pArea->GetVariables()->AddKey(variable);
+            }
+        }
+
+        // Every completed set posts the change, caller and target both the
+        // setter's id (the original's 7-argument constructor hardcodes
+        // bIncrement FALSE and dwFlags 0, as the in-tree one does).
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetVariable(sScope, sName, triggerCopy.GetSpecifics(), m_id, m_id),
+            FALSE);
+        break;
     case 0x4034:
         // GlobalGT
         sString = triggerCopy.m_string1;
@@ -7711,6 +7781,92 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     INFINITE);
 
                 if (bFound) {
+                    return TRUE;
+                }
+            }
+            return FALSE;
+        }
+    case 0x4043:
+        // InParty: the trigger's object is a living party member. Every
+        // exit is a direct return, as 0x4042.
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            CGameObject* pCharacter;
+            triggerCopy.Decode(this);
+            LONG nInstance = triggerCopy.GetCause().GetInstance();
+
+            if (nInstance != -1) {
+                if (pGame->GetCharacterPortraitNum(nInstance) != -1) {
+                    // NOTE: The original does not check GetShare's return
+                    // code here and does not retry (unlike 0x4042): a
+                    // portrait holder is always a seated, shareable
+                    // character.
+                    pGame->GetObjectArray()->GetShare(nInstance,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+
+                    // Dead answers FALSE through 0x45AE25, alive TRUE
+                    // through 0x457A85; the share is released on both.
+                    BOOL bDead = (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                        & STATE_DEAD)
+                        != 0;
+                    pGame->GetObjectArray()->ReleaseShare(nInstance,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return bDead ? FALSE : TRUE;
+                }
+            } else {
+                for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                    LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                    BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                    if (rc != CGameObjectArray::SUCCESS) {
+                        // NOTE: The original skips a character it cannot
+                        // share and keeps scanning (0x4042 gives up).
+                        continue;
+                    }
+
+                    BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
+                        && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                            & STATE_DEAD)
+                            == 0;
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+
+                    if (bMatch) {
+                        return TRUE;
+                    }
+                }
+            }
+
+            // The character-overflow scan is shared by both entries: the
+            // no-instance path falls through after the party loop, an
+            // instance without a portrait jumps here directly, skipping
+            // the loop (0x456375).
+            CTypedPtrArray<CPtrArray, int*>& overflow = pGame->GetCharacterOverflow();
+            for (int nIndex = 0; nIndex < overflow.GetSize(); nIndex++) {
+                LONG nCharacterId = *overflow.GetAt(nIndex);
+                BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pCharacter,
+                    INFINITE);
+                if (rc != CGameObjectArray::SUCCESS) {
+                    continue;
+                }
+
+                BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
+                    && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                        & STATE_DEAD)
+                        == 0;
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bMatch) {
                     return TRUE;
                 }
             }
