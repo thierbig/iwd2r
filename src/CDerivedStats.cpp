@@ -1160,6 +1160,37 @@ DWORD CDerivedStats::GetSorcererWizardLevel()
     return GetClassMaskLevel(CLASSMASK_SORCERER | CLASSMASK_WIZARD);
 }
 
+// 0x4478C0
+BYTE CDerivedStats::SumSorcererWizardLevels()
+{
+    DWORD dwMask = CLASSMASK_SORCERER | CLASSMASK_WIZARD;
+    DWORD dwClassMask = m_classMask & dwMask;
+    DWORD nLevel = 0;
+
+    if (dwClassMask != 0) {
+        DWORD dwCurrentClassMask = 1;
+        for (int index = 0; index < CAIOBJECT_CLASS_MAX; index++) {
+            if (dwCurrentClassMask > dwMask) {
+                break;
+            }
+
+            if ((dwClassMask & dwCurrentClassMask) != 0) {
+                nLevel += m_nClassLevels[index];
+            }
+
+            dwCurrentClassMask <<= 1;
+        }
+    }
+
+    // The original sums twice and returns 1 when the first sum is below 1;
+    // the second sum is the same value.
+    if (nLevel < 1) {
+        return 1;
+    }
+
+    return static_cast<BYTE>(nLevel);
+}
+
 // 0x4473F0
 DWORD CDerivedStats::GetBardMonkRogueLevel()
 {
