@@ -8129,6 +8129,69 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = pSprite->GetHappiness() == triggerCopy.GetSpecifics();
         }
         break;
+    case 0x407E:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089): the
+        // trigger's string1 against the current area's name, read as a C
+        // string from the start of the area (its header's RESREF, as the
+        // MYAREA scope in Global 0x400F reads it). The original builds two
+        // CStrings only to hand their buffers to CompareStrings (0x7E8182,
+        // lstrcmpi) and takes the raw compare as the answer -- 0 when the
+        // names match, nonzero when they differ -- so unlike every other
+        // arm nothing normalizes it to 0/1.
+        bResult = _stricmp(triggerCopy.m_string1,
+            reinterpret_cast<const char*>(m_pArea->m_header.m_areaName));
+        break;
+    case 0x40DD:
+        // HPLostLT(object, n): the trigger sprite's lost hit points -- the
+        // derived max (m_nMaxHitPoints) minus the base current
+        // (m_hitPoints), both sign-extended shorts -- against the
+        // specifics by less (the shared setl tail 0x4551AF, which other
+        // arms jump into as 0x4551AB). As in HP (0x4010), a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nHPLost = pSprite->GetDerivedStats()->m_nMaxHitPoints
+                - pSprite->GetBaseStats()->m_hitPoints;
+            bResult = nHPLost < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40EA:
+    case 0x40EB:
+        // LevelInClassGT, LevelInClassLT(object, level, class): the
+        // trigger sprite's level in the trigger's class (int1,
+        // m_specific2) -- CDerivedStats::GetClassLevel, whose UTIL_ASSERT
+        // fires for a class of 0 or less, as in the original -- against
+        // the specifics. The two arms share the same loads; 0x40EA
+        // answers greater through the setg tail 0x459A21 and 0x40EB less
+        // through the setl tail 0x456AA3 (both tails are LevelGT/LT's,
+        // 0x4095/0x4096). As in HP (0x4010), a null sprite leaves through
+        // the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nLevel = pSprite->GetDerivedStats()->GetClassLevel(triggerCopy.GetInt1());
+            if (triggerCopy.m_triggerID == 0x40EA) {
+                bResult = nLevel > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
