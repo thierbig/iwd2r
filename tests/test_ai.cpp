@@ -10,6 +10,7 @@
 #include "CCreatureFile.h"
 #include "CDerivedStats.h"
 #include "CGameAIBase.h"
+#include "CGameAnimationType.h"
 #include "CGameArea.h"
 #include "CGameContainer.h"
 #include "CGameDoor.h"
@@ -5541,6 +5542,166 @@ TEST_CASE("ai: EvaluateStatusTrigger 83z NumCreatureMinusPartyGT Reputation IsPl
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, callerCause, 5)) == FALSE);
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, CAIObjectType::NOONE, 5)) == FALSE);
     pSprite->m_nSequence = nOldSequence;
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: EvaluateStatusTrigger 84a ReputationLT TimeOfDay Difficulty IsAnimationID NumItems NumItemsGT NearbyDialog CurrentAreaIs", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x401B ReputationLT: the sprite is not a party member (no portraits
+    // in the harness game), so the reputation is its base-stats byte: 30 is
+    // less than 31 but not than 30 or 29; a cause that resolves to nothing
+    // answers FALSE through the early epilogue.
+    const BYTE nOldReputation = pSprite->m_baseStats.m_reputation;
+    pSprite->m_baseStats.m_reputation = 30;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401B, spriteCause, 31)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401B, spriteCause, 30)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401B, spriteCause, 29)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401B, CAIObjectType::NOONE, 31)) == FALSE);
+    pSprite->m_baseStats.m_reputation = nOldReputation;
+
+    // 0x401F TimeOfDay: the world timer's band picked by the specifics; the
+    // unsigned gate answers FALSE for a specifics above 3 or negative.
+    CTimerWorld* pWorldTimer = g_pBaldurChitin->GetObjectGame()->GetWorldTimer();
+    const ULONG nOldGameTime = pWorldTimer->m_gameTime;
+    pWorldTimer->m_gameTime = CTimerWorld::TIME_DAY + 1;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 0)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 1)) == FALSE);
+    pWorldTimer->m_gameTime = CTimerWorld::TIME_DUSK + 1;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 1)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 0)) == FALSE);
+    pWorldTimer->m_gameTime = CTimerWorld::TIME_NIGHT + 1;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 2)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 3)) == FALSE);
+    pWorldTimer->m_gameTime = CTimerWorld::TIME_DAWN + 1;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 3)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, 4)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401F, CAIObjectType::NOONE, -1)) == FALSE);
+    pWorldTimer->m_gameTime = nOldGameTime;
+
+    // 0x40AB Difficulty: the game's difficulty level (2) against the
+    // specifics, the compare picked by the trigger's int1 (1 equal, 2 less,
+    // 3 greater); an unset int1 and one outside 1..3 answer FALSE.
+    const DWORD nOldDifficultyLevel
+        = g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nDifficultyLevel;
+    g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nDifficultyLevel = 2;
+    {
+        CAITrigger mode(0x40AB, CAIObjectType::NOONE, 2);
+        mode.SetInt1(1);
+        CHECK(pCaller->EvaluateStatusTrigger(mode) == TRUE);
+        mode.SetInt1(2);
+        CHECK(pCaller->EvaluateStatusTrigger(mode) == FALSE); // 2 < 2
+        mode.SetInt1(3);
+        CHECK(pCaller->EvaluateStatusTrigger(mode) == FALSE); // 2 > 2
+
+        CAITrigger lt(0x40AB, CAIObjectType::NOONE, 3);
+        lt.SetInt1(2);
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == TRUE);
+        CAITrigger gt(0x40AB, CAIObjectType::NOONE, 1);
+        gt.SetInt1(3);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == TRUE);
+
+        CAITrigger bad(0x40AB, CAIObjectType::NOONE, 2);
+        bad.SetInt1(4);
+        CHECK(pCaller->EvaluateStatusTrigger(bad) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AB, CAIObjectType::NOONE, 2)) == FALSE);
+    }
+    g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nDifficultyLevel = nOldDifficultyLevel;
+
+    // 0x40DF IsAnimationID: the sprite's current animation id (a WORD,
+    // zero-extended) against the specifics by equality; a cause that
+    // resolves to nothing answers FALSE through the early epilogue.
+    auto* animationTypeBytes
+        = static_cast<unsigned char*>(::operator new(sizeof(CGameAnimationType)));
+    std::memset(animationTypeBytes, 0, sizeof(CGameAnimationType));
+    auto* pAnimationType = reinterpret_cast<CGameAnimationType*>(animationTypeBytes);
+    pAnimationType->m_animationID = 0x42;
+    CGameAnimationType* pOldAnimationType = pSprite->m_animation.m_animation;
+    pSprite->m_animation.m_animation = pAnimationType;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DF, spriteCause, 0x42)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DF, spriteCause, 0x43)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DF, CAIObjectType::NOONE, 0x42)) == FALSE);
+    pSprite->m_animation.m_animation = pOldAnimationType;
+    ::operator delete(animationTypeBytes);
+
+    // 0x4077/0x4078 NumItems/NumItemsGT: the CHARBASE sprite carries no
+    // items, so its personal count is 0 -- equal to a 0 specifics, greater
+    // than -1 -- and a resolved non-sprite fails the type gates; a cause
+    // that resolves to nothing answers FALSE through the early epilogue.
+    // The container path needs a registered container, which the harness
+    // does not have.
+    {
+        CAITrigger item(0x4077, spriteCause, 0);
+        item.m_string1 = "ANYITEM";
+        CHECK(pCaller->EvaluateStatusTrigger(item) == TRUE);
+        item.m_triggerCause = callerCause;
+        CHECK(pCaller->EvaluateStatusTrigger(item) == FALSE);
+        item.m_triggerCause = CAIObjectType::NOONE;
+        CHECK(pCaller->EvaluateStatusTrigger(item) == FALSE);
+
+        CAITrigger item1(0x4077, spriteCause, 1);
+        item1.m_string1 = "ANYITEM";
+        CHECK(pCaller->EvaluateStatusTrigger(item1) == FALSE);
+
+        CAITrigger itemGT(0x4078, spriteCause, -1);
+        itemGT.m_string1 = "ANYITEM";
+        CHECK(pCaller->EvaluateStatusTrigger(itemGT) == TRUE);
+        CAITrigger itemGT0(0x4078, spriteCause, 0);
+        itemGT0.m_string1 = "ANYITEM";
+        CHECK(pCaller->EvaluateStatusTrigger(itemGT0) == FALSE);
+    }
+
+    // 0x40C6 NearbyDialog: over a zeroed area whose vertical sort list is
+    // empty no dialog-capable neighbour exists, so the match comes back
+    // INVALID_INDEX for a nonzero specifics and for the zero specifics that
+    // falls back to the (zeroed) area dimensions as the range. The TRUE
+    // path needs a dialog neighbour in the vertical sort list, which the
+    // harness does not have.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        reinterpret_cast<CGameArea*>(area)->m_pGame = g_pBaldurChitin->GetObjectGame();
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CAITrigger nearby(0x40C6, CAIObjectType::NOONE, 50);
+        nearby.m_string1 = "ANYDLG";
+        CHECK(pCaller->EvaluateStatusTrigger(nearby) == FALSE);
+        CAITrigger nearby0(0x40C6, CAIObjectType::NOONE, 0);
+        nearby0.m_string1 = "ANYDLG";
+        CHECK(pCaller->EvaluateStatusTrigger(nearby0) == FALSE);
+        pCaller->m_pArea = NULL;
+        ::operator delete(area);
+    }
+
+    // 0x40CF CurrentAreaIs: the resolved sprite's area resref "AR1000" is
+    // area number 1000 (the number starts at the first digit); a NULL area,
+    // a resref with no digit in it, and a cause that resolves to nothing
+    // answer FALSE through the release tail.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        reinterpret_cast<CGameArea*>(area)->m_resRef = CResRef("AR1000");
+        CGameArea* pOldArea = pSprite->m_pArea;
+        pSprite->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, spriteCause, 1000)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, spriteCause, 999)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, spriteCause, 1001)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, CAIObjectType::NOONE, 1000)) == FALSE);
+        pSprite->m_pArea = NULL;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, spriteCause, 1000)) == FALSE);
+        reinterpret_cast<CGameArea*>(area)->m_resRef = CResRef("AR");
+        pSprite->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CF, spriteCause, 0)) == FALSE);
+        pSprite->m_pArea = pOldArea;
+        ::operator delete(area);
+    }
 
     ClearMessages();
 }
