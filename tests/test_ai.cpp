@@ -5150,3 +5150,94 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x4014 0x4015 0x4016 0x40EC 0x40B2 0x40B4 0
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x402D 0x4094 0x40D4 0x40D8 0x40DB 0x40DC 0x40DE 0x40E9 hp percent level door flags rotation hp lost fallen paladin class level",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x402D HPPERCENTLT: the sprite's hit-point percentage -- base current
+    // times 100 over derived max, 10 * 100 / 20 = 50 -- against the
+    // specifics by less. An unresolved cause answers FALSE through the
+    // early epilogue.
+    const SHORT nOldMaxHitPoints = pSprite->m_derivedStats.m_nMaxHitPoints;
+    const SHORT nOldHitPoints = pSprite->m_baseStats.m_hitPoints;
+    pSprite->m_derivedStats.m_nMaxHitPoints = 20;
+    pSprite->m_baseStats.m_hitPoints = 10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402D, spriteCause, 51)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402D, spriteCause, 50)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402D, CAIObjectType::NOONE, 51)) == FALSE);
+
+    // 0x40DB/0x40DC HPLost/HPLostGT: the same sprite's lost hit points,
+    // 20 - 10 = 10, against the specifics by equal and greater.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DB, spriteCause, 10)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DB, spriteCause, 11)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DC, spriteCause, 9)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DC, spriteCause, 10)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DB, CAIObjectType::NOONE, 10)) == FALSE);
+    pSprite->m_derivedStats.m_nMaxHitPoints = nOldMaxHitPoints;
+    pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+
+    // 0x4094 Level: the sprite's combined class level over the full class
+    // mask 0xFFF against the specifics by equal. One class bit with level 5
+    // makes the sum 5.
+    const DWORD nOldClassMask = pSprite->m_derivedStats.m_classMask;
+    const BYTE nOldClassLevel = pSprite->m_derivedStats.m_nClassLevels[0];
+    pSprite->m_derivedStats.m_classMask = 1;
+    pSprite->m_derivedStats.m_nClassLevels[0] = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4094, spriteCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4094, spriteCause, 4)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4094, CAIObjectType::NOONE, 5)) == FALSE);
+
+    // 0x40E9 LevelInClass: the sprite's level in the trigger's class (int1,
+    // m_specific2) against the specifics by equal; class 1 is level 5.
+    CAITrigger classEQ(0x40E9, spriteCause, 5);
+    classEQ.m_specific2 = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(classEQ) == TRUE);
+    classEQ.m_specificID = 6;
+    CHECK(pCaller->EvaluateStatusTrigger(classEQ) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E9, CAIObjectType::NOONE, 5)) == FALSE);
+
+    // 0x40DE FallenPaladin: the resolved sprite's first three class bits
+    // (m_classMask & 7) nonzero AND bit 0x200 of its base stats flags set;
+    // either side cleared fails the trigger. This block keeps the class
+    // level state from 0x4094 and the level checks' mask 1.
+    const DWORD nOldFlags = pSprite->GetBaseStats()->m_flags;
+    pSprite->GetBaseStats()->m_flags = nOldFlags | 0x200;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DE, spriteCause, 0)) == TRUE);
+    pSprite->GetBaseStats()->m_flags = nOldFlags & ~0x200;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DE, spriteCause, 0)) == FALSE);
+    pSprite->GetBaseStats()->m_flags = nOldFlags | 0x200;
+    pSprite->m_derivedStats.m_classMask = 0;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DE, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DE, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_derivedStats.m_classMask = 1;
+    pSprite->GetBaseStats()->m_flags = nOldFlags;
+    pSprite->m_derivedStats.m_nClassLevels[0] = nOldClassLevel;
+    pSprite->m_derivedStats.m_classMask = nOldClassMask;
+
+    // 0x40D8 IsRotation: the resolved sprite's direction word against the
+    // specifics by equal.
+    const SHORT nOldDirection = pSprite->m_nDirection;
+    pSprite->m_nDirection = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D8, spriteCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D8, spriteCause, 6)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D8, CAIObjectType::NOONE, 5)) == FALSE);
+    pSprite->m_nDirection = nOldDirection;
+
+    // 0x40D4 CheckDoorFlags: only the FALSE paths are observable here -- a
+    // cause that resolves to nothing zeroes the result in the arm, and a
+    // resolved sprite fails the door type gate inside the object lookup.
+    // The TRUE path needs a real CGameDoor, whose constructor walks a loaded
+    // area's tiled objects (CTiledObject::Initialize over the area's WED);
+    // the test harness has no loaded area.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D4, CAIObjectType::NOONE, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D4, spriteCause, 0)) == FALSE);
+
+    ClearMessages();
+}
