@@ -29,6 +29,7 @@
 #include "CSpell.h"
 #include "CStore.h"
 #include "CVariableHash.h"
+#include "Icewind586B70.h"
 #include "ScreenLayout.h"
 #include "data_view.h"
 #include "platform/data_dir.h"
@@ -4920,6 +4921,76 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x4027 0x404E 0x404F 0x4050 0x4066 0x406A 0
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, spriteCause, 79)) == TRUE);
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, spriteCause, 80)) == FALSE);
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4066, CAIObjectType::NOONE, 0)) == FALSE);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x401E 0x4068 0x4069 0x4095 0x4096 0x40B3 0x40D5 0x40F5 time level summon hide critical",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    const CAIObjectType emptyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x401E/0x4068/0x4069 Time trio: the world timer's current hour, a
+    // zero-extended byte, against the specifics by equal, greater, less.
+    CTimerWorld* pWorldTimer = g_pBaldurChitin->GetObjectGame()->GetWorldTimer();
+    const ULONG nOldGameTime = pWorldTimer->m_gameTime;
+    pWorldTimer->m_gameTime = 5 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401E, emptyCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401E, emptyCause, 6)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4068, emptyCause, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4068, emptyCause, 5)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4069, emptyCause, 6)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4069, emptyCause, 5)) == FALSE);
+    pWorldTimer->m_gameTime = nOldGameTime;
+
+    // 0x4095/0x4096 Level pair: the trigger sprite's combined class level
+    // over the full class mask 0xFFF against the specifics. A single class
+    // bit with level 5 makes the sum 5; an unresolved cause answers FALSE
+    // through the early epilogue before any compare.
+    pSprite->m_derivedStats.m_classMask = 1;
+    pSprite->m_derivedStats.m_nClassLevels[0] = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4095, spriteCause, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4095, spriteCause, 5)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4096, spriteCause, 6)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4096, spriteCause, 5)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4095, CAIObjectType::NOONE, 0)) == FALSE);
+
+    // 0x40B3 SummoningLimitGT: the summon registry's count of occupied
+    // slots against the specifics by greater. One occupied slot answers
+    // TRUE for 0 and FALSE for 1; the sprite still has to resolve, or the
+    // early epilogue answers FALSE before the count.
+    {
+        std::vector<Icewind586B70::Entry> oldEntries = Icewind586B70::Instance()->mEntries;
+        Icewind586B70::Instance()->mEntries.assign(1, Icewind586B70::Entry(1, 1));
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B3, spriteCause, 0)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B3, spriteCause, 1)) == FALSE);
+        Icewind586B70::Instance()->mEntries = oldEntries;
+    }
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B3, CAIObjectType::NOONE, 0)) == FALSE);
+
+    // 0x40D5 IsCreatureHiddenInShadows: the resolved sprite's hide flag
+    // taken raw; a cause that resolves to nothing answers FALSE.
+    pSprite->m_bHiding = TRUE;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D5, spriteCause, 0)) == TRUE);
+    pSprite->m_bHiding = FALSE;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D5, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D5, CAIObjectType::NOONE, 0)) == FALSE);
+
+    // 0x40F5 IsPathCriticalObject: bit 0x2000 of the resolved object's base
+    // stats flags (the flag action 283 SetCriticalPathObject writes).
+    const DWORD nOldFlags = pSprite->GetBaseStats()->m_flags;
+    pSprite->GetBaseStats()->m_flags = nOldFlags | 0x2000;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40F5, spriteCause, 0)) == TRUE);
+    pSprite->GetBaseStats()->m_flags = nOldFlags & ~0x2000;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40F5, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40F5, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->GetBaseStats()->m_flags = nOldFlags;
 
     ClearMessages();
 }
