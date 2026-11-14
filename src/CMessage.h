@@ -514,6 +514,15 @@ public:
     /* 001C */ BOOLEAN m_bLastArbitrationLockStatus;
 };
 
+// A queued action (vtable 0x847B24, 0xDC bytes): SEND, so the action is
+// handed to the player who controls the target sprite. On the wire: the
+// target's remote ids, the action id, then each of the action's three
+// CAIObjectTypes (length-prefixed name, nine one-byte selectors, class mask,
+// the instance's remote ids, the five special-case bytes), the three
+// specific ids, the two strings and the destination point. The action's
+// m_internalFlags and the CAIObjectType location fields are not sent;
+// UnmarshalMessage copies each decoded object into the action through
+// CAIObjectType::Set, so those unsent fields keep their pre-message values.
 class CMessageAddAction : public CMessage {
 public:
     CMessageAddAction(const CAIAction& action, LONG caller, LONG target);
@@ -521,6 +530,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIAction m_action;

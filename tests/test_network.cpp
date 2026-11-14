@@ -66,6 +66,97 @@ private:
         REQUIRE(engine_world::StartEngine(error));  \
     } while (0)
 
+// A minimal object array and remote-object map for the message codecs. The
+// object array owns the object it is given; the remote map entry is
+// installed directly because CGameRemoteObjectArray::Add's empty-bucket arm
+// is not part of what is under test here.
+class MessageGameScope {
+public:
+    MessageGameScope()
+        : m_savedBaldur(g_pBaldurChitin)
+    {
+        m_baldur.reset(new unsigned char[sizeof(CBaldurChitin)]());
+        m_game.reset(new unsigned char[sizeof(CInfGame)]());
+        g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(m_baldur.get());
+        g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(m_game.get());
+        m_pGame = g_pBaldurChitin->GetObjectGame();
+        new (&m_pGame->m_cObjectArray) CGameObjectArray(10, 10);
+        new (&m_pGame->m_cRemoteObjectArray) CGameRemoteObjectArray(10);
+    }
+
+    ~MessageGameScope()
+    {
+        m_pGame->m_cRemoteObjectArray.~CGameRemoteObjectArray();
+        m_pGame->m_cObjectArray.~CGameObjectArray();
+        g_pBaldurChitin = m_savedBaldur;
+    }
+
+    LONG AddObject(PLAYER_ID player, LONG remote)
+    {
+        CGameObject* pObject = new CGameObject();
+        LONG nObjectId;
+        REQUIRE(m_pGame->m_cObjectArray.Add(&nObjectId, pObject, INFINITE) == CGameObjectArray::SUCCESS);
+        pObject->m_remotePlayerID = player;
+        pObject->m_remoteObjectID = remote;
+        return nObjectId;
+    }
+
+    void MapRemote(PLAYER_ID player, LONG remote, LONG local)
+    {
+        CGameRemoteObjectListEntry* entry = new CGameRemoteObjectListEntry();
+        entry->remotePlayerID = player;
+        entry->remoteObjectID = remote;
+        entry->localObjectID = local;
+        const SHORT index = static_cast<SHORT>((remote >> 16) & 0x7FFF);
+        entry->pNext = m_pGame->m_cRemoteObjectArray.m_pArray[index];
+        m_pGame->m_cRemoteObjectArray.m_pArray[index] = entry;
+    }
+
+private:
+    CBaldurChitin* m_savedBaldur;
+    std::unique_ptr<unsigned char[]> m_baldur;
+    std::unique_ptr<unsigned char[]> m_game;
+    CInfGame* m_pGame;
+};
+
+// Every field the codec carries. The CAIObjectType location fields
+// (m_ptCenter/m_nRadius/m_rect) and CAIAction::m_internalFlags are not on
+// the wire, so the tests below keep them at their constructor defaults.
+void CheckObjectTypeEqual(const CAIObjectType& expected, const CAIObjectType& actual)
+{
+    CHECK(actual.m_sName == expected.m_sName);
+    CHECK(actual.m_nEnemyAlly == expected.m_nEnemyAlly);
+    CHECK(actual.m_nGeneral == expected.m_nGeneral);
+    CHECK(actual.m_nRace == expected.m_nRace);
+    CHECK(actual.m_nSubRace == expected.m_nSubRace);
+    CHECK(actual.m_nClass == expected.m_nClass);
+    CHECK(actual.m_nSpecific == expected.m_nSpecific);
+    CHECK(actual.m_nGender == expected.m_nGender);
+    CHECK(actual.m_nAlignment == expected.m_nAlignment);
+    CHECK(actual.m_nAvClass == expected.m_nAvClass);
+    CHECK(actual.m_nClassMask == expected.m_nClassMask);
+    CHECK(actual.m_nInstance == expected.m_nInstance);
+    CHECK(actual.m_nLocationType == expected.m_nLocationType);
+    for (int index = 0; index < 5; index++) {
+        CHECK(actual.m_SpecialCase[index] == expected.m_SpecialCase[index]);
+    }
+}
+
+void CheckActionEqual(const CAIAction& expected, const CAIAction& actual)
+{
+    CHECK(actual.m_actionID == expected.m_actionID);
+    CheckObjectTypeEqual(expected.m_actorID, actual.m_actorID);
+    CheckObjectTypeEqual(expected.m_acteeID, actual.m_acteeID);
+    CheckObjectTypeEqual(expected.m_acteeID2, actual.m_acteeID2);
+    CHECK(actual.m_specificID == expected.m_specificID);
+    CHECK(actual.m_specificID2 == expected.m_specificID2);
+    CHECK(actual.m_specificID3 == expected.m_specificID3);
+    CHECK(actual.m_string1 == expected.m_string1);
+    CHECK(actual.m_string2 == expected.m_string2);
+    CHECK(actual.m_dest.x == expected.m_dest.x);
+    CHECK(actual.m_dest.y == expected.m_dest.y);
+    CHECK(actual.m_internalFlags == expected.m_internalFlags);
+}
 }
 
 TEST_CASE("null service provider hosts a single-player session", "[network]")
@@ -1336,4 +1427,300 @@ TEST_CASE("msg: CMessageSetVariable::UnmarshalMessage reads the name before the 
     CHECK(message.m_dwFlags == 0x0F);
 
     g_pBaldurChitin = pSavedBaldur;
+}
+
+// CMessageAddAction::MarshalMessage (0x4F7AE0) / UnmarshalMessage
+// (0x4F80B0): an action is the target's remote ids, the action id, three
+// CAIObjectTypes and the action tail (three specific ids, two strings and
+// the destination). An empty action still sends its three objects: a zero
+// length name, the nine one-byte selectors, the class mask, the (0, -1)
+// instance fallback and five zero special-case bytes. The fixed size is
+// 8 + 2 + 3 * (2 + 13 + 8 + 5) + 12 + 4 + 8 = 118.
+TEST_CASE("msg: CMessageAddAction round-trips an empty action", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CAIAction action;
+    action.m_actionID = CAIAction::NO_ACTION;
+    action.m_actorID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_acteeID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_acteeID2 = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_specificID = 0;
+    action.m_specificID2 = 0;
+    action.m_specificID3 = 0;
+    action.m_string1 = "";
+    action.m_string2 = "";
+    action.m_dest = CPoint(0, 0);
+    action.m_internalFlags = 0;
+
+    CMessageAddAction message(action, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::SEND);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION);
+
+    BYTE packed[0x4000];
+    memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+
+    CHECK(pPacked == packed);
+    CHECK(packedSize == 118);
+    CHECK(packed[packedSize] == 0xCD);
+
+    BYTE expected[0x4000];
+    DWORD expectedSize = 0;
+    auto put = [&](const void* p, DWORD n) {
+        memcpy(expected + expectedSize, p, n);
+        expectedSize += n;
+    };
+
+    const PLAYER_ID targetPlayer = 7;
+    const LONG targetRemote = 0x00010002;
+    const SHORT actionID = CAIAction::NO_ACTION;
+    put(&targetPlayer, sizeof(targetPlayer));
+    put(&targetRemote, sizeof(targetRemote));
+    put(&actionID, sizeof(actionID));
+    for (int index = 0; index < 3; index++) {
+        const SHORT nameLength = 0;
+        put(&nameLength, sizeof(nameLength));
+        const BYTE selectors[9] = { };
+        put(selectors, sizeof(selectors));
+        const DWORD classMask = 0;
+        put(&classMask, sizeof(classMask));
+        const PLAYER_ID instancePlayer = 0;
+        const LONG instanceRemote = CGameObjectArray::INVALID_INDEX;
+        put(&instancePlayer, sizeof(instancePlayer));
+        put(&instanceRemote, sizeof(instanceRemote));
+        const BYTE specialCase[5] = { };
+        put(specialCase, sizeof(specialCase));
+    }
+    const LONG zero = 0;
+    put(&zero, sizeof(zero));
+    put(&zero, sizeof(zero));
+    put(&zero, sizeof(zero));
+    const SHORT stringLength = 0;
+    put(&stringLength, sizeof(stringLength));
+    put(&stringLength, sizeof(stringLength));
+    put(&zero, sizeof(zero));
+    put(&zero, sizeof(zero));
+    REQUIRE(expectedSize == packedSize);
+    CHECK(memcmp(packed, expected, packedSize) == 0);
+
+    BYTE packet[0x4000 + 3];
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessageAddAction received(CAIAction::NULL_ACTION, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CheckActionEqual(action, received.m_action);
+}
+
+// The same codec with every carried field populated: names, the nine
+// selectors, class masks, special cases, two different instances (one
+// resolving through the remote map, one taking the (0, -1) fallback), the
+// three specific ids, both strings and a negative destination. Names are 5,
+// 5 and 6 bytes and the strings 10 and 11, so the payload is 118 + 16 + 21
+// = 155 bytes.
+TEST_CASE("msg: CMessageAddAction round-trips a populated action", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CAIAction action;
+    action.m_actionID = CAIAction::SPELL;
+
+    action.m_actorID = CAIObjectType(2, 1, 1, 2, CAIObjectType::C_WIZARD, 3, 1, 2,
+        nTarget, CAIObjectType::C_FIGHTER, CLASSMASK_WIZARD);
+    action.m_actorID.m_sName = "ACTOR";
+    const BYTE actorSpecialCase[5] = { 1, 2, 3, 4, 5 };
+    action.m_actorID.SetSpecialCase(actorSpecialCase);
+
+    action.m_acteeID = CAIObjectType(4, 2, 3, 4, CAIObjectType::C_CLERIC, 5, 2, 1,
+        nTarget, CAIObjectType::C_CLERIC, CLASSMASK_CLERIC);
+    action.m_acteeID.m_sName = "ACTEE";
+    const BYTE acteeSpecialCase[5] = { 6, 7, 8, 9, 10 };
+    action.m_acteeID.SetSpecialCase(acteeSpecialCase);
+
+    action.m_acteeID2 = CAIObjectType(3, 3, 5, 6, CAIObjectType::C_ROGUE, 7, 1, 3,
+        -1, CAIObjectType::C_ROGUE, CLASSMASK_ROGUE);
+    action.m_acteeID2.m_sName = "ACTEE2";
+    const BYTE actee2SpecialCase[5] = { 11, 12, 13, 14, 15 };
+    action.m_acteeID2.SetSpecialCase(actee2SpecialCase);
+
+    action.m_specificID = 11;
+    action.m_specificID2 = 22;
+    action.m_specificID3 = 33;
+    action.m_string1 = "SPELL_NAME";
+    action.m_string2 = "TARGET_NAME";
+    action.m_dest = CPoint(1234, -567);
+    action.m_internalFlags = 0;
+
+    CMessageAddAction message(action, 0, nTarget);
+
+    BYTE packed[0x4000];
+    memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+
+    CHECK(pPacked == packed);
+    CHECK(packedSize == 155);
+    CHECK(packed[packedSize] == 0xCD);
+
+    BYTE expected[0x4000];
+    DWORD expectedSize = 0;
+    auto put = [&](const void* p, DWORD n) {
+        memcpy(expected + expectedSize, p, n);
+        expectedSize += n;
+    };
+    auto putObject = [&](const char* name,
+                         BYTE enemyAlly,
+                         BYTE general,
+                         BYTE race,
+                         BYTE subRace,
+                         BYTE objectClass,
+                         BYTE specific,
+                         BYTE gender,
+                         BYTE alignment,
+                         BYTE avClass,
+                         DWORD classMask,
+                         PLAYER_ID instancePlayer,
+                         LONG instanceRemote,
+                         const BYTE specialCase[5]) {
+        const SHORT nameLength = static_cast<SHORT>(strlen(name));
+        put(&nameLength, sizeof(nameLength));
+        put(name, nameLength);
+        put(&enemyAlly, sizeof(enemyAlly));
+        put(&general, sizeof(general));
+        put(&race, sizeof(race));
+        put(&subRace, sizeof(subRace));
+        put(&objectClass, sizeof(objectClass));
+        put(&specific, sizeof(specific));
+        put(&gender, sizeof(gender));
+        put(&alignment, sizeof(alignment));
+        put(&avClass, sizeof(avClass));
+        put(&classMask, sizeof(classMask));
+        put(&instancePlayer, sizeof(instancePlayer));
+        put(&instanceRemote, sizeof(instanceRemote));
+        put(specialCase, 5);
+    };
+
+    const PLAYER_ID targetPlayer = 7;
+    const LONG targetRemote = 0x00010002;
+    const SHORT actionID = CAIAction::SPELL;
+    put(&targetPlayer, sizeof(targetPlayer));
+    put(&targetRemote, sizeof(targetRemote));
+    put(&actionID, sizeof(actionID));
+    putObject("ACTOR", 2, 1, 1, 2, CAIObjectType::C_WIZARD, 3, 1, 2, CAIObjectType::C_FIGHTER,
+        CLASSMASK_WIZARD, 7, 0x00010002, actorSpecialCase);
+    putObject("ACTEE", 4, 2, 3, 4, CAIObjectType::C_CLERIC, 5, 2, 1, CAIObjectType::C_CLERIC,
+        CLASSMASK_CLERIC, 7, 0x00010002, acteeSpecialCase);
+    putObject("ACTEE2", 3, 3, 5, 6, CAIObjectType::C_ROGUE, 7, 1, 3, CAIObjectType::C_ROGUE,
+        CLASSMASK_ROGUE, 0, CGameObjectArray::INVALID_INDEX, actee2SpecialCase);
+    const LONG specificID = 11;
+    const LONG specificID2 = 22;
+    const LONG specificID3 = 33;
+    put(&specificID, sizeof(specificID));
+    put(&specificID2, sizeof(specificID2));
+    put(&specificID3, sizeof(specificID3));
+    const SHORT string1Length = 10;
+    put(&string1Length, sizeof(string1Length));
+    put("SPELL_NAME", string1Length);
+    const SHORT string2Length = 11;
+    put(&string2Length, sizeof(string2Length));
+    put("TARGET_NAME", string2Length);
+    const LONG destX = 1234;
+    const LONG destY = -567;
+    put(&destX, sizeof(destX));
+    put(&destY, sizeof(destY));
+    REQUIRE(expectedSize == packedSize);
+    CHECK(memcmp(packed, expected, packedSize) == 0);
+
+    BYTE packet[0x4000 + 3];
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessageAddAction received(CAIAction::NULL_ACTION, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CheckActionEqual(action, received.m_action);
+}
+
+// The failure values: a target the object array cannot share makes the
+// marshaller write nothing and zero the size; a wire target the remote map
+// cannot resolve leaves m_targetId alone; and an object instance whose
+// remote ids resolve to neither a local id nor the (0, -1) fallback makes
+// the unmarshaller return FALSE after the target was already accepted.
+TEST_CASE("msg: CMessageAddAction marshal/unmarshal failure paths", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CAIAction action;
+    action.m_actorID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_acteeID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_acteeID2 = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    action.m_dest = CPoint(0, 0);
+    action.m_internalFlags = 0;
+
+    CMessageAddAction missing(action, 0, CGameObjectArray::INVALID_INDEX);
+    BYTE packed[0x4000];
+    memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0xDEADBEEF;
+    missing.MarshalMessage(&pPacked, &packedSize);
+    CHECK(packedSize == 0);
+    CHECK(pPacked == packed);
+    CHECK(packed[0] == 0xCD);
+
+    // A target remote id the remote map does not know: Find misses, so the
+    // message is rejected before m_targetId changes.
+    BYTE targetMiss[0x4000];
+    memset(targetMiss, 0, sizeof(targetMiss));
+    const PLAYER_ID unknownPlayer = 99;
+    const LONG targetRemote = 0x00010002;
+    memcpy(targetMiss + CNetwork::SPEC_MSG_HEADER_LENGTH, &unknownPlayer, sizeof(unknownPlayer));
+    memcpy(targetMiss + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID), &targetRemote, sizeof(targetRemote));
+    CMessageAddAction received(CAIAction::NULL_ACTION, 0, 12345);
+    CHECK(received.UnmarshalMessage(targetMiss, CNetwork::SPEC_MSG_HEADER_LENGTH + 118) == FALSE);
+    CHECK(received.m_targetId == 12345);
+
+    // Accept the target, then fail on the first object's remote ids. The
+    // object block starts at payload offset 10; with an empty name its
+    // instance ids are at 25 (player) and 29 (object).
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CMessageAddAction empty(action, 0, nTarget);
+    BYTE payload[0x4000];
+    memset(payload, 0xCD, sizeof(payload));
+    BYTE* pPayload = payload;
+    DWORD payloadSize = 0;
+    empty.MarshalMessage(&pPayload, &payloadSize);
+    REQUIRE(payloadSize == 118);
+
+    BYTE objectMiss[0x4000];
+    objectMiss[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    objectMiss[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    objectMiss[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION;
+    memcpy(objectMiss + CNetwork::SPEC_MSG_HEADER_LENGTH, payload, payloadSize);
+    const PLAYER_ID badPlayer = 99;
+    const LONG badRemote = 0x00020003;
+    memcpy(objectMiss + CNetwork::SPEC_MSG_HEADER_LENGTH + 25, &badPlayer, sizeof(badPlayer));
+    memcpy(objectMiss + CNetwork::SPEC_MSG_HEADER_LENGTH + 29, &badRemote, sizeof(badRemote));
+
+    CMessageAddAction objectResult(CAIAction::NULL_ACTION, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(objectResult.UnmarshalMessage(objectMiss, CNetwork::SPEC_MSG_HEADER_LENGTH + payloadSize) == FALSE);
+    CHECK(objectResult.m_targetId == nTarget);
 }
