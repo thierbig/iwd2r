@@ -1717,6 +1717,7 @@ public:
 class CMessageMoveGlobal : public CMessage {
 public:
     CMessageMoveGlobal(const CString& sArea, const CPoint& ptStart, LONG caller, LONG target);
+    ~CMessageMoveGlobal() override;
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;

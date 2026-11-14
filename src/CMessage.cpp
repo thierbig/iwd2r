@@ -18221,6 +18221,15 @@ CMessageMoveGlobal::CMessageMoveGlobal(const CString& sArea, const CPoint& ptSta
     m_ptStart = ptStart;
 }
 
+// NOTE: The exe's 0x4670C0 destroys m_sArea (+0xC, CString_Destruct at
+// 0x4670E8) then stores the CMessage vftable 0x847B40 (the inlined empty
+// base destructor, 0x4670F1); the members below carry that destruction.
+// 0x4670A0 (vtable slot 0 at 0x848CAC) is only the compiler's deleting
+// destructor wrapper around this body.
+CMessageMoveGlobal::~CMessageMoveGlobal()
+{
+}
+
 // 0x453510
 SHORT CMessageMoveGlobal::GetCommType()
 {
