@@ -7261,6 +7261,131 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = static_cast<ULONG>(pVariable->GetIntValue()) < nGameTime;
         }
         break;
+    case 0x403F:
+        // GlobalTimerExact(name, scope) (0x455636-0x4557E0): the same
+        // resolution as GlobalTimerExpired (0x4040) -- the name in
+        // string1, the scope in string2 uppercased and cut to six
+        // characters -- except that a missing variable answers FALSE
+        // (0x455731 and 0x4557DA reach the FALSE tail 0x45AB39), and
+        // the comparison is the world timer's game time EQUALING the
+        // variable's value (sub/neg/sbb/inc, the equality idiom,
+        // 0x45575B-0x455761).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = FALSE;
+                break;
+            }
+
+            ULONG nGameTime = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+            bResult = static_cast<ULONG>(pVariable->GetIntValue()) == nGameTime;
+        }
+        break;
+    case 0x4041:
+        // GlobalTimerNotExpired(name, scope) (0x455989-0x455B3B): the
+        // same resolution as 0x4040, and a missing variable also
+        // answers FALSE (all three branches' FindKey tests land on
+        // 0x455B09, the FALSE tail). TRUE while the timer runs: the
+        // world timer's game time strictly BELOW the variable's value
+        // (cmp edi,eax -- game time against value -- then sbb/neg,
+        // 0x455B31-0x455B35).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = FALSE;
+                break;
+            }
+
+            ULONG nGameTime = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+            bResult = nGameTime < static_cast<ULONG>(pVariable->GetIntValue());
+        }
+        break;
+    case 0x40E3:
+        // GlobalTimerStarted(name, scope) (0x455CD1-0x455E43): the
+        // same resolution as 0x4040, but the value is never read --
+        // the answer is only whether the variable exists (jne to the
+        // TRUE tail 0x45AD47 at 0x455E37; the non-sprite LOCALS and
+        // missing-area cases leave through the FALSE tail 0x45A887).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            bResult = pVariable != NULL;
+        }
+        break;
     case 0x400B:
         // Allegiance: the decoded cause's enemy-ally byte.
         triggerCopy.m_triggerCause.Decode(this);
@@ -9964,6 +10089,67 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
 
             bResult = bIdentified;
+        }
+        break;
+    case 0x40F6:
+        // AnyPCSeesEnemy (0x45A96F-0x45AAE8): whether any party
+        // member sees an enemy. The object type is local -- the
+        // eleven-argument constructor (0x40AE80) with every field
+        // zero except EA_ENEMY (0x847C40) and instance -1 -- decoded
+        // against each shared party member (the walk re-reads
+        // GetNumCharacters every iteration), then resolved to a
+        // TYPE_SPRITE it matches (sub_40CB20, no back list). A
+        // resolved target is checked with SeeTarget (0x44DAC0,
+        // bSeeDead FALSE) and its share released; the member's share
+        // is always released. A member that cannot be shared is
+        // simply skipped (0x45AA0D; nothing was shared, so nothing is
+        // released), as in ItemIsIdentified (0x40C5) -- unlike
+        // NumItemsParty (0x407A), which gives up. The walk stops at
+        // the first member whose SeeTarget answers exactly 1
+        // (0x45AAD0 skips the increment), leaving that answer as the
+        // trigger's answer; a member with no matching target keeps
+        // the previous answer and the walk continues.
+        {
+            CAIObjectType type(CAIObjectType::EA_ENEMY, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x45AA0D); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameAIBase* pMember = static_cast<CGameAIBase*>(pCharacter);
+                type.Decode(pMember);
+                CGameObject* pTarget = type.sub_40CB20(pMember, CGameObject::TYPE_SPRITE, FALSE);
+                if (pTarget != NULL) {
+                    bResult = pMember->SeeTarget(pTarget, FALSE);
+
+                    pGame->GetObjectArray()->ReleaseShare(pTarget->GetId(),
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bResult == 1) {
+                    break;
+                }
+            }
         }
         break;
     default:
