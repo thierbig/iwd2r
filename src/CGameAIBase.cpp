@@ -7872,6 +7872,95 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
             return FALSE;
         }
+    case 0x40A6:
+        // GlobalBitGlobal (0x457DC5-0x4582DF): both strings are uppercased
+        // and split at the first ':' into scope and name. string2 is
+        // resolved first into nLeftValue; every miss (absent variable,
+        // LOCALS on a non-sprite, unknown area) just leaves it 0. string1
+        // is then resolved into pVariable the same way, except LOCALS on a
+        // non-sprite (0x458202) and an unknown area (0x458255) answer FALSE
+        // directly. A miss answers specifics == 0 (0x4582A7, the usual
+        // neg/sbb/inc). On a hit only specifics == 1 can answer TRUE
+        // ((nLeftValue & value) != 0): the == 2 (OR, 0x4580F5) and == 3
+        // (XOR, 0x4581DB) compares, and their LOCALS and area copies, are
+        // unreachable in the original, because every path into them
+        // already required specifics == 1.
+        {
+            CString sString1 = triggerCopy.m_string1;
+            sString1.MakeUpper();
+            int nColon1 = sString1.Find(':');
+            CString sScope1 = sString1.Left(nColon1);
+            CString sName1 = sString1.Right(sString1.GetLength() - nColon1 - 1);
+
+            CString sString2 = triggerCopy.m_string2;
+            sString2.MakeUpper();
+            int nColon2 = sString2.Find(':');
+            CString sScope2 = sString2.Left(nColon2);
+            CString sName2 = sString2.Right(sString2.GetLength() - nColon2 - 1);
+
+            int nLeftValue = 0;
+            if (strcmp(sScope2, "GLOBAL") == 0) {
+                CVariable* pLeft = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName2);
+                if (pLeft != NULL) {
+                    nLeftValue = pLeft->GetIntValue();
+                }
+            } else if (strcmp(sScope2, "LOCALS") == 0) {
+                if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+                    CVariable* pLeft = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName2);
+                    if (pLeft != NULL) {
+                        nLeftValue = pLeft->GetIntValue();
+                    }
+                }
+            } else {
+                if (strcmp(sScope2, "MYAREA") == 0) {
+                    // NOTE: The area's name is read as a C string from the
+                    // start of the area (its header's RESREF), as the
+                    // original does.
+                    sScope2 = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope2);
+                if (pArea != NULL) {
+                    CVariable* pLeft = pArea->GetVariables()->FindKey(sName2);
+                    if (pLeft != NULL) {
+                        nLeftValue = pLeft->GetIntValue();
+                    }
+                }
+            }
+
+            CVariable* pVariable;
+            if (strcmp(sScope1, "GLOBAL") == 0) {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName1);
+            } else if (strcmp(sScope1, "LOCALS") == 0) {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName1);
+            } else {
+                if (strcmp(sScope1, "MYAREA") == 0) {
+                    // NOTE: The area's name is read as a C string from the
+                    // start of the area (its header's RESREF), as the
+                    // original does.
+                    sScope1 = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope1);
+                if (pArea == NULL) {
+                    break;
+                }
+
+                pVariable = pArea->GetVariables()->FindKey(sName1);
+            }
+
+            if (pVariable == NULL) {
+                bResult = triggerCopy.GetSpecifics() == 0;
+            } else if (triggerCopy.GetSpecifics() == 1) {
+                bResult = (nLeftValue & pVariable->GetIntValue()) != 0;
+            }
+        }
+        break;
     case 0x40A7:
         // CreatureHidden: the object's hidden flag (base stats field_294).
         {
@@ -10950,9 +11039,11 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             return TRUE;
         }
     default:
-        // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
-        // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
-        // it answers FALSE until it is.
+        // Trigger IDs outside the table (the byte table 0x45B0C4 indexes
+        // 0x400A-0x40F7 into the jump table 0x45AE40) and the table entries
+        // that point at 0x45AD4C answer FALSE, as in the original. The two
+        // arms still unported are 0x4067 HappinessLT (0x4567C0) and 0x40E6
+        // CheckSkill (0x455EDD); they answer FALSE until they are ported.
         bResult = FALSE;
         break;
     }
