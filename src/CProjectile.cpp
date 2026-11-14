@@ -5164,6 +5164,32 @@ CProjectileWallOfMoonlight::CProjectileWallOfMoonlight()
     m_loopFireSound = TRUE;
 }
 
+// 0x5820B0
+// Vtable slot 0x70 of both walls (0x8514CC and 0x851664 hold this one
+// function). The first arrival starts the wall's ARE_P22 loop: the resref
+// goes through the sound helper's request path (TRUE, TRUE), then it is made
+// fire-and-forget and bound to channel 15 of the area at the wall's
+// position; the byte at +0x2B2 and field_1DE are latched TRUE. A later
+// arrival takes the early exit, which only re-latches both flags — it does
+// not touch the sound. The CResHelper::SetResRef request sequence lives in
+// the sound helper (a private STL/CRT routine is not ported here).
+void CProjectileWallOfMoonlight::OnArrival()
+{
+    if (field_2B2 != 0) {
+        field_2B2 = 1;
+        field_1DE = TRUE;
+        return;
+    }
+
+    m_loopSound.SetResRef(CResRef("ARE_P22"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    field_2B2 = 1;
+    field_1DE = TRUE;
+}
+
 // 0x5806C0
 // The line-beam carrier's ctor: the spell's travel BAM goes through the
 // base (the char* argument folds through a CResRef temp), then the strike
@@ -5255,4 +5281,25 @@ CProjectileWallOfFire::CProjectileWallOfFire()
     field_1C2 = FALSE;
     m_fireSoundRef = "AFT_P21";
     m_loopFireSound = TRUE;
+}
+
+// 0x5820B0
+// The Wall of Fire's copy of the shared arrival body (see
+// CProjectileWallOfMoonlight::OnArrival; the exe holds one function at slot
+// 0x70 of both 0x8514CC and 0x851664, which COMDAT folding reproduces here).
+void CProjectileWallOfFire::OnArrival()
+{
+    if (field_2B2 != 0) {
+        field_2B2 = 1;
+        field_1DE = TRUE;
+        return;
+    }
+
+    m_loopSound.SetResRef(CResRef("ARE_P22"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    field_2B2 = 1;
+    field_1DE = TRUE;
 }

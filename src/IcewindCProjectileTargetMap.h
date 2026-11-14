@@ -54,18 +54,17 @@ public:
 // store the base lacks (the wall byte at +0x3A cleared) and its own vtable
 // stamp 0x84EEB0, which keeps the base Service 0x55A610 in slot 0 and puts
 // the wall's own gather 0x55B1B0 in slot 1 — that override walks the four
-// corner offsets at +0x3C..+0x5C instead of ranging a radius, and is not
-// ported: it stays undeclared and the class inherits the base gather until
-// it lands (a declared-but-undefined virtual would become the key function
-// and leave the vtable unemitted). Both wall ctors arm the wall length at
-// +0x36 to 20 after construction. Offsets informational as above (vtable
-// 0x84EEB0, sizeof 0x5C in the exe: 0x2B4 + 0x5C = 0x310, exactly the
-// loop sound's CSound that follows the embed).
+// corner offsets at +0x3C..+0x5C instead of ranging a radius. Both wall
+// ctors arm the wall length at +0x36 to 20 after construction. The corner
+// setup 0x55B010 (which would write +0x3C..+0x5C and set +0x3A) has no
+// caller or reference anywhere in the exe, so the corners keep whatever the
+// ctor state has; the gather reads them as the original does. Offsets
+// informational as above (vtable 0x84EEB0, sizeof 0x5C in the exe: 0x2B4 +
+// 0x5C = 0x310, exactly the loop sound's CSound that follows the embed).
 class IcewindCProjectileWallTargetMap : public IcewindCProjectileTargetMap {
 public:
     IcewindCProjectileWallTargetMap(); // 0x55AF40
-    // GatherTargets 0x55B1B0 (vtable 0x84EEB0 slot 1) is not ported; the
-    // base gather serves meanwhile.
+    std::map<LONG, CPoint> GatherTargets() override; // 0x55B1B0, vtable 0x84EEB0 slot 1
 
     /* 0034 */ WORD field_34; // untouched by both wall ctors
     /* 0036 */ LONG field_36; // armed 20 by both wall ctors (the wall length)
