@@ -9205,7 +9205,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // cause with TYPE_AIBASE (sub_40CB20 with the byte 0x84C501,
         // which accepts any object); a cause that resolves to nothing
         // leaves through the early epilogue (0x45AB7A) with nothing
-        // shared. A sprite answers whether FindItemPersonal (0x71D3D0)
+        // shared. A sprite answers whether FindItemPersonal (0x71D310)
         // finds the trigger's string1 in its equipment, or failing that
         // FindItemBags (0x722530) in the bags there (both with count 0
         // and no identification check); a container answers whether
