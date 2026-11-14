@@ -7849,7 +7849,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             // the loop (0x456375).
             CTypedPtrArray<CPtrArray, int*>& overflow = pGame->GetCharacterOverflow();
             for (int nIndex = 0; nIndex < overflow.GetSize(); nIndex++) {
-                LONG nCharacterId = *overflow.GetAt(nIndex);
+                LONG nCharacterId = static_cast<LONG>(reinterpret_cast<INT_PTR>(overflow.GetAt(nIndex)));
                 BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
                     &pCharacter,
