@@ -38,6 +38,7 @@
 #include "CWeather.h"
 #include "Icewind586B70.h"
 #include "IcewindCGameEffects.h"
+#include "msvc_atol.h"
 
 // 0x8485C4
 const SHORT CGameAIBase::ACTION_DONE = -1;
@@ -8915,6 +8916,103 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
             bResult = pSprite->GetAnimation()->GetAnimationId()
                 == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4077:
+    case 0x4078:
+        // NumItems(object, item, n) / NumItemsGT(object, item, n):
+        // decode the trigger and resolve its cause with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501); a cause that resolves to
+        // nothing leaves through the early epilogue (0x45AB7A). The
+        // object's type picks the count -- a sprite reads
+        // CountItemPersonal on the trigger's string1 (0x71D3D0), a
+        // container builds a CResRef from string1 and reads CountItem
+        // (0x481830), both SHORTs sign-extended (0x456F02 / 0x456FAA)
+        // -- and every other type answers FALSE through the release
+        // tail (0x4570A1). 0x4077 compares for equality (sub/neg/sbb/
+        // inc, 0x456F0A), 0x4078 with setg (0x456FB6). The exe spells
+        // the whole walk twice, one arm per trigger (0x456EAB /
+        // 0x456F54); this port shares the body and picks the compare by
+        // trigger ID, the way the NumCreature trio does.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            BYTE nType = pObject2->GetObjectType();
+            if (nType == CGameObject::TYPE_SPRITE
+                || nType == CGameObject::TYPE_CONTAINER) {
+                SHORT nCount;
+                if (nType == CGameObject::TYPE_SPRITE) {
+                    nCount = static_cast<CGameSprite*>(pObject2)->CountItemPersonal(
+                        triggerCopy.GetString1());
+                } else {
+                    CResRef resItem(triggerCopy.GetString1());
+                    nCount = static_cast<CGameContainer*>(pObject2)->CountItem(resItem);
+                }
+                if (triggerCopy.m_triggerID == 0x4077) {
+                    bResult = nCount == triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nCount > triggerCopy.GetSpecifics();
+                }
+            }
+        }
+        break;
+    case 0x40C6:
+        // NearbyDialog(object): whether any dialog-capable creature is
+        // within range of this object. The range is the specifics when
+        // they are nonzero; otherwise it is the larger of the area's
+        // dimensions (the embedded CInfinity's nAreaX +0x80 against
+        // nAreaY +0x84 at 0x459A6F; the jle takes nAreaY). The
+        // caller's area is read as the raw member (+0x12, no null
+        // check, not the virtual getter), and GetNearestDialogMatch
+        // (0x46C460) gets the caller's id (+0x5C) and a CResRef built
+        // from the trigger's string1; the trigger answers TRUE when
+        // the match comes back anything but
+        // CGameObjectArray::INVALID_INDEX (setne against the global at
+        // 0x851878). Nothing is resolved, so the arm takes the release
+        // tail.
+        {
+            LONG nRange = triggerCopy.GetSpecifics();
+            if (nRange == 0) {
+                CInfinity* pInfinity = m_pArea->GetInfinity();
+                nRange = pInfinity->nAreaX > pInfinity->nAreaY
+                    ? pInfinity->nAreaX
+                    : pInfinity->nAreaY;
+            }
+            CResRef resDialog(triggerCopy.GetString1());
+            bResult = m_pArea->GetNearestDialogMatch(GetId(), resDialog, nRange)
+                != CGameObjectArray::INVALID_INDEX;
+        }
+        break;
+    case 0x40CF:
+        // CurrentAreaIs(object, n): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, the
+        // Alignment arm's pattern), resolve it with TYPE_AIBASE
+        // (sub_40CB20), and read the resolved object's area (the raw
+        // +0x12 member); a null object or a null area answers FALSE
+        // through the release tail. The area's resref (+0x1F0) is
+        // copied into a CString; the first character in "1234567890"
+        // (FindOneOf, 0x453B13) starts the number the original parses
+        // with ToNumberWrapper (0x7E7B8E, VC6 atol) -- no digit answers
+        // FALSE -- and the trigger answers TRUE when that number
+        // equals the specifics (0x453B32): area "AR1000" is area
+        // number 1000.
+        triggerCopy.m_triggerCause.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 != NULL && pObject2->m_pArea != NULL) {
+            CString sArea;
+            pObject2->m_pArea->m_resRef.CopyToString(sArea);
+            int nDigit = sArea.FindOneOf("1234567890");
+            if (nDigit >= 0) {
+                bResult = iwd2r_atol(sArea.GetBuffer(0) + nDigit)
+                    == triggerCopy.GetSpecifics();
+            }
         }
         break;
     default:
