@@ -9848,6 +9848,124 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nAverage < nTarget;
         }
         break;
+    case 0x40C4:
+        // CheckPartyAverageLevel(): no object is resolved -- the trigger
+        // copy is not even decoded; the arm reads its int1 and specifics
+        // directly. The walk is the 0x407A party walk over
+        // GetClassMaskLevel(0xFFF) (the sum of each member's class
+        // levels), the first member that cannot be shared leaving
+        // through the early epilogue (0x45AB7A). The sum is divided by
+        // a party count read fresh after the walk (the original divides
+        // by zero for an empty party, mirrored here). int1 picks the
+        // comparison of that average against the specifics: 1 equal
+        // (sete 0x4599D9), 2 less (setl 0x459A01), 3 greater (setg
+        // 0x459A2D); any other mode keeps the entry FALSE through the
+        // FALSE stub 0x45AB39, still through the release tail.
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nMode = triggerCopy.GetInt1();
+            if (nMode == 1) {
+                bResult = nAverage == triggerCopy.GetSpecifics();
+            } else if (nMode == 2) {
+                bResult = nAverage < triggerCopy.GetSpecifics();
+            } else if (nMode == 3) {
+                bResult = nAverage > triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40C5:
+        // ItemIsIdentified(resref): whether the first party member that
+        // carries the named item has it identified -- FindItemPersonal
+        // (0x71D310), then FindItemBags (0x722530) for one inside a
+        // bag, and the found item's m_flags bit 0 (+0x20, which the
+        // original reads through the trivial CGameEffectList
+        // GetPosCurrent getter 0x452F30 reused on the CItem). NOTE:
+        // when FindItemBags finds it the slot is the bag's own
+        // equipment slot, so the flags tested are the bag's -- mirrored
+        // from the listing. The party count is read once and cached
+        // (0x459D77; most arms re-read it every iteration). A member
+        // that cannot be shared is simply skipped (0x459E89; nothing
+        // was shared, so nothing is released), as in AnyPCOnMap
+        // (0x40D3); a member without the item is released and the walk
+        // continues; the first member that has it -- identified or not
+        // -- ends the walk after its share is released.
+        {
+            triggerCopy.Decode(this);
+            CString sName(triggerCopy.GetString1());
+
+            BOOL bIdentified = FALSE;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            SHORT nCount = pGame->GetNumCharacters();
+            for (SHORT nIndex = 0; nIndex < nCount; nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x459E89); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameSprite* pMember = static_cast<CGameSprite*>(pCharacter);
+                SHORT nSlot = pMember->FindItemPersonal(sName, 0, FALSE);
+                if (nSlot == -1) {
+                    nSlot = pMember->FindItemBags(sName, 0, FALSE);
+                }
+
+                if (nSlot != -1) {
+                    CItem* pItem = pMember->GetEquipment()->m_items[nSlot];
+                    if (pItem != NULL && (pItem->m_flags & 1) != 0) {
+                        bIdentified = TRUE;
+                    }
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (nSlot != -1) {
+                    break;
+                }
+            }
+
+            bResult = bIdentified;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
