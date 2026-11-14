@@ -8192,6 +8192,56 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4014:
+    case 0x4015:
+    case 0x4016:
+        // Morale, MoraleGT, MoraleLT(object, n): the trigger sprite's base
+        // morale byte (m_morale, +0x264 of GetBaseStats) against the LOW
+        // byte of the specifics. The three arms share the same loads and
+        // differ only in the normalizer: 0x4014 answers sete (equal),
+        // 0x4015 sbb/neg after comparing the specifics byte first (morale
+        // greater) and 0x4016 sbb/neg after comparing the morale first
+        // (morale less); the byte compares are unsigned. As in HP (0x4010),
+        // a null sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            BYTE nMorale = pSprite->GetBaseStats()->m_morale;
+            BYTE nSpecifics = static_cast<BYTE>(triggerCopy.GetSpecifics());
+            if (triggerCopy.m_triggerID == 0x4014) {
+                bResult = nMorale == nSpecifics;
+            } else if (triggerCopy.m_triggerID == 0x4015) {
+                bResult = nMorale > nSpecifics;
+            } else {
+                bResult = nMorale < nSpecifics;
+            }
+        }
+        break;
+    case 0x40EC:
+        // IsCreatureAreaFlag(object, flags): the trigger's flag mask (the
+        // specifics) AND the trigger sprite's base stats flags dword
+        // (m_flags, +0x8 of GetBaseStats -- the dword action 283's bit
+        // 0x2000 lives in), normalized by neg/sbb/neg to nonzero 1, as in
+        // StateCheck (0x4037). Unlike Morale above, a null sprite does NOT
+        // leave through the early epilogue: the arm zeroes bResult
+        // (0x454606) and falls into the release tail.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite != NULL) {
+                bResult = (triggerCopy.GetSpecifics()
+                    & pSprite->GetBaseStats()->m_flags) != 0;
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
