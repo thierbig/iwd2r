@@ -8679,12 +8679,19 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             if (nLevel >= 1 && nLevel <= 3) {
                 CAreaFileHeader* pHeader = m_pArea->GetHeader();
                 INT nPartyLevel = pHeader->field_4E;
-                if (nPartyLevel < pHeader->field_4C) {
-                    bResult = nLevel == 1;
-                } else if (nPartyLevel < pHeader->field_4D) {
-                    bResult = nLevel == 2;
-                } else {
-                    bResult = nLevel == 3;
+                // The three bands are tested independently, not as an
+                // else-chain (0x459B0F, 0x459B1D, 0x459B37): with an
+                // upper bound below the lower one, a party under both
+                // answers TRUE for 1 and for 3.
+                if (nPartyLevel < pHeader->field_4C && nLevel == 1) {
+                    bResult = TRUE;
+                }
+                if (nPartyLevel < pHeader->field_4D) {
+                    if (nPartyLevel >= pHeader->field_4C && nLevel == 2) {
+                        bResult = TRUE;
+                    }
+                } else if (nLevel == 3) {
+                    bResult = TRUE;
                 }
             }
         }
