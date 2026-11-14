@@ -9200,6 +9200,70 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4061:
+        // HasItem(resref, object): decode the trigger and resolve its
+        // cause with TYPE_AIBASE (sub_40CB20 with the byte 0x84C501,
+        // which accepts any object); a cause that resolves to nothing
+        // leaves through the early epilogue (0x45AB7A) with nothing
+        // shared. A sprite answers whether FindItemPersonal (0x71D3D0)
+        // finds the trigger's string1 in its equipment, or failing that
+        // FindItemBags (0x722530) in the bags there (both with count 0
+        // and no identification check); a container answers whether
+        // FindItemSlot (0x4817F0) holds the resref built from string1
+        // (the CResRef ctor 0x78A970; not-found is the -1 the setne at
+        // 0x4561A1 tests); any other type answers FALSE (xor esi,esi at
+        // 0x4570A1). Every resolved path releases the share inline
+        // (0x4570A3) before joining the release tail -- the same net
+        // effect as leaving pObject2 set for the release label.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+            bResult = pSprite->FindItemPersonal(triggerCopy.GetString1(), 0, FALSE) != -1
+                || pSprite->FindItemBags(triggerCopy.GetString1(), 0, FALSE) != -1;
+        } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+            CResRef resRef(triggerCopy.GetString1());
+            bResult = static_cast<CGameContainer*>(pObject2)->FindItemSlot(resRef) != -1;
+        }
+        break;
+    case 0x4079:
+        // NumItemsLT(resref, object, num): resolve the cause exactly as
+        // HasItem above (TYPE_AIBASE, nothing shared on a miss through
+        // the early epilogue 0x45AB7A). A sprite counts its equipment
+        // with CountItemPersonal (0x71D3D0), a container counts the
+        // resref built from string1 (CResRef ctor 0x78A970) with
+        // CountItem (0x481830); the container path joins the sprite
+        // path's compare (jmp 0x457050 into the movsx at 0x457050). The
+        // count, sign-extended from SHORT, answers strictly less than
+        // the specifics (setl 0x457061); any other type answers FALSE
+        // untouched (0x4570A1). All resolved paths release the share
+        // inline (0x4570A3), as above.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            SHORT nCount;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nCount = static_cast<CGameSprite*>(pObject2)->CountItemPersonal(
+                    triggerCopy.GetString1());
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                CResRef resRef(triggerCopy.GetString1());
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItem(resRef);
+            } else {
+                break;
+            }
+            bResult = static_cast<LONG>(nCount) < triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
