@@ -5705,3 +5705,207 @@ TEST_CASE("ai: EvaluateStatusTrigger 84a ReputationLT TimeOfDay Difficulty IsAni
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84b Reaction ReactionGT ReactionLT NumDead NumDeadGT NumDeadLT Contains OnIsland HasItemInSlot", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x403C/0x403D/0x403E Reaction/ReactionGT/ReactionLT: GetReaction on
+    // the caller (its roll plus the charisma and reputation table columns)
+    // feeds the sprite's feedback line, then the byte is compared with the
+    // specifics (==, >, < by trigger id). The expected byte is read from the
+    // public getter for self-consistency; a cause that resolves to nothing
+    // answers FALSE through the early epilogue.
+    {
+        BYTE nReaction = pCaller->GetReaction(pSprite);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, spriteCause, nReaction)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, spriteCause, nReaction + 1)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403D, spriteCause, nReaction - 1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403D, spriteCause, nReaction)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403E, spriteCause, nReaction + 1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403E, spriteCause, nReaction)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, CAIObjectType::NOONE, nReaction)) == FALSE);
+    }
+
+    // 0x4071/0x4072/0x4073 NumDead/NumDeadGT/NumDeadLT: the dead-count
+    // global "_DEAD" + string1, when present, is compared with the specifics
+    // (==, >, < by trigger id); when absent the specifics answer alone
+    // (== 0, < 0, > 0). The trigger's object is never resolved.
+    {
+        CVariableHash* pGlobals = g_pBaldurChitin->GetObjectGame()->GetVariables();
+        CVariable var;
+        var.SetName("_DEADIWD2RNUMDEAD");
+        var.m_intValue = 5;
+        pGlobals->AddKey(var);
+
+        CAITrigger eq5(0x4071, CAIObjectType::NOONE, 5);
+        eq5.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(eq5) == TRUE);
+        CAITrigger eq6(0x4071, CAIObjectType::NOONE, 6);
+        eq6.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(eq6) == FALSE);
+
+        CAITrigger gt4(0x4072, CAIObjectType::NOONE, 4);
+        gt4.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(gt4) == TRUE);
+        CAITrigger gt5(0x4072, CAIObjectType::NOONE, 5);
+        gt5.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(gt5) == FALSE);
+
+        CAITrigger lt6(0x4073, CAIObjectType::NOONE, 6);
+        lt6.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(lt6) == TRUE);
+        CAITrigger lt5(0x4073, CAIObjectType::NOONE, 5);
+        lt5.m_string1 = "IWD2RNUMDEAD";
+        CHECK(pCaller->EvaluateStatusTrigger(lt5) == FALSE);
+
+        CAITrigger missEq0(0x4071, CAIObjectType::NOONE, 0);
+        missEq0.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missEq0) == TRUE);
+        CAITrigger missEq1(0x4071, CAIObjectType::NOONE, 1);
+        missEq1.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missEq1) == FALSE);
+        CAITrigger missGt(0x4072, CAIObjectType::NOONE, -1);
+        missGt.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missGt) == TRUE);
+        CAITrigger missGt0(0x4072, CAIObjectType::NOONE, 0);
+        missGt0.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missGt0) == FALSE);
+        CAITrigger missLt(0x4073, CAIObjectType::NOONE, 1);
+        missLt.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missLt) == TRUE);
+        CAITrigger missLt0(0x4073, CAIObjectType::NOONE, 0);
+        missLt0.m_string1 = "IWD2RNOSUCH";
+        CHECK(pCaller->EvaluateStatusTrigger(missLt0) == FALSE);
+    }
+
+    // 0x4075 Contains: the resolved cause must be a container holding the
+    // named item; an empty container, a non-container and a cause that
+    // resolves to nothing all answer FALSE (the last through the bare
+    // early epilogue). The container is a heap ground pile, as
+    // CompressTime's test makes, over a zeroed heap area.
+    {
+        auto* areaBytes = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(areaBytes, 0, sizeof(CGameArea));
+        auto* pArea = reinterpret_cast<CGameArea*>(areaBytes);
+        pArea->m_pGame = g_pBaldurChitin->GetObjectGame();
+        CGameContainer* pContainer = new CGameContainer(pArea, CRect(8, 8, 24, 24));
+        CAIObjectType containerCause(0, 0, 0, 0, 0, 0, 0, 0, pContainer->m_id, 0, 0);
+
+        CAITrigger hit(0x4075, containerCause, 0);
+        hit.m_string1 = "00GEM01";
+        // Empty container: the item-count gate fails.
+        CHECK(pCaller->EvaluateStatusTrigger(hit) == FALSE);
+        // The gem in slot 0 matches.
+        pContainer->m_lstItems.AddTail(new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0));
+        CHECK(pCaller->EvaluateStatusTrigger(hit) == TRUE);
+        CAITrigger miss(0x4075, containerCause, 0);
+        miss.m_string1 = "00POTN01";
+        CHECK(pCaller->EvaluateStatusTrigger(miss) == FALSE);
+        // A resolved non-container fails the type gate.
+        CAITrigger notContainer(0x4075, callerCause, 0);
+        notContainer.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(notContainer) == FALSE);
+        // A cause that resolves to nothing leaves through the bare epilogue.
+        CAITrigger noOne(0x4075, CAIObjectType::NOONE, 0);
+        noOne.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) == FALSE);
+
+        // Takes the pile out of the object array and deletes it (its items
+        // with it).
+        pContainer->RemoveFromArea();
+        ::operator delete(areaBytes);
+    }
+
+    // 0x40B0 OnIsland: a cause that resolves to nothing answers TRUE, as
+    // does a dead sprite (either stat block); a live sprite's position walks
+    // the AR1600 island decision chain, whose bands the points below probe.
+    {
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, CAIObjectType::NOONE, 0)) == TRUE);
+
+        const CPoint ptOld = pSprite->m_pos;
+        // Inside: the core x band 0x3FA-0x403 with y under 0x12D, and the
+        // two wider bands.
+        pSprite->m_pos = CPoint(0x400, 0x100);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == TRUE);
+        pSprite->m_pos = CPoint(0x2B0, 0x200);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == TRUE);
+        pSprite->m_pos = CPoint(0x3F9, 0x12C);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == TRUE);
+        // Outside: past each edge, and past the ceilings of the bands.
+        pSprite->m_pos = CPoint(0x404, 0x100);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == FALSE);
+        pSprite->m_pos = CPoint(0x400, 0x68);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == FALSE);
+        pSprite->m_pos = CPoint(0x400, 0x24F);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == FALSE);
+        pSprite->m_pos = CPoint(0x2B0, 0x250);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == FALSE);
+        pSprite->m_pos = CPoint(0x400, 0x12D);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == FALSE);
+        pSprite->m_pos = ptOld;
+
+        // Dead in the derived stats: TRUE regardless of position.
+        const DWORD nOldState = pSprite->m_derivedStats.m_generalState;
+        pSprite->m_pos = CPoint(0x404, 0x100);
+        pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == TRUE);
+        // Dead in the base file header's state: TRUE as well.
+        pSprite->m_derivedStats.m_generalState = nOldState;
+        const DWORD nOldBaseState = pSprite->m_baseStats.m_generalState;
+        pSprite->m_baseStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B0, spriteCause, 0)) == TRUE);
+        pSprite->m_baseStats.m_generalState = nOldBaseState;
+        pSprite->m_pos = ptOld;
+    }
+
+    // 0x40F0 HasItemInSlot: the resolved cause must be a sprite; specifics
+    // of 24 or more answer FALSE; an occupied slot answers whether the
+    // item's resref equals string1, an empty slot whether the empty string
+    // does. The negative-slot quirk (reads before m_items) is not driven.
+    {
+        CAITrigger none(0x40F0, CAIObjectType::NOONE, 3);
+        none.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(none) == FALSE);
+        CAITrigger notSprite(0x40F0, callerCause, 3);
+        notSprite.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(notSprite) == FALSE);
+
+        CItem* pOldItem = pSprite->m_equipment.m_items[3];
+        pSprite->m_equipment.m_items[3] = new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0);
+        CAITrigger hit(0x40F0, spriteCause, 3);
+        hit.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(hit) == TRUE);
+        CAITrigger miss(0x40F0, spriteCause, 3);
+        miss.m_string1 = "00POTN01";
+        CHECK(pCaller->EvaluateStatusTrigger(miss) == FALSE);
+        CAITrigger high(0x40F0, spriteCause, 24);
+        high.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(high) == FALSE);
+        delete pSprite->m_equipment.m_items[3];
+        pSprite->m_equipment.m_items[3] = pOldItem;
+
+        // An empty slot: only the empty string matches.
+        SHORT nEmptySlot = -1;
+        for (SHORT i = 0; i < 24; i++) {
+            if (pSprite->m_equipment.m_items[i] == NULL) {
+                nEmptySlot = i;
+                break;
+            }
+        }
+        REQUIRE(nEmptySlot >= 0);
+        CAITrigger emptyHit(0x40F0, spriteCause, nEmptySlot);
+        emptyHit.m_string1 = "";
+        CHECK(pCaller->EvaluateStatusTrigger(emptyHit) == TRUE);
+        CAITrigger emptyMiss(0x40F0, spriteCause, nEmptySlot);
+        emptyMiss.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(emptyMiss) == FALSE);
+    }
+
+    ClearMessages();
+}
