@@ -2804,9 +2804,9 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   so they stay unwired;
         // - TODO: 0x5201C0 (type 45): builds the CProjectile84E9C0 (ctor
         //   0x535F20, like types 119-142) and then overwrites its vtable
-        //   with 0x84D838 - a CProjectile84E9C0-derived class whose
-        //   constructor is fully inlined at the call site; the class is not
-        //   ported;
+        //   with 0x84D838 - the memberless derived class
+        //   CProjectile84D838 (its Fire 0x5367C0 is in tree); the decoder
+        //   arm itself is not ported;
         // DEVIATION (temporary): unported type -> instant projectile. The
         // original reaches the fallback below only for types out of range
         // and for the assert entries listed above. Until the other cases
