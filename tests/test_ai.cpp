@@ -6926,3 +6926,69 @@ TEST_CASE("ai: EvaluateStatusTrigger 84j TriggerSetGlobal 0x40C9 InParty 0x4043"
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84k GlobalBitGlobal 0x40A6", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // 0x40A6 GlobalBitGlobal: both strings are "SCOPE:NAME", uppercased as
+    // a whole before the colon split. string2 resolves into the left value
+    // (every miss, including LOCALS on a non-sprite and an unknown area,
+    // silently leaves 0); string1 resolves into the compared variable
+    // (LOCALS on a non-sprite and an unknown area answer FALSE outright).
+    // A found variable only answers TRUE under specifics 1 (AND nonzero);
+    // the OR (2) and XOR (3) compares are dead in the original, mirrored
+    // here. A missing string1 variable answers specifics == 0.
+    auto eval = [&](CGameAIBase* pOn, const char* sName1, const char* sName2, LONG nOp) {
+        CAITrigger trigger(0x40A6, CAIObjectType::NOONE, nOp);
+        trigger.m_string1 = sName1;
+        trigger.m_string2 = sName2;
+        return pOn->EvaluateStatusTrigger(trigger);
+    };
+
+    CVariable globalA;
+    globalA.SetName(CString("T84K_A"));
+    globalA.m_intValue = 0x5;
+    pGame->GetVariables()->AddKey(globalA);
+
+    CVariable globalB;
+    globalB.SetName(CString("T84K_B"));
+    globalB.m_intValue = 0xC;
+    pGame->GetVariables()->AddKey(globalB);
+
+    // AND of the two game variables; only specifics 1 can answer TRUE.
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "GLOBAL:T84K_B", 1) == TRUE); // 0xC & 0x5
+    CHECK(eval(pCaller, "global:t84k_a", "global:t84k_b", 1) == TRUE); // uppercased whole
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "GLOBAL:T84K_B", 2) == FALSE); // OR 0xD never runs
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "GLOBAL:T84K_B", 3) == FALSE); // XOR 0x9 never runs
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "GLOBAL:T84K_B", 0) == FALSE);
+
+    // A missing string2 variable reads as 0.
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "GLOBAL:T84K_MISSING", 1) == FALSE);
+    // A missing string1 variable answers specifics == 0.
+    CHECK(eval(pCaller, "GLOBAL:T84K_MISSING", "GLOBAL:T84K_B", 0) == TRUE);
+    CHECK(eval(pCaller, "GLOBAL:T84K_MISSING", "GLOBAL:T84K_B", 1) == FALSE);
+
+    // string2 with an unknown-area scope silently reads 0 (it must not
+    // answer FALSE on its own); string1 with an unknown-area scope does.
+    CHECK(eval(pCaller, "GLOBAL:T84K_A", "AR1200:T84K_B", 1) == FALSE);
+    CHECK(eval(pCaller, "GLOBAL:T84K_MISSING", "AR1200:T84K_B", 0) == TRUE);
+    CHECK(eval(pCaller, "AR1200:T84K_A", "GLOBAL:T84K_B", 0) == FALSE);
+
+    // LOCALS: string1 requires a sprite caller even for specifics 0;
+    // string2 on a non-sprite caller silently reads 0.
+    CVariable localA;
+    localA.SetName(CString("T84K_LA"));
+    localA.m_intValue = 0x3;
+    pSprite->GetLocalVariables()->AddKey(localA);
+    CHECK(eval(pSprite, "LOCALS:T84K_LA", "LOCALS:T84K_LA", 1) == TRUE); // 0x3 & 0x3
+    CHECK(eval(pSprite, "LOCALS:T84K_LA", "LOCALS:T84K_MISSING", 1) == FALSE);
+    CHECK(eval(pCaller, "LOCALS:T84K_LA", "GLOBAL:T84K_B", 0) == FALSE);
+    CHECK(eval(pCaller, "GLOBAL:T84K_MISSING", "LOCALS:T84K_LA", 0) == TRUE);
+
+    ClearMessages();
+}
