@@ -7809,7 +7809,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     // Dead answers FALSE through 0x45AE25, alive TRUE
                     // through 0x457A85; the share is released on both.
                     BOOL bDead = (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
-                        & STATE_DEAD)
+                                     & STATE_DEAD)
                         != 0;
                     pGame->GetObjectArray()->ReleaseShare(nInstance,
                         CGameObjectArray::THREAD_ASYNCH,
@@ -7831,7 +7831,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
                     BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
                         && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
-                            & STATE_DEAD)
+                               & STATE_DEAD)
                             == 0;
                     pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                         CGameObjectArray::THREAD_ASYNCH,
@@ -7860,7 +7860,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
                 BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
                     && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
-                        & STATE_DEAD)
+                           & STATE_DEAD)
                         == 0;
                 pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
