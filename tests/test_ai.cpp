@@ -6992,3 +6992,45 @@ TEST_CASE("ai: EvaluateStatusTrigger 84k GlobalBitGlobal 0x40A6", "[ai][data]")
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84l HappinessLT CheckSkill", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x4067 HappinessLT: the trigger sprite's happiness strictly below the
+    // specifics; an unresolved cause answers FALSE through the early
+    // epilogue before any compare.
+    const SHORT nOldHappiness = pSprite->m_nHappiness;
+    pSprite->m_nHappiness = 80;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4067, spriteCause, 81)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4067, spriteCause, 80)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4067, spriteCause, 79)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4067, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_nHappiness = nOldHappiness;
+
+    // 0x40E6 CheckSkill: the rank of skill m_specific2 (a signed byte,
+    // sign-extended as the movsx does) against the specifics by equal; an
+    // unresolved cause answers FALSE through the early epilogue.
+    const signed char nOldSkill = pSprite->m_derivedStats.m_nSkills[2];
+    pSprite->m_derivedStats.m_nSkills[2] = 5;
+    CAITrigger checkSkill(0x40E6, spriteCause, 5);
+    checkSkill.m_specific2 = 2;
+    CHECK(pCaller->EvaluateStatusTrigger(checkSkill) == TRUE);
+    checkSkill.m_specificID = 6;
+    CHECK(pCaller->EvaluateStatusTrigger(checkSkill) == FALSE);
+    checkSkill.m_specificID = 4;
+    CHECK(pCaller->EvaluateStatusTrigger(checkSkill) == FALSE);
+    pSprite->m_derivedStats.m_nSkills[2] = -3;
+    checkSkill.m_specificID = -3;
+    CHECK(pCaller->EvaluateStatusTrigger(checkSkill) == TRUE);
+    checkSkill.m_specificID = 0;
+    CHECK(pCaller->EvaluateStatusTrigger(checkSkill) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E6, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_derivedStats.m_nSkills[2] = nOldSkill;
+
+    ClearMessages();
+}
