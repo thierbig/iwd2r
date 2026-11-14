@@ -8591,16 +8591,19 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         break;
     case 0x4019:
     case 0x401A:
-        // Reputation(object, n) / ReputationGT(object, n): the trigger
-        // sprite's reputation against the specifics. The loads are one
-        // arm apart in the listing (0x45497D for 0x4019, 0x4549FD for
-        // 0x401A) and identical: for a party member --
+    case 0x401B:
+        // Reputation(object, n) / ReputationGT(object, n) /
+        // ReputationLT(object, n): the trigger sprite's reputation
+        // against the specifics. The loads are one arm apart in the
+        // listing (0x45497D for 0x4019, 0x4549FD for 0x401A, 0x454A6E
+        // for 0x401B) and identical: for a party member --
         // GetCharacterPortraitNum(GetId()) != -1 -- the reputation is
         // the game's GetReputation() (sign-extended SHORT); for anyone
         // else it is the base-stats reputation byte (+0x3C,
         // zero-extended). Only the final compare differs -- 0x4019 an
-        // inline sete (0x4549EF-0x4549F3), 0x401A the shared setg tail.
-        // A null sprite leaves through the early epilogue (0x45AB7A).
+        // inline sete (0x4549EF-0x4549F3), 0x401A the shared setg tail,
+        // 0x401B setl (0x454AD2). A null sprite leaves through the
+        // early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
@@ -8621,8 +8624,10 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
             if (triggerCopy.m_triggerID == 0x4019) {
                 bResult = nReputation == triggerCopy.GetSpecifics();
-            } else {
+            } else if (triggerCopy.m_triggerID == 0x401A) {
                 bResult = nReputation > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nReputation < triggerCopy.GetSpecifics();
             }
         }
         break;
@@ -8833,6 +8838,83 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 bResult = static_cast<CGameSprite*>(pObject2)->GetSequence()
                     == triggerCopy.GetSpecifics();
             }
+        }
+        break;
+    case 0x401F:
+        // TimeOfDay(n): which band of the day the world timer is in.
+        // The specifics gate is an unsigned compare against 3 (cmp eax,
+        // 3 / ja 0x455028 -- a negative specifics is huge unsigned and
+        // also falls through to FALSE); 0 through 3 then index the jump
+        // table at 0x45B1B4: 0 IsDay, 1 IsDusk, 2 IsNight, 3 IsDawn,
+        // each read through GetObjectGame()->GetWorldTimer() and
+        // truncated to a byte (and eax, 0xff) into the result. Nothing
+        // is resolved, so the arm takes the release tail.
+        {
+            LONG nBand = triggerCopy.GetSpecifics();
+            if (static_cast<ULONG>(nBand) <= 3) {
+                CTimerWorld* pWorldTimer
+                    = g_pBaldurChitin->GetObjectGame()->GetWorldTimer();
+                switch (nBand) {
+                case 0:
+                    bResult = pWorldTimer->IsDay();
+                    break;
+                case 1:
+                    bResult = pWorldTimer->IsDusk();
+                    break;
+                case 2:
+                    bResult = pWorldTimer->IsNight();
+                    break;
+                default:
+                    bResult = pWorldTimer->IsDawn();
+                    break;
+                }
+            }
+        }
+        break;
+    case 0x40AB:
+        // Difficulty(mode, n): the game's difficulty level
+        // (GetObjectGame()->GetOptions(), m_nDifficultyLevel at +0x6C)
+        // against the specifics, the compare picked by the trigger's
+        // int1 (m_specific2 +0x46, read through GetInt1): a dec/je
+        // chain takes 1 to equality (sete, 0x4588E3), 2 to less (setl,
+        // 0x4588B5), 3 to greater (setg, 0x458887); any other value
+        // zeroes the result. The specifics are read on every path, and
+        // nothing is resolved, so every exit takes the release tail.
+        {
+            LONG nMode = triggerCopy.GetInt1();
+            if (nMode >= 1 && nMode <= 3) {
+                LONG nDifficulty = static_cast<LONG>(
+                    g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nDifficultyLevel);
+                if (nMode == 1) {
+                    bResult = nDifficulty == triggerCopy.GetSpecifics();
+                } else if (nMode == 2) {
+                    bResult = nDifficulty < triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nDifficulty > triggerCopy.GetSpecifics();
+                }
+            }
+        }
+        break;
+    case 0x40DF:
+        // IsAnimationID(object, n): resolve the trigger sprite; a null
+        // one leaves through the early epilogue (0x45AB7A). The
+        // sprite's current animation id -- GetAnimation (0x45B730)
+        // -> GetAnimationId (0x45B690), a WORD zero-extended
+        // (0x45ABFB-0x45ABFE) -- compares against the specifics
+        // through the shared equality tail (0x45451F), then the release
+        // tail. The original does not null-check the animation;
+        // GetAnimation returns the embedded object.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+            bResult = pSprite->GetAnimation()->GetAnimationId()
+                == triggerCopy.GetSpecifics();
         }
         break;
     default:
