@@ -9448,16 +9448,17 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // the trigger and resolve its cause with the untyped resolver
         // sub_40CCA0; a cause that resolves to nothing stores 0xFFFFFFFE
         // (-2, still TRUE for a BOOL) and jumps to the release tail
-        // (0x45A5FE). A container answers FALSE untouched (je to the
-        // release tail at 0x45A44E), and so does anything that is not a
-        // sprite (xor esi at 0x45A464). A sprite looks string1 up
+        // (0x45A5FE). A container answers FALSE untouched (cmp al,0x11
+        // at 0x45A466, je 0x45AD4C), and so does anything that is not a
+        // sprite (xor esi at 0x45A472). A sprite looks string1 up
         // personally (FindItemPersonal 0x71D310, count 0, no
-        // equipped-only flag): no slot (cmp bx,-1 at 0x45A48B) or an
+        // equipped-only flag): no slot (cmp bx,-1 at 0x45A494) or an
         // empty slot answers FALSE, otherwise the item's usage count
         // for the specifics' ability (GetUsageCount 0x4E84B0) is
-        // compared against int1 as int2 says: 1 equal (sete tail
-        // 0x45A519), 2 less (setl 0x45A4FC), 3 greater (setg
-        // 0x45A4DF); anything else answers FALSE.
+        // compared against int1 as int2 says: 1 equal (the
+        // sub/neg/sbb/inc equality idiom at 0x45A519), 2 less (setl
+        // 0x45A50F), 3 greater (setg 0x45A4F2); anything else answers
+        // FALSE.
         triggerCopy.Decode(this);
         pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
         if (pObject2 == NULL) {
@@ -9542,11 +9543,11 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
     case 0x40D3:
         // AnyPCOnMap(): TRUE as soon as a living party member stands in
         // this object's area. The party size is read once and cached
-        // (0x45A27C; most arms re-read it every iteration). A member
+        // (0x45A27E; most arms re-read it every iteration). A member
         // that cannot be shared is simply skipped (0x45A39F; nothing
         // was shared, so nothing is released), and so is a dead one
         // (STATE_DEAD 0x800 in the derived stats' m_generalState, test
-        // ch,8 at 0x45A31B), released first. The first living member
+        // ch,8 at 0x45A2FE), released first. The first living member
         // whose GetArea() (0x40CB00) equals this object's sets TRUE
         // and, after its share is released, jumps straight to the
         // release tail (cmp esi,1; je 0x45AD4C).
