@@ -5459,3 +5459,88 @@ TEST_CASE("ai: EvaluateStatusTrigger 83y NumCreatureMinusParty HPPercentGT Reput
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 83z NumCreatureMinusPartyGT Reputation IsPlayerNumber OpenState Reaction Sequence", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x4082 (unnamed; NumCreature minus the party, greater): over a zeroed
+    // area with no party the difference is 0, so the inline setg answers TRUE
+    // below zero and FALSE at it.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4082, spriteCause, -1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4082, spriteCause, 0)) == FALSE);
+        pCaller->m_pArea = NULL;
+    }
+
+    // 0x4019 Reputation: the equality twin of 0x401A ReputationGT. The sprite
+    // is not a party member (no portraits in the harness game), so the
+    // reputation is its base-stats byte.
+    const BYTE nOldReputation = pSprite->m_baseStats.m_reputation;
+    pSprite->m_baseStats.m_reputation = 30;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4019, spriteCause, 30)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4019, spriteCause, 29)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4019, spriteCause, 31)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4019, CAIObjectType::NOONE, 30)) == FALSE);
+    pSprite->m_baseStats.m_reputation = nOldReputation;
+
+    // 0x40E5 IsPlayerNumber: sub_45B610 reads m_characters[n-1] with the
+    // 1..6 gate on the specifics. Put the sprite in slot 1 and the caller in
+    // slot 2: slot 1 answers TRUE, slot 2 FALSE, and specifics outside 1..6
+    // answer FALSE through 0x45AB39, as does a cause that resolves to
+    // nothing.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const LONG nOldSlot0 = pGame->m_characters[0];
+    const LONG nOldSlot1 = pGame->m_characters[1];
+    pGame->m_characters[0] = pSprite->GetId();
+    pGame->m_characters[1] = pCaller->m_id;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E5, spriteCause, 1)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E5, spriteCause, 2)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E5, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E5, spriteCause, 7)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E5, CAIObjectType::NOONE, 1)) == FALSE);
+    pGame->m_characters[0] = nOldSlot0;
+    pGame->m_characters[1] = nOldSlot1;
+
+    // 0x4076 OpenState: a resolved sprite is not a door, so the type gate
+    // answers FALSE through the release tail, and a cause that resolves to
+    // nothing answers FALSE through the early epilogue. The door path needs
+    // a registered door with a live vtable, which the harness does not have
+    // (MakeDoor stays out of the object array), so only these FALSE paths
+    // are asserted.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4076, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4076, CAIObjectType::NOONE, 0)) == FALSE);
+
+    // 0x403C/0x403D/0x403E Reaction family: the sprite resolves, but its
+    // reaction byte comes from 0x45D560 (not ported), so every compare keeps
+    // the FALSE entry default; a cause that resolves to nothing answers
+    // FALSE through the early epilogue.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403D, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403E, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, CAIObjectType::NOONE, 0)) == FALSE);
+
+    // 0x40AF Sequence: the sprite's m_nSequence (GetSequence,
+    // sign-extended SHORT) against the specifics by equality; the caller is
+    // neither a static nor a sprite, so the type dispatch answers FALSE, and
+    // a cause that resolves to nothing falls to the release tail. The static
+    // path (GetVidCell) needs a registered static, which the harness does
+    // not have.
+    const SHORT nOldSequence = pSprite->m_nSequence;
+    pSprite->m_nSequence = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, spriteCause, 5)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, spriteCause, 6)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, callerCause, 5)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AF, CAIObjectType::NOONE, 5)) == FALSE);
+    pSprite->m_nSequence = nOldSequence;
+
+    ClearMessages();
+}
