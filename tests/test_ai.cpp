@@ -6255,3 +6255,153 @@ TEST_CASE("ai: EvaluateStatusTrigger 84d ChargeCount CheckPartyLevel AnyPCOnMap 
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84e PartyLevelVS CheckPartyAverageLevel ItemIsIdentified", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // 0x40B8/0x40B9/0x40C0 PartyLevelVS family: the party's average level
+    // against the resolved target's combined class level (the +0x46 level
+    // byte, which STAT_CLASSLEVELSUM also reads), by equal/greater/less;
+    // 0x40C0 alone measures the members by GetClassMaskLevel(0xFFF). A
+    // cause that resolves to nothing leaves through the early epilogue
+    // before the walk. The walk divides by the fresh party count, so every
+    // resolved cause is evaluated with the sprite seated as the only
+    // member; the class mask is zeroed so the mask average stays 0.
+    {
+        CAITrigger noOne(0x40B8, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) == FALSE);
+        CAITrigger noOneGt(0x40B9, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(noOneGt) == FALSE);
+        CAITrigger noOneLt(0x40C0, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(noOneLt) == FALSE);
+
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        const BYTE nOldLevel = pSprite->m_derivedStats.m_nLevel;
+        const DWORD nOldMask = pSprite->m_derivedStats.m_classMask;
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        pSprite->m_derivedStats.m_classMask = 0;
+
+        // Level 0: a sprite target reads the same byte, a non-sprite
+        // target compares against 0.
+        pSprite->m_derivedStats.m_nLevel = 0;
+        CAITrigger eq(0x40B8, spriteCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        CAITrigger gt(0x40B9, callerCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == FALSE);
+        CAITrigger lt(0x40C0, callerCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(lt) == FALSE);
+
+        // Level 5: the sprite target stays equal, a non-sprite target is
+        // beaten by greater but not equal, and the mask average of 0 only
+        // sits under the sprite's 5.
+        pSprite->m_derivedStats.m_nLevel = 5;
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(gt) == TRUE);
+        CAITrigger ltSprite(0x40C0, spriteCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(ltSprite) == TRUE);
+        CAITrigger eqCaller(0x40B8, callerCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(eqCaller) == FALSE);
+        CAITrigger gtSprite(0x40B9, spriteCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(gtSprite) == FALSE);
+        CAITrigger ltCaller(0x40C0, callerCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(ltCaller) == FALSE);
+
+        pSprite->m_derivedStats.m_nLevel = nOldLevel;
+        pSprite->m_derivedStats.m_classMask = nOldMask;
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x40C4 CheckPartyAverageLevel: no object is resolved at all; the
+    // party's average class-mask level against the specifics, with int1
+    // picking equal (1), less (2) or greater (3), and any other mode
+    // answering FALSE. One seated member with a single class level 4 makes
+    // the average 4. The walk divides by the party count, so the party
+    // stays seated for every evaluation.
+    {
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        const DWORD nOldMask = pSprite->m_derivedStats.m_classMask;
+        const BYTE nOldClassLevel = pSprite->m_derivedStats.m_nClassLevels[0];
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        pSprite->m_derivedStats.m_classMask = 1;
+        pSprite->m_derivedStats.m_nClassLevels[0] = 4;
+        REQUIRE(pSprite->GetDerivedStats()->GetClassMaskLevel(0xFFF) == 4);
+
+        CAITrigger avg(0x40C4, CAIObjectType::NOONE, 0);
+        avg.SetInt1(1);
+        avg.SetSpecifics(4);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == TRUE);
+        avg.SetSpecifics(5);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == FALSE);
+
+        avg.SetInt1(2);
+        avg.SetSpecifics(5);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == TRUE);
+        avg.SetSpecifics(4);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == FALSE);
+
+        avg.SetInt1(3);
+        avg.SetSpecifics(3);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == TRUE);
+        avg.SetSpecifics(4);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == FALSE);
+
+        // Any other mode keeps the FALSE entry.
+        avg.SetInt1(0);
+        CHECK(pCaller->EvaluateStatusTrigger(avg) == FALSE);
+
+        pSprite->m_derivedStats.m_classMask = nOldMask;
+        pSprite->m_derivedStats.m_nClassLevels[0] = nOldClassLevel;
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x40C5 ItemIsIdentified: TRUE when the first party member carrying
+    // the item named by string1 (personally, then in bags) holds it
+    // identified (flags bit 0). An empty party answers FALSE without
+    // walking. The bag lookup needs a container item, so only the personal
+    // slot is driven; the constructor force-identifies items with no lore
+    // value, so the unidentified gem has its bit cleared by hand.
+    {
+        CAITrigger empty(0x40C5, CAIObjectType::NOONE, 0);
+        empty.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(empty) == FALSE);
+
+        CItem* pOldItem = pSprite->m_equipment.m_items[3];
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        pSprite->m_equipment.m_items[3] = new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 1);
+        REQUIRE(pSprite->FindItemPersonal("00GEM01", 0, FALSE) != -1);
+
+        CAITrigger identified(0x40C5, CAIObjectType::NOONE, 0);
+        identified.m_string1 = "00GEM01";
+        CHECK(pCaller->EvaluateStatusTrigger(identified) == TRUE);
+
+        pSprite->m_equipment.m_items[3]->m_flags &= ~1u;
+        CHECK(pCaller->EvaluateStatusTrigger(identified) == FALSE);
+
+        // A name nobody carries walks the whole party and answers FALSE.
+        identified.m_string1 = "00POTN01";
+        CHECK(pCaller->EvaluateStatusTrigger(identified) == FALSE);
+
+        delete pSprite->m_equipment.m_items[3];
+        pSprite->m_equipment.m_items[3] = pOldItem;
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    ClearMessages();
+}
