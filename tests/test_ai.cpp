@@ -17,6 +17,7 @@
 #include "CGameObjectArray.h"
 #include "CGameSave.h"
 #include "CGameSprite.h"
+#include "CGameTimer.h"
 #include "CGameTrigger.h"
 #include "CInfGame.h"
 #include "CMessage.h"
@@ -5321,6 +5322,140 @@ TEST_CASE("ai: EvaluateStatusTrigger 83x NumCreature HPPercent Alignment CheckSp
     // area; the harness has none.
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40ED, spriteCause, 0)) == -2);
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40ED, CAIObjectType::NOONE, 0)) == -2);
+
+    ClearMessages();
+}
+
+TEST_CASE("ai: EvaluateStatusTrigger 83y NumCreatureMinusParty HPPercentGT ReputationGT TimerActive FindItemPersonal CheckAreaDiffLevel IsScriptName", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x4080/0x4081 (unnamed; NumCreature minus the party): over a zeroed
+    // area GetAllInRange finds nothing, and the harness game has no party
+    // (GetNumCharacters reads m_nCharacters, 0 here), so the difference is
+    // 0: 0x4080 compares it by equal, 0x4081 by less.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4080, spriteCause, 0)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4080, spriteCause, 1)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4081, spriteCause, 0)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4081, spriteCause, 1)) == TRUE);
+        pCaller->m_pArea = NULL;
+    }
+
+    // 0x402E HPPercentGT: 10 of 20 hit points is 50 percent, so 49 is
+    // greater and 50 is not; a cause that resolves to nothing answers FALSE
+    // through the early epilogue.
+    const SHORT nOldMaxHitPoints = pSprite->m_derivedStats.m_nMaxHitPoints;
+    const SHORT nOldHitPoints = pSprite->m_baseStats.m_hitPoints;
+    pSprite->m_derivedStats.m_nMaxHitPoints = 20;
+    pSprite->m_baseStats.m_hitPoints = 10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402E, spriteCause, 49)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402E, spriteCause, 50)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402E, CAIObjectType::NOONE, 49)) == FALSE);
+    pSprite->m_derivedStats.m_nMaxHitPoints = nOldMaxHitPoints;
+    pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+
+    // 0x401A ReputationGT: the sprite is not a party member (no portraits
+    // in the harness game), so the reputation is its base-stats byte.
+    const BYTE nOldReputation = pSprite->m_baseStats.m_reputation;
+    pSprite->m_baseStats.m_reputation = 30;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401A, spriteCause, 29)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401A, spriteCause, 30)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x401A, CAIObjectType::NOONE, 29)) == FALSE);
+    pSprite->m_baseStats.m_reputation = nOldReputation;
+
+    // 0x4097 TimerActive: any live timer whose id equals the specifics; NULL
+    // node data between timers is skipped, and an empty list answers FALSE.
+    CGameTimer* pTimer3 = new CGameTimer;
+    pTimer3->m_id = 3;
+    pTimer3->m_time = 100;
+    CGameTimer* pTimer4 = new CGameTimer;
+    pTimer4->m_id = 4;
+    pTimer4->m_time = 100;
+    CGameTimer* pTimer6 = new CGameTimer;
+    pTimer6->m_id = 6;
+    pTimer6->m_time = 100;
+    pCaller->m_timers.AddTail(pTimer3);
+    pCaller->m_timers.AddTail(static_cast<CGameTimer*>(NULL));
+    pCaller->m_timers.AddTail(pTimer4);
+    pCaller->m_timers.AddTail(pTimer6);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4097, CAIObjectType::NOONE, 3)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4097, CAIObjectType::NOONE, 4)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4097, CAIObjectType::NOONE, 6)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4097, CAIObjectType::NOONE, 5)) == FALSE);
+    {
+        POSITION pos = pCaller->m_timers.GetHeadPosition();
+        while (pos != NULL) {
+            POSITION oldPos = pos;
+            CGameTimer* pTimer = pCaller->m_timers.GetNext(pos);
+            pCaller->m_timers.RemoveAt(oldPos);
+            delete pTimer;
+        }
+    }
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4097, CAIObjectType::NOONE, 3)) == FALSE);
+
+    // 0x407F (unnamed; FindItemPersonal): a resolved sprite with an empty
+    // inventory finds no slot (the CHARBASE sprite carries no items), a
+    // resolved non-sprite fails the type gate, and a cause that resolves to
+    // nothing answers FALSE through the early epilogue.
+    CAITrigger itemPersonal(0x407F, spriteCause, 0);
+    itemPersonal.m_string1 = "ANYITEM";
+    CHECK(pCaller->EvaluateStatusTrigger(itemPersonal) == FALSE);
+    itemPersonal.m_triggerCause = callerCause;
+    CHECK(pCaller->EvaluateStatusTrigger(itemPersonal) == FALSE);
+    itemPersonal.m_triggerCause = CAIObjectType::NOONE;
+    CHECK(pCaller->EvaluateStatusTrigger(itemPersonal) == FALSE);
+
+    // 0x40C7 CheckAreaDiffLevel: the area header's party-level band. The
+    // zeroed area gives the test a header it can write: field_4C lower
+    // bound, field_4D upper bound, field_4E party level. Specifics outside
+    // 1..3 and a NULL area answer FALSE.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CAreaFileHeader* pHeader = pCaller->m_pArea->GetHeader();
+        pHeader->field_4C = 5;
+        pHeader->field_4D = 10;
+        pHeader->field_4E = 3; // below the band
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 2)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 3)) == FALSE);
+        pHeader->field_4E = 5; // at the lower bound
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 2)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 1)) == FALSE);
+        pHeader->field_4E = 10; // at the upper bound
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 3)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 2)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 0)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 4)) == FALSE);
+        pCaller->m_pArea = NULL;
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40C7, CAIObjectType::NOONE, 1)) == FALSE);
+    }
+
+    // 0x40D0 IsScriptName: the resolved object's script name against the
+    // trigger's string1, case-insensitively; a cause that resolves to
+    // nothing answers FALSE through the release tail.
+    SCRIPTNAME nOldScriptName;
+    std::memcpy(nOldScriptName, pSprite->m_scriptName, sizeof(SCRIPTNAME));
+    std::memcpy(pSprite->m_scriptName, "ar1000guard", 12);
+    CAITrigger scriptName(0x40D0, spriteCause, 0);
+    scriptName.m_string1 = "AR1000GUARD";
+    CHECK(pCaller->EvaluateStatusTrigger(scriptName) == TRUE);
+    scriptName.m_string1 = "ar2000guard";
+    CHECK(pCaller->EvaluateStatusTrigger(scriptName) == FALSE);
+    scriptName.m_triggerCause = CAIObjectType::NOONE;
+    scriptName.m_string1 = "ar1000guard";
+    CHECK(pCaller->EvaluateStatusTrigger(scriptName) == FALSE);
+    std::memcpy(pSprite->m_scriptName, nOldScriptName, sizeof(SCRIPTNAME));
 
     ClearMessages();
 }
