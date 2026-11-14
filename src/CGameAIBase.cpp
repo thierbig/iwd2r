@@ -9300,8 +9300,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     return FALSE;
                 }
 
-                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
-                    triggerCopy.GetString1());
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
 
                 pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
@@ -9335,8 +9334,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     return FALSE;
                 }
 
-                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
-                    triggerCopy.GetString1());
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
 
                 pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
@@ -9370,8 +9368,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     return FALSE;
                 }
 
-                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
-                    triggerCopy.GetString1());
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
 
                 pGame->GetObjectArray()->ReleaseShare(nCharacterId,
                     CGameObjectArray::THREAD_ASYNCH,
