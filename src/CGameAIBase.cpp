@@ -9688,6 +9688,166 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             sub_4530F0(typeMarked);
         }
         break;
+    case 0x40B8:
+        // PartyLevelVS(object): the party's average level against the
+        // named object's combined class level, by equal. The cause
+        // resolves through sub_40CB20 (TYPE_AIBASE, no back list); a
+        // cause that resolves to nothing leaves through the early
+        // epilogue (0x45AB7A) with nothing shared. The walk is the
+        // 0x407A party walk; each shared member adds its derived stats
+        // level byte (+0x46, zero-extended), and the first member that
+        // cannot be shared leaves through the early epilogue too. The
+        // sum is divided by a party count read fresh after the walk --
+        // the original divides by zero for an empty party, mirrored
+        // here. A non-sprite target compares against 0, a sprite
+        // against its derived stats' GetAtOffset(STAT_CLASSLEVELSUM)
+        // (word 0x84848C, 0x5F) -- equal through sete 0x4591AC.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage == nTarget;
+        }
+        break;
+    case 0x40B9:
+        // PartyLevelVSGT(object): greater. The original repeats the
+        // whole 0x40B8 arm byte for byte except the final comparison
+        // (setg 0x459301); this port repeats it too rather than share
+        // a helper the exe does not have.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage > nTarget;
+        }
+        break;
+    case 0x40C0:
+        // PartyLevelVSLT(object): less. Same shape as 0x40B8 -- the
+        // original spells the whole arm again -- except each member
+        // contributes GetClassMaskLevel(0xFFF) (the sum of its class
+        // levels, a LONG) instead of the level byte, and the final
+        // comparison is setl 0x45945E.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage < nTarget;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
