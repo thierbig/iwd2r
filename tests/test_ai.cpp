@@ -5520,13 +5520,11 @@ TEST_CASE("ai: EvaluateStatusTrigger 83z NumCreatureMinusPartyGT Reputation IsPl
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4076, spriteCause, 0)) == FALSE);
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4076, CAIObjectType::NOONE, 0)) == FALSE);
 
-    // 0x403C/0x403D/0x403E Reaction family: the sprite resolves, but its
-    // reaction byte comes from 0x45D560 (not ported), so every compare keeps
-    // the FALSE entry default; a cause that resolves to nothing answers
-    // FALSE through the early epilogue.
-    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, spriteCause, 0)) == FALSE);
-    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403D, spriteCause, 0)) == FALSE);
-    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403E, spriteCause, 0)) == FALSE);
+    // 0x403C/0x403D/0x403E Reaction family: ported since 84b (GetReaction
+    // 0x45D560, daf67713) -- the resolved-sprite compares are driven
+    // self-consistently through the public getter in the 84b case below.
+    // Here only the null-sprite path: a cause that resolves to nothing
+    // answers FALSE through the early epilogue.
     CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x403C, CAIObjectType::NOONE, 0)) == FALSE);
 
     // 0x40AF Sequence: the sprite's m_nSequence (GetSequence,
