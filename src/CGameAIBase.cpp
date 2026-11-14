@@ -7045,6 +7045,25 @@ static BOOL sub_45B290(const CString* psName, LPCTSTR szName)
     return strcmp(static_cast<LPCTSTR>(*psName), szName) != 0;
 }
 
+// 0x45B2D0
+// The LOS arm's world-to-grid conversion: signed division (cdq/idiv
+// in the original) of a position by the path-search grid's byte
+// constants (0x84D6A0/0x84D6A1 = GRID_SQUARE_SIZEX/SIZEY), stored
+// through the destination pointer.
+static CPoint* sub_45B2D0(CPoint* pDest, LONG x, LONG y)
+{
+    pDest->x = x / CPathSearch::GRID_SQUARE_SIZEX;
+    pDest->y = y / CPathSearch::GRID_SQUARE_SIZEY;
+    return pDest;
+}
+
+// 0x45B300
+// The LOS arm's squared distance between two grid points.
+static LONG sub_45B300(LONG x1, LONG y1, LONG x2, LONG y2)
+{
+    return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+}
+
 // 0x453840
 BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 {
@@ -9570,6 +9589,102 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                     break;
                 }
             }
+        }
+        break;
+    case 0x40F7:
+        // PCInStore(): TRUE for the first party member whose
+        // sub_45B710 (the int at +0x70F2) answers nonzero, its share
+        // released on the way out through the TRUE tail (0x45AD47).
+        // Unlike the rest of the family this walk does NOT retry the
+        // GetShare: a non-SUCCESS share calls UtilAssert (original
+        // CGameAIBase.cpp line 6035) and returns -2 through the raw
+        // return path (0x45AE25) without the release tail -- dead
+        // code since UtilAssert never returns, ported faithfully. An
+        // empty party answers FALSE through the release tail.
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pCharacter,
+                    INFINITE);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\CGameAIBase.cpp
+                    // __LINE__: 6035
+                    UTIL_ASSERT(FALSE);
+                    return -2;
+                }
+
+                if (static_cast<CGameSprite*>(pCharacter)->sub_45B710() != 0) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    bResult = TRUE;
+                    break;
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+        break;
+    case 0x4013:
+        // LOS(object, range): decode the trigger and resolve its cause
+        // with the LOS resolver sub_40D050 (TYPE_AIBASE, no back
+        // list); a cause that resolves to nothing leaves through the
+        // early epilogue (0x45AB7A) with nothing shared. A sprite
+        // target also asks Orderable (0x728460, FALSE); anything else
+        // keeps FALSE. Both positions go through the path-search grid
+        // conversion (sub_45B2D0) and the squared grid distance
+        // (sub_45B300) must not exceed the squared range -- the exe
+        // reads GetSpecifics twice and squares the two reads (they
+        // cannot differ), so this port reads it once. In range, the
+        // area's CheckLOS (0x46A820) runs from the target's position
+        // to this object's, with this object's visible terrain table
+        // (vtable slot 0x9C) and the Orderable answer; out of range or
+        // blocked answers FALSE (the FALSE stub 0x45AB39). On success
+        // the resolved object's type is marked as the last object
+        // (sub_4530F0 with an 0x40AE80 type whose only set fields are
+        // that type byte and instance -1) before the TRUE tail.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40D050(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            BOOL bOrderable = FALSE;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                bOrderable = static_cast<CGameSprite*>(pObject2)->Orderable(FALSE);
+            }
+
+            const CPoint& rTargetPos = pObject2->GetPos();
+            CPoint ptTargetGrid;
+            sub_45B2D0(&ptTargetGrid, rTargetPos.x, rTargetPos.y);
+            const CPoint& rThisPos = GetPos();
+            CPoint ptThisGrid;
+            sub_45B2D0(&ptThisGrid, rThisPos.x, rThisPos.y);
+            LONG nDistanceSq = sub_45B300(ptTargetGrid.x, ptTargetGrid.y, ptThisGrid.x, ptThisGrid.y);
+
+            LONG nRange = triggerCopy.GetSpecifics() + 1;
+            if (nDistanceSq > nRange * nRange) {
+                bResult = FALSE;
+                break;
+            }
+
+            if (!GetArea()->CheckLOS(rTargetPos, rThisPos, GetVisibleTerrainTable(), bOrderable)) {
+                bResult = FALSE;
+                break;
+            }
+
+            bResult = TRUE;
+            CAIObjectType typeMarked(pObject2->GetObjectType(), 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+            sub_4530F0(typeMarked);
         }
         break;
     default:
