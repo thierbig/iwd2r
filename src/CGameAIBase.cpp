@@ -8314,6 +8314,87 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         }
         bResult = TRUE;
         break;
+    case 0x402D:
+        // HPPERCENTLT(object, n): the trigger sprite's hit points as a
+        // percentage -- the base current (m_hitPoints, sign-extended)
+        // scaled by 100 (lea eax,[eax+eax*4] twice, then shl 2) over the
+        // derived max (m_nMaxHitPoints), signed divide -- against the
+        // specifics by less. The arm carries no compare of its own: it
+        // jumps back to 0x4543BD, the setl tail of the arm before it in
+        // the listing (GetSpecifics; cmp esi,eax; setl dl). As in HP
+        // (0x4010), a null sprite leaves through the early epilogue
+        // (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40D4:
+        // CheckDoorFlags(object, flags): the trigger's flag mask (the
+        // specifics) AND the flags dword of the door the decoded cause
+        // resolves to (sub_40CB20 with TYPE_DOOR, the byte 0x84C503, then
+        // CGameDoor::GetFlags). The original takes the raw AND as the
+        // answer -- esi keeps the masked bits, nothing normalizes them to
+        // 0/1, as in the area-name arm 0x407E. A cause that resolves to
+        // nothing zeroes bResult (0x45AB39) and falls into the release
+        // tail, as in IsCreatureHiddenInShadows (0x40D5).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_DOOR, FALSE);
+        if (pObject2 != NULL) {
+            bResult = triggerCopy.GetSpecifics()
+                & static_cast<CGameDoor*>(pObject2)->GetFlags();
+        }
+        break;
+    case 0x40D8:
+        // IsRotation(object, n): the facing of the sprite the decoded
+        // cause resolves to (sub_40CB20 with TYPE_SPRITE, the byte
+        // 0x84C507, then CGameSprite::GetDirection, sign-extended) against
+        // the specifics by equal (sub/neg/sbb/inc). A cause that resolves
+        // to nothing jumps straight to the release tail 0x45AD4C with the
+        // result still zero from dispatch -- no in-arm zeroing, unlike
+        // IsCreatureHiddenInShadows (0x40D5).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameSprite*>(pObject2)->GetDirection()
+                == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40DE:
+        // FallenPaladin(object): resolve the decoded cause to a sprite
+        // (sub_40CB20 with TYPE_SPRITE), then type-check it again through
+        // the vtable's GetObjectType against TYPE_SPRITE (a mismatch
+        // answers FALSE through the release tail). The answer needs the
+        // low three bits of the derived class mask set (test byte
+        // [eax+0x42],7 -- the mask's bit for a class is 1 << (class-1),
+        // so bits 0-2 are the first three classes) AND bit 9 of the base
+        // stats flags dword (test ch,2 of [eax+8], 0x200). A cause that
+        // resolves to nothing leaves through the early epilogue
+        // (0x45AB7A), as in HP (0x4010).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pFallen = static_cast<CGameSprite*>(pObject2);
+            bResult = (pFallen->GetDerivedStats()->m_classMask & 7) != 0
+                && (pFallen->GetBaseStats()->m_flags & 0x200) != 0;
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
