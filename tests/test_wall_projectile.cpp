@@ -14,11 +14,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "CChitin.h"
+#include "CDimmKeyTable.h"
 #include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CProjectile.h"
 #include "CProjectileSingleTarget.h"
-#include "CDimmKeyTable.h"
 #include "CRes.h"
 #include "CVidMode.h"
 #include "CWarp.h"

@@ -1487,7 +1487,7 @@ TEST_CASE("msg: CMessageAddAction round-trips an empty action", "[network][msg]"
     for (int index = 0; index < 3; index++) {
         const SHORT nameLength = 0;
         put(&nameLength, sizeof(nameLength));
-        const BYTE selectors[9] = { };
+        const BYTE selectors[9] = {};
         put(selectors, sizeof(selectors));
         const DWORD classMask = 0;
         put(&classMask, sizeof(classMask));
@@ -1495,7 +1495,7 @@ TEST_CASE("msg: CMessageAddAction round-trips an empty action", "[network][msg]"
         const LONG instanceRemote = CGameObjectArray::INVALID_INDEX;
         put(&instancePlayer, sizeof(instancePlayer));
         put(&instanceRemote, sizeof(instanceRemote));
-        const BYTE specialCase[5] = { };
+        const BYTE specialCase[5] = {};
         put(specialCase, sizeof(specialCase));
     }
     const LONG zero = 0;

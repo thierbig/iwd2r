@@ -1078,7 +1078,7 @@ TEST_CASE("projectile: the secondary spell-hit message round-trips its wire fiel
     CHECK(sent.field_1E == 9);
     CHECK(sent.field_20 == 0);
 
-    BYTE buffer[3 + 35] = { };
+    BYTE buffer[3 + 35] = {};
     BYTE* pData = buffer + CNetwork::SPEC_MSG_HEADER_LENGTH;
     DWORD dwSize = 0;
     sent.MarshalMessage(&pData, &dwSize);

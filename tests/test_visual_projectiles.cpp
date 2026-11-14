@@ -3539,7 +3539,7 @@ TEST_CASE("visual projectiles: Circle of Death's level budget is one d4 per sorc
     // A wizard of level 3: three d4, each 1 to 4, so 3 to 12.
     pSource->GetDerivedStats()->m_classMask = CLASSMASK_WIZARD;
     pSource->GetDerivedStats()->m_wizardLevel = 3;
-    bool seen[13] = { };
+    bool seen[13] = {};
     for (unsigned int seed = 1; seed <= 200; seed++) {
         INFO("seed " << seed);
         iwd2r_srand(seed);
@@ -3612,7 +3612,7 @@ TEST_CASE("visual projectiles: Circle of Death spends its level budget on level 
     pSource->GetDerivedStats()->m_wizardLevel = 2;
     std::unique_ptr<Recording<CProjectileCircleOfDeath>> pCircle(new Recording<CProjectileCircleOfDeath>());
     pCircle->m_sourceId = pSource->GetId();
-    bool seen[9] = { };
+    bool seen[9] = {};
     for (unsigned int seed = 1; seed <= 200; seed++) {
         INFO("seed " << seed);
         const LONG nBudget = RandAt(seed, 1) % 4 + 1 + (RandAt(seed, 2) % 4 + 1);
