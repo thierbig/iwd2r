@@ -6079,3 +6079,179 @@ TEST_CASE("ai: EvaluateStatusTrigger 84c HasItem NumItemsLT NumItemsParty NumIte
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84d ChargeCount CheckPartyLevel AnyPCOnMap PCInStore LOS", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x40D6 ChargeCount: a sprite's usage count for the item named by
+    // string1 (looked up personally, not equipped-only) at the ability
+    // index in the specifics, compared against int1 as int2 says (1
+    // equal, 2 less, 3 greater). The gem's count is read back through
+    // the same getter the arm calls; a missing name, an AIBASE cause
+    // and a container answer FALSE, and a cause that resolves to
+    // nothing stores -2, which is not FALSE.
+    {
+        CItem* pOldItem = pSprite->m_equipment.m_items[3];
+        pSprite->m_equipment.m_items[3] = new CItem(CResRef("00GEM01"), 0, 0, 0, 0, 0);
+        REQUIRE(pSprite->FindItemPersonal("00GEM01", 0, FALSE) != -1);
+        const WORD nUsage = pSprite->m_equipment.m_items[3]->GetUsageCount(0);
+
+        CAITrigger miss(0x40D6, spriteCause, 0);
+        miss.m_string1 = "00POTN01";
+        miss.SetInt1(nUsage);
+        miss.SetInt2(1);
+        CHECK(pCaller->EvaluateStatusTrigger(miss) == FALSE);
+
+        CAITrigger eq(0x40D6, spriteCause, 0);
+        eq.m_string1 = "00GEM01";
+        eq.SetInt2(1);
+        eq.SetInt1(nUsage);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        eq.SetInt1(nUsage + 1);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+
+        eq.SetInt2(2);
+        eq.SetInt1(nUsage + 1);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        eq.SetInt1(nUsage);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+
+        eq.SetInt2(3);
+        eq.SetInt1(nUsage - 1);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == TRUE);
+        eq.SetInt1(nUsage);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+
+        // Any other operation answers FALSE.
+        eq.SetInt2(0);
+        CHECK(pCaller->EvaluateStatusTrigger(eq) == FALSE);
+
+        CAITrigger noOne(0x40D6, CAIObjectType::NOONE, 0);
+        noOne.m_string1 = "00GEM01";
+        noOne.SetInt2(1);
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) != FALSE);
+
+        CAITrigger otherType(0x40D6, callerCause, 0);
+        otherType.m_string1 = "00GEM01";
+        otherType.SetInt2(1);
+        CHECK(pCaller->EvaluateStatusTrigger(otherType) == FALSE);
+
+        // A container answers FALSE untouched (a heap ground pile over a
+        // zeroed area, as the HasItem test makes).
+        auto* areaBytes = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(areaBytes, 0, sizeof(CGameArea));
+        auto* pArea = reinterpret_cast<CGameArea*>(areaBytes);
+        pArea->m_pGame = g_pBaldurChitin->GetObjectGame();
+        CGameContainer* pContainer = new CGameContainer(pArea, CRect(8, 8, 24, 24));
+        CAIObjectType containerCause(0, 0, 0, 0, 0, 0, 0, 0, pContainer->m_id, 0, 0);
+        CAITrigger container(0x40D6, containerCause, 0);
+        container.m_string1 = "00GEM01";
+        container.SetInt2(1);
+        CHECK(pCaller->EvaluateStatusTrigger(container) == FALSE);
+        pContainer->RemoveFromArea();
+        ::operator delete(areaBytes);
+
+        delete pSprite->m_equipment.m_items[3];
+        pSprite->m_equipment.m_items[3] = pOldItem;
+    }
+
+    // 0x40AA CheckPartyLevel: the lowest derived level in the party,
+    // with an empty party leaving the initial 0xFF; specifics <= that
+    // minimum. The harness game starts with no party.
+    {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+        CAITrigger level(0x40AA, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(level) == TRUE);
+        level.SetSpecifics(255);
+        CHECK(pCaller->EvaluateStatusTrigger(level) == TRUE);
+        level.SetSpecifics(256);
+        CHECK(pCaller->EvaluateStatusTrigger(level) == FALSE);
+
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        const BYTE nLevel = pSprite->GetDerivedStats()->m_nLevel;
+        REQUIRE(nLevel < 255);
+        level.SetSpecifics(nLevel);
+        CHECK(pCaller->EvaluateStatusTrigger(level) == TRUE);
+        level.SetSpecifics(nLevel + 1);
+        CHECK(pCaller->EvaluateStatusTrigger(level) == FALSE);
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x40D3 AnyPCOnMap: TRUE for the first living party member standing
+    // in this object's area; the caller and a harness sprite both have no
+    // area, so a living seated sprite matches. The harness game starts
+    // with no party.
+    {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+        CAITrigger anyPC(0x40D3, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(anyPC) == FALSE);
+
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        CHECK(pCaller->EvaluateStatusTrigger(anyPC) == TRUE);
+
+        // A dead member is released and skipped.
+        const DWORD nOldState = pSprite->m_derivedStats.m_generalState;
+        pSprite->m_derivedStats.m_generalState |= STATE_DEAD;
+        CHECK(pCaller->EvaluateStatusTrigger(anyPC) == FALSE);
+        pSprite->m_derivedStats.m_generalState = nOldState;
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x40F7 PCInStore: TRUE for the first party member whose sub_45B710
+    // field (the int at +0x70F2) is set. The harness game starts with no
+    // party.
+    {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+        CAITrigger inStore(0x40F7, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(inStore) == FALSE);
+
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        const int nOldStore = pSprite->field_70F2;
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        pSprite->field_70F2 = 0;
+        CHECK(pCaller->EvaluateStatusTrigger(inStore) == FALSE);
+        pSprite->field_70F2 = 1;
+        CHECK(pCaller->EvaluateStatusTrigger(inStore) == TRUE);
+        pSprite->field_70F2 = nOldStore;
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    // 0x4013 LOS: the squared grid distance between the resolved target
+    // and this object must not exceed the squared range (specifics + 1);
+    // out of range answers FALSE through the FALSE stub. The caller at
+    // (320, 0) and the sprite at (0, 0) sit 20 grid squares apart
+    // (distance squared 400), so specifics 0 (range 1) and 18 (range 19,
+    // squared 361) both miss. The in-range path (specifics 19 here) runs
+    // CheckLOS on the caller's area, which needs a loaded area the
+    // harness cannot build; it is not driven. A cause that resolves to
+    // nothing leaves through the early epilogue.
+    {
+        pCaller->GetPos() = CPoint(320, 0);
+        pSprite->GetPos() = CPoint(0, 0);
+        CAITrigger noOne(0x4013, CAIObjectType::NOONE, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(noOne) == FALSE);
+        CAITrigger farAway(0x4013, spriteCause, 0);
+        CHECK(pCaller->EvaluateStatusTrigger(farAway) == FALSE);
+        farAway.SetSpecifics(18);
+        CHECK(pCaller->EvaluateStatusTrigger(farAway) == FALSE);
+    }
+
+    ClearMessages();
+}
