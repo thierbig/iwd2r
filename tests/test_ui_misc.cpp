@@ -301,6 +301,68 @@ CGameSprite* PartyMember()
     return PartySprite();
 }
 
+// The message handler's queued messages. The slot-reply tests clear it first
+// so a case sees only the messages its own call produced.
+void ClearMessages()
+{
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+    while (!handler.m_messageList.IsEmpty()) {
+        delete handler.m_messageList.RemoveHead();
+    }
+}
+
+int MessageCount()
+{
+    return static_cast<int>(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetCount());
+}
+
+// The reply the client sends for a slot: {header; SHORT slot; BYTE has;
+// 0x188-byte stats; WORD animation; WORD icon count; CSavedGamePartyCreature;
+// creature; DWORD biographyLength}. The struct's offset is relative to the
+// payload, so the handler's +header restores it.
+void BuildCharacterSlotReply(CGameSprite* pSprite, SHORT nSlot, std::vector<BYTE>& reply)
+{
+    CSavedGamePartyCreature partyCreature;
+    pSprite->Marshal(partyCreature, TRUE);
+    BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
+    REQUIRE(pCreature != NULL);
+    REQUIRE(partyCreature.m_creatureSize > 0);
+
+    BYTE* pStats = NULL;
+    LONG nStats = 0;
+    pSprite->m_derivedStats.Marshal(&pStats, &nStats);
+    REQUIRE(nStats >= 0x188);
+    const LONG nStatsInReply = 0x188;
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const DWORD nCreatureAt = cnt + sizeof(SHORT) + sizeof(BYTE) + nStatsInReply
+        + sizeof(WORD) + sizeof(WORD) + sizeof(CSavedGamePartyCreature);
+    reply.assign(nCreatureAt + partyCreature.m_creatureSize + sizeof(DWORD), 0);
+
+    *reinterpret_cast<SHORT*>(&reply[cnt]) = nSlot;
+    cnt += sizeof(SHORT);
+    reply[cnt] = 1;
+    cnt += sizeof(BYTE);
+    memcpy(&reply[cnt], pStats, nStatsInReply);
+    cnt += nStatsInReply;
+    *reinterpret_cast<WORD*>(&reply[cnt]) = pSprite->m_baseStats.m_animationType;
+    cnt += sizeof(WORD);
+    *reinterpret_cast<WORD*>(&reply[cnt]) = 0; // no portrait icons
+    cnt += sizeof(WORD);
+
+    partyCreature.m_creatureOffset = nCreatureAt - CNetwork::SPEC_MSG_HEADER_LENGTH;
+    memcpy(&reply[cnt], &partyCreature, sizeof(CSavedGamePartyCreature));
+    cnt += sizeof(CSavedGamePartyCreature);
+    memcpy(&reply[cnt], pCreature, partyCreature.m_creatureSize);
+    cnt += partyCreature.m_creatureSize;
+    *reinterpret_cast<DWORD*>(&reply[cnt]) = 0; // no biography override
+    cnt += sizeof(DWORD);
+    REQUIRE(cnt == reply.size());
+
+    delete[] pStats;
+    delete[] pCreature;
+}
+
 // Every item of a text display, as GetItem joins its lines.
 std::vector<std::string> DisplayItems(CUIControlTextDisplay* pText)
 {
@@ -3722,23 +3784,34 @@ TEST_CASE("player character: OnUpdateCharacterSlotReply's session guard and its 
     CNetwork& network = g_pChitin->cNetwork;
     CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
 
+    // The object array the early returns must leave alone.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const LONG nPartyId = pGame->m_characters[0];
+    ClearMessages();
+
     // A closed session answers FALSE before parsing anything.
     network.m_bConnectionEstablished = FALSE;
     BYTE reply[8] = { 0 };
     reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 0; // slot 0
     reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 1; // has a character
     CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == FALSE);
+    CHECK(MessageCount() == 0);
+    CHECK(pGame->m_characters[0] == nPartyId);
 
     // An open session with no character in the slot only answers TRUE: the
     // handler returns before it reads the marshalled part.
     network.m_bConnectionEstablished = TRUE;
     reply[CNetwork::SPEC_MSG_HEADER_LENGTH + 2] = 0;
     CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+    CHECK(MessageCount() == 0);
+    CHECK(pGame->m_characters[0] == nPartyId);
 
     // A slot past the party never indexes the character array; with no
     // character it still only answers TRUE.
     reply[CNetwork::SPEC_MSG_HEADER_LENGTH] = 6;
     CHECK(message.OnUpdateCharacterSlotReply(0, reply, sizeof(reply)) == TRUE);
+    CHECK(MessageCount() == 0);
+    CHECK(pGame->m_characters[0] == nPartyId);
 }
 
 TEST_CASE("player character: the slot reply retargets both type AIs to the slot's id", "[uimisc][message][data]")
@@ -3758,49 +3831,21 @@ TEST_CASE("player character: the slot reply retargets both type AIs to the slot'
         SKIP("[iwd2r-skip] no CHR V2.2 character in the Characters folder");
     }
     const LONG nOldCharacter = pOld->GetId();
-    const WORD nAnimation = pOld->m_baseStats.m_animationType;
 
-    // The reply the client sends: the party creature marshalled whole.
-    CSavedGamePartyCreature partyCreature;
-    pOld->Marshal(partyCreature, TRUE);
-    BYTE* pCreature = static_cast<BYTE*>(iwd2r::UnmarshalPtr(partyCreature.m_creatureOffset));
-    REQUIRE(pCreature != NULL);
-    REQUIRE(partyCreature.m_creatureSize > 0);
+    // What the reply must put the replacement back into: the old area, the
+    // exact position (not a grid snap), the z, list type, vertical-list
+    // position and infravision flag (0x42EE29..0x42EE75).
+    CGameArea* pOldArea = pOld->GetArea();
+    REQUIRE(pOldArea != NULL);
+    const CPoint ptOld = pOld->GetPos();
+    const LONG nOldPosZ = pOld->m_posZ;
+    const BYTE nOldListType = pOld->m_listType;
+    const POSITION posOldVertList = pOld->m_posVertList;
+    const BOOLEAN bOldInfravision = pOld->m_bInfravisionOn;
+    ClearMessages();
 
-    BYTE* pStats = NULL;
-    LONG nStats = 0;
-    pOld->m_derivedStats.Marshal(&pStats, &nStats);
-    REQUIRE(nStats >= 0x188);
-    // The reply carries the 0x188-byte template the handler reads.
-    const LONG nStatsInReply = 0x188;
-
-    // {header; SHORT slot; BYTE has; stats; WORD animation; WORD icons;
-    //  CSavedGamePartyCreature; creature; DWORD biographyLength}. The struct's
-    // offset is relative to the payload, so the handler's +header restores it.
-    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
-    const DWORD nCreatureAt = cnt + sizeof(SHORT) + sizeof(BYTE) + nStatsInReply
-        + sizeof(WORD) + sizeof(WORD) + sizeof(CSavedGamePartyCreature);
-    std::vector<BYTE> reply(nCreatureAt + partyCreature.m_creatureSize + sizeof(DWORD), 0);
-
-    *reinterpret_cast<SHORT*>(&reply[cnt]) = 0;
-    cnt += sizeof(SHORT);
-    reply[cnt] = 1;
-    cnt += sizeof(BYTE);
-    memcpy(&reply[cnt], pStats, nStatsInReply);
-    cnt += nStatsInReply;
-    *reinterpret_cast<WORD*>(&reply[cnt]) = nAnimation;
-    cnt += sizeof(WORD);
-    *reinterpret_cast<WORD*>(&reply[cnt]) = 0; // no portrait icons
-    cnt += sizeof(WORD);
-
-    partyCreature.m_creatureOffset = nCreatureAt - CNetwork::SPEC_MSG_HEADER_LENGTH;
-    memcpy(&reply[cnt], &partyCreature, sizeof(CSavedGamePartyCreature));
-    cnt += sizeof(CSavedGamePartyCreature);
-    memcpy(&reply[cnt], pCreature, partyCreature.m_creatureSize);
-    cnt += partyCreature.m_creatureSize;
-    *reinterpret_cast<DWORD*>(&reply[cnt]) = 0; // no biography override
-    cnt += sizeof(DWORD);
-    REQUIRE(cnt == reply.size());
+    std::vector<BYTE> reply;
+    BuildCharacterSlotReply(pOld, 0, reply);
 
     CNetwork& network = g_pChitin->cNetwork;
     CBaldurMessage& message = g_pBaldurChitin->m_cBaldurMessage;
@@ -3819,10 +3864,192 @@ TEST_CASE("player character: the slot reply retargets both type AIs to the slot'
         == CGameObjectArray::SUCCESS);
     CHECK(pNew->m_liveTypeAI.m_nInstance == nOldCharacter);
     CHECK(pNew->m_startTypeAI.m_nInstance == nOldCharacter);
+
+    // The helper placed the replacement back in the old area (0x6F3B80); the
+    // m_bInOnObjectAdd guard around it keeps its ObjectAdd and sprite update
+    // out of the reply (0x42EE72/0x42EE7E).
+    CHECK(pNew->m_pArea == pOldArea);
+    CHECK(pNew->GetPos() == ptOld);
+    CHECK(pNew->m_posZ == nOldPosZ);
+    CHECK(pNew->m_listType == nOldListType);
+    CHECK(pNew->m_posVertList == posOldVertList);
+    CHECK(pNew->m_bInfravisionOn == bOldInfravision);
+    CHECK(pNew->m_posOld == ptOld);
+    CHECK(pNew->m_posExact.x == (ptOld.x << 10));
+    CHECK(pNew->m_posExact.y == ((ptOld.y << 12) / 3));
+    // The guard around 0x6F3B80 (0x42EE72/0x42EE7E) suppresses its sprite
+    // update; the only message the reply may queue is the old sprite's
+    // ClearAI set-sequence.
+    CHECK(pNew->m_cLastSpriteUpdate.m_bFullUpdateRequired == FALSE);
+    CHECK(MessageCount() <= 1);
+    POSITION pos = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetHeadPosition();
+    while (pos != NULL) {
+        CMessage* pMessage = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetNext(pos);
+        CMessageSetSequence* pSequence = dynamic_cast<CMessageSetSequence*>(pMessage);
+        REQUIRE(pSequence != NULL);
+        CHECK(pSequence->GetSource() == pSequence->GetTarget());
+    }
     pGame->GetObjectArray()->ReleaseShare(nOldCharacter,
         CGameObjectArray::THREAD_ASYNCH,
         INFINITE);
+}
 
-    delete[] pStats;
-    delete[] pCreature;
+// 0x6F3B80: the seven-argument placement helper itself. A saved character
+// (the view's Characters folder through PartyMember) is put back at an exact
+// position in its area; unlike AddToArea (0x6F40F0) the helper leaves
+// m_currentArea alone. The front list marks the search bitmap (the reference
+// flag becomes TRUE) and adds the character to the visibility map; the back
+// list raises the dynamic height by one step and adds no search entry.
+TEST_CASE("sprite: the old-area placement helper restores area, search and visibility", "[uimisc][sprite][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 character in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CGameArea* pArea = pSprite->GetArea();
+    REQUIRE(pArea != NULL);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const LONG nId = pSprite->GetId();
+
+    // The helper's visibility branch needs the portrait and a local sprite.
+    REQUIRE(pSprite->m_bGlobal == TRUE);
+    REQUIRE(pGame->GetCharacterPortraitNum(nId) != -1);
+    REQUIRE((!pGame->GetGameSave()->field_1AC || pSprite->InControl()));
+    REQUIRE(pArea->m_visibility.m_pDynamicHeight != NULL);
+
+    // Everything the helper writes, saved for the restore at the end.
+    const CPoint ptOld = pSprite->GetPos();
+    const CPoint ptOldExact = pSprite->m_posExact;
+    const CPoint ptOldOld = pSprite->m_posOld;
+    const CPoint ptOldVis = pSprite->m_posLastVisMapEntry;
+    const LONG nOldZ = pSprite->m_posZ;
+    const BYTE nOldListType = pSprite->m_listType;
+    const POSITION posOldVertList = pSprite->m_posVertList;
+    const BOOLEAN bOldInfravision = pSprite->m_bInfravisionOn;
+    const unsigned char nOldOnSearchMap = pSprite->field_7430;
+    const CResRef oldCurrentArea = pSprite->m_currentArea;
+    const BOOL bOldActive = pSprite->m_active;
+    const BOOL bOldActiveAI = pSprite->m_activeAI;
+    const BOOL bOldActiveImprisonment = pSprite->m_activeImprisonment;
+    const DWORD dwOldState = pSprite->m_derivedStats.m_generalState;
+    const BOOL bOldFullUpdate = pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired;
+    const BYTE nOldCharacters = pArea->m_nCharacters;
+
+    // The helper's front branch wants the live trio and a non-dead sprite;
+    // its sound branch wants not silenced.
+    pSprite->m_active = TRUE;
+    pSprite->m_activeAI = TRUE;
+    pSprite->m_activeImprisonment = TRUE;
+    pSprite->m_derivedStats.m_generalState &= ~(STATE_DEAD | STATE_SILENCED);
+
+    const int nGridX = pArea->m_search.m_GridSquareDimensions.cx;
+    const int nGridY = pArea->m_search.m_GridSquareDimensions.cy;
+    REQUIRE(nGridX > 6);
+    REQUIRE(nGridY > 6);
+    const auto gridPoint = [&](int nDx, int nDy) {
+        int x = (ptOld.x / CPathSearch::GRID_SQUARE_SIZEX + nDx) % nGridX;
+        int y = (ptOld.y / CPathSearch::GRID_SQUARE_SIZEY + nDy) % nGridY;
+        if (x < 0) {
+            x += nGridX;
+        }
+        if (y < 0) {
+            y += nGridY;
+        }
+        return CPoint(x * CPathSearch::GRID_SQUARE_SIZEX, y * CPathSearch::GRID_SQUARE_SIZEY);
+    };
+    const BYTE nExpectedCharacters = nOldCharacters == 0xFF
+        ? 1
+        : static_cast<BYTE>(nOldCharacters + 1);
+
+    ClearMessages();
+
+    // Front list: exact fields, the m_posExact formula, the search bitmap,
+    // the visibility map and the sprite-update marker.
+    const CPoint ptFront = gridPoint(3, 2);
+    pSprite->field_7430 = FALSE;
+    pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired = FALSE;
+    pSprite->sub_6F3B80(pArea, ptFront, 7, CGameObject::LIST_FRONT, posOldVertList, TRUE);
+
+    CHECK(pSprite->m_pArea == pArea);
+    CHECK(pSprite->GetPos() == ptFront);
+    CHECK(pSprite->m_posZ == 7);
+    CHECK(pSprite->m_listType == CGameObject::LIST_FRONT);
+    CHECK(pSprite->m_posVertList == posOldVertList);
+    CHECK(pSprite->m_bInfravisionOn == TRUE);
+    CHECK(pSprite->m_posExact.x == (ptFront.x << 10));
+    CHECK(pSprite->m_posExact.y == ((ptFront.y << 12) / 3));
+    CHECK(pSprite->m_posOld == ptFront);
+    CHECK(pSprite->m_currentArea == oldCurrentArea);
+    CHECK(pSprite->field_7430 == TRUE);
+    CHECK(pArea->m_nCharacters == nExpectedCharacters);
+    CHECK(pSprite->m_posLastVisMapEntry == ptFront);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired == TRUE);
+    CHECK(MessageCount() == 0);
+
+    pArea->m_search.RemoveObject(CPoint(ptFront.x / CPathSearch::GRID_SQUARE_SIZEX,
+                                     ptFront.y / CPathSearch::GRID_SQUARE_SIZEY),
+        pSprite->m_typeAI.GetEnemyAlly(),
+        pSprite->m_animation.GetPersonalSpace(),
+        pSprite->field_54A8,
+        pSprite->field_7430);
+    CHECK(pSprite->field_7430 == FALSE);
+    pArea->m_visibility.RemoveCharacter(ptFront, nId, pSprite->m_visibleTerrainTable);
+    pArea->m_nCharacters = nOldCharacters;
+
+    // Back list: IncrHeightDynamic raises the square one step, and the helper
+    // adds nothing to the search bitmap.
+    const CPoint ptBack = gridPoint(5, 4);
+    const int nHeightIndex = (nGridX * (ptBack.y / CPathSearch::GRID_SQUARE_SIZEY)
+                                 + ptBack.x / CPathSearch::GRID_SQUARE_SIZEX)
+        / 2;
+    const BYTE nOldHeight = pArea->m_visibility.m_pDynamicHeight[nHeightIndex];
+    pArea->m_visibility.m_pDynamicHeight[nHeightIndex] = 0;
+    pSprite->field_7430 = FALSE;
+    pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired = FALSE;
+    pSprite->sub_6F3B80(pArea, ptBack, -3, CGameObject::LIST_BACK, posOldVertList, FALSE);
+
+    CHECK(pSprite->m_pArea == pArea);
+    CHECK(pSprite->GetPos() == ptBack);
+    CHECK(pSprite->m_posZ == -3);
+    CHECK(pSprite->m_listType == CGameObject::LIST_BACK);
+    CHECK(pSprite->m_posExact.x == (ptBack.x << 10));
+    CHECK(pSprite->m_posExact.y == ((ptBack.y << 12) / 3));
+    CHECK(pSprite->m_posOld == ptBack);
+    CHECK(pSprite->m_currentArea == oldCurrentArea);
+    CHECK(pSprite->field_7430 == FALSE);
+    CHECK(pArea->m_visibility.m_pDynamicHeight[nHeightIndex] == 16);
+    CHECK(pArea->m_nCharacters == nExpectedCharacters);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired == TRUE);
+    CHECK(MessageCount() == 0);
+
+    pArea->m_visibility.m_pDynamicHeight[nHeightIndex] = nOldHeight;
+    pArea->m_visibility.RemoveCharacter(ptBack, nId, pSprite->m_visibleTerrainTable);
+    pArea->m_nCharacters = nOldCharacters;
+
+    // Put the fixture back as the other cases expect it.
+    pSprite->m_pos = ptOld;
+    pSprite->m_posExact = ptOldExact;
+    pSprite->m_posOld = ptOldOld;
+    pSprite->m_posLastVisMapEntry = ptOldVis;
+    pSprite->m_posZ = nOldZ;
+    pSprite->m_listType = nOldListType;
+    pSprite->m_posVertList = posOldVertList;
+    pSprite->m_bInfravisionOn = bOldInfravision;
+    pSprite->field_7430 = nOldOnSearchMap;
+    pSprite->m_currentArea = oldCurrentArea;
+    pSprite->m_active = bOldActive;
+    pSprite->m_activeAI = bOldActiveAI;
+    pSprite->m_activeImprisonment = bOldActiveImprisonment;
+    pSprite->m_derivedStats.m_generalState = dwOldState;
+    pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired = bOldFullUpdate;
 }
