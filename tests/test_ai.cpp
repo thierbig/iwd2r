@@ -5085,3 +5085,68 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x4037 0x4038 0x4064 0x4065 0x407E 0x40DD 0
     ::operator delete(areaStorage);
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x4014 0x4015 0x4016 0x40EC 0x40B2 0x40B4 0x40E1 0x40F4 morale area flag summon limit marked object spell target",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x4014/0x4015/0x4016 Morale trio: the sprite's base morale byte
+    // against the low byte of the specifics by equal, greater, less. An
+    // unresolved cause answers FALSE through the early epilogue.
+    const BYTE nOldMorale = pSprite->m_baseStats.m_morale;
+    pSprite->m_baseStats.m_morale = 80;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4014, spriteCause, 80)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4014, spriteCause, 81)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4015, spriteCause, 79)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4015, spriteCause, 80)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4016, spriteCause, 81)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4016, spriteCause, 80)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4014, CAIObjectType::NOONE, 80)) == FALSE);
+    pSprite->m_baseStats.m_morale = nOldMorale;
+
+    // 0x40EC IsCreatureAreaFlag: the specifics mask AND the sprite's base
+    // stats flags dword; the answer is the nonzero bit. A null sprite
+    // zeroes the result inside the arm (no early epilogue) -- still FALSE.
+    const DWORD nOldFlags = pSprite->GetBaseStats()->m_flags;
+    pSprite->GetBaseStats()->m_flags = 0x10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EC, spriteCause, 0x10)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EC, spriteCause, 0x04)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EC, CAIObjectType::NOONE, 0x10)) == FALSE);
+    pSprite->GetBaseStats()->m_flags = nOldFlags;
+
+    // 0x40B2/0x40B4 SummoningLimit/LT: the summon registry's count of
+    // occupied slots against the specifics by equal (0x40B2) and less
+    // (0x40B4). One occupied slot: equal at 1, less than 2. The sprite
+    // still has to resolve for the early epilogue's FALSE.
+    {
+        std::vector<Icewind586B70::Entry> oldEntries = Icewind586B70::Instance()->mEntries;
+        Icewind586B70::Instance()->mEntries.assign(1, Icewind586B70::Entry(1, 1));
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B2, spriteCause, 1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B2, spriteCause, 2)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B4, spriteCause, 2)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B4, spriteCause, 1)) == FALSE);
+        Icewind586B70::Instance()->mEntries = oldEntries;
+    }
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40B2, CAIObjectType::NOONE, 1)) == FALSE);
+
+    // 0x40E1/0x40F4 SetLastMarkedObject/SetSpellTarget: the resolved
+    // cause's AI type lands in field_342 / field_3BA (the slots actions
+    // 281/305 write); a cause that resolves to nothing stores NOONE. Both
+    // always answer TRUE, whatever they stored.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E1, spriteCause, 0)) == TRUE);
+    CHECK(pCaller->field_342.Equal(pSprite->GetAIType()));
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40F4, spriteCause, 0)) == TRUE);
+    CHECK(pCaller->field_3BA.Equal(pSprite->GetAIType()));
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40E1, CAIObjectType::NOONE, 0)) == TRUE);
+    CHECK(pCaller->field_342.Equal(CAIObjectType::NOONE));
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40F4, CAIObjectType::NOONE, 0)) == TRUE);
+    CHECK(pCaller->field_3BA.Equal(CAIObjectType::NOONE));
+
+    ClearMessages();
+}
