@@ -4994,3 +4994,94 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x401E 0x4068 0x4069 0x4095 0x4096 0x40B3 0
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 0x4037 0x4038 0x4064 0x4065 0x407E 0x40DD 0x40EA 0x40EB state weapon happiness area name hp lost class level",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The 0x407E arm reads the caller's area name straight off the area
+    // header; a zeroed area's RESREF is the empty string.
+    auto* areaStorage = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+    std::memset(areaStorage, 0, sizeof(CGameArea));
+    CGameArea* pZeroArea = reinterpret_cast<CGameArea*>(areaStorage);
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    const CAIObjectType emptyCause(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // 0x4037/0x4038 StateCheck/NotStateCheck: the trigger's state mask AND
+    // the sprite's derived general state word; 0x4037 answers bits set and
+    // 0x4038 bits clear. An unresolved cause answers FALSE.
+    const DWORD nOldGeneralState = pSprite->m_derivedStats.m_generalState;
+    pSprite->m_derivedStats.m_generalState = 0x10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4037, spriteCause, 0x10)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4037, spriteCause, 0x04)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4038, spriteCause, 0x04)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4038, spriteCause, 0x10)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4037, CAIObjectType::NOONE, 0x10)) == FALSE);
+    pSprite->m_derivedStats.m_generalState = nOldGeneralState;
+
+    // 0x4064 HasWeaponEquiped: the sprite's selected weapon slot against
+    // SLOT_FIST (10) by inequality.
+    const BYTE nOldWeapon = pSprite->m_equipment.m_selectedWeapon;
+    pSprite->m_equipment.m_selectedWeapon = 3;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4064, spriteCause, 0)) == TRUE);
+    pSprite->m_equipment.m_selectedWeapon = CGameSpriteEquipment::SLOT_FIST;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4064, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4064, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_equipment.m_selectedWeapon = nOldWeapon;
+
+    // 0x4065 Happiness: the sprite's happiness against the specifics by
+    // equal.
+    const SHORT nOldHappiness = pSprite->m_nHappiness;
+    pSprite->m_nHappiness = 80;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4065, spriteCause, 80)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4065, spriteCause, 81)) == FALSE);
+    pSprite->m_nHappiness = nOldHappiness;
+
+    // 0x407E (unnamed in TRIGGER.IDS): the trigger's string1 against the
+    // caller's area name through lstrcmpi, RAW -- the compare's 0 (a
+    // match) is returned as FALSE and a difference as nonzero.
+    pCaller->m_pArea = pZeroArea;
+    CAITrigger areaName(0x407E, emptyCause, 0);
+    areaName.m_string1 = "";
+    CHECK(pCaller->EvaluateStatusTrigger(areaName) == FALSE);
+    areaName.m_string1 = "ar1000";
+    CHECK(pCaller->EvaluateStatusTrigger(areaName) != FALSE);
+    pCaller->m_pArea = NULL;
+
+    // 0x40DD HPLostLT: the sprite's lost hit points -- derived max minus
+    // base current, 20 - 10 = 10 -- against the specifics by less.
+    const SHORT nOldMaxHitPoints = pSprite->m_derivedStats.m_nMaxHitPoints;
+    const SHORT nOldHitPoints = pSprite->m_baseStats.m_hitPoints;
+    pSprite->m_derivedStats.m_nMaxHitPoints = 20;
+    pSprite->m_baseStats.m_hitPoints = 10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DD, spriteCause, 11)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DD, spriteCause, 10)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40DD, CAIObjectType::NOONE, 99)) == FALSE);
+    pSprite->m_derivedStats.m_nMaxHitPoints = nOldMaxHitPoints;
+    pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+
+    // 0x40EA/0x40EB LevelInClassGT/LT: the sprite's level in the trigger's
+    // class (int1, m_specific2) against the specifics by greater/less.
+    const BYTE nOldClassLevel = pSprite->m_derivedStats.m_nClassLevels[0];
+    pSprite->m_derivedStats.m_nClassLevels[0] = 5;
+    CAITrigger classGT(0x40EA, spriteCause, 4);
+    classGT.m_specific2 = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(classGT) == TRUE);
+    classGT.m_specificID = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(classGT) == FALSE);
+    CAITrigger classLT(0x40EB, spriteCause, 6);
+    classLT.m_specific2 = 1;
+    CHECK(pCaller->EvaluateStatusTrigger(classLT) == TRUE);
+    classLT.m_specificID = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(classLT) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40EA, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_derivedStats.m_nClassLevels[0] = nOldClassLevel;
+
+    ::operator delete(areaStorage);
+    ClearMessages();
+}
