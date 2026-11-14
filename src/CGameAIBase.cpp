@@ -9380,6 +9380,53 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nTotal < triggerCopy.GetSpecifics();
         }
         break;
+    case 0x40DA:
+        // Frame(object, start, end): decode the trigger and resolve its
+        // cause with the untyped resolver sub_40CCA0 (a NOONE cause
+        // resolves to nothing); a cause that resolves to nothing
+        // answers FALSE through the release tail (je 0x45AD4C at
+        // 0x45A7C6). The band is the specifics and int1 in either
+        // order: the exe calls its max(const int&, const int&) and
+        // min(const int&, const int&) instantiations (0x45EAC0/
+        // 0x45EA80), reading each getter twice; the values cannot
+        // differ, so this port reads each once. A static's frame is its
+        // vid cell's current frame id (GetVidCell 0x45B940,
+        // GetCurrentFrameId 0x45B2B0, sign-extended from WORD), a
+        // sprite's its animation's current frame (GetAnimation
+        // 0x45B730, the inline CGameAnimation::GetCurrentFrame, vtable
+        // slot 0xC8); any other type answers FALSE untouched (jne to
+        // the release tail at 0x45A7FB/0x45A809). The frame,
+        // sign-extended from SHORT, answers TRUE only inside the closed
+        // band: above the max FALSE (jg 0x45A887), at or above the min
+        // TRUE (0x45AD47), below FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            break;
+        }
+        {
+            LONG nBound1 = triggerCopy.GetSpecifics();
+            LONG nBound2 = triggerCopy.GetInt1();
+            LONG nMax = nBound1 > nBound2 ? nBound1 : nBound2;
+            LONG nMin = nBound1 < nBound2 ? nBound1 : nBound2;
+            SHORT nFrame;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_STATIC) {
+                nFrame = static_cast<SHORT>(
+                    static_cast<CGameStatic*>(pObject2)->GetVidCell()->GetCurrentFrameId());
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nFrame = static_cast<CGameSprite*>(pObject2)->GetAnimation()->GetCurrentFrame();
+            } else {
+                break;
+            }
+            if (nFrame > nMax) {
+                bResult = FALSE;
+            } else if (nFrame >= nMin) {
+                bResult = TRUE;
+            } else {
+                bResult = FALSE;
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
