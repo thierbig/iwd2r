@@ -8777,6 +8777,64 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x403C:
+    case 0x403D:
+    case 0x403E:
+        // Reaction(object, n) / ReactionGT / ReactionLT: resolve the
+        // trigger sprite (virtual GetTriggerSprite at vtable 0xA4); a
+        // null sprite leaves through the early epilogue (0x45AB7A).
+        // 0x45D560 then computes the sprite's reaction byte from this
+        // AI object, the arm passes it to the sprite's feedback line
+        // (CGameSprite::FeedBack(29, reaction, 0, 0, -1, 0, 0); the
+        // word 0x85C0EC is 29), and the byte -- spilled to a stack
+        // temp and read back masked to 0xff -- is compared against the
+        // specifics. The three arms are byte-identical up to that
+        // compare: 0x403C sub/neg/sbb/inc (0x455540), 0x403D setg
+        // (0x4555B7), 0x403E setl (0x45562C).
+        {
+            // TODO: 0x455500 (likewise 0x455570 and 0x4555E5) calls
+            // 0x45D560 (not ported): it computes the sprite's reaction
+            // byte (base +0x590 with word modifiers +0x97E/+0x994, a
+            // base-stats table lookup, and a hated-race adjustment via
+            // CRuleTables::IsHatedRace); the arm feeds that byte to
+            // pSprite->FeedBack(29, reaction, 0, 0, -1, 0, 0) before the
+            // compare. Without the callee there is no reaction to
+            // compare, so the result stays FALSE for all three
+            // triggers.
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+        }
+        break;
+    case 0x40AF:
+        // Sequence(object, n): resolve the decoded cause (whole-trigger
+        // Decode, then sub_40CCA0); a cause that resolves to nothing
+        // falls to the release tail with the result zero. The object's
+        // type picks the sequence source: TYPE_STATIC reads the
+        // animation cell's current sequence id (GetVidCell ->
+        // CVidCell::GetCurrentSequenceId, a WORD zero-extended at
+        // 0x4589DA), TYPE_SPRITE reads GetSequence (a SHORT
+        // sign-extended at 0x4589BB), and every other type answers
+        // FALSE. Both paths compare against the specifics with the
+        // sub/neg/sbb/inc tail (0x4589BE / 0x4589EE).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            BYTE nType = pObject2->GetObjectType();
+            if (nType == CGameObject::TYPE_STATIC) {
+                bResult = static_cast<CGameStatic*>(pObject2)->GetVidCell()->GetCurrentSequenceId()
+                    == triggerCopy.GetSpecifics();
+            } else if (nType == CGameObject::TYPE_SPRITE) {
+                bResult = static_cast<CGameSprite*>(pObject2)->GetSequence()
+                    == triggerCopy.GetSpecifics();
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
