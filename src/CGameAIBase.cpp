@@ -9264,6 +9264,122 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = static_cast<LONG>(nCount) < triggerCopy.GetSpecifics();
         }
         break;
+    case 0x407A:
+        // NumItemsParty(resref, num): the party's total count of the
+        // item (string1) equals the specifics. Nothing is decoded or
+        // resolved: walk the party (GetNumCharacters/GetCharacterId,
+        // the GetShare retried while it answers SHARED or DENIED), add
+        // each member's CountItemPersonal (0x71D3D0), sign-extended
+        // from SHORT, and release the share before the next member. The
+        // first member that cannot be shared leaves through the early
+        // epilogue (0x45AB7A) with nothing shared; an empty party skips
+        // the walk and compares 0. The original repeats this whole arm
+        // for 0x407B and 0x407C byte for byte except the final setcc
+        // (sete 0x4571BE / setg 0x4572A6 / setl 0x457391); this port
+        // repeats it too rather than share a helper the exe does not
+        // have. All three arms end in a bare jump to the release tail
+        // (0x45ADB7) with nothing left shared.
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
+                    triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407B:
+        // NumItemsPartyGT(resref, num): the same party walk as 0x407A,
+        // byte for byte, answering strictly greater than the specifics
+        // (setg 0x4572A6).
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
+                    triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407C:
+        // NumItemsPartyLT(resref, num): the same party walk as 0x407A,
+        // byte for byte, answering strictly less than the specifics
+        // (setl 0x457391).
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(
+                    triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal < triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
