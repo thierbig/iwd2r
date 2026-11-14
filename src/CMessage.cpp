@@ -5680,6 +5680,50 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteM
     return TRUE;
 }
 
+// 0x438560
+BOOLEAN CBaldurMessage::OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The original never touches its receiver (`this`); every state below is
+    // reached through the chitin globals.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE
+        || g_pChitin->cNetwork.m_bIsHost == FALSE) {
+        return FALSE;
+    }
+
+    // The requester's name is fetched and then discarded: the panic handler
+    // records no reply, it only arms the pending flag.
+    CString sPlayerName;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The panic after the 3-byte header (no dwSize check in the original,
+    // the two lengths are trusted):
+    //   {LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[]; BYTE areaNameLen; char areaName[]}
+    BYTE* pData = pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH;
+    LONG nX = *reinterpret_cast<LONG*>(pData);
+    LONG nY = *reinterpret_cast<LONG*>(pData + 4);
+    SHORT nDirection = *reinterpret_cast<SHORT*>(pData + 8);
+    pData += 10;
+
+    CString sParchment(reinterpret_cast<const char*>(pData + 1), *pData);
+    pData += 1 + *pData;
+
+    CString sAreaName(reinterpret_cast<const char*>(pData + 1), *pData);
+
+    // Arm the panic: once the world clock passes the deadline (90 ticks,
+    // the dword at 0x85a240) the screen world performs the recorded
+    // transition itself, permit or not.
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    pWorld->m_bLeaveAreaLuaPanicPending = TRUE;
+    pWorld->m_ulLeaveAreaLuaPanicTimer = g_pBaldurChitin->m_pObjectGame->m_worldTime.m_gameTime + 90;
+
+    g_pBaldurChitin->GetScreenWorld()->SetLeaveAreaLuaPanicData(CPoint(nX, nY), nDirection, sAreaName, sParchment);
+
+    return TRUE;
+}
+
 // A party's travel through a party required region (LeaveAreaName,
 // 0x74DA6B): in a session the host makes the transition itself (CInfGame
 // 0x5C4AD0) and answers 1, done; a paused game, a dialog or cutscene mode
