@@ -8535,6 +8535,7 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         break;
     case 0x4080: // unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089)
     case 0x4081:
+    case 0x4082:
         // NumCreature minus the party: count what the area finds around
         // this object's position for the trigger's RAW cause -- the same
         // seven-argument GetAllInRange as the NumCreature trio (0x4028):
@@ -8542,11 +8543,12 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // visible-terrain table (vtable 0x9C), line of sight checked,
         // non-sprites not filtered -- then subtract GetNumCharacters()
         // (sign-extended SHORT) and compare the difference against the
-        // specifics. The two arms are identical except for that final
+        // specifics. The three arms are identical except for that final
         // compare: 0x4080 by equal, jumping into the compare tail at
-        // 0x45451D (sub/neg/sbb/inc) that the HPLost arm shares, and
+        // 0x45451D (sub/neg/sbb/inc) that the HPLost arm shares,
         // 0x4081 by setl, entering the setl block at 0x4551AF that
-        // 0x40DD HPLostLT shares. Nothing is resolved, so both release
+        // 0x40DD HPLostLT shares, and 0x4082 by an inline setg
+        // (0x455229-0x45522D). Nothing is resolved, so the release
         // slots stay NULL and the arms jump straight to the release
         // tail.
         {
@@ -8557,8 +8559,10 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 - g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
             if (triggerCopy.m_triggerID == 0x4080) {
                 bResult = nDifference == triggerCopy.GetSpecifics();
-            } else {
+            } else if (triggerCopy.m_triggerID == 0x4081) {
                 bResult = nDifference < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nDifference > triggerCopy.GetSpecifics();
             }
         }
         break;
@@ -8585,14 +8589,18 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nPercent > triggerCopy.GetSpecifics();
         }
         break;
+    case 0x4019:
     case 0x401A:
-        // ReputationGT(object, n): the trigger sprite's reputation
-        // against the specifics by setg. For a party member --
+        // Reputation(object, n) / ReputationGT(object, n): the trigger
+        // sprite's reputation against the specifics. The loads are one
+        // arm apart in the listing (0x45497D for 0x4019, 0x4549FD for
+        // 0x401A) and identical: for a party member --
         // GetCharacterPortraitNum(GetId()) != -1 -- the reputation is
         // the game's GetReputation() (sign-extended SHORT); for anyone
         // else it is the base-stats reputation byte (+0x3C,
-        // zero-extended). A null sprite leaves through the early
-        // epilogue (0x45AB7A).
+        // zero-extended). Only the final compare differs -- 0x4019 an
+        // inline sete (0x4549EF-0x4549F3), 0x401A the shared setg tail.
+        // A null sprite leaves through the early epilogue (0x45AB7A).
         {
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
@@ -8611,7 +8619,11 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             } else {
                 nReputation = pSprite->GetBaseStats()->m_reputation;
             }
-            bResult = nReputation > triggerCopy.GetSpecifics();
+            if (triggerCopy.m_triggerID == 0x4019) {
+                bResult = nReputation == triggerCopy.GetSpecifics();
+            } else {
+                bResult = nReputation > triggerCopy.GetSpecifics();
+            }
         }
         break;
     case 0x4097:
@@ -8717,6 +8729,52 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = _stricmp(triggerCopy.m_string1,
                           static_cast<CGameAIBase*>(pObject2)->m_scriptName)
                 == 0;
+        }
+        break;
+    case 0x40E5:
+        // IsPlayerNumber(object, n): resolve the decoded cause (whole-
+        // trigger Decode, then sub_40CCA0 with no back-list check, as in
+        // SetLastMarkedObject 0x40E1). A cause that resolves to nothing,
+        // or a specifics outside 1..6, leaves through 0x45AB39 -- result
+        // zero with the release tail, which is just an empty release
+        // here. Otherwise the player slot is read with the game's
+        // sub_45B610 (m_characters[n-1]) and the answer is slot ==
+        // GetId(), by the sub/neg/sbb/inc tail at 0x455ED1.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            INT nPlayer = triggerCopy.GetSpecifics();
+            if (nPlayer >= 1 && nPlayer <= 6) {
+                bResult = g_pBaldurChitin->GetObjectGame()->sub_45B610(
+                              static_cast<SHORT>(nPlayer - 1))
+                    == pObject2->GetId();
+            }
+        }
+        break;
+    case 0x4076:
+        // OpenState(object, n): resolve the decoded cause (whole-trigger
+        // Decode, then sub_40CCA0) and require a door -- GetObjectType
+        // against the byte 0x84C503 (TYPE_DOOR); anything else answers
+        // FALSE through the release tail. A null cause leaves through
+        // the early epilogue (0x45AB7A). For a door the open flag is
+        // sub_45B700 (m_dwFlags & 1): a nonzero specifics answers the
+        // flag as it is (esi = eax), a zero specifics inverts it through
+        // the sub/neg/sbb/inc tail at 0x456BF2 -- "is closed".
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+
+        if (pObject2->GetObjectType() == CGameObject::TYPE_DOOR) {
+            BOOL bOpen = static_cast<CGameDoor*>(pObject2)->sub_45B700();
+            if (triggerCopy.GetSpecifics() != 0) {
+                bResult = bOpen != FALSE;
+            } else {
+                bResult = bOpen == FALSE;
+            }
         }
         break;
     default:

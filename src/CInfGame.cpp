@@ -11961,6 +11961,16 @@ CGameOptions* CInfGame::GetOptions()
     return &m_cOptions;
 }
 
+// 0x45B610
+LONG CInfGame::sub_45B610(SHORT nPlayer)
+{
+    if (nPlayer < 6) {
+        return m_characters[nPlayer];
+    }
+
+    return CGameObjectArray::INVALID_INDEX;
+}
+
 // 0x45B640
 SHORT CInfGame::GetReputation()
 {

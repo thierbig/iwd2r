@@ -363,6 +363,7 @@ public:
     void SetCurrentChapter(INT nChapter);
     CInfButtonArray* GetButtonArray();
     LONG GetCharacterId(SHORT nPortrait);
+    LONG sub_45B610(SHORT nPlayer);
     LONG sub_5BDFE0(SHORT nType);
     CTimerWorld* GetWorldTimer();
     SHORT GetNumCharacters();
