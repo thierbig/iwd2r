@@ -8395,6 +8395,60 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 && (pFallen->GetBaseStats()->m_flags & 0x200) != 0;
         }
         break;
+    case 0x4028:
+    case 0x4029:
+    case 0x402A:
+        // NumCreature(object, n) with its LT (0x4029) and GT (0x402A)
+        // variants: count what the area finds around this object's
+        // position for the trigger's cause -- the RAW object spec out
+        // of the trigger (GetCause is just lea +6; no Decode runs
+        // first), over this object's visual range (vtable 0x98) and
+        // visible-terrain table (vtable 0x9C), with line of sight
+        // checked (push 1) and non-sprites not filtered (push 0) --
+        // then compare the list count (0x45B200) against the
+        // specifics. The three arms are identical except for that
+        // final compare: equal for 0x4028 (sub/neg/sbb/inc), setg for
+        // 0x402A, setl for 0x4029 (0x4028 and 0x402A/0x4029 even push
+        // the same seven arguments in a different interleave). Nothing
+        // is resolved, so both release slots stay NULL and the arms
+        // jump straight to the release tail.
+        {
+            CTypedPtrList<CPtrList, LONG*> targets;
+            m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            int nCount = targets.GetCount();
+            if (triggerCopy.m_triggerID == 0x4028) {
+                bResult = nCount == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x402A) {
+                bResult = nCount > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nCount < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x402C:
+        // HPPercent(object, n): the trigger sprite's hit points as a
+        // percentage -- the base current (m_hitPoints, sign-extended)
+        // scaled by 100 (lea eax,[eax+eax*4] twice, then shl 2) over
+        // the derived max (m_nMaxHitPoints), signed divide -- against
+        // the specifics by equal (sub/neg/sbb/inc). Identical to
+        // HPPERCENTLT (0x402D) except for the compare; a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent == triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
