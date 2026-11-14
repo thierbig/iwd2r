@@ -9424,6 +9424,154 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x40D6:
+        // ChargeCount(item, object, ability, number, operation): decode
+        // the trigger and resolve its cause with the untyped resolver
+        // sub_40CCA0; a cause that resolves to nothing stores 0xFFFFFFFE
+        // (-2, still TRUE for a BOOL) and jumps to the release tail
+        // (0x45A5FE). A container answers FALSE untouched (je to the
+        // release tail at 0x45A44E), and so does anything that is not a
+        // sprite (xor esi at 0x45A464). A sprite looks string1 up
+        // personally (FindItemPersonal 0x71D310, count 0, no
+        // equipped-only flag): no slot (cmp bx,-1 at 0x45A48B) or an
+        // empty slot answers FALSE, otherwise the item's usage count
+        // for the specifics' ability (GetUsageCount 0x4E84B0) is
+        // compared against int1 as int2 says: 1 equal (sete tail
+        // 0x45A519), 2 less (setl 0x45A4FC), 3 greater (setg
+        // 0x45A4DF); anything else answers FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            bResult = -2;
+            break;
+        }
+        {
+            BYTE objectType = pObject2->GetObjectType();
+            if (objectType == CGameObject::TYPE_CONTAINER) {
+                break;
+            }
+            if (objectType != CGameObject::TYPE_SPRITE) {
+                break;
+            }
+            SHORT nSlot = static_cast<CGameSprite*>(pObject2)->FindItemPersonal(
+                triggerCopy.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                break;
+            }
+            CItem* pItem
+                = static_cast<CGameSprite*>(pObject2)->GetEquipment()->m_items[nSlot];
+            if (pItem == NULL) {
+                break;
+            }
+            WORD nCount = pItem->GetUsageCount(triggerCopy.GetSpecifics());
+            switch (triggerCopy.GetInt2()) {
+            case 1:
+                bResult = static_cast<LONG>(nCount) == triggerCopy.GetInt1();
+                break;
+            case 2:
+                bResult = static_cast<LONG>(nCount) < triggerCopy.GetInt1();
+                break;
+            case 3:
+                bResult = static_cast<LONG>(nCount) > triggerCopy.GetInt1();
+                break;
+            default:
+                bResult = FALSE;
+                break;
+            }
+        }
+        break;
+    case 0x40AA:
+        // CheckPartyLevel(level): the lowest level in the party (each
+        // member's derived stats byte at +0x46, through the min
+        // instantiation over two byte references 0x45EAA0, inlined
+        // here as in the Frame arm), with the initial 0xFF an empty
+        // party never replaces. The walk is the 0x407A party walk; the
+        // first member that cannot be shared leaves through the early
+        // epilogue (0x45AB7A) with nothing shared. The answer is
+        // specifics <= that minimum (setle 0x458840).
+        {
+            BYTE nMin = 0xFF;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                BYTE nLevel = static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+                nMin = nMin < nLevel ? nMin : nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = triggerCopy.GetSpecifics() <= static_cast<LONG>(nMin);
+        }
+        break;
+    case 0x40D3:
+        // AnyPCOnMap(): TRUE as soon as a living party member stands in
+        // this object's area. The party size is read once and cached
+        // (0x45A27C; most arms re-read it every iteration). A member
+        // that cannot be shared is simply skipped (0x45A39F; nothing
+        // was shared, so nothing is released), and so is a dead one
+        // (STATE_DEAD 0x800 in the derived stats' m_generalState, test
+        // ch,8 at 0x45A31B), released first. The first living member
+        // whose GetArea() (0x40CB00) equals this object's sets TRUE
+        // and, after its share is released, jumps straight to the
+        // release tail (cmp esi,1; je 0x45AD4C).
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            SHORT nCount = pGame->GetNumCharacters();
+            for (SHORT nIndex = 0; nIndex < nCount; nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x45A39F); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameSprite* pMember = static_cast<CGameSprite*>(pCharacter);
+                if ((pMember->GetDerivedStats()->m_generalState & STATE_DEAD) != 0) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    continue;
+                }
+
+                bResult = pMember->GetArea() == GetArea();
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bResult) {
+                    break;
+                }
+            }
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
