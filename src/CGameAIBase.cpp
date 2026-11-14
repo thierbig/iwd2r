@@ -36,6 +36,7 @@
 #include "CUtil.h"
 #include "CVariableHash.h"
 #include "CWeather.h"
+#include "Icewind586B70.h"
 #include "IcewindCGameEffects.h"
 
 // 0x8485C4
@@ -7974,6 +7975,44 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
 
             bResult = nCount < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x401E:
+    case 0x4068:
+    case 0x4069:
+        // Time, TimeGT, TimeLT(I:Time*): the world timer's current hour (a
+        // byte, zero-extended) against the trigger's specifics. The three
+        // arms share the same loads; 0x401E answers equality through the
+        // sub/neg/sbb/inc sequence (1 iff the difference is zero), 0x4068
+        // and 0x4069 compare the operands directly (setg, setl).
+        {
+            LONG nHour = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->GetCurrentHour();
+            if (triggerCopy.m_triggerID == 0x401E) {
+                bResult = nHour == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x4068) {
+                bResult = nHour > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nHour < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40B3:
+        // SummoningLimitGT(object, n): the summon registry's count of
+        // occupied slots (Icewind586B70::GetCount) against the specifics
+        // by greater. The sprite is resolved first only so the epilogue
+        // can release it; as in HP (0x4010), a null sprite leaves through
+        // the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = Icewind586B70::Instance()->GetCount() > triggerCopy.GetSpecifics();
         }
         break;
     default:
