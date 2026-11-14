@@ -125,6 +125,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_START_COMBAT_MUSIC;
     static const BYTE MSG_SUBTYPE_CMESSAGE_95;
     static const BYTE MSG_SUBTYPE_CMESSAGE_96;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_CHAPTER_DONE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
@@ -1674,6 +1675,26 @@ public:
     /* 0010 */ CResRef m_resScript;
 };
 #pragma pack(pop)
+
+// The chapter screen's Done button pressed on the machines that do not own
+// it (vtable 0x84D3B4, 0xC bytes; subtype 98, getter 0x4F6CB0). The hosting
+// machine constructs it in CScreenChapter::OnDoneButtonClick (0x5D4190) when
+// it leaves the chapter screen mid-game, with the party slot 1 id in both
+// m_sourceId and m_targetId. MarshalMessage writes the target sprite's remote
+// ids; UnmarshalMessage maps them back to a local sprite id. Run presses the
+// same button wherever the chapter screen is the active engine. The original
+// C++ class name is unrecovered; the tree names it by its verified purpose,
+// like CMessageFloatText/CMessageSetProtagonist.
+class CMessageChapterDone : public CMessage {
+public:
+    CMessageChapterDone(LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+};
 
 class CMessage90 : public CMessage {
 public:

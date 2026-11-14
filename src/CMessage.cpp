@@ -365,6 +365,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_95 = 95;
 // 0x84CF37
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_96 = 96;
 
+// 0x84CF39
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CHAPTER_DONE = 98;
+
 // 0x84CF3A
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SCREENSHAKE = 99;
 
@@ -20631,6 +20634,113 @@ void CMessage97::Run()
         g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+// 0x4F6C90
+CMessageChapterDone::CMessageChapterDone(LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+}
+
+// 0x4536E0
+SHORT CMessageChapterDone::GetCommType()
+{
+    return BROADCAST_FORCED_OTHERS;
+}
+
+// 0x40A0E0
+BYTE CMessageChapterDone::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// 0x4F6CB0
+BYTE CMessageChapterDone::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CHAPTER_DONE;
+}
+
+// 0x514240
+void CMessageChapterDone::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29890
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID remotePlayerID = pObject->m_remotePlayerID;
+    LONG remoteObjectID = pObject->m_remoteObjectID;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = sizeof(PLAYER_ID) + sizeof(LONG);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29913
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    *reinterpret_cast<PLAYER_ID*>(*pData) = remotePlayerID;
+    *reinterpret_cast<LONG*>(*pData + 4) = remoteObjectID;
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29933
+    UTIL_ASSERT(*dwSize == 8);
+}
+
+// 0x514360
+BOOL CMessageChapterDone::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 29947
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+            remoteObjectID,
+            localObjectID)
+        != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    // Native code ignores dwSize and keeps the caller's source ID.
+    return TRUE;
+}
+
+// 0x5143D0
+void CMessageChapterDone::Run()
+{
+    // Only the machines still looking at the chapter screen take the click.
+    if (g_pBaldurChitin->pActiveEngine == g_pBaldurChitin->m_pEngineChapter) {
+        g_pBaldurChitin->m_pEngineChapter->OnDoneButtonClick();
     }
 }
 

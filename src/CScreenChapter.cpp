@@ -567,8 +567,15 @@ void CScreenChapter::OnDoneButtonClick()
 
         if (g_pBaldurChitin->cNetwork.GetServiceProvider() != CNetwork::SERV_PROV_NULL
             && g_pBaldurChitin->cNetwork.GetSessionHosting() == TRUE) {
-            // NOTE: The host's message to the clients is not ported
-            // (multiplayer, ADR 0002).
+            // The host tells the clients to leave the chapter screen with it.
+            // The original passes the party slot 1 id as both the caller and
+            // the target; the clients resolve it back through the sender's
+            // remote ids, and Run presses this button on their machines only.
+            CMessage* pMessage = new CMessageChapterDone(pGame->m_characters[1],
+                pGame->m_characters[1]);
+
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
             Sleep(25);
         }
 
