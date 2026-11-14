@@ -6525,3 +6525,141 @@ TEST_CASE("ai: EvaluateStatusTrigger 84f GlobalTimerExact GlobalTimerNotExpired 
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84g BitGlobal HelpEx NumCreaturesLTMyLevel NumCreaturesATMyLevel NumCreaturesGTMyLevel",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+    CAIObjectType callerCause(0, 0, 0, 0, 0, 0, 0, 0, pCaller->m_id, 0, 0);
+
+    // 0x40A5 BitGlobal: the first string names scope and variable in one
+    // ("SCOPE:NAME"), uppercased as a whole before the colon split, so a
+    // lower-case spelling still finds the variable. The mask is the
+    // specifics, the operation comes from int1: only mode 1 (AND) can answer
+    // TRUE; the OR and XOR blocks sit behind compares that release FALSE for
+    // any other mode, so modes 2 and 3 answer FALSE (dead in the original,
+    // mirrored). A missing variable answers as though its value were zero
+    // (mask 0 TRUE, any set bit FALSE), but only in a scope that was found;
+    // a scope naming no area answers FALSE with no fallback.
+    {
+        auto evalBit = [&](CGameAIBase* pOn, const char* sName, LONG nMask, LONG nMode) {
+            CAITrigger trigger(0x40A5, CAIObjectType::NOONE, nMask);
+            trigger.SetInt1(nMode);
+            trigger.m_string1 = sName;
+            return pOn->EvaluateStatusTrigger(trigger);
+        };
+
+        CVariable global;
+        global.SetName(CString("T84G_BIT"));
+        global.m_intValue = 0x5;
+        pGame->GetVariables()->AddKey(global);
+
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x4, 1) == TRUE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x5, 1) == TRUE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x8, 1) == FALSE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x0, 1) == FALSE);
+        // The whole string is uppercased before the split.
+        CHECK(evalBit(pCaller, "global:t84g_bit", 0x4, 1) == TRUE);
+        // Only mode 1 answers; the OR and XOR blocks never run.
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x4, 0) == FALSE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x4, 2) == FALSE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_BIT", 0x4, 3) == FALSE);
+
+        // A missing variable reads as zero.
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_MISSING", 0x0, 1) == TRUE);
+        CHECK(evalBit(pCaller, "GLOBAL:T84G_MISSING", 0x1, 1) == FALSE);
+
+        // A scope naming no area answers FALSE outright, mask 0 or not.
+        CHECK(evalBit(pCaller, "AR1200:T84G_BIT", 0x0, 1) == FALSE);
+
+        // LOCALS: the caller must be a sprite.
+        CVariable local;
+        local.SetName(CString("T84G_LOC"));
+        local.m_intValue = 0x2;
+        pSprite->GetLocalVariables()->AddKey(local);
+        CHECK(evalBit(pSprite, "LOCALS:T84G_LOC", 0x2, 1) == TRUE);
+        CHECK(evalBit(pSprite, "LOCALS:T84G_LOC", 0x4, 1) == FALSE);
+        CHECK(evalBit(pSprite, "LOCALS:T84G_MISSING", 0x0, 1) == TRUE);
+        CHECK(evalBit(pCaller, "LOCALS:T84G_LOC", 0x2, 1) == FALSE);
+    }
+
+    // 0x40A8 HelpEx: whether the resolved trigger sprite's AI-type field
+    // named by the specifics (1 EA, 2 general, 3 race, 4 class, 5 specific,
+    // 6 gender, 7 alignment) still matches the same field of the caller's
+    // m_lHelp, the object type of the last help shout it took; the checked
+    // field is set to 0xFF after the check, matched or not, so an equality
+    // match fires only once. Class answers the raw AND of the two bytes
+    // (0x4086's spelling), so a 0xFF help class cannot block a rematch. A
+    // cause that resolves to no sprite leaves through the early epilogue; a
+    // specifics outside 1..7 answers FALSE and writes nothing.
+    {
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, CAIObjectType::NOONE, 1)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, callerCause, 1)) == FALSE);
+
+        // Enemy-ally (1): equality, fires once.
+        pCaller->m_lHelp.SetEnemyAlly(pSprite->GetAIType().GetEnemyAlly());
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 1)) == TRUE);
+        CHECK(pCaller->m_lHelp.GetEnemyAlly() == 0xFF);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 1)) == FALSE);
+
+        // General (2): a mismatch also writes 0xFF.
+        pCaller->m_lHelp.SetGeneral(pSprite->GetAIType().GetGeneral() ^ 0xFF);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 2)) == FALSE);
+        CHECK(pCaller->m_lHelp.GetGeneral() == 0xFF);
+
+        // Class (4): the raw AND, not equality.
+        const BYTE nClass = pSprite->GetAIType().GetClass();
+        pCaller->m_lHelp.SetClass(nClass);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 4)) == nClass);
+        CHECK(pCaller->m_lHelp.GetClass() == 0xFF);
+
+        // Specific (5): equality.
+        pCaller->m_lHelp.SetSpecific(pSprite->GetAIType().GetSpecific());
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 5)) == TRUE);
+        CHECK(pCaller->m_lHelp.GetSpecific() == 0xFF);
+
+        // Alignment (7): equality.
+        pCaller->m_lHelp.SetAlignment(pSprite->GetAIType().GetAlignment());
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 7)) == TRUE);
+
+        // Specifics 0 and 8 answer FALSE without touching the field.
+        pCaller->m_lHelp.SetRace(pSprite->GetAIType().GetRace());
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 0)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40A8, spriteCause, 8)) == FALSE);
+        CHECK(pCaller->m_lHelp.GetRace() == pSprite->GetAIType().GetRace());
+    }
+
+    // NumCreatures(LT/AT/GT)MyLevel: only a sprite with an area reaches the
+    // count. A sprite on the front vert list (the constructor's list type)
+    // with no vert-list position skips the search outright (the eight-
+    // argument GetAllInRange path); the back list takes the seven-argument
+    // path, which finds nothing over a zeroed area. Either way the list is
+    // empty and all three answer FALSE before the level compare -- or the
+    // specifics-driven level-sum walk, which needs live targets the unit
+    // harness does not load -- can run.
+    {
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40CA, CAIObjectType::NOONE, 0)) == FALSE);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CA, CAIObjectType::NOONE, 0)) == FALSE);
+
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pSprite->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CA, spriteCause, 0)) == FALSE);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CB, spriteCause, 0)) == FALSE);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CC, spriteCause, 0)) == FALSE);
+
+        pSprite->m_listType = CGameObject::LIST_BACK;
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CA, spriteCause, 0)) == FALSE);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CB, spriteCause, 0)) == FALSE);
+        CHECK(pSprite->EvaluateStatusTrigger(CAITrigger(0x40CC, spriteCause, 0)) == FALSE);
+        pSprite->m_listType = CGameObject::LIST_FRONT;
+        pSprite->m_pArea = NULL;
+    }
+
+    ClearMessages();
+}
