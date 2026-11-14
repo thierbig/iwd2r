@@ -5241,3 +5241,86 @@ TEST_CASE("ai: EvaluateStatusTrigger 0x402D 0x4094 0x40D4 0x40D8 0x40DB 0x40DC 0
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 83x NumCreature HPPercent Alignment CheckSpellState IsFacingSavedRotation InTrap", "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CAIObjectType spriteCause(0, 0, 0, 0, 0, 0, 0, 0, pSprite->m_id, 0, 0);
+
+    // NumCreature family: the count is the area's GetAllInRange walk, which
+    // finds nothing over a zeroed area, so the trio compares 0 against the
+    // specifics by equal (0x4028), greater (0x402A) and less (0x4029). The
+    // cause spec is passed raw -- the arms decode nothing -- so an
+    // instance-based spec gives the same empty count.
+    {
+        auto* area = static_cast<unsigned char*>(::operator new(sizeof(CGameArea)));
+        std::memset(area, 0, sizeof(CGameArea));
+        pCaller->m_pArea = reinterpret_cast<CGameArea*>(area);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4028, spriteCause, 0)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4028, spriteCause, 1)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402A, spriteCause, 0)) == FALSE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4029, spriteCause, 1)) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x4029, spriteCause, 0)) == FALSE);
+        pCaller->m_pArea = NULL;
+    }
+
+    // HPPercent: 10 of 20 hit points is exactly 50 percent; a cause that
+    // resolves to nothing answers FALSE through the early epilogue.
+    const SHORT nOldMaxHitPoints = pSprite->m_derivedStats.m_nMaxHitPoints;
+    const SHORT nOldHitPoints = pSprite->m_baseStats.m_hitPoints;
+    pSprite->m_derivedStats.m_nMaxHitPoints = 20;
+    pSprite->m_baseStats.m_hitPoints = 10;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402C, spriteCause, 50)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402C, spriteCause, 51)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x402C, CAIObjectType::NOONE, 50)) == FALSE);
+    pSprite->m_derivedStats.m_nMaxHitPoints = nOldMaxHitPoints;
+    pSprite->m_baseStats.m_hitPoints = nOldHitPoints;
+
+    // CheckSpellState: the derived spell-state bitset; both IDs 0x40AC and
+    // 0x40AD share the arm.
+    const std::bitset<256> oldSpellStates = pSprite->m_derivedStats.m_spellStates;
+    pSprite->m_derivedStats.m_spellStates.reset();
+    pSprite->m_derivedStats.m_spellStates.set(7);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AD, spriteCause, 7)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AD, spriteCause, 8)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AC, spriteCause, 7)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40AD, CAIObjectType::NOONE, 7)) == FALSE);
+    pSprite->m_derivedStats.m_spellStates = oldSpellStates;
+
+    // IsFacingSavedRotation: the base-stats byte at +0x2E8 against the
+    // current direction; the specifics play no part.
+    const BYTE nOldSavedRotation = pSprite->m_baseStats.field_2E8;
+    const SHORT nOldDirection = pSprite->m_nDirection;
+    pSprite->m_baseStats.field_2E8 = 5;
+    pSprite->m_nDirection = 5;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D9, spriteCause, 0)) == TRUE);
+    pSprite->m_nDirection = 6;
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D9, spriteCause, 0)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40D9, CAIObjectType::NOONE, 0)) == FALSE);
+    pSprite->m_baseStats.field_2E8 = nOldSavedRotation;
+    pSprite->m_nDirection = nOldDirection;
+
+    // Alignment: an unnamed spec's alignment selector byte (ctor argument 8)
+    // survives Decode untouched, so 0x41 answers the equality for 0x41, the
+    // mask tests for 1 (0x41 & 1) but not 2 or 0x20, and 0x40 -- not one of
+    // the six mask values -- falls to the equality and fails.
+    CAIObjectType alignCause(0, 0, 0, 0, 0, 0, 0, 0x41, -1, 0, 0);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 0x41)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 0x42)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 1)) == TRUE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 2)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 0x20)) == FALSE);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x400A, alignCause, 0x40)) == FALSE);
+
+    // InTrap: the caller here is a plain AI object, not a trigger, so the
+    // arm never reaches IsOverActivate and stores -2 (0xFFFFFFFE) -- still a
+    // truthy BOOL. The trigger path needs a real CGameTrigger in a loaded
+    // area; the harness has none.
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40ED, spriteCause, 0)) == -2);
+    CHECK(pCaller->EvaluateStatusTrigger(CAITrigger(0x40ED, CAIObjectType::NOONE, 0)) == -2);
+
+    ClearMessages();
+}
