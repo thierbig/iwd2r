@@ -8533,6 +8533,87 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = -2;
         }
         break;
+    case 0x4080: // unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089)
+    case 0x4081:
+        // NumCreature minus the party: count what the area finds around
+        // this object's position for the trigger's RAW cause -- the same
+        // seven-argument GetAllInRange as the NumCreature trio (0x4028):
+        // no Decode runs first, visual range (vtable 0x98),
+        // visible-terrain table (vtable 0x9C), line of sight checked,
+        // non-sprites not filtered -- then subtract GetNumCharacters()
+        // (sign-extended SHORT) and compare the difference against the
+        // specifics. The two arms are identical except for that final
+        // compare: 0x4080 by equal, jumping into the compare tail at
+        // 0x45451D (sub/neg/sbb/inc) that the HPLost arm shares, and
+        // 0x4081 by setl, entering the setl block at 0x4551AF that
+        // 0x40DD HPLostLT shares. Nothing is resolved, so both release
+        // slots stay NULL and the arms jump straight to the release
+        // tail.
+        {
+            CTypedPtrList<CPtrList, LONG*> targets;
+            m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            int nDifference = targets.GetCount()
+                - g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+            if (triggerCopy.m_triggerID == 0x4080) {
+                bResult = nDifference == triggerCopy.GetSpecifics();
+            } else {
+                bResult = nDifference < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x402E:
+        // HPPercentGT(object, n): the trigger sprite's hit points as a
+        // percentage -- the same base current (m_hitPoints,
+        // sign-extended) scaled by 100 (lea eax,[eax+eax*4] twice, then
+        // shl 2) over the derived max (m_nMaxHitPoints), signed divide,
+        // as HPPercent (0x402C) -- against the specifics by setg.
+        // Identical to 0x402C except for the compare; a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x401A:
+        // ReputationGT(object, n): the trigger sprite's reputation
+        // against the specifics by setg. For a party member --
+        // GetCharacterPortraitNum(GetId()) != -1 -- the reputation is
+        // the game's GetReputation() (sign-extended SHORT); for anyone
+        // else it is the base-stats reputation byte (+0x3C,
+        // zero-extended). A null sprite leaves through the early
+        // epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nReputation;
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(
+                    pSprite->GetId())
+                != -1) {
+                nReputation = g_pBaldurChitin->GetObjectGame()->GetReputation();
+            } else {
+                nReputation = pSprite->GetBaseStats()->m_reputation;
+            }
+            bResult = nReputation > triggerCopy.GetSpecifics();
+        }
+        break;
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
