@@ -6405,3 +6405,123 @@ TEST_CASE("ai: EvaluateStatusTrigger 84e PartyLevelVS CheckPartyAverageLevel Ite
 
     ClearMessages();
 }
+
+TEST_CASE("ai: EvaluateStatusTrigger 84f GlobalTimerExact GlobalTimerNotExpired GlobalTimerStarted AnyPCSeesEnemy",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pSprite = MakeSprite();
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CTimerWorld* pWorldTimer = pGame->GetWorldTimer();
+
+    // The world timer sits at hour 5; the GLOBAL variable holds hour 6
+    // (not expired) and the sprite's LOCALS variable mirrors it. The hash
+    // upper-cases names, so lookups after AddKey use the upper-case form.
+    const ULONG nOldGameTime = pWorldTimer->m_gameTime;
+    pWorldTimer->m_gameTime = 5 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+
+    CVariable global;
+    global.SetName(CString("T84F_TIMER"));
+    global.m_intValue = 6 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    pGame->GetVariables()->AddKey(global);
+
+    CVariable local;
+    local.SetName(CString("T84F_LOCAL"));
+    local.m_intValue = 6 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    pSprite->GetLocalVariables()->AddKey(local);
+
+    CVariable* pTimer = pGame->GetVariables()->FindKey(CString("T84F_TIMER"));
+    REQUIRE(pTimer != NULL);
+
+    // Evaluates <id> with the variable name in string1 and the scope in
+    // string2, as the GlobalTimer family resolves them (0x4040).
+    auto eval = [&](WORD nTriggerID, const char* sName, const char* sScope) {
+        CAITrigger trigger(nTriggerID, CAIObjectType::NOONE, 0);
+        trigger.m_string1 = sName;
+        trigger.m_string2 = sScope;
+        return pCaller->EvaluateStatusTrigger(trigger);
+    };
+
+    // 0x40E3 GlobalTimerStarted: whether the variable exists at all -- its
+    // value is never read. A missing variable answers FALSE, LOCALS needs
+    // a sprite caller (the AI object is not one), and an unknown area
+    // scope answers FALSE without an area lookup result.
+    CHECK(eval(0x40E3, "T84F_TIMER", "GLOBAL") == TRUE);
+    CHECK(eval(0x40E3, "T84F_MISSING", "GLOBAL") == FALSE);
+    {
+        CAITrigger started(0x40E3, CAIObjectType::NOONE, 0);
+        started.m_string1 = "T84F_LOCAL";
+        started.m_string2 = "locals";
+        CHECK(pSprite->EvaluateStatusTrigger(started) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(started) == FALSE);
+    }
+    CHECK(eval(0x40E3, "T84F_TIMER", "AR1200") == FALSE);
+
+    // 0x4041 GlobalTimerNotExpired: the world time below the variable's
+    // value. Equality and a past timer answer FALSE, as does a missing
+    // variable; LOCALS works through the sprite caller.
+    CHECK(eval(0x4041, "T84F_TIMER", "GLOBAL") == TRUE);
+    pTimer->m_intValue = 5 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(eval(0x4041, "T84F_TIMER", "GLOBAL") == FALSE);
+    pTimer->m_intValue = 4 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(eval(0x4041, "T84F_TIMER", "GLOBAL") == FALSE);
+    CHECK(eval(0x4041, "T84F_MISSING", "GLOBAL") == FALSE);
+    {
+        CAITrigger notExpired(0x4041, CAIObjectType::NOONE, 0);
+        notExpired.m_string1 = "T84F_LOCAL";
+        notExpired.m_string2 = "LOCALS";
+        CHECK(pSprite->EvaluateStatusTrigger(notExpired) == TRUE);
+    }
+
+    // 0x403F GlobalTimerExact: the world time EQUALING the variable's
+    // value (the equality idiom, not less-than). Missing, unequal, a
+    // non-sprite LOCALS caller and an unknown area scope all answer FALSE.
+    pTimer->m_intValue = 5 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(eval(0x403F, "T84F_TIMER", "GLOBAL") == TRUE);
+    pTimer->m_intValue = 6 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(eval(0x403F, "T84F_TIMER", "GLOBAL") == FALSE);
+    pTimer->m_intValue = 4 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+    CHECK(eval(0x403F, "T84F_TIMER", "GLOBAL") == FALSE);
+    CHECK(eval(0x403F, "T84F_MISSING", "GLOBAL") == FALSE);
+    {
+        CAITrigger exact(0x403F, CAIObjectType::NOONE, 0);
+        exact.m_string1 = "T84F_LOCAL";
+        exact.m_string2 = "LOCALS";
+        pSprite->GetLocalVariables()->FindKey(CString("T84F_LOCAL"))->m_intValue
+            = 5 * CTimerWorld::TIMESCALE_MSEC_PER_HOUR;
+        CHECK(pSprite->EvaluateStatusTrigger(exact) == TRUE);
+        CHECK(pCaller->EvaluateStatusTrigger(exact) == FALSE);
+    }
+    CHECK(eval(0x403F, "T84F_TIMER", "AR1200") == FALSE);
+
+    // 0x40F6 AnyPCSeesEnemy: whether any party member sees an enemy. An
+    // empty party answers FALSE without walking; a member that cannot be
+    // shared is skipped; a member with no area resolves no target (the
+    // resolver gives up when the caller's area is NULL), so the trigger
+    // stays FALSE. Seeing an enemy needs a live area with an enemy in it,
+    // which the unit harness does not load.
+    {
+        const SHORT nOldCharacters = pGame->m_nCharacters;
+        const LONG nOldPortrait = pGame->m_characterPortraits[0];
+        CAITrigger sees(0x40F6, CAIObjectType::NOONE, 0);
+
+        pGame->m_nCharacters = 0;
+        CHECK(pCaller->EvaluateStatusTrigger(sees) == FALSE);
+
+        pGame->m_nCharacters = 1;
+        pGame->m_characterPortraits[0] = 0x1234;
+        CHECK(pCaller->EvaluateStatusTrigger(sees) == FALSE);
+
+        pGame->m_characterPortraits[0] = pSprite->m_id;
+        CHECK(pCaller->EvaluateStatusTrigger(sees) == FALSE);
+
+        pGame->m_nCharacters = nOldCharacters;
+        pGame->m_characterPortraits[0] = nOldPortrait;
+    }
+
+    pWorldTimer->m_gameTime = nOldGameTime;
+
+    ClearMessages();
+}
