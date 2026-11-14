@@ -1,5 +1,7 @@
 #include "CGameAIBase.h"
 
+#include <math.h>
+
 #include "C2DArray.h"
 #include "CAIConditionResponse.h"
 #include "CAIResponse.h"
@@ -10550,6 +10552,246 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4074:
+        // Detect(object) (0x454C17-0x454F51). The trigger is decoded
+        // first (0x454C1C); the cause then resolves two ways.
+        //
+        // A cause carrying an instance goes through the resolver
+        // sub_40CCA0 (0x454DCD). A NULL resolution breaks FALSE through
+        // the release tail with nothing shared (0x454DD8). Both
+        // positions convert to path-search grid squares (sub_45B2D0,
+        // the cause at 0x454DF4 and the caller at 0x454E19) and the
+        // squared grid distance comes from sub_45B300. A sprite cause
+        // contributes Orderable(FALSE) (0x728460 at 0x454E4A, gated on
+        // the TYPE_SPRITE byte 0x84C507 at 0x454E3D); anything else
+        // contributes 0. The visual range is fetched twice fresh and
+        // the two fetches multiplied (0x454E55/0x454E62/0x454E6B, both
+        // sign-extended). A squared distance past the squared range
+        // (0x454E6E/0x454E70) skips the LOS block outright -- only the
+        // same-area test can still answer TRUE; inside it the LOS is
+        // the caller's area's CheckLOS from the cause's position to the
+        // caller's over the visible-terrain table with the orderable
+        // byte (0x46A820 at 0x454E93), and that answer is ANDed
+        // unconditionally with the cause seating in this same area
+        // (GetArea 0x40CB00, 0x454EAE-0x454EB6). A FALSE answer
+        // releases the share inline by GetId, nulls pObject and breaks
+        // FALSE through 0x456E71 (0x454EB8). A TRUE answer asks
+        // m_lTrigger.Equal against the cause's AI type (0x40CC40 at
+        // 0x454ED0): already the last-seen object breaks TRUE as is
+        // (0x454ED7) with no bookkeeping; otherwise a party-member
+        // cause (GetCharacterPortraitNum 0x5AF4E0 at 0x454EF4) sets
+        // m_canBeSeen to 4 * (VISIBLE_DELAY + 1) (0x454F0E), the type
+        // is recorded in m_lTrigger (0x45B370 at 0x454F1E), and a
+        // CMessageSetLastObject with the cause's AI type, type
+        // CAITRIGGER_SEE (0x401C), caller and target both m_id is
+        // posted (0x454F48) before the same inline release and a TRUE
+        // break.
+        //
+        // A cause without an instance never shares anything. The
+        // caller's area finds it -- the same search 0x407D uses: on the
+        // front vert list the nine-argument GetNearest (0x46B160) from
+        // m_id over the visual range and visible-terrain table, LOS and
+        // see-invisible both hardcoded TRUE (0x454C51/0x454C53),
+        // nearest index zero, dead not ignored; any other vert-list
+        // type takes the point search sub_46DAE0 from m_pos with the
+        // same hardcoded values (0x454C83/0x454C85). No hit
+        // (INVALID_INDEX, 0x454CBD) breaks FALSE through the release
+        // tail, releasing nothing. A hit that is a party member
+        // (0x5AF4E0 at 0x454CD1) sets m_canBeSeen (0x454CEB) before the
+        // answer turns TRUE (0x454CF7). m_lTrigger already holding
+        // that instance id breaks TRUE as is (0x454D01); otherwise a
+        // type carrying only that instance is built (0x40AE80 at
+        // 0x454D26, SetInstance 0x45B470 at 0x454D3B), recorded in
+        // m_lTrigger (0x45B370 at 0x454D4A), and a CMessageSetLastObject
+        // with the DECODED cause -- the search's spec, not the found
+        // object's type -- type CAITRIGGER_SEE and caller and target
+        // both m_id is posted (0x454D81) before a TRUE break through
+        // the tail.
+        triggerCopy.Decode(this);
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                // NOTE: 0x454DD8 falls through to the release tail with
+                // nothing shared and the prologue FALSE.
+                break;
+            }
+
+            CPoint ptCauseGrid;
+            sub_45B2D0(&ptCauseGrid, pObject->GetPos().x, pObject->GetPos().y);
+            CPoint ptThisGrid;
+            sub_45B2D0(&ptThisGrid, GetPos().x, GetPos().y);
+            LONG nDistanceSq = sub_45B300(ptThisGrid.x,
+                ptThisGrid.y,
+                ptCauseGrid.x,
+                ptCauseGrid.y);
+
+            BOOLEAN nOrderable = 0;
+            if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nOrderable = static_cast<CGameSprite*>(pObject)->Orderable(FALSE);
+            }
+
+            LONG nRangeSq = static_cast<LONG>(GetVisualRange()) * static_cast<LONG>(GetVisualRange());
+
+            bResult = FALSE;
+            if (nDistanceSq <= nRangeSq) {
+                bResult = m_pArea->CheckLOS(pObject->GetPos(),
+                    GetPos(),
+                    GetVisibleTerrainTable(),
+                    nOrderable) != FALSE;
+            }
+            bResult = bResult != FALSE && pObject->GetArea() == m_pArea;
+            if (bResult == FALSE) {
+                // NOTE: releases inline by GetId and breaks FALSE
+                // through 0x456E71; nothing reaches the release tail.
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                pObject = NULL;
+                break;
+            }
+
+            if (m_lTrigger.Equal(pObject->GetAIType()) != FALSE) {
+                // Already the last-seen object: TRUE with no bookkeeping
+                // (0x454ED7).
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                pObject = NULL;
+                break;
+            }
+
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(pObject->GetId()) != -1) {
+                m_canBeSeen = 4 * (CGameObject::VISIBLE_DELAY + 1);
+            }
+            m_lTrigger.Set(pObject->GetAIType());
+            CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), CAITRIGGER_SEE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        } else {
+            LONG nId;
+            if (GetVertListType() == CGameObject::LIST_FRONT) {
+                nId = m_pArea->GetNearest(m_id,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    FALSE,
+                    0,
+                    FALSE);
+            } else {
+                nId = m_pArea->sub_46DAE0(m_pos.x,
+                    m_pos.y,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    0,
+                    0);
+            }
+            if (nId == CGameObjectArray::INVALID_INDEX) {
+                // NOTE: 0x454CBD jumps to the release tail; nothing was
+                // shared and the prologue FALSE carries.
+                break;
+            }
+
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nId) != -1) {
+                m_canBeSeen = 4 * (CGameObject::VISIBLE_DELAY + 1);
+            }
+            bResult = TRUE;
+            if (m_lTrigger.GetInstance() != nId) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.SetInstance(nId);
+                m_lTrigger.Set(type);
+                CMessage* message = new CMessageSetLastObject(triggerCopy.GetCause(), CAITRIGGER_SEE, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        break;
+    case 0x4092:
+        // Unnamed (TRIGGER.IDS jumps 0x4089-0x4093)
+        // (0x4576DD-0x457A97). The named object is string1: a type
+        // carrying only that name is built (SetName) BEFORE the trigger
+        // decodes. The cause and then the named type each resolve
+        // through sub_40CCA0; a NULL resolution is a direct FALSE
+        // return (0x457755) releasing nothing. Each hit contributes
+        // only its position -- the share is released inline by GetId
+        // before the math. The three squared distances come from
+        // sub_45B300 over raw (unconverted) positions. Guard one
+        // (0x457932): me-cause must not EXCEED me-named; guard two
+        // (0x457948): cause-named must not exceed me-named. Both
+        // compares are strict-greater only -- the fnstsw/test ah,0x41
+        // form jumps on strictly-greater while equality and NaN
+        // continue -- and a failure cleans up and answers FALSE
+        // directly (0x457755). The three square roots (0x45795E/
+        // 0x45797A/0x457990) give the law of cosines at the caller:
+        // acos((meCauseSq + meNamedSq - causeNamedSq) / ((meNamed *
+        // meCause) * 2.0)) (0x4579D9). The angle is then scaled by
+        // * 360 / 2 * 3.1415926535 (0x4579EF/0x457A04/0x457A0A) --
+        // theta * 180 * pi rather than 180/pi, a unit bug that shrinks
+        // the cone to roughly three degrees; ported verbatim. The final
+        // compare against 30.0 (0x457A10) succeeds on scaled < 30.0 or
+        // an unordered (NaN) scaled and answers TRUE (0x457A8E); a
+        // failure answers FALSE directly (0x457764). Every exit of this
+        // arm returns directly, bypassing the release tail.
+        {
+            CPoint ptCause;
+            CPoint ptNamed;
+            CAIObjectType typeNamed(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+            typeNamed.SetName(triggerCopy.GetString1());
+            triggerCopy.Decode(this);
+
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                // NOTE: direct return through the FALSE cleanup
+                // 0x457755; nothing is shared.
+                return FALSE;
+            }
+            ptCause = pObject->GetPos();
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+
+            pObject = typeNamed.sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                return FALSE;
+            }
+            ptNamed = pObject->GetPos();
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+
+            double dMeCauseSq = static_cast<double>(sub_45B300(m_pos.x, m_pos.y, ptCause.x, ptCause.y));
+            double dMeNamedSq = static_cast<double>(sub_45B300(m_pos.x, m_pos.y, ptNamed.x, ptNamed.y));
+            double dCauseNamedSq = static_cast<double>(sub_45B300(ptCause.x, ptCause.y, ptNamed.x, ptNamed.y));
+
+            if (dMeCauseSq > dMeNamedSq) {
+                return FALSE;
+            }
+            if (dCauseNamedSq > dMeNamedSq) {
+                return FALSE;
+            }
+
+            double dMeCause = sqrt(dMeCauseSq);
+            double dMeNamed = sqrt(dMeNamedSq);
+            double dCauseNamed = sqrt(dCauseNamedSq);
+
+            double angle = acos((dMeCause * dMeCause + dMeNamed * dMeNamed - dCauseNamed * dCauseNamed)
+                / ((dMeNamed * dMeCause) * 2.0));
+            double scaled = angle * 360.0 / 2.0 * 3.1415926535;
+
+            if (!(scaled < 30.0) && scaled == scaled) {
+                return FALSE;
+            }
+            return TRUE;
+        }
     default:
         // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
         // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
