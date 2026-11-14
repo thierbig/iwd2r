@@ -5110,6 +5110,44 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
     return TRUE;
 }
 
+// 0x4352A0
+BOOLEAN CBaldurMessage::OnMapWorldStartRequest(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    // The original never touches its receiver (`this`) or dwSize; every state
+    // below is reached through the chitin globals. The message body is the
+    // requester's facing as a DWORD just past the specific-message header.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE
+        || g_pChitin->cNetwork.m_bIsHost == FALSE) {
+        return FALSE;
+    }
+
+    DWORD nFacing = *(DWORD*)(pByteMessage + CNetwork::SPEC_MSG_HEADER_LENGTH);
+
+    // Same permission test CScreenWorld applies before starting the map world
+    // on its own: save mode 386/1282, or the host busy in a permitted dialog.
+    BOOLEAN bPermitted = TRUE;
+    if (g_pBaldurChitin->m_pObjectGame->GetGameSave()->m_mode == 386
+        || g_pBaldurChitin->m_pObjectGame->GetGameSave()->m_mode == 1282) {
+        bPermitted = FALSE;
+    }
+    if (g_pBaldurChitin->m_pObjectGame->GetMultiplayerSettings()->m_bHostPermittedDialog == TRUE) {
+        bPermitted = FALSE;
+    }
+
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    PLAYER_ID idController = g_pChitin->cNetwork.GetPlayerID(nMsgFrom);
+
+    // Hard-paused or not permitted: record the request as pending instead of
+    // starting the map world now; the screen world picks it up later.
+    if (pWorld->m_bHardPaused == TRUE || bPermitted == FALSE) {
+        pWorld->SetPendingMapWorld(idController, static_cast<SHORT>(nFacing));
+    } else {
+        pWorld->StartMapWorldMultiplayerHost(idController, static_cast<SHORT>(nFacing));
+    }
+
+    return TRUE;
+}
+
 // 0x435360
 BOOLEAN CBaldurMessage::SendMapWorldCancelRequestToServer()
 {
