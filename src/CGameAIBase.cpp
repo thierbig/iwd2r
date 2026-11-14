@@ -5347,9 +5347,10 @@ SHORT CGameAIBase::FireSpell(const CResRef& resRef, CGameObject* target)
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356, a
-        // member of the class DecodeProjectile builds for this type (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x4680E1) before the message
+        // copy at +0x20 (0x4680E7).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
@@ -5489,8 +5490,10 @@ SHORT CGameAIBase::FireSpellPoint(const CResRef& resRef, const CPoint& ptTarget)
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356 (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x4685D0) before the message
+        // copy at +0x20 (0x4685D6).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
@@ -5942,8 +5945,10 @@ SHORT CGameAIBase::ForceSpellPoint()
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356 (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x462373) before the message
+        // copy at +0x20 (0x462379).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
