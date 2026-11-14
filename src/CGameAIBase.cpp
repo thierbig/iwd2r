@@ -7653,6 +7653,34 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
         // InCutsceneMode
         bResult = g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_mode == 0x142;
         break;
+    case 0x4027:
+        // Delay(n): this sprite's AI round counter (field_54C, which
+        // ProcessAI increments when it runs this sprite's AI) divided by n
+        // (signed idiv) with the remainder compared by <= against the
+        // offscreen rounds counter (field_550, the short ProcessAI raises
+        // while this sprite is out of the viewport, capped at 120).
+        bResult = field_54C % triggerCopy.GetSpecifics() <= field_550;
+        break;
+    case 0x404E:
+    case 0x404F:
+    case 0x4050:
+        // PartyGold, PartyGoldGT, PartyGoldLT: the party gold dword of the
+        // game save against the trigger's specifics. The three arms share
+        // the same loads (GetObjectGame, GetGameSave, GetSpecifics); 0x404E
+        // compares inline with sete, while 0x404F and 0x4050 each answer a
+        // carry pair (cmp/sbb/neg: 1 iff the first operand is below the
+        // second as unsigned).
+        {
+            DWORD nPartyGold = g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_nPartyGold;
+            if (triggerCopy.m_triggerID == 0x404E) {
+                bResult = nPartyGold == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x404F) {
+                bResult = nPartyGold > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nPartyGold < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
     case 0x40B5:
         // TotalItemCnt(object, n): the count of the items the named object
         // carries against n, by equal. A sprite's equipment counts each
