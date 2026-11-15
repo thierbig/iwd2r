@@ -737,8 +737,8 @@ BOOL CVidTile::Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, const CRect& r
 
     BOOL bSuccess;
 
-    // Both palettes are set up and realized inside the 16-bpp blitter,
-    // not here (0x7B279A-0x7B27F6).
+    // Both palettes are set up and realized inside each bpp's blitter,
+    // not here (0x7B279A-0x7B27F6 in the 16-bpp one).
     switch (g_pChitin->cVideo.m_nBpp) {
     case 16:
         bSuccess = BltDualTile8To16(reinterpret_cast<WORD*>(ddsd.lpSurface),
@@ -752,12 +752,26 @@ BOOL CVidTile::Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, const CRect& r
             dwFlags);
         break;
     case 24:
-        // TODO: 0x7B1F70 calls 0x7CE3D0 (not ported).
-        bSuccess = FALSE;
+        bSuccess = BltDualTile8To24(reinterpret_cast<DWORD*>(ddsd.lpSurface),
+            ddsd.lPitch,
+            pData,
+            pDualData,
+            pResDualTile,
+            nDitherSeed,
+            blitSize,
+            nDataJump,
+            dwFlags);
         break;
     case 32:
-        // TODO: 0x7B1F70 calls 0x7CE930 (not ported).
-        bSuccess = FALSE;
+        bSuccess = BltDualTile8To32(reinterpret_cast<DWORD*>(ddsd.lpSurface),
+            ddsd.lPitch,
+            pData,
+            pDualData,
+            pResDualTile,
+            nDitherSeed,
+            blitSize,
+            nDataJump,
+            dwFlags);
         break;
     default:
         // An unknown bpp unlocks and releases only this tile's demand
