@@ -1,7 +1,10 @@
 #include "CtrlAltDelete.h"
 
+#include "CAIAction.h"
+#include "CAIGroup.h"
 #include "CBaldurChitin.h"
 #include "CCreatureFile.h"
+#include "CChitin.h"
 #include "CGameArea.h"
 #include "CGameObject.h"
 #include "CGameObjectArray.h"
@@ -319,6 +322,30 @@ void CtrlAltDelete_AddItemPack()
     CtrlAltDelete_AddItem(CString("potn08"), 5, 0, 0);
     CtrlAltDelete_AddItem(CString("potn20"), 5, 0, 0);
     CtrlAltDelete_AddItem(CString("scrlpet"), 1, 0, 0);
+}
+
+// 0x4ED2C0 void CtrlAltDelete_Hans() — 570 bytes (0x4ED2C0-0x4ED4F9). The
+// HANS console command: the dispatcher's command-word resolver (0x583E60)
+// maps the word to id 0xD and the dispatch arm calls here with no
+// arguments, handing the handler this+0x40. ecx is not read.
+//
+// Jumps the party to the mouse pointer: the visible area's infinity engine
+// converts the chitin's screen-space pointer position to world coordinates,
+// and the party group is given a JUMPTOPOINT action at that point. The
+// listing inlines the 0x593D70 constructor (actionID, dest, specificID=0,
+// specificID2=-1), including its construct-and-destroy of a temporary
+// default CAIAction; the port spells the constructor. The original fetches
+// the object game from the global a second time before GetGroup
+// (0x4ED45E); the port re-chains it.
+void CtrlAltDelete_Hans()
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameArea* pArea = pGame->GetVisibleArea();
+    CPoint ptWorld = pArea->GetInfinity()->GetWorldCoordinates(g_pChitin->m_ptPointer);
+
+    CAIAction cAction(CAIAction::JUMPTOPOINT, ptWorld, 0, -1);
+
+    g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction(cAction, TRUE, NULL);
 }
 
 // 0x4ED500 void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1,

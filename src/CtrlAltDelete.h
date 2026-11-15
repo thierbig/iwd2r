@@ -43,6 +43,9 @@ void CtrlAltDelete_AddGold500();
 // 0x4ED250
 void CtrlAltDelete_AddItemPack();
 
+// 0x4ED2C0
+void CtrlAltDelete_Hans();
+
 // 0x4ED500
 void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3);
 

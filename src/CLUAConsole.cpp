@@ -417,7 +417,7 @@ void CLUAConsole::Execute(CString sInput)
         CtrlAltDelete_AddItemPack();
         break;
     case 1: // HANS (same this+0x40)
-        // TODO: 0x5838A0 calls 0x4ED2C0 (not ported).
+        CtrlAltDelete_Hans();
         break;
     case 2: // MIDAS (same this+0x40)
         CtrlAltDelete_AddGold500();
