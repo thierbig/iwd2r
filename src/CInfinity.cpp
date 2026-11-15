@@ -1654,6 +1654,30 @@ BOOL CInfinity::DrawEllipse(const CPoint& ptCenter, const CSize& axes, COLORREF 
         rgbColor);
 }
 
+// 0x5CDD00
+//
+// The world-space rect of the box to darken, to screen space and into the
+// video mode's DarkenRect (vtable slot 0xAC).
+void CInfinity::DarkenRect(const CRect& rSquare)
+{
+    CRect rNormal(rSquare);
+    rNormal.NormalizeRect();
+
+    CRect rDst;
+    rDst.left = rViewPort.left - nCurrentX + rNormal.left;
+    rDst.top = rViewPort.top - nCurrentY + rNormal.top;
+    rDst.right = rDst.left + (rNormal.right - rNormal.left);
+    rDst.bottom = rDst.top + (rNormal.bottom - rNormal.top);
+
+    CRect rClip;
+    rClip.left = rViewPort.left;
+    rClip.top = rViewPort.top;
+    rClip.right = rViewPort.right - 1;
+    rClip.bottom = rViewPort.bottom - 1;
+
+    pVidMode->DarkenRect(rDst, 0, rClip);
+}
+
 // 0x5CDDC0
 BOOL CInfinity::DrawHighlightRect(const CRect& rSquare, COLORREF rgbColor, BYTE width)
 {
