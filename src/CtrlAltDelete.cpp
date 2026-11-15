@@ -132,3 +132,60 @@ void CtrlAltDelete_CreateCreature(CString sName)
             pSprite->m_animation.GetListType());
     }
 }
+
+// 0x4EC350 void CtrlAltDelete_EnableCheatKeys(INT nEnable) — 24 bytes
+// (0x4EC350-0x4EC367). ecx is not read; the store goes through the global
+// screen world. Stores the argument into CScreenWorld+0x156, the flag the
+// world screen's OnKeyDown consults for the Ctrl cheat keys.
+void CtrlAltDelete_EnableCheatKeys(INT nEnable)
+{
+    g_pBaldurChitin->GetScreenWorld()->m_bCheatKeysEnabled = nEnable;
+}
+
+// 0x4EC370 void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP) — 25 bytes
+// (0x4EC370-0x4EC388). ecx is not read. Forwards the argument to the world
+// screen.
+void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP)
+{
+    g_pBaldurChitin->GetScreenWorld()->SetCurrentXP(dwCurrentXP);
+}
+
+// 0x4ECA80 void CtrlAltDelete_SetAreaExplored() — 37 bytes
+// (0x4ECA80-0x4ECAA4). ecx is not read. Tail-calls SetAreaExplored on the
+// visible area's visibility map.
+void CtrlAltDelete_SetAreaExplored()
+{
+    g_pBaldurChitin->GetObjectGame()->GetVisibleArea()->m_visibility.SetAreaExplored();
+}
+
+// 0x4ECAB0 void CtrlAltDelete_AddGold(DWORD dwGold) — 25 bytes
+// (0x4ECAB0-0x4ECAC8). ecx is not read. Forwards the argument to the world
+// screen.
+void CtrlAltDelete_AddGold(DWORD dwGold)
+{
+    g_pBaldurChitin->GetScreenWorld()->AddGold(dwGold);
+}
+
+// 0x4ED230 void CtrlAltDelete_AddGold500() — 22 bytes (0x4ED230-0x4ED245).
+// ecx is not read. Adds a fixed 500 gold, the console command that takes no
+// argument.
+void CtrlAltDelete_AddGold500()
+{
+    g_pBaldurChitin->GetScreenWorld()->AddGold(500);
+}
+
+// 0x4EDF60 void CtrlAltDelete_JeffKAttacks() — 31 bytes (0x4EDF60-0x4EDF7E).
+// ecx is saved in esi and forwarded to 0x4EC390, which never reads it.
+// Spawns the "JeffK" creature.
+void CtrlAltDelete_JeffKAttacks()
+{
+    CtrlAltDelete_CreateCreature(CString("JeffK"));
+}
+
+// 0x4EDF80 void CtrlAltDelete_JeffKDefends() — 31 bytes (0x4EDF80-0x4EDF9E).
+// ecx is saved in esi and forwarded to 0x4EC390, which never reads it.
+// Spawns the "JeffK2" creature.
+void CtrlAltDelete_JeffKDefends()
+{
+    CtrlAltDelete_CreateCreature(CString("JeffK2"));
+}

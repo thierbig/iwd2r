@@ -168,7 +168,7 @@ CScreenWorld::CScreenWorld()
     field_14A = 0;
     m_pActiveDialogDisplay = NULL;
     m_pActiveChatDisplay = NULL;
-    field_156 = 0;
+    m_bCheatKeysEnabled = 0;
     field_F37 = 0;
     field_15A = 1;
     m_newViewSize.left = 0;
@@ -517,7 +517,7 @@ void CScreenWorld::EngineGameInit()
     field_14A = 0;
     m_pActiveDialogDisplay = NULL;
     m_pActiveChatDisplay = NULL;
-    field_156 = 0;
+    m_bCheatKeysEnabled = 0;
     field_F37 = 0;
     field_15A = 1;
     m_newViewSize.left = 0;
@@ -733,7 +733,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
         CAITrigger hotKey(CAITRIGGER_HOTKEY, nKey);
         pGame->m_group.AddTrigger(hotKey);
 
-        if (field_156 && m_bCtrlKeyDown && nKey != pGame->m_pKeymap[22]) {
+        if (m_bCheatKeysEnabled && m_bCtrlKeyDown && nKey != pGame->m_pKeymap[22]) {
             if (nKey == 'O') {
                 // 0x68B24D: Ctrl+O dumps the resource lists (the CDimm at
                 // g_pBaldurChitin+0x542); the original passes 0 and returns.
@@ -742,8 +742,8 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             }
 
             // TODO: Incomplete. 0x68956A-0x68BC5D: the remaining cheat keys
-            // (Ctrl with `field_156`, which ours never sets) for the party
-            // leader and the area; the original returns after one.
+            // (Ctrl with `m_bCheatKeysEnabled`, which ours never sets) for
+            // the party leader and the area; the original returns after one.
             return;
         }
 

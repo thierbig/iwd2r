@@ -154,7 +154,7 @@ public:
     /* 014A */ int field_14A;
     /* 014E */ int field_14E;
     /* 0152 */ BOOL m_bPausedBeforePickParty;
-    /* 0156 */ int field_156;
+    /* 0156 */ int m_bCheatKeysEnabled;
     /* 015A */ int field_15A;
     /* 015C */ unsigned char field_15C;
     /* 015D */ unsigned char field_15D;

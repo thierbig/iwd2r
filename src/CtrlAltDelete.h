@@ -18,4 +18,25 @@ void CtrlAltDelete_MoveToArea(CString sAreaName);
 // 0x4EC390
 void CtrlAltDelete_CreateCreature(CString sName);
 
+// 0x4EC350
+void CtrlAltDelete_EnableCheatKeys(INT nEnable);
+
+// 0x4EC370
+void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP);
+
+// 0x4ECA80
+void CtrlAltDelete_SetAreaExplored();
+
+// 0x4ECAB0
+void CtrlAltDelete_AddGold(DWORD dwGold);
+
+// 0x4ED230
+void CtrlAltDelete_AddGold500();
+
+// 0x4EDF60
+void CtrlAltDelete_JeffKAttacks();
+
+// 0x4EDF80
+void CtrlAltDelete_JeffKDefends();
+
 #endif /* CTRLALTDELETE_H_ */
