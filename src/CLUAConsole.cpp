@@ -65,3 +65,23 @@ void CLUAConsole::CommandNotFound()
 
     field_0 = -1;
 }
+
+// 140 bytes (0x5844E0-0x58456B). Free function, not a member: the resolver
+// 0x583E60 calls it with ecx = the console (0x583EA6) but the body never
+// reads ecx; the only inputs are the by-value CString argument and the
+// hidden return buffer (callee-cleaned `ret 8` at 0x584569). The length
+// check is inlined as the CString header read [eax-8] (0x584503, re-read
+// each iteration at 0x584526); the per-byte work at 0x584514-0x58451F is
+// register-only — al = sText[i], al += 8, al <<= 1, byte-truncated — and
+// SetAt (0x7FD114, called at 0x584521) stores it back. The copy ctor
+// (0x7FC98F at 0x58453D) then moves the transformed string to the return
+// buffer and the dtor (0x7FCC1A at 0x584553) drops the argument. Ghidra:
+// Encode_CString_Weirdness.
+// 0x5844E0
+CString EncodeCommandWord(CString sText)
+{
+    for (int i = 0; i < sText.GetLength(); i++)
+        sText.SetAt(i, static_cast<char>((sText[i] + 8) * 2));
+
+    return sText;
+}

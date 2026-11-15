@@ -37,4 +37,7 @@ public:
     /* 003C */ DWORD field_3C;
 };
 
+// 0x5844E0
+CString EncodeCommandWord(CString sText);
+
 #endif /* CLUACONSOLE_H_ */
