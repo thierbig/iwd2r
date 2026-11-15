@@ -4,10 +4,11 @@
 #include "FileFormat.h"
 
 // The debug console's "CtrlAltDelete:" cheat-command layer. The console's
-// dispatcher (0x5838A0, not ported; docs/followups.md tracks it) hands every
-// handler its own this in ecx and the parsed command argument as a CString by
-// value on the stack. None of the ported handlers reads ecx, so they are free
-// functions here; each body states what it does with ecx.
+// dispatcher (CLUAConsole::Execute 0x5838A0) hands every handler its own this
+// in ecx (this+0x38, this+0x40 for the FIRSTAID/HANS/MIDAS arms) and the
+// parsed command argument as a CString by value on the stack. None of the
+// ported handlers reads ecx, so they are free functions here; each body
+// states what it does with ecx.
 
 // 0x4EC1C0
 void CtrlAltDelete_DisplayText(CString sText);

@@ -3,13 +3,13 @@
 
 #include "mfc.h"
 
-// The Lua debug console's command buffer: the stack object the unported
-// dispatcher 0x5838A0 ("CLUAConsole", docs/followups.md) parses each entered
-// "CtrlAltDelete:" line into. The Lua console edit's Enter handler
-// (0x77BF30, not ported; iwd2r has no Lua runtime) constructs one per line
-// at its ebp-0xB8 and reaches the destructor 0x4EDA50 through its SEH unwind
-// pad. Layout from those two listings; the offsets are the exe's, the field
-// names are the tree's.
+// The Lua debug console's command buffer: the stack object the dispatcher
+// 0x5838A0 (Execute, "CLUAConsole" in docs/followups.md's original note)
+// parses each entered "CtrlAltDelete:" line into. The Lua console edit's
+// Enter handler (0x77BF30, not ported; iwd2r has no Lua runtime) constructs
+// one per line at its ebp-0xB8 and reaches the destructor 0x4EDA50 through
+// its SEH unwind pad. Layout from those two listings; the offsets are the
+// exe's, the field names are the tree's.
 class CLUAConsole {
 public:
     ~CLUAConsole();
@@ -32,6 +32,9 @@ public:
     // 0x5840E0
     void ParseArgs(CString sArgs);
 
+    // 0x5838A0
+    void Execute(CString sInput);
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;
@@ -43,8 +46,9 @@ public:
     // The command token store: the arms fetch their text arguments through
     // 0x65F8F0 with this+0x24 as the store (0x583D3D in the SETGLOBAL arm).
     /* 0024 */ CStringArray field_24;
-    // The dispatcher hands &field_38 to the handlers in ecx; every ported
-    // handler ignores it (see src/CtrlAltDelete.h).
+    // The dispatcher hands &field_38 (this+0x40 for the FIRSTAID/HANS/MIDAS
+    // arms) to the handlers in ecx; every ported handler ignores it (see
+    // src/CtrlAltDelete.h).
     /* 0038 */ DWORD field_38;
     /* 003C */ DWORD field_3C;
 };
