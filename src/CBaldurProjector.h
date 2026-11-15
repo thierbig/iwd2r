@@ -13,10 +13,11 @@
 #define CBALDURPROJECTOR_VIRTUAL_KEYS 2
 
 // #guess: the 8-byte line of the subtitle overlay's list (the list at +0x08 of
-// CProjectorSubtitles): a 4-byte field and the text. The element destructor the
-// exe passes to array_destruct (0x428F80) destroys the CString at +4.
+// CProjectorSubtitles): the frame the line turns current at and the text. The
+// element destructor the exe passes to array_destruct (0x428F80) destroys the
+// CString at +4.
 struct CProjectorSubtitlesLine { // #guess name
-    /* 0000 */ DWORD field_0; // #guess: the line's timing/offset
+    /* 0000 */ DWORD field_0; // #guess: elapsed-frame count that makes the line current (0 = end sentinel)
     /* 0004 */ CString m_sText;
 };
 
@@ -28,6 +29,11 @@ struct CProjectorSubtitlesLine { // #guess name
 class CProjectorSubtitles { // #guess name
 public:
     void Unload(); // 0x43F900
+
+    // NOTE: The body at 0x428AD0 is subtitle machinery the original compiled
+    // into CBaldurChitin.cpp (its assert names that file at line 0x127B); it
+    // exists to build this class's line list, so it is ported here.
+    static CProjectorSubtitlesLine* LoadLines(CResRef cMovie, int* pnColor, int nWidth); // 0x428AD0
 
     /* 0000 */ CString m_sText;
     /* 0004 */ int field_4;

@@ -1,5 +1,6 @@
 #include "CBaldurProjector.h"
 
+#include "C2DArray.h"
 #include "CBaldurChitin.h"
 #include "CInfGame.h"
 #include "CScreenWorld.h"
@@ -568,4 +569,56 @@ void CProjectorSubtitles::Unload()
     }
 
     m_sText.~CString();
+}
+
+// 0x428AD0
+CProjectorSubtitlesLine* CProjectorSubtitles::LoadLines(CResRef cMovie, int* pnColor, int nWidth)
+{
+    C2DArray c2dArray;
+    STR_RES strRes;
+    CString sError;
+
+    c2dArray.Load(cMovie);
+    if (!c2dArray.Demand()) {
+        return NULL;
+    }
+    c2dArray.Release();
+
+    SHORT nRows = c2dArray.GetHeight();
+
+    // new[] with a count word at p-4 and 8-byte elements; MSVC6 new returns
+    // NULL on failure, and the exe still writes the packed color first.
+    CProjectorSubtitlesLine* pLines = new CProjectorSubtitlesLine[nRows - 2];
+
+    // Column 0 of rows 0-2 packs the subtitle color, low byte of each cell.
+    *pnColor = (c2dArray.GetAtLong(CPoint(0, 0)) & 0xFF)
+        | ((c2dArray.GetAtLong(CPoint(0, 1)) & 0xFF) << 8)
+        | ((c2dArray.GetAtLong(CPoint(0, 2)) & 0xFF) << 16);
+
+    if (pLines == NULL) {
+        return NULL;
+    }
+
+    CPoint pt(0, 3);
+    for (int i = 0; i < nRows - 3; i++, pt.y++) {
+        pLines[i].field_0 = c2dArray.GetAtLong(pt);
+        LONG nStrRef = c2dArray.GetAtLong(CPoint(1, pt.y));
+
+        if (g_pBaldurChitin->m_cTlkTable.Fetch(nStrRef, strRes)) {
+            pLines[i].m_sText = strRes.szText;
+        } else {
+            // NOTE: the exe never frees this buffer; kept faithful.
+            char* pMovieName = new char[9];
+            cMovie.CopyToString(pMovieName);
+            sError.Format("STR REF %d not found while playing %s movie", nStrRef, pMovieName);
+            CUtil::UtilAssert(0x127B, "C:\\Projects\\Icewind2\\src\\Baldur\\CBaldurChitin.cpp", "FALSE", sError);
+        }
+    }
+
+    // The element past the last filled one is the {0, ""} stop marker (the
+    // per-frame advance gates on field_0 > 0).
+    pLines[nRows - 3].field_0 = 0;
+    pLines[nRows - 3].m_sText = "";
+
+    return pLines;
 }
