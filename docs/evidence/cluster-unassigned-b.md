@@ -15,7 +15,7 @@ zero-padded ones — and in-tree caller bodies). Note two survey rows were
 already marked with zero-padded markers (`// 0x0632530`,
 `// 0x06475B0`), which the survey's marker scan missed.
 
-Tally: 11 (a), 16 (b), 15 (c).
+Tally: 11 (a), 17 (b), 14 (c).
 
 | address | size | ghidra name | class | verdict | evidence |
 |---|---|---|---|---|---|
@@ -30,7 +30,7 @@ Tally: 11 (a), 16 (b), 15 (c).
 | 0x6475B0 | 327 | CScreenMovies::OnMovieItemSelect | (a) | Already ported — zero-padded marker `// 0x06475B0` at src/CScreenMovies.cpp:256. |
 | 0x694510 | 267 | CScreenWorld_B3AUTO_00694510 | (c) | Real CScreenWorld game code; sole caller 0x6872D0 in tree (src/CScreenWorld.cpp:606). |
 | 0x6A0350 | 151 | FUN_006a0350 | (a) | COMDAT duplicate of `CUIControlButton::~CUIControlButton` 0x4D4B80 (tree src/CUIControlButton.cpp:100). |
-| 0x727C90 | 63 | CopySpellListEntries | (c) | Copies nCount 0x10-byte records src→dst, advancing dst even for NULL src entries; sole caller 0x725950 in tree (src/CGameSpriteSpells.cpp:22). |
+| 0x727C90 | 63 | CopySpellListEntries | (b) | MSVC out-of-lined copy loop for `vector<16-byte POD>::push_back` (args dst,count,src, 4-dword record copy, NULL dst cursor skipped but still advanced): its sole call site 0x725A60 inside 0x725950 passes count=1 to append the new entry into the grown buffer (operator_new 0x7FC95B, old elements copied by 0x448680, old buffer freed via 0x7FC984, begin/end/cap updated) — the tree's `CGameSpriteSpellList::Add` (src/CGameSpriteSpells.cpp:22) already does this via std::vector; the Ghidra name is an analyst mislabel. |
 | 0x767260 | 95 | FUN_00767260 | (b) | Same MFC CPlex RemoveAll shape as 0x646940 with vptr 0x85C210; caller 0x767240. |
 | 0x77A4F0 | 151 | FUN_0077a4f0 | (a) | COMDAT duplicate of `CUIControlButton::~CUIControlButton` 0x4D4B80 (tree src/CUIControlButton.cpp:100). |
 | 0x77BF30 | 1410 | FUN_0077bf30 | (c) | Game code, CLUAConsole-scale; no callers in the callgraph. |
