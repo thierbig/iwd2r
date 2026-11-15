@@ -27,6 +27,9 @@ void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP);
 // 0x4EC870
 void CtrlAltDelete_CreateItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3);
 
+// 0x4ECAD0
+void CtrlAltDelete_SetGlobal(CString sName, CString sScope, DWORD dwValue);
+
 // 0x4ECA80
 void CtrlAltDelete_SetAreaExplored();
 

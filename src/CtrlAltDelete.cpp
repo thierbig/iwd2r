@@ -235,6 +235,56 @@ void CtrlAltDelete_CreateItem(CString sItem, WORD wUseCount1, WORD wUseCount2, W
     }
 }
 
+// 0x4ECAD0 void CtrlAltDelete_SetGlobal(CString sName, CString sScope,
+// DWORD dwValue) — 402 bytes (0x4ECAD0-0x4ECC62). The SETGLOBAL console
+// command: the dispatcher's resolver (0x583E60) matches the obfuscated
+// literal at 0x8AF6C8, which decodes to "SETGLOBAL", maps it to id 29, and
+// the dispatch arm at 0x583D22 calls here from 0x583D79 once exactly three
+// arguments are parsed. ecx (the dispatcher's this) is not read.
+//
+// Upper-cases both text arguments on entry (MakeUpper 0x7FD0F0, scope first
+// then name in the listing), then picks the variable hash: scope "GLOBAL"
+// (strcmp 0x7E7A54 against 0x8A7FBC) takes the game's hash
+// (CInfGame::GetVariables 0x4286A0); any other scope names an area
+// (CInfGame::GetArea 0x5B7510, by-value CString) and a miss is a silent
+// no-op, unlike the handlers above, which print the "Error File" text.
+// Either hash: FindKey(sName) (virtual slot 4) hit stores dwValue into
+// m_intValue (+0x28, not the DWORD field at +0x24); miss constructs a local
+// CVariable (0x452BD0), SetName(sName) (0x452C60), stores dwValue into
+// m_intValue, and AddKey (virtual slot 0).
+void CtrlAltDelete_SetGlobal(CString sName, CString sScope, DWORD dwValue)
+{
+    sScope.MakeUpper();
+    sName.MakeUpper();
+
+    CVariableHash* pVariables;
+
+    if (sScope == CString("GLOBAL")) {
+        pVariables = g_pBaldurChitin->GetObjectGame()->GetVariables();
+    } else {
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+
+        if (pArea == NULL) {
+            // Missing area: the original falls straight into the epilogue.
+            return;
+        }
+
+        pVariables = pArea->GetVariables();
+    }
+
+    CVariable* pVariable = pVariables->FindKey(sName);
+
+    if (pVariable != NULL) {
+        pVariable->m_intValue = dwValue;
+    } else {
+        CVariable cVariable;
+
+        cVariable.SetName(sName);
+        cVariable.m_intValue = dwValue;
+        pVariables->AddKey(cVariable);
+    }
+}
+
 // 0x4ECA80 void CtrlAltDelete_SetAreaExplored() — 37 bytes
 // (0x4ECA80-0x4ECAA4). ecx is not read. Tail-calls SetAreaExplored on the
 // visible area's visibility map.
