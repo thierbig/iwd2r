@@ -15,6 +15,7 @@
 #include "CResRef.h"
 #include "CScreenInventory.h"
 #include "CScreenWorld.h"
+#include "CSpell.h"
 #include "CUtil.h"
 #include "CVariableHash.h"
 
@@ -285,6 +286,166 @@ void CtrlAltDelete_SetGlobal(CString sName, CString sScope, DWORD dwValue)
         cVariable.SetName(sName);
         cVariable.m_intValue = dwValue;
         pVariables->AddKey(cVariable);
+    }
+}
+
+// 0x4ECC70 void CtrlAltDelete_AddSpell(CString sSpell, DWORD dwCount) — 1447
+// bytes (0x4ECC70-0x4ED216; the GetSpellType switch's jump table sits at
+// 0x4ED218). ecx (the console) is saved in esi at 0x4ECC8C and forwarded to
+// CtrlAltDelete_DisplayText (0x4EC1C0, with the original esi before the
+// party walk reuses the register) and to every CtrlAltDelete_AddSpellClass
+// call; none of them reads it.
+//
+// The ADDSPELL cheat. A class name hands dwCount copies of every spell of
+// that class to the party through CtrlAltDelete_AddSpellClass: "ALL" walks
+// the seven spellcaster indices, and BARD, CLERIC, DRUID, PALADIN, RANGER,
+// SORCERER and WIZARD name the classes directly (ids 2, 3, 4, 7, 8, 10,
+// 11). Anything else is a spell resref: one missing from the key table
+// (type 1006, as in CSpell's CResHelper<CResSpell, 1006>) prints the usual
+// "Error File" text; otherwise each party member (m_group.m_memberList
+// GetDeny round trip, retrying SHARED and DENIED, skip without release on
+// other status) is handed the spell by its game type. Wizard and cleric
+// spells (type 1) go through AddKnownSpell, with the caster class taken
+// from the spell file — GetCasterType 1 maps to WIZARD, 2 to CLERIC, and 4
+// to the sprite's own class — and only levels 0 through 8 (the exe skips
+// level 9: `jge` at 0x4ED0A5). Innates (2), songs (3) and shapeshifts (4)
+// go through their Add* counterparts; a shapeshift also counts dwCount uses
+// (sub_724C40) and tops the sprite's shapeshift list up by dwCount
+// (sub_725D30). The guard's `add 0x3884` test at 0x4ECF98 is a dead
+// null-game artifact; the live test is the head node at game+0x388E.
+void CtrlAltDelete_AddSpell(CString sSpell, DWORD dwCount)
+{
+    if (strcmp(sSpell, "ALL") == 0) {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+        for (UINT nCounter = 0; nCounter < 7; nCounter++) {
+            BYTE nClass = pGame->GetSpellcasterClass(nCounter);
+            CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        }
+        return;
+    }
+
+    if (strcmp(sSpell, "BARD") == 0) {
+        BYTE nClass = 2; // BARD
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "CLERIC") == 0) {
+        BYTE nClass = 3; // CLERIC
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "DRUID") == 0) {
+        BYTE nClass = 4; // DRUID
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "PALADIN") == 0) {
+        BYTE nClass = 7; // PALADIN
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "RANGER") == 0) {
+        BYTE nClass = 8; // RANGER
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "SORCERER") == 0) {
+        BYTE nClass = 10; // SORCERER
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    if (strcmp(sSpell, "WIZARD") == 0) {
+        BYTE nClass = 11; // WIZARD
+        CtrlAltDelete_AddSpellClass(nClass, dwCount);
+        return;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CResRef cResRef(sSpell);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(cResRef, 1006, TRUE) == NULL) {
+        CtrlAltDelete_DisplayText("Error File " + sSpell + " does not exist\n");
+        return;
+    }
+
+    // NOTE: Uninline. The original expands CResHelper<CResSpell, 1006>'s
+    // construction and SetResRef here (0x78A970, 0x78A960, 0x78AD40,
+    // 0x4699F0); ours declares the CSpell and calls SetResRef.
+    CSpell cSpellFile;
+    cSpellFile.SetResRef(cResRef, TRUE, TRUE);
+
+    if (pGame->m_group.m_memberList.GetHeadPosition() == NULL) {
+        return;
+    }
+
+    POSITION pos = pGame->m_group.m_memberList.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nCharacterId = static_cast<LONG>(reinterpret_cast<INT_PTR>(
+            pGame->m_group.m_memberList.GetNext(pos)));
+
+        CGameObject* pObject = NULL;
+        BYTE nStatus;
+
+        // The original spins while another thread shares or holds the sprite.
+        do {
+            nStatus = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (nStatus == CGameObjectArray::SHARED
+            || nStatus == CGameObjectArray::DENIED);
+
+        if (nStatus != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+
+        BYTE nClass = 0;
+        switch (cSpellFile.GetCasterType()) {
+        case 1:
+            nClass = 11; // WIZARD
+            break;
+        case 2:
+            nClass = 3; // CLERIC
+            break;
+        case 4:
+            // Divine spells for the sprite's own class (druid, paladin,
+            // ranger): the caster is whoever is being handed the spell.
+            nClass = pSprite->GetAIType().m_nClass;
+            break;
+        }
+
+        switch (pGame->GetSpellType(cResRef)) {
+        case 1: {
+            INT nLevel = pGame->GetSpellLevel(cResRef, nClass, 0);
+            if (nLevel < 9) {
+                pSprite->AddKnownSpell(nClass, nLevel, cResRef, dwCount, dwCount, 0);
+            }
+            break;
+        }
+        case 2:
+            pSprite->AddInnateSpell(cResRef, dwCount, dwCount, 0);
+            break;
+        case 3:
+            pSprite->AddSong(cResRef, dwCount, dwCount, 0);
+            break;
+        case 4:
+            pSprite->AddShapeshift(cResRef, 0);
+            pSprite->sub_724C40(dwCount);
+            pSprite->m_shapeshifts.sub_725D30(dwCount, FALSE);
+            break;
+        }
+
+        pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
     }
 }
 

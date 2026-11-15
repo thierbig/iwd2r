@@ -37,6 +37,9 @@ void CtrlAltDelete_SetAreaExplored();
 // 0x4ECAB0
 void CtrlAltDelete_AddGold(DWORD dwGold);
 
+// 0x4ECC70
+void CtrlAltDelete_AddSpell(CString sSpell, DWORD dwCount);
+
 // 0x4ED230
 void CtrlAltDelete_AddGold500();
 

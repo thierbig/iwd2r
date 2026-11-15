@@ -433,11 +433,10 @@ void CLUAConsole::Execute(CString sInput)
     case 4: { // ADDSPELL
         int nArgs = CountArgs();
         if (nArgs == 2) {
-            // TODO: 0x5838A0 calls 0x4ECC70 (not ported).
-            // 0x4ECC70(GetText(0), field_10.GetAt(0)).
+            CtrlAltDelete_AddSpell(field_24.GetAt(0), field_10.GetAt(0));
         } else if (nArgs == 1) {
-            // TODO: 0x5838A0 calls 0x4ECC70 (not ported).
-            // 0x4ECC70(GetText(0), 10).
+            // The exe stages the default count 10 (0xA) before the token.
+            CtrlAltDelete_AddSpell(field_24.GetAt(0), 10);
         } else {
             field_0 = -2;
             CommandNotFound();
