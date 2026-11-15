@@ -2741,8 +2741,9 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
     pCaller->SetCurrAction(equip);
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
 
-    // 295 TransferInventory: the arm is still a TODO stub (its resolver
-    // 0x45C290 is in tree from Task 83i), so it answers the entry default.
+    // 295 TransferInventory without an actee: the resolver 0x45C290 (in
+    // tree from Task 83i) misses and takes 0x451451's ACTION_ERROR. The
+    // live walks are pinned in the 295 case below.
     CAIAction transfer;
     transfer.m_actionID = 295;
     pCaller->SetCurrAction(transfer);
@@ -2803,6 +2804,220 @@ TEST_CASE("ai: ExecuteAction 294 295 296 and 297 equip transfer markup and scree
         CHECK(shakes[0]->m_sourceId == pCaller->m_id);
         CHECK(shakes[0]->m_targetId == pCaller->m_id);
     }
+
+    ClearMessages();
+}
+
+// Task 84z's case 295 TransferInventory arm, driven through ExecuteAction
+// on live sprites and the area container. The giver is the action's target
+// (actee1, resolved by the in-tree 0x45C290) and the receiver is actee2,
+// so both object types ride the same arm; the container-to-container walk
+// and the unusable sides have no second area container to route through
+// the dispatcher and drive 0x4C83F0 directly, as the 481C50 test does.
+TEST_CASE("ai: ExecuteAction 295 TransferInventory hands the actee the whole inventory",
+    "[ai][data]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear, so a pump thread stands in for the display loop.
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea1000 = pGame->LoadArea(CString("AR1000"), 0, FALSE, FALSE);
+    REQUIRE(pArea1000 != NULL);
+    pArea1000->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    CGameSprite* pGiver = MakeSprite();
+    CGameSprite* pReceiver = MakeSprite();
+    CAIObjectType giverType(0, 0, 0, 0, 0, 0, 0, 0, pGiver->m_id, 0, 0);
+    CAIObjectType receiverType(0, 0, 0, 0, 0, 0, 0, 0, pReceiver->m_id, 0, 0);
+    CAIAction transfer;
+    transfer.m_actionID = 295;
+    transfer.m_acteeID = giverType;
+
+    // Sprite to sprite: every equipped item whose file is droppable leaves
+    // as a remove/add message pair -- the removal runs only when the remove
+    // message does, so the giver keeps the items. The fist slot (10) and an
+    // empty-resref item (whose file flags read 0) stay. The add message is
+    // the full operator= copy, so the charges ride along.
+    // CHARBASE.CRE may already carry its fist in slot 10; the potion over
+    // it pins that a droppable item there never moves either.
+    REQUIRE(pGiver->m_equipment.m_items[17] == NULL);
+    REQUIRE(pGiver->m_equipment.m_items[18] == NULL);
+    REQUIRE(pGiver->m_equipment.m_items[19] == NULL);
+    CItem* pPotion = new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0);
+    CItem* pSecond = new CItem(CResRef("00POTN02"), 1, 0, 0, 0, 0);
+    pGiver->m_equipment.m_items[18] = pPotion;
+    pGiver->m_equipment.m_items[17] = pSecond;
+    pGiver->m_equipment.m_items[10] = new CItem(CResRef("00POTN01"), 2, 0, 0, 0, 0);
+    pGiver->m_equipment.m_items[19] = new CItem();
+
+    transfer.m_acteeID2 = receiverType;
+    pCaller->SetCurrAction(transfer);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pGiver->m_equipment.m_items[18] == pPotion);
+    CHECK(pGiver->m_equipment.m_items[17] == pSecond);
+    CHECK(pGiver->m_equipment.m_items[10] != NULL); // the fist slot never moves
+    CHECK(pGiver->m_equipment.m_items[19] != NULL); // empty resref: not droppable
+    {
+        const std::vector<CMessageRemoveItem*> removes = Queued<CMessageRemoveItem>();
+        REQUIRE(removes.size() == 2);
+        CHECK(removes[0]->m_slot == 17);
+        CHECK(removes[1]->m_slot == 18);
+        CHECK(removes[0]->m_sourceId == pGiver->m_id);
+        CHECK(removes[0]->m_targetId == pGiver->m_id); // both ids are the giver's
+    }
+    {
+        const std::vector<CMessageAddItem*> adds = Queued<CMessageAddItem>();
+        REQUIRE(adds.size() == 2);
+        CHECK(adds[0]->m_item.GetResRef() == CResRef("00POTN02"));
+        CHECK(adds[0]->m_item.GetUsageCount(0) == 1);
+        CHECK(adds[1]->m_item.GetResRef() == CResRef("00POTN01"));
+        CHECK(adds[1]->m_item.GetUsageCount(0) == 3);
+        CHECK(adds[0]->m_sourceId == pGiver->m_id);
+        CHECK(adds[0]->m_targetId == pReceiver->m_id);
+    }
+
+    // Sprite to container: the same two items as container-add messages
+    // with the blank slot number and compression off. Nothing here calls
+    // the container's RemoveItem, so no compress-true message rides along.
+    ClearMessages();
+    auto findTypeId = [pGame, pArea1000](BYTE type) -> LONG {
+        CTypedPtrList<CPtrList, int*>* lists[2] = { &pArea1000->m_lVertSort,
+            &pArea1000->m_lVertSortBack };
+        for (CTypedPtrList<CPtrList, int*>* list : lists) {
+            POSITION pos = list->GetHeadPosition();
+            while (pos != NULL) {
+                LONG id = static_cast<LONG>(reinterpret_cast<INT_PTR>(list->GetNext(pos)));
+                CGameObject* pObject;
+                if (pGame->GetObjectArray()->GetShare(id, CGameObjectArray::THREAD_ASYNCH,
+                        &pObject, INFINITE)
+                    == CGameObjectArray::SUCCESS) {
+                    const LONG nId = pObject->GetId();
+                    pGame->GetObjectArray()->ReleaseShare(id, CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    if (pObject->GetObjectType() == type) {
+                        return nId;
+                    }
+                }
+            }
+        }
+        return CGameObjectArray::INVALID_INDEX;
+    };
+    const LONG nContainerId = findTypeId(CGameObject::TYPE_CONTAINER);
+    REQUIRE(nContainerId != CGameObjectArray::INVALID_INDEX);
+    transfer.m_acteeID2 = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, nContainerId, 0, 0);
+    pCaller->SetCurrAction(transfer);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(Queued<CMessageRemoveItem>().size() == 2);
+    {
+        const std::vector<CMessageContainerAddItem*> adds = Queued<CMessageContainerAddItem>();
+        REQUIRE(adds.size() == 2);
+        CHECK(adds[0]->m_bCompressContainer == FALSE);
+        CHECK(adds[0]->m_slotNum == 0x7FFF);
+        CHECK(adds[0]->m_item.GetResRef() == CResRef("00POTN02"));
+        CHECK(adds[1]->m_item.GetResRef() == CResRef("00POTN01"));
+        CHECK(adds[1]->m_item.GetUsageCount(0) == 3);
+        CHECK(adds[0]->m_sourceId == pGiver->m_id);
+        CHECK(adds[0]->m_targetId == nContainerId);
+    }
+
+    // Container to sprite: the giver's whole list empties synchronously
+    // (GetItem(0) then RemoveItem(0) per pass), and each pass queues one
+    // add message for the sprite plus RemoveItem's own compress-true
+    // empty-item message. A container giver queues no slot removes.
+    ClearMessages();
+    CGameObject* pContainerObject;
+    REQUIRE(pGame->GetObjectArray()->GetShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                &pContainerObject, INFINITE)
+        == CGameObjectArray::SUCCESS);
+    CGameContainer* pContainer = static_cast<CGameContainer*>(pContainerObject);
+    while (pContainer->GetNumItems() > 0) {
+        pContainer->RemoveItem(0);
+    }
+    ClearMessages();
+    pContainer->m_lstItems.AddTail(new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0));
+    pContainer->m_lstItems.AddTail(new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0));
+    transfer.m_acteeID = CAIObjectType(0, 0, 0, 0, 0, 0, 0, 0, nContainerId, 0, 0);
+    transfer.m_acteeID2 = receiverType;
+    pCaller->SetCurrAction(transfer);
+    CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    CHECK(pContainer->GetNumItems() == 0);
+    CHECK(Queued<CMessageRemoveItem>().empty());
+    {
+        const std::vector<CMessageAddItem*> adds = Queued<CMessageAddItem>();
+        REQUIRE(adds.size() == 2);
+        CHECK(adds[0]->m_item.GetResRef() == CResRef("00POTN01")); // head first
+        CHECK(adds[0]->m_item.GetUsageCount(0) == 3);
+        CHECK(adds[1]->m_item.GetResRef() == CResRef("00GEM01"));
+        CHECK(adds[0]->m_sourceId == nContainerId);
+        CHECK(adds[0]->m_targetId == pReceiver->m_id);
+    }
+    {
+        const std::vector<CMessageContainerAddItem*> own = Queued<CMessageContainerAddItem>();
+        REQUIRE(own.size() == 2);
+        CHECK(own[0]->m_bCompressContainer == TRUE);
+        CHECK(own[0]->m_item.GetResRef() == CResRef(""));
+        CHECK(own[0]->m_sourceId == nContainerId);
+        CHECK(own[0]->m_targetId == nContainerId);
+    }
+    REQUIRE(pGame->GetObjectArray()->ReleaseShare(nContainerId, CGameObjectArray::THREAD_ASYNCH,
+                INFINITE)
+        == CGameObjectArray::SUCCESS);
+
+    // Container to container, directly: the source list empties, the
+    // destination only receives messages, and the single pass queues one
+    // move message plus RemoveItem's own compress-true one.
+    ClearMessages();
+    CGameContainer* pSource = new CGameContainer(pArea1000, CRect(400, 400, 416, 416));
+    CGameContainer* pDest = new CGameContainer(pArea1000, CRect(432, 400, 448, 416));
+    pSource->m_lstItems.AddTail(new CItem(CResRef("00POTN01"), 3, 0, 0, 0, 0));
+    CHECK(pSource->TransferInventory(pDest) == CGameAIBase::ACTION_DONE);
+    CHECK(pSource->GetNumItems() == 0);
+    CHECK(pDest->GetNumItems() == 0); // the add runs only when the message does
+    {
+        const std::vector<CMessageContainerAddItem*> adds = Queued<CMessageContainerAddItem>();
+        REQUIRE(adds.size() == 2);
+        CHECK(adds[0]->m_bCompressContainer == FALSE);
+        CHECK(adds[0]->m_slotNum == 0x7FFF);
+        CHECK(adds[0]->m_item.GetResRef() == CResRef("00POTN01"));
+        CHECK(adds[0]->m_targetId == pDest->m_id);
+        CHECK(adds[1]->m_bCompressContainer == TRUE); // RemoveItem's own
+    }
+
+    // Neither side of an unusable pair moves anything: an AIBASE giver and
+    // an AIBASE receiver each answer ACTION_ERROR, leaving lists and slots
+    // alone and queueing no message.
+    ClearMessages();
+    pSource->m_lstItems.AddTail(new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0));
+    CHECK(pCaller->TransferInventory(pDest) == CGameAIBase::ACTION_ERROR);
+    CHECK(pGiver->TransferInventory(pCaller) == CGameAIBase::ACTION_ERROR);
+    CHECK(pSource->TransferInventory(pCaller) == CGameAIBase::ACTION_ERROR);
+    CHECK(pSource->GetNumItems() == 1); // untouched by the refused receiver
+    CHECK(pGiver->m_equipment.m_items[18] == pPotion);
+    CHECK(Queued<CMessageAddItem>().empty());
+    CHECK(Queued<CMessageContainerAddItem>().empty());
+    CHECK(Queued<CMessageRemoveItem>().empty());
 
     ClearMessages();
 }
