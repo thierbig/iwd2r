@@ -35,7 +35,36 @@ void CBaldurProjector::sub_43E300(HBINK bnk)
             g_pChitin->pActiveEngine->pVidMode->EraseScreen(CVIDINF_SURFACE_BACK, RGB(0, 0, 0));
         }
 
-        // TODO: Incomplete (subtitles).
+        // 0x43E3F7: advance the movie-subtitle overlay one frame.
+        if (pProjectorSubtitles != NULL) {
+            pProjectorSubtitles->field_4++;
+
+            if (pProjectorSubtitles->m_pLines != NULL) {
+                CProjectorSubtitlesLine* pLine = &pProjectorSubtitles->m_pLines[pProjectorSubtitles->field_C];
+
+                if (pLine->field_0 > 0 && pProjectorSubtitles->field_4 >= pLine->field_0) {
+                    pProjectorSubtitles->m_sText = pLine->m_sText;
+                    pProjectorSubtitles->field_C++;
+
+                    // Same erase blt as the ctor: clear the band the line
+                    // renders into before drawing it (same rect as both the
+                    // dest and the src of the fill).
+                    CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+                    DDBLTFX fx;
+                    fx.dwSize = sizeof(fx);
+                    fx.dwFillColor = pVidMode->ConvertToSurfaceRGB(0);
+
+                    HRESULT hr;
+                    do {
+                        hr = g_pChitin->cVideo.cVidBlitter.Blt(pVidMode->pSurfaces[8], &pProjectorSubtitles->rcRect, NULL, &pProjectorSubtitles->rcRect, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+                        pVidMode->CheckResults(hr);
+                    } while (hr == DDERR_SURFACELOST || hr == DDERR_WASSTILLDRAWING);
+
+                    pProjectorSubtitles->Render();
+                }
+            }
+        }
 
         m_pfnBinkDoFrame(bnk);
 
@@ -642,6 +671,103 @@ void CProjectorSubtitles::Unload()
     }
 
     m_sText.~CString();
+}
+
+// 0x43F9B0
+void CProjectorSubtitles::Render()
+{
+    if (m_sText.GetLength() <= 0) {
+        return;
+    }
+
+    CVidFont& cFont = g_pBaldurChitin->m_pEngineProjector->field_14A;
+
+    int nTextWidth = cFont.GetStringLength(m_sText, 1);
+
+    // The original copies the rect twice (0x43FA00 and 0x43FA14) but only this
+    // one is ever read - the second copy is dead and not ported.
+    CRect rcClip(rcRect);
+
+    int nMaxWidth = rcRect.right - rcRect.left;
+
+    BOOLEAN bFits = 0;
+    int nLineCount = 0;
+    CString asLines[4];
+
+    if (nTextWidth < nMaxWidth) {
+        bFits = 1;
+        nLineCount = 1;
+    } else {
+        CString sText(m_sText);
+        CString sBuilding;
+
+        for (int nLine = 0; nLine < 4; nLine++) {
+            int nLength = sText.GetLength();
+            if (nLength < 0) {
+                continue;
+            }
+
+            int nIndex = 0;
+            while (nIndex != nLength) {
+                sBuilding += sText.GetAt(nIndex);
+
+                if (cFont.GetStringLength(sBuilding, 1) > nMaxWidth) {
+                    // The line outgrew the band: break it at the last space at
+                    // or before the overflowing char.
+                    while (nIndex >= 0 && sBuilding.GetAt(nIndex) != ' ') {
+                        nIndex--;
+                    }
+
+                    if (nIndex < 0) {
+                        // No space in the line - it is dropped and the outer
+                        // loop retries with the next band.
+                        break;
+                    }
+
+                    asLines[nLine] = sBuilding.Left(nIndex);
+                    sText = sText.Right(sText.GetLength() - nIndex - 1);
+                    nLineCount++;
+                    sBuilding = "";
+                    break;
+                }
+
+                nIndex++;
+            }
+
+            if (nIndex == nLength) {
+                // The rest of the text fits the band - store it whole.
+                asLines[nLine] = sText;
+                nLineCount++;
+                break;
+            }
+        }
+    }
+
+    int nFontHeight = cFont.GetFontHeight(1);
+
+    if (bFits) {
+        int nX = (rcClip.right - rcClip.left) / 2 - nTextWidth / 2;
+        cFont.SetColor(m_rgbColor, 0, 0);
+        cFont.TextOut(m_sText, nX, nFontHeight, rcClip, 8);
+        return;
+    }
+
+    if (nLineCount <= 0) {
+        return;
+    }
+
+    CString* pLine = asLines;
+    do {
+        cFont.SetColor(m_rgbColor, 0, 0);
+        cFont.TextOut(*pLine, 0, nFontHeight, rcClip, 8);
+
+        // The original calls GetFontHeight(1) twice per line and discards the
+        // first result - only the second feeds the advance.
+        nFontHeight += cFont.GetFontHeight(1);
+
+        pLine++;
+        nLineCount--;
+    } while (nLineCount != 0);
 }
 
 // 0x428AD0
