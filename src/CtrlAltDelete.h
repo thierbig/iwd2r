@@ -15,4 +15,7 @@ void CtrlAltDelete_DisplayText(CString sText);
 // 0x4EC250
 void CtrlAltDelete_MoveToArea(CString sAreaName);
 
+// 0x4EC390
+void CtrlAltDelete_CreateCreature(CString sName);
+
 #endif /* CTRLALTDELETE_H_ */
