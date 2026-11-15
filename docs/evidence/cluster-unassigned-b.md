@@ -45,7 +45,7 @@ Tally: 11 (a), 17 (b), 14 (c).
 | 0x794050 | 102 | FUN_00794050 | (a) | Implicit member dtor of CTlkFileOverride: CFile dtor at +0x36, ~CTlkFileOverrideHeader 0x7B5D50 at +8, CString_Destruct 0x7FCC1A at +4/+0 — emitted by the inline empty dtor at src/CTlkFileOverride.h:73 with that member layout. |
 | 0x79465F | 230 | Catch@0079465f | (a) | Compiler-generated catch funclet of `CTlkTable::Fetch` (STR_RES/CResRef bookkeeping); Fetch in tree at src/CTlkTable.cpp:92. |
 | 0x797E70 | 622 | CVidMode_VFTable_0AC | (c) | CVidMode darken-rect rendering code; no callers in the callgraph. |
-| 0x7A6895 | 196 | FUN_007a6895 | (c) | Appends to the 64-entry player list in g_pChitin+0x952 region: count +0x126 < 0x40, CString from entry+0x30 stored at +0x12a, 16-byte record at +0x22a, flag byte +0x62a, returns 1; no callers in callgraph. |
+| 0x7A6895 | 196 | FUN_007a6895 | (c) | Appends to the 64-entry session list in g_pChitin+0x952 region: count +0x126 < 0x40, CString from entry+0x30 stored at +0x12a, 16-byte GUID at +0x22a, flag byte +0x62a, returns 1; no callers in callgraph (corrected by the 7A6895 port: the survey first read the offsets as a player list, but they land on CNetwork's session fields — the DirectPlay EnumSessions callback registered at 0x7A6076). |
 | 0x7ACCB0 | 138 | FUN_007accb0 | (c) | Builds the standalone dither cube at global 0x9060F0 (0x20000 bytes, RGB 6:6:5 indexing); called by 0x7CE3D0 and 0x7CE930. |
 | 0x7B1F70 | 865 | FUN_007b1f70 | (c) | Tile-blit dispatcher: bpp switch (0x20→0x7CE930, 0x18→0x7CE3D0, 0x10→0x7B25E0); sole caller 0x5CB260 in tree (src/CInfinity.cpp:258). |
 | 0x7B25E0 | 1120 | FUN_007b25e0 | (c) | 16bpp palette-dither blit, dispatched from 0x7B1F70. |

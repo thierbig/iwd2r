@@ -1714,6 +1714,40 @@ void CNetwork::UnselectSession()
     m_nSession = -1;
 }
 
+// The DirectPlay session-enumeration callback: EnumerateSessions (0x7A5F00)
+// registers this function's address with IDirectPlay2::EnumSessions (push at
+// 0x7A6076), which then calls it once per advertised session; DirectPlay is
+// the only caller, so the tree has none. The original's entry is 0x7A6840 —
+// an SEH frame plus the lpContext cancel test — and Ghidra carves the
+// continuation at 0x7A6895, the surveyed row; the body spans both. The name
+// follows the registration, not the exe (the symbol is static and stripped).
+//
+// 0x7A6895
+BOOL CALLBACK EnumSessionsCallback(const DPENUMSESSION_DESC* lpSessionDesc, DWORD dwTimeout, LPVOID lpContext, BOOL* lpbDone)
+{
+    // A context whose low bit is set cancels the enumeration; the only
+    // registration passes NULL, so the branch never fires there. dwTimeout
+    // and lpbDone are never read.
+    if ((reinterpret_cast<uintptr_t>(lpContext) & 1) != 0) {
+        return FALSE;
+    }
+
+    CNetwork& cNetwork = g_pChitin->cNetwork;
+
+    INT nSession = cNetwork.m_nTotalSessions;
+    if (nSession < CNETWORK_MAX_SESSIONS) {
+        cNetwork.m_psSessionName[nSession] = lpSessionDesc->lpszSessionName;
+        cNetwork.m_pSessionGuid[nSession] = lpSessionDesc->guidInstance;
+        // DPSESSION_PASSWORDREQUIRED (0x400).
+        cNetwork.m_pbSessionPasswordRequired[nSession] = static_cast<BOOLEAN>((lpSessionDesc->dwFlags >> 10) & 1);
+        cNetwork.m_nTotalSessions = nSession + 1;
+    }
+
+    // A full list skips the append but still answers TRUE, continuing the
+    // enumeration.
+    return TRUE;
+}
+
 // 0x7A6960
 BOOLEAN CNetwork::CreatePlayer(INT& nErrorCode)
 {
