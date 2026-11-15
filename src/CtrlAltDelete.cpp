@@ -428,6 +428,83 @@ void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD
     }
 }
 
+// 0x4ED730 void CtrlAltDelete_CheckVar(CString sName, CString sScope) —
+// 757 bytes (0x4ED730-0x4EDA25), ret 8: two by-value CString arguments.
+// The CHECKVAR console command: the resolver (0x583E60) maps the word to
+// id 0x12 and the dispatch arm at 0x583B26 calls here from 0x583B77 once
+// exactly two arguments are parsed, handing the handler this+0x38. ecx is
+// saved in ebp and forwarded to 0x4EC1C0 at the shared print tail; that
+// callee never reads it.
+//
+// Upper-cases both arguments on entry (MakeUpper 0x7FD0F0, scope first
+// then name), then picks the variable hash exactly like SetGlobal: scope
+// "GLOBAL" (strcmp 0x7E7A54 against 0x8A7FBC) takes the game's hash
+// (CInfGame::GetVariables 0x4286A0); any other scope names an area
+// (CInfGame::GetArea 0x5B7510, by-value CString). Either hash:
+// FindKey(sName) (virtual slot 4). A hit prints "<scope>::<name> = <value>"
+// through CtrlAltDelete_DisplayText, the value Format-ed ("%d", 0x7FAEE8)
+// from m_intValue (+0x28); the GLOBAL branch spells the scope prefix as
+// the literal "GLOBAL::" (0x8ABDE0) while the area branch uses the area's
+// own resref (m_resRef +0x1F0, GetResRefStr 0x78AA30). A miss prints "No
+// variable called GLOBAL::<name>" (the literal prefix again) resp. "No
+// variable called <scope>::<name>"; an unknown area prints "Need to be in
+// area specified when checking local!" (0x8ABD90) — unlike SetGlobal's
+// silent no-op.
+void CtrlAltDelete_CheckVar(CString sName, CString sScope)
+{
+    sScope.MakeUpper();
+    sName.MakeUpper();
+
+    if (sScope == CString("GLOBAL")) {
+        CVariableHash* pVariables = g_pBaldurChitin->GetObjectGame()->GetVariables();
+        CVariable* pVariable = pVariables->FindKey(sName);
+
+        if (pVariable != NULL) {
+            CString sValue;
+            sValue.Format("%d", pVariable->m_intValue);
+
+            CString sText = "GLOBAL::";
+            sText += pVariable->GetName();
+            sText += " = ";
+            sText += sValue;
+            CtrlAltDelete_DisplayText(sText);
+        } else {
+            CString sText = "No variable called GLOBAL::";
+            sText += sName;
+            CtrlAltDelete_DisplayText(sText);
+        }
+    } else {
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+
+        if (pArea == NULL) {
+            // Missing area: the original jumps straight to the print tail.
+            CtrlAltDelete_DisplayText("Need to be in area specified when checking local!");
+            return;
+        }
+
+        CVariableHash* pVariables = pArea->GetVariables();
+        CVariable* pVariable = pVariables->FindKey(sName);
+
+        if (pVariable != NULL) {
+            CString sValue;
+            sValue.Format("%d", pVariable->m_intValue);
+
+            CString sText = pArea->m_resRef.GetResRefStr();
+            sText += "::";
+            sText += pVariable->GetName();
+            sText += " = ";
+            sText += sValue;
+            CtrlAltDelete_DisplayText(sText);
+        } else {
+            CString sText = "No variable called ";
+            sText += sScope;
+            sText += "::";
+            sText += sName;
+            CtrlAltDelete_DisplayText(sText);
+        }
+    }
+}
+
 // 0x4EDAB0 void CtrlAltDelete_SetChapter(INT nChapter) — 492 bytes
 // (0x4EDAB0-0x4EDC9B), ret 0x4: one DWORD argument. The SETCHAPTER console
 // command: the resolver maps the word to id 0x25 and the dispatch arm calls

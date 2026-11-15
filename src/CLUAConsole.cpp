@@ -449,8 +449,7 @@ void CLUAConsole::Execute(CString sInput)
             field_0 = -2;
             CommandNotFound();
         } else {
-            // TODO: 0x5838A0 calls 0x4ED730 (not ported).
-            // 0x4ED730(GetText(0), GetText(1)).
+            CtrlAltDelete_CheckVar(field_24.GetAt(0), field_24.GetAt(1));
         }
         break;
     case 6: { // CREATEITEM
