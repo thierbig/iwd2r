@@ -201,6 +201,50 @@ TEST_CASE("null service provider hosts a single-player session", "[network]")
     CHECK(n.m_idLocalPlayer == 0);
 }
 
+// EnumSessionsCallback (0x7A6895): the DirectPlay session-enumeration
+// callback EnumerateSessions (0x7A5F00) registers at 0x7A6076. It appends
+// each advertised session — name, instance GUID, the password-required flag
+// (dwFlags bit 10, DPSESSION_PASSWORDREQUIRED 0x400) — to the chitin's
+// network object as long as the 64-slot list has room, and answers TRUE to
+// continue either way. A context pointer with its low bit set cancels the
+// enumeration with FALSE (the only registration passes NULL, so that arm is
+// unreachable from the engine).
+TEST_CASE("network: EnumSessionsCallback appends advertised sessions", "[network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+
+    DPENUMSESSION_DESC desc = {};
+    desc.dwFlags = 0x400;
+    desc.guidInstance.Data1 = 0x12345678;
+    desc.guidInstance.Data2 = 0xBEEF;
+    desc.lpszSessionName = "The Host's Game";
+
+    CHECK(EnumSessionsCallback(&desc, 0, NULL, NULL) == TRUE);
+    CHECK(network.m_nTotalSessions == 1);
+    CHECK(network.m_psSessionName[0] == "The Host's Game");
+    CHECK(network.m_pSessionGuid[0].Data1 == 0x12345678);
+    CHECK(network.m_pSessionGuid[0].Data2 == 0xBEEF);
+    CHECK(network.m_pbSessionPasswordRequired[0] == TRUE);
+
+    // Without the password flag the slot is FALSE.
+    desc = {};
+    desc.lpszSessionName = "Open Game";
+    CHECK(EnumSessionsCallback(&desc, 5000, NULL, NULL) == TRUE);
+    CHECK(network.m_nTotalSessions == 2);
+    CHECK(network.m_pbSessionPasswordRequired[1] == FALSE);
+
+    // A full list skips the append but still answers TRUE.
+    network.m_nTotalSessions = CNETWORK_MAX_SESSIONS;
+    desc.lpszSessionName = "Overflow Game";
+    CHECK(EnumSessionsCallback(&desc, 0, NULL, NULL) == TRUE);
+    CHECK(network.m_nTotalSessions == CNETWORK_MAX_SESSIONS);
+
+    // An odd context cancels the enumeration before the append.
+    CHECK(EnumSessionsCallback(&desc, 0, reinterpret_cast<LPVOID>(3), NULL) == FALSE);
+    CHECK(network.m_nTotalSessions == CNETWORK_MAX_SESSIONS);
+}
+
 // CBaldurMessage::SendMapWorldCancelRequestToServer (0x435360): the client's
 // empty MAPWORLD cancel request. It stops at three guards (no session, a host,
 // no host name) and otherwise sends type/subtype 109/99 to the host with no
