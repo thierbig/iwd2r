@@ -729,8 +729,7 @@ void CtrlAltDelete_SetChapter(INT nChapter)
 void CtrlAltDelete_AddSpellClass(const BYTE& nClass, DWORD dwCount)
 {
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    CGroupedSpellList* pGroupedList =
-        &pGame->m_spellsByClass[pGame->GetSpellcasterIndex(nClass)];
+    CGroupedSpellList* pGroupedList = &pGame->m_spellsByClass[pGame->GetSpellcasterIndex(nClass)];
 
     if (pGame->m_group.m_memberList.GetHeadPosition() == NULL) {
         return;
@@ -781,8 +780,7 @@ void CtrlAltDelete_AddSpellClass(const BYTE& nClass, DWORD dwCount)
                     UINT nCastCount
                         = pSprite->GetSpellsAtLevel(nClass, nLevel)->field_14 + dwCount;
                     pSprite->GetSpellsAtLevel(nClass, nLevel)->field_14 = nCastCount;
-                    pSprite->GetSpellsAtLevel(nClass, nLevel)->sub_725D30(dwCount,
-                        FALSE);
+                    pSprite->GetSpellsAtLevel(nClass, nLevel)->sub_725D30(dwCount, FALSE);
                 }
             }
         }
