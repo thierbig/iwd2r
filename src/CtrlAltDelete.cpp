@@ -4,10 +4,13 @@
 #include "CCreatureFile.h"
 #include "CGameArea.h"
 #include "CGameObject.h"
+#include "CGameObjectArray.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
+#include "CItem.h"
 #include "CPathSearch.h"
 #include "CResRef.h"
+#include "CScreenInventory.h"
 #include "CScreenWorld.h"
 #include "CUtil.h"
 #include "CVariableHash.h"
@@ -175,14 +178,95 @@ void CtrlAltDelete_AddGold500()
 }
 
 // 0x4ED250 void CtrlAltDelete_AddItemPack() — 97 bytes (0x4ED250-0x4ED2B0).
-// ecx is saved in esi and forwarded as the this of 0x4ED500 on all three
-// calls; that callee is not ported, so this body is a stub. The original
-// hands the player the cheat item pack: five "potn08" (0x8ABD88), five
-// "potn20" (0x8ABD80) and one "scrlpet" (0x8ABD78), each via
-// 0x4ED500(CString by value, count, 0, 0).
+// ecx is saved in esi and forwarded as the this of the three 0x4ED500 calls;
+// that callee never reads it. Hands the player the cheat item pack: five
+// "potn08" (0x8ABD88), five "potn20" (0x8ABD80) and one "scrlpet" (0x8ABD78),
+// each via CtrlAltDelete_AddItem(CString by value, count, 0, 0).
 void CtrlAltDelete_AddItemPack()
 {
-    // TODO: 0x4ED250 calls 0x4ED500 (not ported).
+    CtrlAltDelete_AddItem(CString("potn08"), 5, 0, 0);
+    CtrlAltDelete_AddItem(CString("potn20"), 5, 0, 0);
+    CtrlAltDelete_AddItem(CString("scrlpet"), 1, 0, 0);
+}
+
+// 0x4ED500 void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1,
+// WORD wUseCount2, WORD wUseCount3) — 557 bytes (0x4ED500-0x4ED72D). ecx (the
+// dispatcher's this, which the item pack handler forwards) is not read.
+//
+// Looks the item name up as res type 1005 (item, as in CItem's
+// CResHelper<CResItem, 1005>) and prints the same "Error File" text as
+// MoveToArea when it is missing. Otherwise walks the party slots and gives the
+// item to the first member with a free personal-inventory slot: denies the
+// sprite, takes the first NULL of m_items[18..18 + PERSONAL_INVENTORY_SIZE)
+// (the pointer array at 0x4B20), news a CItem there with the use counts,
+// releases the sprite and stops — one item is placed per call. The listing's
+// INVALID_INDEX arm at 0x4ED60C is unreachable (the loop enters only with
+// nIndex < m_nCharacters, and 0x4ED5FB returns when the count is not positive)
+// and is omitted.
+void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CResRef cResRef(sItem);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(cResRef, 1005, TRUE) == NULL) {
+        CtrlAltDelete_DisplayText("Error File " + sItem + " does not exist\n");
+        return;
+    }
+
+    for (SHORT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+        LONG nCharacterId = pGame->m_characterPortraits[nIndex];
+        CGameObject* pObject = NULL;
+        BYTE nStatus;
+
+        // The original spins while another thread shares the sprite; GetDeny
+        // itself sleeps a millisecond before returning SHARED. Unlike the
+        // CInfButtonArray callers it does not retry on DENIED.
+        do {
+            nStatus = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (nStatus == CGameObjectArray::SHARED);
+
+        if (nStatus != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+
+        SHORT nSlot = 0;
+        while (nSlot < CScreenInventory::PERSONAL_INVENTORY_SIZE
+            && pSprite->m_equipment.m_items[18 + nSlot] != NULL) {
+            nSlot++;
+        }
+
+        // No free slot: release the sprite and try the next party member.
+        if (nSlot == CScreenInventory::PERSONAL_INVENTORY_SIZE) {
+            pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        // NOTE: The original stores operator new's result (0xEE bytes) with no
+        // NULL check: a failed allocation stores NULL in the slot and the
+        // handout still stops here.
+        pSprite->m_equipment.m_items[18 + nSlot] = new CItem(CResRef(sItem),
+            wUseCount1,
+            wUseCount2,
+            wUseCount3,
+            0,
+            0);
+
+        pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+
+        // The original stops after the first placement (0x4ED702 falls
+        // straight into the epilogue); the pack handler's three calls place
+        // one item each.
+        return;
+    }
 }
 
 // 0x4EDF60 void CtrlAltDelete_JeffKAttacks() — 31 bytes (0x4EDF60-0x4EDF7E).

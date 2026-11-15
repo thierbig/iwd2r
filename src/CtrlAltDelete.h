@@ -33,9 +33,11 @@ void CtrlAltDelete_AddGold(DWORD dwGold);
 // 0x4ED230
 void CtrlAltDelete_AddGold500();
 
-// 0x4ED250 — stub: hands the player the cheat item pack via 0x4ED500,
-// which is not ported (see the body).
+// 0x4ED250
 void CtrlAltDelete_AddItemPack();
+
+// 0x4ED500
+void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3);
 
 // 0x4EDF60
 void CtrlAltDelete_JeffKAttacks();
