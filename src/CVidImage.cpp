@@ -651,6 +651,131 @@ BOOL CVidTile::Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, CResTile* pRes
     return bSuccess;
 }
 
+// 0x7B1F70
+BOOL CVidTile::Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, const CRect& rClip, CResTile* pResDualTile, BYTE nDitherSeed, DWORD dwFlags)
+{
+    LONG nDataJump = 0;
+
+    // __FILE__: C:\Projects\Icewind2\src\chitin\ChVidImage.cpp
+    // __LINE__: 6526
+    UTIL_ASSERT(pSurface != NULL);
+
+    if (pRes == NULL) {
+        return FALSE;
+    }
+
+    if (rClip.IsRectEmpty()) {
+        return FALSE;
+    }
+
+    pRes->Demand();
+    pResDualTile->Demand();
+
+    // Unlike the plain Render there is no assertion on the returned data:
+    // the original fetches both tiles' data and blits whatever it gets.
+    BYTE* pData = pRes->GetTileData();
+    BYTE* pDualData = pResDualTile->GetTileData();
+
+    INT nTileSize = pRes->GetTileSize();
+    CSize blitSize(nTileSize, nTileSize);
+
+    CRect rTileRect(x, y, x + nTileSize, y + nTileSize);
+
+    // As in the plain Render, but every data skip moves BOTH tiles' data.
+    INT nSkipTop = rClip.top - rTileRect.top;
+    if (nSkipTop > 0) {
+        rTileRect.top += nSkipTop;
+        pData += nTileSize * nSkipTop;
+        pDualData += nTileSize * nSkipTop;
+        blitSize.cy -= nSkipTop;
+    }
+
+    INT nSkipBottom = rTileRect.bottom - rClip.bottom;
+    if (nSkipBottom > 0) {
+        blitSize.cy -= nSkipBottom;
+        rTileRect.bottom -= nSkipBottom;
+    }
+
+    INT nSkipRight = rTileRect.right - rClip.right;
+    if (nSkipRight > 0) {
+        blitSize.cx -= nSkipRight;
+        rTileRect.right -= nSkipRight;
+    }
+
+    INT nSkipLeft = rClip.left - rTileRect.left;
+    if (nSkipLeft > 0) {
+        blitSize.cx -= nSkipLeft;
+        pData += nSkipLeft;
+        pDualData += nSkipLeft;
+        rTileRect.left += nSkipLeft;
+        nDataJump = nSkipLeft;
+    }
+
+    if (rTileRect.IsRectEmpty()) {
+        pRes->Release();
+        pResDualTile->Release();
+        return FALSE;
+    }
+
+    DDSURFACEDESC ddsd;
+    HRESULT hr;
+
+    do {
+        ddsd.dwSize = sizeof(ddsd);
+        hr = pSurface->Lock(&rTileRect, &ddsd, DDLOCK_WAIT, NULL);
+        if (hr == DDERR_SURFACELOST) {
+            g_pChitin->GetCurrentVideoMode()->RestoreSurfaces();
+        }
+    } while (hr == DDERR_SURFACELOST || hr == DDERR_SURFACEBUSY);
+
+    if (hr != DD_OK) {
+        // Only this tile's demand is released (0x7B2190); the dual tile's
+        // stays held, as in the original.
+        pRes->Release();
+        return FALSE;
+    }
+
+    BOOL bSuccess;
+
+    // Both palettes are set up and realized inside the 16-bpp blitter,
+    // not here (0x7B279A-0x7B27F6).
+    switch (g_pChitin->cVideo.m_nBpp) {
+    case 16:
+        bSuccess = BltDualTile8To16(reinterpret_cast<WORD*>(ddsd.lpSurface),
+            ddsd.lPitch,
+            pData,
+            pDualData,
+            pResDualTile,
+            nDitherSeed,
+            blitSize,
+            nDataJump,
+            dwFlags);
+        break;
+    case 24:
+        // TODO: 0x7B1F70 calls 0x7CE3D0 (not ported).
+        bSuccess = FALSE;
+        break;
+    case 32:
+        // TODO: 0x7B1F70 calls 0x7CE930 (not ported).
+        bSuccess = FALSE;
+        break;
+    default:
+        // An unknown bpp unlocks and releases only this tile's demand
+        // (0x7B21CC-0x7B21E0); the dual tile's stays held, as in the
+        // original.
+        pSurface->Unlock(ddsd.lpSurface);
+        pRes->Release();
+        return FALSE;
+    }
+
+    pSurface->Unlock(ddsd.lpSurface);
+    pRes->Release();
+    pResDualTile->Release();
+
+    // The blit's result (mov eax, esi at 0x7B22C2).
+    return bSuccess;
+}
+
 // 0x7B22E0
 BOOL CVidTile::BltTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags)
 {
