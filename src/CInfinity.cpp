@@ -299,14 +299,20 @@ BOOL CInfTileSet::RenderToPrimary(LPDIRECTDRAWSURFACE pSurface, INT nTile, INT n
     default:
         // An unknown dual-tile code is a data error: the exe asserts FALSE
         // (0x5CB415, Infinity.cpp line 571) and then, if the assert returns,
-        // calls the dual-tile fallback (SetRes, SetAddColor and 0x7B1F70 at
-        // 0x5CB42B-0x5CB474) instead of the Render call below. The fallback is
-        // dead code the survey left unported (#54, report-T96.md); our
-        // UTIL_ASSERT aborts, so the flow after it is unreachable either way.
+        // runs a dual-tile fallback - SetRes/SetAddColor and the dual-tile
+        // Render 0x7B1F70 with the tile's dual resource, dither seed a6 and
+        // zero flags (0x5CB42B-0x5CB474) - then jumps to the BltFogOWar tail
+        // (0x5CB479), skipping the stencil/plain Render below. Ported as
+        // written; unreachable in-tree because our UtilAssert never returns.
         // __FILE__: C:\Projects\Icewind2\src\Baldur\Infinity.cpp
         // __LINE__: 571
         UTIL_ASSERT(FALSE);
-        break;
+        m_cVidTile.SetRes(m_pResTiles[nTile]);
+        m_cVidTile.SetAddColor(m_rgbAddColor);
+        m_cVidTile.Render(pSurface, 0, 0, rClip, m_pResTiles[nTile]->m_pDualTileRes, static_cast<BYTE>(a6), 0);
+        CVisibilityMap::BltFogOWar(pSurface, tileCode);
+
+        return TRUE;
     }
 
     if (nStencilTile != -1) {
