@@ -18,6 +18,13 @@ BYTE CVidTile::m_pPixels[16384];
 // 0x9064F8
 DWORD CVidImage::rgbTempPal[256];
 
+// The dual-tile blitter's realized second palette. Its address sits
+// between m_pBlendTable (0x9060F0) and rgbTempPal (0x9064F8); the 4-byte
+// gap before rgbTempPal matches the exe's static layout.
+//
+// 0x9060F4
+DWORD CVidImage::rgbDualTempPal[256];
+
 // The 64x64x32 blend table: entry (k, m, i) is m and k mixed at weight
 // i / 32, (m * (64 - 2i) + k * 2i) >> 6.
 //
@@ -732,6 +739,94 @@ BOOL CVidTile::BltStencilTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, BYT
 
         nDataIndex += nDataJump;
         pDest = reinterpret_cast<DWORD*>(reinterpret_cast<WORD*>(pDest) + ((lPitch >> 1) - blitSize.cx));
+    }
+
+    return TRUE;
+}
+
+// 0x7B25E0
+BOOL CVidTile::BltDualTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pDualData, CResTile* pResDualTile, BYTE nDitherSeed, const CSize& blitSize, LONG nDataJump, DWORD dwFlags)
+{
+    INT nWidth = blitSize.cx;
+    INT nHeight = blitSize.cy;
+
+    // The dual tile's palette, realized separately from this tile's.
+    CVidPalette cDualPalette;
+
+    // Each channel field is read off the video mode with its own NULL
+    // guard (0 if there is none); the shifts are read as bytes at
+    // +0xAA/+0xAE/+0xB2.
+    CVidMode* pVideoMode = g_pChitin->GetCurrentVideoMode();
+    DWORD nRMask = pVideoMode != NULL ? pVideoMode->m_dwRBitMask : 0;
+    DWORD nGMask = pVideoMode != NULL ? pVideoMode->m_dwGBitMask : 0;
+    DWORD nBMask = pVideoMode != NULL ? pVideoMode->m_dwBBitMask : 0;
+    DWORD nRShift = pVideoMode != NULL ? pVideoMode->m_dwRBitShift : 0;
+    DWORD nGShift = pVideoMode != NULL ? pVideoMode->m_dwGBitShift : 0;
+    DWORD nBShift = pVideoMode != NULL ? pVideoMode->m_dwBBitShift : 0;
+
+    if (m_pBlendTable == NULL) {
+        // The original inlines the fill loop here (0x7B26E9-0x7B2756);
+        // the tree keeps the one copy in BuildBlendTable.
+        if (!BuildBlendTable()) {
+            return FALSE;
+        }
+    }
+
+    // The seed shifted down by three picks the dither phase, 0-31.
+    nDitherSeed >>= 3;
+
+    m_cPalette.SetPalette(pRes->m_pPalette,
+        256,
+        CVidPalette::TYPE_RESOURCE);
+    cDualPalette.SetPalette(pResDualTile->m_pPalette,
+        256,
+        CVidPalette::TYPE_RESOURCE);
+
+    m_cPalette.Realize(rgbTempPal,
+        16,
+        dwFlags | 0x400000,
+        &m_paletteAffects,
+        255);
+    cDualPalette.Realize(rgbDualTempPal,
+        16,
+        dwFlags | 0x400000,
+        &m_paletteAffects,
+        255);
+
+    INT nSurfaceJump = (lPitch >> 1) - nWidth;
+
+    // Checked after the palettes are realized, as in the original
+    // (0x7B2A15).
+    if (nHeight <= 0) {
+        return TRUE;
+    }
+
+    // Each output pixel blends this tile's and the dual tile's pixels at
+    // the dither phase: channel value x from this tile, y from the dual
+    // tile, looked up as blend table entry (x << 11) | (y << 5) | phase —
+    // the (k, m, i) = (m * (64 - 2i) + k * 2i) >> 6 cube built by
+    // BuildBlendTable, with this tile as the primary k.
+    WORD* pDest = pSurface;
+    BYTE* pRowData = pData;
+    BYTE* pRowDualData = pDualData;
+
+    for (INT y = nHeight; y > 0; y--) {
+        for (INT x = 0; x < nWidth; x++) {
+            WORD cPrimary = static_cast<WORD>(rgbTempPal[pRowData[x]]);
+            WORD cDual = static_cast<WORD>(rgbDualTempPal[pRowDualData[x]]);
+
+            INT nRed = (((cPrimary & nRMask) >> nRShift) << 6) + ((cDual & nRMask) >> nRShift);
+            INT nGreen = (((cPrimary & nGMask) >> nGShift) << 6) + ((cDual & nGMask) >> nGShift);
+            INT nBlue = (((cPrimary & nBMask) >> nBShift) << 6) + ((cDual & nBMask) >> nBShift);
+
+            *pDest++ = static_cast<WORD>((m_pBlendTable[(nRed << 5) + nDitherSeed] << nRShift)
+                | (m_pBlendTable[(nGreen << 5) + nDitherSeed] << nGShift)
+                | (m_pBlendTable[(nBlue << 5) + nDitherSeed] << nBShift));
+        }
+
+        pRowData += nWidth + nDataJump;
+        pRowDualData += nWidth + nDataJump;
+        pDest += nSurfaceJump;
     }
 
     return TRUE;
