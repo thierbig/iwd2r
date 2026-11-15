@@ -826,7 +826,8 @@ CProjectorSubtitlesLine* CProjectorSubtitles::LoadLines(CResRef cMovie, int* pnC
     }
 
     CPoint pt(0, 3);
-    for (int i = 0; i < nRows - 3; i++, pt.y++) {
+    int i = 0;
+    for (; i < nRows - 3; i++, pt.y++) {
         pLines[i].field_0 = c2dArray.GetAtLong(pt);
         LONG nStrRef = c2dArray.GetAtLong(CPoint(1, pt.y));
 
@@ -841,10 +842,12 @@ CProjectorSubtitlesLine* CProjectorSubtitles::LoadLines(CResRef cMovie, int* pnC
         }
     }
 
-    // The element past the last filled one is the {0, ""} stop marker (the
-    // per-frame advance gates on field_0 > 0).
-    pLines[nRows - 3].field_0 = 0;
-    pLines[nRows - 3].m_sText = "";
+    // 0x428E67: the element past the last filled one is the {0, ""} stop
+    // marker (the per-frame advance gates on field_0 > 0). The exe indexes it
+    // by the loop counter, so a table with fewer than four rows still writes
+    // element 0.
+    pLines[i].field_0 = 0;
+    pLines[i].m_sText = "";
 
     return pLines;
 }
