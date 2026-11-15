@@ -17,6 +17,8 @@ public:
     static BYTE* m_pBlendTable;
     static INT m_nBlendTableRefs;
 
+    static BOOL BuildBlendTable();
+
     CVidImage();
     ~CVidImage();
     COLORREF GetTintColor();

@@ -27,6 +27,42 @@ BYTE* CVidImage::m_pBlendTable;
 // 0x9068F8
 INT CVidImage::m_nBlendTableRefs;
 
+// Allocates and fills the shared blend table (0x20000 bytes) and returns
+// TRUE, or returns FALSE and leaves the pointer NULL when the allocation
+// fails. The original carries this body twice: inlined in the CVidImage
+// constructor under the m_nBlendTableRefs count, and here as a standalone
+// helper the 24- and 32-bpp tile blitters call when they find no table;
+// the tree keeps the one copy.
+//
+// 0x7ACCB0
+BOOL CVidImage::BuildBlendTable()
+{
+    m_pBlendTable = new BYTE[0x20000];
+    if (m_pBlendTable == NULL) {
+        return FALSE;
+    }
+
+    INT nWeight = 0;
+    INT nStep = 64;
+    do {
+        INT nRowStart = 0;
+        for (INT nColumn = 0; nColumn < 0x800; nColumn += 0x20) {
+            INT nValue = nRowStart;
+            INT nOffset = nColumn;
+            for (INT nRow = 64; nRow != 0; nRow--) {
+                m_pBlendTable[nOffset + nWeight] = static_cast<BYTE>(nValue >> 6);
+                nOffset += 0x800;
+                nValue += nWeight * 2;
+            }
+            nRowStart += nStep;
+        }
+        nStep -= 2;
+        nWeight++;
+    } while (nStep > 0);
+
+    return TRUE;
+}
+
 // 0x7ACA60
 CVidImage::CVidImage()
 {
@@ -44,26 +80,7 @@ CVidImage::CVidImage()
 
     // The first image builds the blend table.
     if (m_nBlendTableRefs++ == 0) {
-        m_pBlendTable = new BYTE[0x20000];
-        if (m_pBlendTable != NULL) {
-            INT nWeight = 0;
-            INT nStep = 64;
-            do {
-                INT nRowStart = 0;
-                for (INT nColumn = 0; nColumn < 0x800; nColumn += 0x20) {
-                    INT nValue = nRowStart;
-                    INT nOffset = nColumn;
-                    for (INT nRow = 64; nRow != 0; nRow--) {
-                        m_pBlendTable[nOffset + nWeight] = static_cast<BYTE>(nValue >> 6);
-                        nOffset += 0x800;
-                        nValue += nWeight * 2;
-                    }
-                    nRowStart += nStep;
-                }
-                nStep -= 2;
-                nWeight++;
-            } while (nStep > 0);
-        }
+        BuildBlendTable();
     }
 }
 
