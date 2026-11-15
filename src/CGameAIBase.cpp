@@ -2060,17 +2060,18 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 295:
         // TransferInventory
-        // 0x451D81: the receiving sprite; a NULL result takes 0x451451
+        // 0x451D81: the giving object (target); a NULL result takes 0x451451
         // (ACTION_ERROR straight to release), as the entry default does here.
         pTarget = sub_45C290();
         if (pTarget != NULL) {
             bShare = TRUE;
             CGameObject* pActee = m_curAction.GetActee2().sub_40CCA0(this, FALSE);
             if (pActee != NULL) {
-                // TODO: 0x451DB6 calls 0x4C83F0 (not ported; annotated
-                // CGameObject::FloatText): the receiving sprite runs the
-                // transfer against the actee; its return is the action
-                // result, which keeps the ACTION_ERROR entry default here.
+                // 0x451DB6: the target object gives its whole inventory to
+                // the actee; the transfer's return (ACTION_DONE on a
+                // completed walk, ACTION_ERROR on an unusable side) is the
+                // action result.
+                returnValue = pTarget->TransferInventory(pActee);
                 g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
                     CGameObjectArray::THREAD_ASYNCH,
                     INFINITE);
