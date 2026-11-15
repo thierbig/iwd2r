@@ -85,3 +85,45 @@ CString EncodeCommandWord(CString sText)
 
     return sText;
 }
+
+// 130 bytes (0x584420-0x5844A1). thiscall: ecx is the console; plain `ret`
+// (caller-cleaned, esi saved, no SEH frame). The dispatcher's argument-count
+// check: field_0 - 12 indexes the 28-entry shape table at 0x5844C4 (an id
+// outside 12..39 takes the unsigned-above at 0x58442B), and the byte picks
+// one of eight jump-table arms at 0x5844A4:
+//   0 (0x58449E) return 0;                 1 (0x58443C) field_8==1 ? 1 : 0;
+//   2 (0x58445A) field_C==1 ? field_8+1 : 0;   3 (0x58444B) field_C==2 ? 2 : 0;
+//   4 (0x584468) field_C==1 ? 1 : 0;       5 (0x584477) field_C==2 && field_8==1 ? 3 : 0;
+//   6 (0x58448C) return field_8;           7 (0x584493) field_0 = -3,
+// CommandNotFound (0x584499, ecx unchanged), return 0.
+// 0x584420
+int CLUAConsole::CountArgs()
+{
+    static const BYTE bArgShape[28] = {
+        0, 0, 0, 7, 1, 2, 3, 7, 7, 2, 7, 7, 1, 0, 4,
+        7, 1, 5, 7, 7, 7, 7, 7, 7, 7, 6, 0, 0
+    };
+
+    DWORD nId = field_0 - 12;
+    int nArm = (nId <= 0x1b) ? bArgShape[nId] : 7;
+    switch (nArm) {
+    case 1:
+        return (field_8 == 1) ? 1 : 0;
+    case 2:
+        return (field_C == 1) ? static_cast<int>(field_8) + 1 : 0;
+    case 3:
+        return (field_C == 2) ? 2 : 0;
+    case 4:
+        return (field_C == 1) ? 1 : 0;
+    case 5:
+        return (field_C == 2 && field_8 == 1) ? 3 : 0;
+    case 6:
+        return static_cast<int>(field_8);
+    case 7:
+        field_0 = -3;
+        CommandNotFound();
+        return 0;
+    default:
+        return 0;
+    }
+}
