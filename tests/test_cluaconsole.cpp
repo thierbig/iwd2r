@@ -5,13 +5,18 @@
 // 85d) driving that layer end to end. Every arm that prints (unknown
 // word, bad parens, unclosed quote, wrong argument count, bad prefix)
 // goes through CtrlAltDelete_DisplayText into a live world screen and is
-// pinned by the evidence listings instead; the ENABLECHEATKEYS arm is the
-// one dispatch effect observable without game data, over the zeroed
-// chitin stub from tests/test_ctrl_alt_delete.cpp.
+// pinned by the evidence listings instead; the dispatch effects
+// observable without game data are ENABLECHEATKEYS (a plain store into
+// the zeroed chitin stub from tests/test_ctrl_alt_delete.cpp) and
+// SETCHAPTER (0x4EDAB0), whose GetShare comes back BAD_INDEX on a zeroed
+// object array so the handler returns through its guard without touching
+// a sprite. The arms that need a live world (HANS 0x4ED2C0 among them)
+// stay evidence-pinned.
 #define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
 #include "CBaldurChitin.h"
+#include "CInfGame.h"
 #include "CLUAConsole.h"
 #include "CScreenWorld.h"
 
@@ -209,6 +214,46 @@ TEST_CASE("CLUAConsole.Execute drives ENABLECHEATKEYS lines end to end", "[clua]
     CLUAConsole cTwo;
     cTwo.Execute("ctrlaltdelete:enablecheatkeys(1,2)");
     CHECK(pScreen->m_bCheatKeysEnabled == 1);
+
+    g_pBaldurChitin = previousBaldur;
+}
+
+TEST_CASE("CLUAConsole.Execute drives SETCHAPTER lines through the guard", "[clua]")
+{
+    CBaldurChitin* previousBaldur = g_pBaldurChitin;
+
+    // Zeroed chitin, engine world and game, as in the ENABLECHEATKEYS
+    // test: GetProtagonist walks the zeroed character tables and the
+    // GetShare on the zeroed object array returns BAD_INDEX, so the
+    // handler builds the INCREMENTCHAPTER action, misses the share and
+    // returns without touching a sprite. Counts accumulate across
+    // Execute calls on one console, so each line gets a fresh one.
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> screen(new unsigned char[sizeof(CScreenWorld)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(screen.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    // The id and the argument counters must be zeroed by hand: the exe's
+    // per-line console construction (inlined in the unported Enter handler
+    // 0x77BF30) zeroes field_0/field_8/field_C/field_38/field_3C with edi
+    // (0x77C384-0x77C38C), but the tree has no constructor, and the
+    // zero-argument line parses no token so field_8 would keep its stack
+    // garbage and CountArgs would report a wrong count.
+    CLUAConsole cNone;
+    cNone.field_0 = 0;
+    cNone.field_8 = 0;
+    cNone.field_C = 0;
+    cNone.Execute("ctrlaltdelete:setchapter()");
+    CHECK(cNone.field_0 == 0x25); // dispatch completed at the SETCHAPTER arm
+
+    CLUAConsole cOne;
+    cOne.field_0 = 0;
+    cOne.field_8 = 0;
+    cOne.field_C = 0;
+    cOne.Execute("ctrlaltdelete:setchapter(3)");
+    CHECK(cOne.field_0 == 0x25);
 
     g_pBaldurChitin = previousBaldur;
 }

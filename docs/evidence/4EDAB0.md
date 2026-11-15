@@ -76,4 +76,10 @@ this port's test commit): Execute of "ctrlaltdelete:setchapter(3)" and
 "ctrlaltdelete:setchapter()" both reach the handler and return with
 field_0 still 0x25 — on the zeroed object array GetShare's THREAD_ASYNCH
 bounds check returns BAD_INDEX, so the share branch and ReleaseShare are
-skipped without a crash.
+skipped without a crash. The test zeroes the console's field_0/field_8/
+field_C by hand first: the exe's per-line console construction (inlined
+in the unported Enter handler 0x77BF30) zeroes field_0/field_8/field_C/
+field_38/field_3C with edi at 0x77C384-0x77C38C, the tree has no
+constructor, and the zero-argument line parses no token so its CountArgs
+would read the member's stack garbage (verified: garbage there sends the
+line to the -2 arm).
