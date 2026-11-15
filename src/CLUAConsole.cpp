@@ -219,8 +219,8 @@ void CLUAConsole::AddTextArg(CString sArg)
 // to the loop (0x58412C/0x58412F); otherwise it looks for the first ')'
 // at sArgs[i+1] and rejects the line (-2 + CommandNotFound, 0x58427C) when
 // i reaches 0x80 (0x584131) or len-1 (0x58413C-0x584142, no ')' before the
-// end). The loop at 0x584152 splits the remainder on ",)" (literal
-// 0x8AF714, Find 0x7FD0D0 at 0x584178): a hit n sets sToken = Left(n)
+// end). The loop at 0x584152 splits the remainder at any of ",)" (literal
+// 0x8AF714, FindOneOf 0x7FD0D0 at 0x584178): a hit n sets sToken = Left(n)
 // (0x7FAA72 at 0x58418D) and sArgs = Right(len-n-1) (0x7FA9F6 at
 // 0x5841C3), a miss leaves sArgs whole; then sToken.TrimRight (0x5841E9)
 // and sArgs.TrimLeft (0x5841F2), an empty token loops (0x584200). A token
@@ -235,11 +235,11 @@ void CLUAConsole::AddTextArg(CString sArg)
 // character — including a bare ')' tail — is the silent, uncounted return
 // at 0x584289.
 //
-// NOTE: the split only consumes on a ",)" hit, so a trailing numeric token
-// without one ("5)") never advances sArgs and re-appends forever — the
-// exe's behavior when the line omits the conventional trailing comma. The
-// port mirrors it exactly; the dispatcher 0x5838A0 always hands a
-// ')'-terminated remainder.
+// NOTE: the split is FindOneOf (any ',' or ')'), so each token is consumed
+// with its delimiter: "5,6)" files 5 then 6 and ends on the empty remainder.
+// A miss leaves sArgs whole, so a numeric token after the closing paren with
+// no further delimiter ("5)7") re-appends forever — the exe's behavior; the
+// pre-scan only guarantees a ')' somewhere past the first character.
 // 0x5840E0
 void CLUAConsole::ParseArgs(CString sArgs)
 {
@@ -264,7 +264,7 @@ void CLUAConsole::ParseArgs(CString sArgs)
             return;
 
         CString sToken = sArgs;
-        int n = sArgs.Find(",)");
+        int n = sArgs.FindOneOf(",)");
         if (n >= 0) {
             sToken = sToken.Left(n);
             sArgs = sArgs.Right(sArgs.GetLength() - n - 1);

@@ -79,6 +79,8 @@ TEST_CASE("CLUAConsole.ParseArgs files numeric tokens into the value table", "[c
 {
     CLUAConsole c;
     c.field_0 = 0x1D;
+    c.field_8 = 0;
+    c.field_C = 0;
     c.ParseArgs("5,)");
     CHECK(c.field_8 == 1);
     REQUIRE(c.field_10.GetSize() == 1);
@@ -90,11 +92,38 @@ TEST_CASE("CLUAConsole.ParseArgs files quoted tokens into the token store", "[cl
 {
     CLUAConsole c;
     c.field_0 = 0x1D;
+    c.field_8 = 0;
+    c.field_C = 0;
     c.ParseArgs("\"name\",)");
     CHECK(c.field_C == 1);
     REQUIRE(c.field_24.GetSize() == 1);
     CHECK(c.field_24[0] == "name");
     CHECK(c.field_8 == 0);
+}
+
+TEST_CASE("CLUAConsole.ParseArgs splits at each comma or paren (FindOneOf 0x584178)", "[clua]")
+{
+    CLUAConsole c;
+    c.field_0 = 0x1D;
+    c.field_8 = 0;
+    c.field_C = 0;
+    c.ParseArgs("5, 6)");
+    CHECK(c.field_8 == 2);
+    REQUIRE(c.field_10.GetSize() == 2);
+    CHECK(c.field_10[0] == 5);
+    CHECK(c.field_10[1] == 6);
+
+    CLUAConsole m;
+    m.field_0 = 0x1D;
+    m.field_8 = 0;
+    m.field_C = 0;
+    m.ParseArgs("\"potn08\", -3)");
+    CHECK(m.field_C == 1);
+    REQUIRE(m.field_24.GetSize() == 1);
+    CHECK(m.field_24[0] == "potn08");
+    CHECK(m.field_8 == 1);
+    REQUIRE(m.field_10.GetSize() == 1);
+    CHECK(static_cast<int>(m.field_10[0]) == -3);
 }
 
 TEST_CASE("CLUAConsole.ParseArgs stops on the bare paren tail", "[clua]")
