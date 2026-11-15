@@ -24,6 +24,9 @@ void CtrlAltDelete_EnableCheatKeys(INT nEnable);
 // 0x4EC370
 void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP);
 
+// 0x4EC870
+void CtrlAltDelete_CreateItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3);
+
 // 0x4ECA80
 void CtrlAltDelete_SetAreaExplored();
 

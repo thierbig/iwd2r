@@ -153,6 +153,88 @@ void CtrlAltDelete_SetCurrentXP(DWORD dwCurrentXP)
     g_pBaldurChitin->GetScreenWorld()->SetCurrentXP(dwCurrentXP);
 }
 
+// 0x4EC870 void CtrlAltDelete_CreateItem(CString sItem, WORD wUseCount1,
+// WORD wUseCount2, WORD wUseCount3) — 517 bytes (0x4EC870-0x4ECA75). The
+// CREATEITEM console command. The dispatcher's command-word resolver
+// (0x583E60) matches the obfuscated literal at 0x8AF680 — the console
+// stores its command words as 2*ch + 0x10, and this one decodes to
+// "CREATEITEM" — maps it to id 0x15, whose dispatch arm (0x583B81) calls
+// here from four sites (jump table 0x583E50, one per argument count 1-4):
+// the parsed item name plus up to three use counts, the missing counts
+// zero. ecx (the dispatcher's this) is saved in esi and forwarded to
+// 0x4EC1C0 on the error path only, which never reads it.
+//
+// Same body as CtrlAltDelete_AddItem (0x4ED500), the internal helper the
+// FIRSTAID pack handler uses, with one spelling difference: the original
+// guards the allocation (0x4EC9F2 `test ebp,ebp / je` stores NULL instead
+// of constructing). The listing's INVALID_INDEX arm at 0x4EC954 is
+// unreachable (the loop enters only with nIndex < m_nCharacters, and
+// 0x4EC93D returns when the count is not positive) and is omitted.
+void CtrlAltDelete_CreateItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CResRef cResRef(sItem);
+
+    if (g_pBaldurChitin->cDimm.m_cKeyTable.FindKey(cResRef, 1005, TRUE) == NULL) {
+        CtrlAltDelete_DisplayText("Error File " + sItem + " does not exist\n");
+        return;
+    }
+
+    for (SHORT nIndex = 0; nIndex < pGame->m_nCharacters; nIndex++) {
+        LONG nCharacterId = pGame->m_characterPortraits[nIndex];
+        CGameObject* pObject = NULL;
+        BYTE nStatus;
+
+        // The original spins while another thread shares the sprite; GetDeny
+        // itself sleeps a millisecond before returning SHARED. Unlike the
+        // CInfButtonArray callers it does not retry on DENIED.
+        do {
+            nStatus = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (nStatus == CGameObjectArray::SHARED);
+
+        if (nStatus != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+
+        SHORT nSlot = 0;
+        while (nSlot < CScreenInventory::PERSONAL_INVENTORY_SIZE
+            && pSprite->m_equipment.m_items[18 + nSlot] != NULL) {
+            nSlot++;
+        }
+
+        // No free slot: release the sprite and try the next party member.
+        if (nSlot == CScreenInventory::PERSONAL_INVENTORY_SIZE) {
+            pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            continue;
+        }
+
+        // NOTE: On a failed allocation the original skips the construction
+        // and stores NULL in the slot (0x4ECA2A `xor eax,eax`); the handout
+        // still stops here.
+        pSprite->m_equipment.m_items[18 + nSlot] = new CItem(CResRef(sItem),
+            wUseCount1,
+            wUseCount2,
+            wUseCount3,
+            0,
+            0);
+
+        pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+
+        // One item is placed per call (0x4ECA37 falls straight into the
+        // epilogue).
+        return;
+    }
+}
+
 // 0x4ECA80 void CtrlAltDelete_SetAreaExplored() — 37 bytes
 // (0x4ECA80-0x4ECAA4). ecx is not read. Tail-calls SetAreaExplored on the
 // visible area's visibility map.
