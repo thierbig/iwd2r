@@ -1618,6 +1618,17 @@ TEST_CASE("outline_poly32", "[vid]")
 // the last image.
 TEST_CASE("vid_image_blend_table", "[vid]")
 {
+    // 0x7ACCB0 also builds the table standalone — the 24/32-bpp tile
+    // blitters call it when they find no table — so drive it directly and
+    // put the previous table back for the constructor checks below.
+    BYTE* pSavedTable = CVidImage::m_pBlendTable;
+    CHECK(CVidImage::BuildBlendTable() != FALSE);
+    REQUIRE(CVidImage::m_pBlendTable != nullptr);
+    CHECK(CVidImage::m_pBlendTable[0] == 0);
+    CHECK(CVidImage::m_pBlendTable[63 * 0x800 + 63 * 0x20 + 31] == 63);
+    delete[] CVidImage::m_pBlendTable;
+    CVidImage::m_pBlendTable = pSavedTable;
+
     const INT refsBefore = CVidImage::m_nBlendTableRefs;
     {
         CVidImage image;
