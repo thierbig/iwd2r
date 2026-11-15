@@ -2,6 +2,7 @@
 address: 0x44DC10
 name: CGameAIBase::ExecuteAction (Task 84z arms)
 exemption: "dispatcher over engine state, as the parent file 44DC10.md records; the arm is fully observable without game data and is driven through ExecuteAction by tests/test_ai.cpp [ai][data] (commit ffb39645): 295 answers ACTION_DONE on all four transfer walks (message shapes asserted per walk) and ACTION_ERROR on the no-target path, and the error sides of the callee are exercised through it. The CHARBASE.CRE sprites and fresh CGameContainers carry all the state the arm reads."
+parity_waiver: "asm lints 2026-11-15 T84z: lints - the arm's two RE004s are its calls by tree address-derived names: sub_45C290 at src/CGameAIBase.cpp (ported with its own evidence 45C290.md — the already-waived category the 83i/83l segments record for its 281/305/235/278 call sites) and sub_40CCA0 (the CAIObjectType share resolve, src/CAIObjectType.cpp, evidence 40CCA0.md), the same category. asm - the arm's one new call target 0x4C83F0 is the in-tree TransferInventory this task ports (its own row, 4C83F0.md); the arm adds no named-callee miss, and the row's remaining findings are the standing ones the 83d/83i/83l waiver segments record."
 kind: replay
 ghidra_version: 12.1.4
 ---
