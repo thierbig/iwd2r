@@ -30,12 +30,21 @@ void CBaldurProjector::sub_43E300(HBINK bnk)
     int nDestY = (CVideo::SCREENHEIGHT - bnk->height) / 2;
 
     if (nDestX >= 0 && nDestY >= 0) {
+        // 0x43E3AB: the subtitle band sits four font heights above the
+        // bottom of the screen.
+        int nBandY = CVideo::SCREENHEIGHT - field_14A.GetFontHeight(1) * 4;
+        // 0x43E3B5: in widescreen mode (field_4A28) the movie is drawn at
+        // twice its native width - the subtitle band follows the widened
+        // movie, not the native-width CopyToBuffer position below.
+        int nDestXWide = (CVideo::SCREENWIDTH - bnk->width * ((g_pBaldurChitin->field_4A28 != 0) ? 2 : 1)) / 2;
+
         if (field_65A > 0) {
             field_65A--;
             g_pChitin->pActiveEngine->pVidMode->EraseScreen(CVIDINF_SURFACE_BACK, RGB(0, 0, 0));
         }
 
-        // 0x43E3F7: advance the movie-subtitle overlay one frame.
+        // 0x43E3F7: advance the movie-subtitle overlay one frame (the exe's
+        // single NULL test at 0x43E3FE also guards the composite below).
         if (pProjectorSubtitles != NULL) {
             pProjectorSubtitles->field_4++;
 
@@ -64,6 +73,24 @@ void CBaldurProjector::sub_43E300(HBINK bnk)
                     pProjectorSubtitles->Render();
                 }
             }
+
+            // 0x43E4DD: composite the subtitle band onto the movie back
+            // buffer every frame - BinkCopyToBuffer below overwrites the
+            // surface each frame, so the band has to go on after the movie
+            // pixels. The band's y is re-derived from the current font
+            // height unless the prologue's value already leaves more than
+            // four font heights above it; with the prologue's own math the
+            // compare is equal, so the recompute (the second GetFontHeight)
+            // is the path that runs.
+            int nCompositeFontHeight = field_14A.GetFontHeight(1);
+
+            if (CVideo::SCREENHEIGHT - nBandY <= nCompositeFontHeight * 4) {
+                nBandY = CVideo::SCREENHEIGHT - field_14A.GetFontHeight(1) * 4;
+            }
+
+            CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+            pSurface->BltFast(nDestXWide, nBandY, pVidMode->pSurfaces[8], &pProjectorSubtitles->rcRect, DDBLTFAST_WAIT);
         }
 
         m_pfnBinkDoFrame(bnk);
