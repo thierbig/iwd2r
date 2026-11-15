@@ -18,6 +18,7 @@
 #include "CScreenStore.h"
 #include "CScreenWorldMap.h"
 #include "CStore.h"
+#include "CUIControlEdit.h"
 #include "CUIControlFactory.h"
 #include "CUIControlTextDisplay.h"
 #include "CUIPanel.h"
@@ -653,10 +654,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
 
             if (nKey == pGame->m_pKeymap[24]
                 && pGame->m_pKeymapFlags[24] == m_bCtrlKeyDown) {
-                // NOTE: 0x694510 (the multiplayer chat's panel) runs only
-                // under a provider other than the null one (its gate at
-                // 0x6945C1), so a single-player host session returns from
-                // it at once; not called.
+                BeginChatMessage();
                 sub_693710();
                 continue;
             }
@@ -1187,10 +1185,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 break;
             case 24:
-                // NOTE: 0x694510 (the multiplayer chat's panel) runs only
-                // under a provider other than the null one (its gate at
-                // 0x6945C1), so a single-player host session returns from
-                // it at once; not called.
+                BeginChatMessage();
                 sub_693710();
                 break;
             case 25: {
@@ -4396,6 +4391,53 @@ void CScreenWorld::CheckEndOfHardPause()
 
         g_pBaldurChitin->GetObjectGame()->GetMultiplayerSettings()->SetListenToJoinOption(m_bEndMajorEventListenToJoin, TRUE);
     }
+}
+
+// 0x694510
+void CScreenWorld::BeginChatMessage()
+{
+    if (!g_pBaldurChitin->cNetwork.GetSessionOpen()) {
+        return;
+    }
+
+    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+        return;
+    }
+
+    if (!GetManager()->GetPanel(22)->m_bActive) {
+        return;
+    }
+
+    if (g_pBaldurChitin->m_pEngineWorld->GetManager()->m_bHidden != FALSE) {
+        m_nAutoHideInterface = 0;
+        g_pBaldurChitin->m_pEngineWorld->UnhideInterface();
+    }
+
+    // Both session gates are re-read to pick the chat bar itself (22) or
+    // the main panel (0) (0x694590-0x6945B4).
+    CUIPanel* pPanel = GetManager()->GetPanel(
+        g_pBaldurChitin->cNetwork.GetSessionOpen()
+                && g_pChitin->cNetwork.GetServiceProvider() != CNetwork::SERV_PROV_NULL
+            ? 22
+            : 0);
+
+    // The control carrying the edit: 5 on the panels numbered 19 and 21,
+    // 3 on panel 22, none anywhere else (0x6945D6-0x6945ED).
+    int nControl = -1;
+    if (pPanel->m_nID == 19 || pPanel->m_nID == 21) {
+        nControl = 5;
+    } else if (pPanel->m_nID == 22) {
+        nControl = 3;
+    }
+
+    CUIControlBase* pControl = pPanel->GetControl(nControl);
+    if (pControl == NULL) {
+        return;
+    }
+
+    // The empty text is passed by value through vtable +0x70,
+    // CUIControlEdit::SetText (0x69460C-0x694615).
+    static_cast<CUIControlEdit*>(pControl)->SetText(CString(""));
 }
 
 // 0x693710
