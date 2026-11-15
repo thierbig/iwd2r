@@ -254,7 +254,12 @@ void CBaldurProjector::EngineActivated()
         }
     }
 
-    // TODO: Incomplete.
+    // 0x43ECDC: reset any overlay left over from a previous movie.
+    if (pProjectorSubtitles != NULL) {
+        pProjectorSubtitles->field_4 = 0;
+        pProjectorSubtitles->field_C = 0;
+        pProjectorSubtitles->m_sText = "";
+    }
 
     if (g_pChitin->cVideo.m_bIs3dAccelerated) {
         SelectEngine(pLastEngine);
@@ -282,7 +287,18 @@ void CBaldurProjector::EngineActivated()
         m_bThreadPriorityChanged = SetThreadPriority(GetCurrentThread(), 15);
 
         if (g_pBaldurChitin->GetObjectGame()->GetOptions()->m_bDisplayMovieSubtitles) {
-            // TODO: Incomplete.
+            // 0x43EE00: operator_new(0x24) is evaluated before the LoadLines
+            // call (MSVC new-expression order), so a failed LoadLines still
+            // constructs with a NULL line list.
+            int nSubtitlesColor = 0;
+            int nWidth = m_hBink->width;
+            if (g_pBaldurChitin->field_4A28 != 0) {
+                nWidth <<= 1;
+            }
+
+            pProjectorSubtitles = new CProjectorSubtitles(
+                CProjectorSubtitles::LoadLines(m_currentMovieResRef, &nSubtitlesColor, nWidth), nWidth);
+            pProjectorSubtitles->m_rgbColor = nSubtitlesColor;
         }
     }
 
@@ -545,6 +561,63 @@ void CBaldurProjector::TimerAsynchronousUpdate()
     }
 
     LeaveCriticalSection(&(g_pChitin->field_3AC));
+}
+
+// 0x43F6D0
+CProjectorSubtitles::CProjectorSubtitles(CProjectorSubtitlesLine* pLines, int nWidth)
+{
+    m_sText = "";
+    field_4 = 0;
+    m_pLines = pLines;
+    field_C = 0;
+    m_rgbColor = 0xFFFFFF;
+
+    CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+    // The pixel format is filled from the back surface, but dwFlags does not
+    // name DDSD_PIXELFORMAT, so CreateSurface never reads it - faithful.
+    DDSURFACEDESC surfaceDesc = { 0 };
+    surfaceDesc.dwSize = sizeof(surfaceDesc);
+    surfaceDesc.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
+    surfaceDesc.dwWidth = nWidth;
+    surfaceDesc.dwHeight = g_pBaldurChitin->m_pEngineProjector->field_14A.GetFontHeight(1) * 4;
+    surfaceDesc.ddpfPixelFormat.dwSize = sizeof(surfaceDesc.ddpfPixelFormat);
+    pVidMode->pSurfaces[CVIDINF_SURFACE_BACK]->GetPixelFormat(&surfaceDesc.ddpfPixelFormat);
+
+    rcRect.left = 0;
+    rcRect.top = 0;
+    rcRect.right = surfaceDesc.dwWidth;
+    rcRect.bottom = surfaceDesc.dwHeight;
+
+    surfaceDesc.ddsCaps.dwCaps = (g_pChitin->cVideo.m_nBpp == 0x10
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftSrcKeyBlt
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftSrcKeyBltFast
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftMirrorBlt)
+        ? (DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY)
+        : (DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY);
+
+    if (g_pChitin->cVideo.m_pDirectDraw2->CreateSurface(&surfaceDesc, &pVidMode->pSurfaces[8], NULL) != DD_OK) {
+        // The retry only rewrites dwCaps; the rest of the descriptor (including
+        // the filled pixel format) is reused as-is.
+        surfaceDesc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+
+        if (g_pChitin->cVideo.m_pDirectDraw2->CreateSurface(&surfaceDesc, &pVidMode->pSurfaces[8], NULL) != DD_OK) {
+            pVidMode->pSurfaces[8] = NULL;
+        }
+    }
+
+    // The erase blt runs even when CreateSurface failed (pSurfaces[8] == NULL)
+    // - the original passes the null surface straight to Blt. The same rect is
+    // passed as both the dest and the src rect of the fill.
+    DDBLTFX fx;
+    fx.dwSize = sizeof(fx);
+    fx.dwFillColor = pVidMode->ConvertToSurfaceRGB(0);
+
+    HRESULT hr;
+    do {
+        hr = g_pChitin->cVideo.cVidBlitter.Blt(pVidMode->pSurfaces[8], &rcRect, NULL, &rcRect, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+        pVidMode->CheckResults(hr);
+    } while (hr == DDERR_SURFACELOST || hr == DDERR_WASSTILLDRAWING);
 }
 
 // 0x43F900
