@@ -13,7 +13,7 @@ callee-cleaned `void AddSpellClass(const BYTE& nClass, DWORD dwCount)`
 (`ret 8`), 692 bytes (0x4EDCA0-0x4EDF53). ecx (the console's this,
 forwarded by the dispatcher chain) is not read: it is overwritten at
 entry and the game comes from the 0x8CF6DC global. Ported in commit
-90c8374f1.
+dcdc1ff05.
 
 ## Body
 
