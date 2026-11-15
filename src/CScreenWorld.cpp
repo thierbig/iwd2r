@@ -734,9 +734,16 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
         pGame->m_group.AddTrigger(hotKey);
 
         if (field_156 && m_bCtrlKeyDown && nKey != pGame->m_pKeymap[22]) {
-            // TODO: Incomplete. 0x68956A-0x68BC5D: the cheat keys (Ctrl
-            // with `field_156`, which ours never sets) for the party leader
-            // and the area; the original returns after one.
+            if (nKey == 'O') {
+                // 0x68B24D: Ctrl+O dumps the resource lists (the CDimm at
+                // g_pBaldurChitin+0x542); the original passes 0 and returns.
+                g_pBaldurChitin->cDimm.DebugDumpResourceLists(0);
+                return;
+            }
+
+            // TODO: Incomplete. 0x68956A-0x68BC5D: the remaining cheat keys
+            // (Ctrl with `field_156`, which ours never sets) for the party
+            // leader and the area; the original returns after one.
             return;
         }
 
