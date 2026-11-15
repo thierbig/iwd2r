@@ -3,6 +3,7 @@ address: 0x7ACCB0
 name: CVidImage::BuildBlendTable
 exemption: "no oracle case: the callers that reach it standalone (the 24/32-bpp tile blitters FUN_007CE3D0 and FUN_007CE930 under 0x7B1F70) are not ported and no capture reaches them; the table contents are deterministic and pinned in-tree by tests/test_vid.cpp vid_image_blend_table against the formula (m * (64 - 2i) + k * 2i) >> 6."
 kind: read-only
+parity_waiver: "asm 2026-11-14 T84r: operator_new 0x7FC95B is the blend-table allocation, spelled as new[] in the port; no game call is waived."
 ghidra_version: 12.1.4
 ---
 
