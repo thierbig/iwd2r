@@ -1076,6 +1076,95 @@ BOOL CVidTile::BltDualTile8To24(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE*
     return TRUE;
 }
 
+// 0x7CE930
+BOOL CVidTile::BltDualTile8To32(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pDualData, CResTile* pResDualTile, BYTE nDitherSeed, const CSize& blitSize, LONG nDataJump, DWORD dwFlags)
+{
+    INT nWidth = blitSize.cx;
+    INT nHeight = blitSize.cy;
+
+    // The dual tile's palette, realized separately from this tile's.
+    CVidPalette cDualPalette;
+
+    // Each channel field is read off the video mode with its own NULL
+    // guard (0 if there is none); the shifts are read as bytes at
+    // +0xAA/+0xAE/+0xB2.
+    CVidMode* pVideoMode = g_pChitin->GetCurrentVideoMode();
+    DWORD nRMask = pVideoMode != NULL ? pVideoMode->m_dwRBitMask : 0;
+    DWORD nGMask = pVideoMode != NULL ? pVideoMode->m_dwGBitMask : 0;
+    DWORD nBMask = pVideoMode != NULL ? pVideoMode->m_dwBBitMask : 0;
+    DWORD nRShift = pVideoMode != NULL ? pVideoMode->m_dwRBitShift : 0;
+    DWORD nGShift = pVideoMode != NULL ? pVideoMode->m_dwGBitShift : 0;
+    DWORD nBShift = pVideoMode != NULL ? pVideoMode->m_dwBBitShift : 0;
+
+    if (m_pBlendTable == NULL) {
+        // The shared builder is called directly here (0x7CEA14), not
+        // inlined as in the 16-bpp blitter.
+        if (!BuildBlendTable()) {
+            return FALSE;
+        }
+    }
+
+    // The seed shifted down by three picks the dither phase, 0-31.
+    nDitherSeed >>= 3;
+
+    m_cPalette.SetPalette(pRes->m_pPalette,
+        256,
+        CVidPalette::TYPE_RESOURCE);
+    cDualPalette.SetPalette(pResDualTile->m_pPalette,
+        256,
+        CVidPalette::TYPE_RESOURCE);
+
+    m_cPalette.Realize(rgbTempPal,
+        32,
+        dwFlags | 0x400000,
+        &m_paletteAffects,
+        255);
+    cDualPalette.Realize(rgbDualTempPal,
+        32,
+        dwFlags | 0x400000,
+        &m_paletteAffects,
+        255);
+
+    // The jump is counted in DWORDs, like the 16-bpp blitter's halfword
+    // count (lPitch >> 2 at 0x7CEAE1).
+    INT nSurfaceJump = (lPitch >> 2) - nWidth;
+
+    // Checked after the palettes are realized, as in the original
+    // (0x7CEAE6).
+    if (nHeight <= 0) {
+        return TRUE;
+    }
+
+    // The per-pixel blend is the 16-bpp blitter's: channel value x from
+    // this tile, y from the dual tile, looked up as blend table entry
+    // (x << 11) | (y << 5) | phase, this tile as the primary k. A row
+    // with no pixels writes nothing and still moves on.
+    DWORD* pDest = pSurface;
+    BYTE* pRowData = pData;
+    BYTE* pRowDualData = pDualData;
+
+    for (INT y = nHeight; y > 0; y--) {
+        for (INT x = 0; x < nWidth; x++) {
+            DWORD cPrimary = rgbTempPal[pRowData[x]];
+            DWORD cDual = rgbDualTempPal[pRowDualData[x]];
+
+            INT nRed = (((cPrimary & nRMask) >> nRShift) << 6) + ((cDual & nRMask) >> nRShift);
+            INT nGreen = (((cPrimary & nGMask) >> nGShift) << 6) + ((cDual & nGMask) >> nGShift);
+            INT nBlue = (((cPrimary & nBMask) >> nBShift) << 6) + ((cDual & nBMask) >> nBShift);
+
+            *pDest++ = (m_pBlendTable[(nRed << 5) + nDitherSeed] << nRShift)
+                | (m_pBlendTable[(nGreen << 5) + nDitherSeed] << nGShift)
+                | (m_pBlendTable[(nBlue << 5) + nDitherSeed] << nBShift);
+        }
+
+        pRowData += nWidth + nDataJump;
+        pRowDualData += nWidth + nDataJump;
+        pDest += nSurfaceJump;
+    }
+
+    return TRUE;
+}
+
 namespace {
 
 // A 24-bit pixel: the three low bytes of a realized palette entry.
