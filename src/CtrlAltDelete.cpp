@@ -546,6 +546,92 @@ void CtrlAltDelete_SetChapter(INT nChapter)
     }
 }
 
+// 0x4EDCA0 void CtrlAltDelete_AddSpellClass(const BYTE& nClass, DWORD dwCount)
+// — 692 bytes (0x4EDCA0-0x4EDF53). ecx (the console) is not read: it is
+// overwritten at entry and the game comes from the global. Called only by
+// CtrlAltDelete_AddSpell (0x4ECC70), which forwards its own ecx with every
+// call; neither reads it.
+//
+// Gives every party member every spell the game has catalogued for one
+// spellcasting class, dwCount copies each. The class's grouped list
+// m_spellsByClass[GetSpellcasterIndex(nClass)] holds level buckets of
+// CSpellListEntry ids; each id is resolved through the game's master m_spells
+// res-ref list and handed to AddKnownSpell with its level. For BARD (2) and
+// SORCERER (10), whose casters draw from a per-level count instead of a book
+// per spell, the sprite's count is topped up too: GetSpellsAtLevel(nClass,
+// nLevel)->field_14 += dwCount, then sub_725D30(dwCount, FALSE). The party
+// walk is the m_group.m_memberList GetDeny/ReleaseDeny round trip (as
+// CAIGroup::GroupAction 0x404D00), retrying on DENIED as well as SHARED; a
+// member whose object cannot be denied is skipped without release. The
+// guard's `add 0x3884` test at 0x4EDCE5 is a dead null-game artifact; the
+// live test is the head node at game+0x388E.
+void CtrlAltDelete_AddSpellClass(const BYTE& nClass, DWORD dwCount)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGroupedSpellList* pGroupedList =
+        &pGame->m_spellsByClass[pGame->GetSpellcasterIndex(nClass)];
+
+    if (pGame->m_group.m_memberList.GetHeadPosition() == NULL) {
+        return;
+    }
+
+    POSITION pos = pGame->m_group.m_memberList.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nCharacterId = static_cast<LONG>(reinterpret_cast<INT_PTR>(
+            pGame->m_group.m_memberList.GetNext(pos)));
+
+        CGameObject* pObject = NULL;
+        BYTE nStatus;
+
+        // The original spins while another thread shares or holds the sprite.
+        do {
+            nStatus = pGame->GetObjectArray()->GetDeny(nCharacterId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (nStatus == CGameObjectArray::SHARED
+            || nStatus == CGameObjectArray::DENIED);
+
+        if (nStatus != CGameObjectArray::SUCCESS) {
+            continue;
+        }
+
+        CGameSprite* pSprite = static_cast<CGameSprite*>(pObject);
+
+        // NOTE: The original inlines CSpellList's and CSpellResRefList's
+        // checked accesses here (UTIL_ASSERTs at 0x8A7DCC/0x8AA868/0x8AA844,
+        // CSpellList.cpp lines 772/724/725 and 652/653); ours reads the
+        // members directly.
+        for (UINT nLevel = 0; nLevel < pGroupedList->m_nHighestLevel; nLevel++) {
+            for (UINT nIndex = 0; nIndex < pGroupedList->m_lists[nLevel].m_nCount;
+                 nIndex++) {
+                UINT nID = pGroupedList->m_lists[nLevel].m_pList[nIndex].m_nID;
+
+                pSprite->AddKnownSpell(nClass, nLevel, pGame->m_spells.m_pList[nID],
+                    dwCount,
+                    dwCount,
+                    0);
+
+                // BARD and SORCERER cast from a per-level count rather than a
+                // book per spell: top it up and let sub_725D30 do the work.
+                // The original calls GetSpellsAtLevel three times, once per
+                // access (0x4EDEA8/0x4EDEBD/0x4EDEE2).
+                if (nClass == 2 || nClass == 10) {
+                    UINT nCastCount
+                        = pSprite->GetSpellsAtLevel(nClass, nLevel)->field_14 + dwCount;
+                    pSprite->GetSpellsAtLevel(nClass, nLevel)->field_14 = nCastCount;
+                    pSprite->GetSpellsAtLevel(nClass, nLevel)->sub_725D30(dwCount,
+                        FALSE);
+                }
+            }
+        }
+
+        pGame->GetObjectArray()->ReleaseDeny(nCharacterId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+}
+
 // 0x4EDF60 void CtrlAltDelete_JeffKAttacks() — 31 bytes (0x4EDF60-0x4EDF7E).
 // ecx is saved in esi and forwarded to 0x4EC390, which never reads it.
 // Spawns the "JeffK" creature.

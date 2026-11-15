@@ -55,6 +55,9 @@ void CtrlAltDelete_CheckVar(CString sName, CString sScope);
 // 0x4EDAB0
 void CtrlAltDelete_SetChapter(INT nChapter);
 
+// 0x4EDCA0
+void CtrlAltDelete_AddSpellClass(const BYTE& nClass, DWORD dwCount);
+
 // 0x4EDF60
 void CtrlAltDelete_JeffKAttacks();
 
