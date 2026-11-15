@@ -23,6 +23,9 @@ public:
     // 0x584420
     int CountArgs();
 
+    // 0x583E60
+    void ResolveCommand(CString sWord);
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;

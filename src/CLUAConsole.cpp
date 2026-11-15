@@ -127,3 +127,63 @@ int CLUAConsole::CountArgs()
         return 0;
     }
 }
+
+// 635 bytes (0x583E60-0x5840DA). thiscall: ecx is the console; the one
+// by-value CString parameter is callee-cleaned (`ret 4` at 0x5840D8).
+// Stores the raw word into field_4 (operator= 0x7FCD07 at 0x583E89),
+// encodes a copy of it through the free scrambler (0x5844E0 at 0x583EA6,
+// ecx = the console, which that callee ignores), then walks a strcmp chain
+// (0x7E7A54, first compare at 0x583ED2) of the encoded word against the
+// same transform baked into the literals at 0x8AF644+; a hit stores the
+// command id into field_0 and jumps to the shared tail at 0x5840B8, the
+// full miss (0x5840AB) leaves field_0 = -1 and reports through
+// CommandNotFound (0x584320, called at 0x5840B3). The tree compares with
+// == against EncodeCommandWord("WORD") per arm: the doubling map is
+// injective over the letter range, so encoded(entered) == encoded(literal)
+// is exactly the entered word, and re-encoding the plain literal at run
+// time equals the baked bytes the exe compares against. Ids, in chain
+// order: FIRSTAID 0xC, HANS 0xD, MIDAS 0xE, ADDGOLD 0x10, ADDSPELL 0x11,
+// CHECKVAR 0x12, CREATEITEM 0x15, ENABLECHEATKEYS 0x18, EXPLOREAREA 0x19,
+// MOVETOAREA 0x1A, SETCURRENTXP 0x1C, SETGLOBAL 0x1D, SETCHAPTER 0x25,
+// JEFFKATTACKS 0x26, JEFFKDEFENDS 0x27. Ghidra: Get_CLUAConsole_Command_ID.
+// 0x583E60
+void CLUAConsole::ResolveCommand(CString sWord)
+{
+    field_4 = sWord;
+    CString sEncoded = EncodeCommandWord(sWord);
+
+    if (sEncoded == EncodeCommandWord("FIRSTAID"))
+        field_0 = 0xC;
+    else if (sEncoded == EncodeCommandWord("HANS"))
+        field_0 = 0xD;
+    else if (sEncoded == EncodeCommandWord("MIDAS"))
+        field_0 = 0xE;
+    else if (sEncoded == EncodeCommandWord("ADDGOLD"))
+        field_0 = 0x10;
+    else if (sEncoded == EncodeCommandWord("ADDSPELL"))
+        field_0 = 0x11;
+    else if (sEncoded == EncodeCommandWord("CHECKVAR"))
+        field_0 = 0x12;
+    else if (sEncoded == EncodeCommandWord("CREATEITEM"))
+        field_0 = 0x15;
+    else if (sEncoded == EncodeCommandWord("ENABLECHEATKEYS"))
+        field_0 = 0x18;
+    else if (sEncoded == EncodeCommandWord("EXPLOREAREA"))
+        field_0 = 0x19;
+    else if (sEncoded == EncodeCommandWord("MOVETOAREA"))
+        field_0 = 0x1A;
+    else if (sEncoded == EncodeCommandWord("SETCURRENTXP"))
+        field_0 = 0x1C;
+    else if (sEncoded == EncodeCommandWord("SETGLOBAL"))
+        field_0 = 0x1D;
+    else if (sEncoded == EncodeCommandWord("SETCHAPTER"))
+        field_0 = 0x25;
+    else if (sEncoded == EncodeCommandWord("JEFFKATTACKS"))
+        field_0 = 0x26;
+    else if (sEncoded == EncodeCommandWord("JEFFKDEFENDS"))
+        field_0 = 0x27;
+    else {
+        field_0 = -1;
+        CommandNotFound();
+    }
+}
