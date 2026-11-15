@@ -26,6 +26,9 @@ public:
     // 0x583E60
     void ResolveCommand(CString sWord);
 
+    // 0x5842C0
+    void AddTextArg(CString sArg);
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;

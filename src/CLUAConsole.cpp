@@ -187,3 +187,21 @@ void CLUAConsole::ResolveCommand(CString sWord)
         CommandNotFound();
     }
 }
+
+// 96 bytes (0x5842C0-0x58431F). thiscall: ecx is the console; the one
+// by-value CString parameter is callee-cleaned (`ret 4` at 0x584318). An
+// SEH frame (trylevel at [esp+0x14] region: 0 at 0x5842E4, -1 at
+// 0x5842FC) wraps the one real call. The append: the array's element
+// count read straight from the member header — mov eax,[esi+0x2C] at
+// 0x5842D8, the CArray m_nSize inside the token store at this+0x24 — is
+// passed with the parameter (edx = [esp+0x14] at 0x5842DE) to
+// CStringArray::SetAtGrow (0x7FBB6A at 0x5842EC, ecx = this+0x24);
+// growing at the current size is an append. The token counter field_C is
+// then bumped through [esi+0xC] (0x5842F1-0x5842F9) and the parameter is
+// destructed in the callee (CString dtor 0x7FCC1A at 0x584304).
+// 0x5842C0
+void CLUAConsole::AddTextArg(CString sArg)
+{
+    field_24.SetAtGrow(field_24.GetSize(), sArg);
+    field_C++;
+}
