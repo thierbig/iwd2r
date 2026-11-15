@@ -1,13 +1,21 @@
 // The CLUAConsole parse layer (Task 85c): the word encoder 0x5844E0, the
 // word-to-id resolver 0x583E60, the argument-count check 0x584420, the
 // argument parser 0x5840E0 with its token append 0x5842C0, and the shared
-// report's non-printing tail 0x584320. Every arm that prints (unknown
-// word, bad parens, unclosed quote, CountArgs arm 7) goes through
-// CtrlAltDelete_DisplayText into a live world screen and is pinned by the
-// evidence listings instead.
+// report's non-printing tail 0x584320; and the dispatcher 0x5838A0 (Task
+// 85d) driving that layer end to end. Every arm that prints (unknown
+// word, bad parens, unclosed quote, wrong argument count, bad prefix)
+// goes through CtrlAltDelete_DisplayText into a live world screen and is
+// pinned by the evidence listings instead; the ENABLECHEATKEYS arm is the
+// one dispatch effect observable without game data, over the zeroed
+// chitin stub from tests/test_ctrl_alt_delete.cpp.
+#define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
+#include "CBaldurChitin.h"
 #include "CLUAConsole.h"
+#include "CScreenWorld.h"
+
+#include <memory>
 
 TEST_CASE("EncodeCommandWord doubles each byte after +8", "[clua]")
 {
@@ -152,4 +160,55 @@ TEST_CASE("CLUAConsole.CommandNotFound leaves the id unknown without printing", 
     c.field_0 = 5; // not a report id: the default arm prints nothing
     c.CommandNotFound();
     CHECK(c.field_0 == 0xFFFFFFFF);
+}
+
+TEST_CASE("CLUAConsole.Execute returns silently on the empty line", "[clua]")
+{
+    CLUAConsole c;
+    c.field_0 = 0x1234;
+    c.Execute("");
+    CHECK(c.field_0 == 0x1234); // untouched: nothing ran
+}
+
+TEST_CASE("CLUAConsole.Execute drives ENABLECHEATKEYS lines end to end", "[clua]")
+{
+    CBaldurChitin* previousBaldur = g_pBaldurChitin;
+
+    // Zeroed CBaldurChitin with a zeroed CScreenWorld behind m_pEngineWorld
+    // (what GetScreenWorld returns), as in tests/test_ctrl_alt_delete.cpp:
+    // the dispatched handler is a plain store into that screen. Counts
+    // accumulate across Execute calls on one console, so each line gets a
+    // fresh one.
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> screen(new unsigned char[sizeof(CScreenWorld)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(screen.get());
+    CScreenWorld* pScreen = g_pBaldurChitin->GetScreenWorld();
+
+    // Lowercase prefix and word exercise both MakeUpper passes. One value
+    // passes through the count check and the table value is stored.
+    pScreen->m_bCheatKeysEnabled = 1;
+    CLUAConsole c0;
+    c0.Execute("ctrlaltdelete:enablecheatkeys(0)");
+    CHECK(pScreen->m_bCheatKeysEnabled == 0);
+    CHECK(c0.field_0 == 0x18);
+
+    CLUAConsole c1;
+    c1.Execute("ctrlaltdelete:enablecheatkeys(1)");
+    CHECK(pScreen->m_bCheatKeysEnabled == 1);
+
+    // No argument: the zero-count arm forces the keys on.
+    pScreen->m_bCheatKeysEnabled = 0;
+    CLUAConsole cNone;
+    cNone.Execute("ctrlaltdelete:enablecheatkeys()");
+    CHECK(pScreen->m_bCheatKeysEnabled == 1);
+
+    // Two values: CountArgs' shape table maps any count but one to zero,
+    // so the zero-count arm fires here too.
+    pScreen->m_bCheatKeysEnabled = 0;
+    CLUAConsole cTwo;
+    cTwo.Execute("ctrlaltdelete:enablecheatkeys(1,2)");
+    CHECK(pScreen->m_bCheatKeysEnabled == 1);
+
+    g_pBaldurChitin = previousBaldur;
 }
