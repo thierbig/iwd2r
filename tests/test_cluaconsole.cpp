@@ -10,17 +10,22 @@
 // the zeroed chitin stub from tests/test_ctrl_alt_delete.cpp) and
 // SETCHAPTER (0x4EDAB0), whose GetShare comes back BAD_INDEX on a zeroed
 // object array so the handler returns through its guard without touching
-// a sprite. The arms that need a live world (HANS 0x4ED2C0 among them)
-// stay evidence-pinned.
+// a sprite, and CHECKVAR (0x4ED730), whose every arm ends in a
+// DisplayText call that the zeroed game's m_bGameLoaded guard turns into
+// a no-op while the dispatch id records which arm ran. The arms that need
+// a live world (HANS 0x4ED2C0 among them) stay evidence-pinned.
 #define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
 #include "CBaldurChitin.h"
+#include "CGameArea.h"
 #include "CInfGame.h"
 #include "CLUAConsole.h"
 #include "CScreenWorld.h"
+#include "CVariableHash.h"
 
 #include <memory>
+#include <new>
 
 TEST_CASE("EncodeCommandWord doubles each byte after +8", "[clua]")
 {
@@ -254,6 +259,74 @@ TEST_CASE("CLUAConsole.Execute drives SETCHAPTER lines through the guard", "[clu
     cOne.field_C = 0;
     cOne.Execute("ctrlaltdelete:setchapter(3)");
     CHECK(cOne.field_0 == 0x25);
+
+    g_pBaldurChitin = previousBaldur;
+}
+
+TEST_CASE("CLUAConsole.Execute drives CHECKVAR lines through every scope branch", "[clua]")
+{
+    CBaldurChitin* previousBaldur = g_pBaldurChitin;
+
+    // Zeroed chitin, engine world, game and one area, as in the
+    // SETCHAPTER test above. Both variable hashes are placement-
+    // constructed over the zeroed buffers and hold one variable; the
+    // area is named AR1200 and reachable through the game's area table.
+    // Each arm's text runs into CScreenWorld::DisplayText's
+    // m_bGameLoaded guard (zeroed FALSE) and returns harmlessly, so the
+    // observable is the dispatch id alone: field_0 stays 0x12, the
+    // CHECKVAR arm, whichever branch of 0x4ED730 built the text.
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> screen(new unsigned char[sizeof(CScreenWorld)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    std::unique_ptr<unsigned char[]> area(new unsigned char[sizeof(CGameArea)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(screen.get());
+    CInfGame* pGame = reinterpret_cast<CInfGame*>(game.get());
+    g_pBaldurChitin->m_pObjectGame = pGame;
+    CGameArea* pArea = reinterpret_cast<CGameArea*>(area.get());
+
+    new (&pGame->m_variables) CVariableHash();
+    new (&pArea->m_variables) CVariableHash();
+    pArea->m_resRef = "AR1200";
+    pGame->m_gameAreas[0] = pArea;
+
+    CVariable cVariable;
+    cVariable.SetName("TESTVAR");
+    cVariable.m_intValue = 42;
+    pGame->m_variables.AddKey(cVariable);
+    pArea->m_variables.AddKey(cVariable);
+
+    // Game-hash hit: "GLOBAL::TESTVAR = 42".
+    CLUAConsole cHit;
+    cHit.field_0 = 0;
+    cHit.field_8 = 0;
+    cHit.field_C = 0;
+    cHit.Execute("ctrlaltdelete:checkvar(\"TESTVAR\",\"GLOBAL\")");
+    CHECK(cHit.field_0 == 0x12);
+
+    // Game-hash miss: "No variable called GLOBAL::NOPE".
+    CLUAConsole cMiss;
+    cMiss.field_0 = 0;
+    cMiss.field_8 = 0;
+    cMiss.field_C = 0;
+    cMiss.Execute("ctrlaltdelete:checkvar(\"NOPE\",\"GLOBAL\")");
+    CHECK(cMiss.field_0 == 0x12);
+
+    // Area hit: the resref-prefixed branch, "AR1200::TESTVAR = 42".
+    CLUAConsole cArea;
+    cArea.field_0 = 0;
+    cArea.field_8 = 0;
+    cArea.field_C = 0;
+    cArea.Execute("ctrlaltdelete:checkvar(\"TESTVAR\",\"AR1200\")");
+    CHECK(cArea.field_0 == 0x12);
+
+    // Unknown area: "Need to be in area specified when checking local!".
+    CLUAConsole cNone;
+    cNone.field_0 = 0;
+    cNone.field_8 = 0;
+    cNone.field_C = 0;
+    cNone.Execute("ctrlaltdelete:checkvar(\"TESTVAR\",\"AR9999\")");
+    CHECK(cNone.field_0 == 0x12);
 
     g_pBaldurChitin = previousBaldur;
 }
