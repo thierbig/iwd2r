@@ -14,6 +14,9 @@ class CLUAConsole {
 public:
     ~CLUAConsole();
 
+    // 0x584400
+    CString GetCommandWord();
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;

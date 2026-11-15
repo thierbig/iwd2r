@@ -18,3 +18,16 @@
 CLUAConsole::~CLUAConsole()
 {
 }
+
+// 32 bytes (0x584400-0x58441F). thiscall with a by-value CString return:
+// the caller pushes the hidden return buffer, the body runs the CString copy
+// ctor (0x7FC98F) with that buffer as its this and the member at +0x4 as the
+// source, and `ret 4` drops the buffer pointer.
+//
+// The accessor behind the console's unknown-word report: 0x584320's -1 arm
+// concatenates it after the "Command not found : " prefix (0x8AF7DC).
+// 0x584400
+CString CLUAConsole::GetCommandWord()
+{
+    return field_4;
+}
