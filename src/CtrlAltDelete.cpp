@@ -174,6 +174,17 @@ void CtrlAltDelete_AddGold500()
     g_pBaldurChitin->GetScreenWorld()->AddGold(500);
 }
 
+// 0x4ED250 void CtrlAltDelete_AddItemPack() — 97 bytes (0x4ED250-0x4ED2B0).
+// ecx is saved in esi and forwarded as the this of 0x4ED500 on all three
+// calls; that callee is not ported, so this body is a stub. The original
+// hands the player the cheat item pack: five "potn08" (0x8ABD88), five
+// "potn20" (0x8ABD80) and one "scrlpet" (0x8ABD78), each via
+// 0x4ED500(CString by value, count, 0, 0).
+void CtrlAltDelete_AddItemPack()
+{
+    // TODO: 0x4ED250 calls 0x4ED500 (not ported).
+}
+
 // 0x4EDF60 void CtrlAltDelete_JeffKAttacks() — 31 bytes (0x4EDF60-0x4EDF7E).
 // ecx is saved in esi and forwarded to 0x4EC390, which never reads it.
 // Spawns the "JeffK" creature.
