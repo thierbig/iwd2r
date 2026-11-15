@@ -2052,7 +2052,7 @@ void CVidMode::RenderQuad(const VERTEX_DESC* pVertices, INT nVertices)
     g_pChitin->GetCurrentVideoMode()->CheckResults3d(0);
 }
 
-// 0x5CEDE0
+// 0x7BD9D0
 void CVidMode::RenderBlackFade3d()
 {
     if (g_pChitin->cVideo.Is3dAccelerated()) {
