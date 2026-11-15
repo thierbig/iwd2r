@@ -17,6 +17,7 @@
 #include "CVidImage.h"
 #include "CVidInf.h"
 #include "CVidPoly.h"
+#include "CVideo3d.h"
 #include "CVisibility.h"
 #include "CWarp.h"
 
@@ -25,6 +26,8 @@
 #include <cstring>
 #include <ios>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -3976,4 +3979,179 @@ TEST_CASE("vid: BltBmp8To16 paints 8-bit indices through the palette into 16-bit
     CHECK(canvas[index(2, 1)] == static_cast<WORD>(pal[2]));
     CHECK(canvas[index(3, 1)] == static_cast<WORD>(pal[3]));
     CHECK(canvas[index(0, 1)] == 0x7C00); // the pack: pure red, five bits
+}
+
+// ---------------------------------------------------------------------------
+// CVidMode::RenderBlackFade3d (0x7BD9D0)
+//
+// The 3d renderer's fade: a fullscreen quad, black through
+// ApplyBrightnessContrast, alpha 1 - m_nFade / NUM_FADE_FRAMES, drawn with
+// blending enabled and texturing disabled. The GL entry points are static
+// function pointers on CVideo3d, so the test swaps them for recorders and
+// drives the function through a bare chitin with an accelerated cVideo and a
+// warp as the active engine (the inlined GetCurrentVideoMode reads
+// pActiveEngine->pVidMode). CheckResults3d(0) queries no GL state, so the
+// log holds only the draw calls.
+
+namespace {
+
+struct GlRecorder {
+    std::vector<std::string> calls;
+};
+
+GlRecorder* g_glRecorder = nullptr;
+
+void GlLog(std::string s)
+{
+    if (g_glRecorder != nullptr) {
+        g_glRecorder->calls.push_back(std::move(s));
+    }
+}
+
+std::string GlFl(GLfloat v)
+{
+    std::ostringstream os;
+    os << v;
+    return os.str();
+}
+
+// Swaps the seven GL entry points RenderBlackFade3d uses for recorders and
+// restores them on scope exit.
+class GlStubScope {
+public:
+    GlStubScope()
+    {
+        m_disable = CVideo3d::glDisable;
+        m_enable = CVideo3d::glEnable;
+        m_blendFunc = CVideo3d::glBlendFunc;
+        m_begin = CVideo3d::glBegin;
+        m_color4f = CVideo3d::glColor4f;
+        m_vertex3f = CVideo3d::glVertex3f;
+        m_end = CVideo3d::glEnd;
+
+        CVideo3d::glDisable = [](GLenum cap) { GlLog("disable " + std::to_string(cap)); };
+        CVideo3d::glEnable = [](GLenum cap) { GlLog("enable " + std::to_string(cap)); };
+        CVideo3d::glBlendFunc = [](GLenum sfactor, GLenum dfactor) {
+            GlLog("blend " + std::to_string(sfactor) + " " + std::to_string(dfactor));
+        };
+        CVideo3d::glBegin = [](GLenum mode) { GlLog("begin " + std::to_string(mode)); };
+        CVideo3d::glColor4f = [](GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
+            GlLog("color " + GlFl(r) + " " + GlFl(g) + " " + GlFl(b) + " " + GlFl(a));
+        };
+        CVideo3d::glVertex3f = [](GLfloat x, GLfloat y, GLfloat z) {
+            GlLog("vertex " + GlFl(x) + " " + GlFl(y) + " " + GlFl(z));
+        };
+        CVideo3d::glEnd = []() { GlLog("end"); };
+    }
+
+    ~GlStubScope()
+    {
+        CVideo3d::glDisable = m_disable;
+        CVideo3d::glEnable = m_enable;
+        CVideo3d::glBlendFunc = m_blendFunc;
+        CVideo3d::glBegin = m_begin;
+        CVideo3d::glColor4f = m_color4f;
+        CVideo3d::glVertex3f = m_vertex3f;
+        CVideo3d::glEnd = m_end;
+    }
+
+    GlStubScope(const GlStubScope&) = delete;
+    GlStubScope& operator=(const GlStubScope&) = delete;
+
+private:
+    PFNGLDISABLEPROC m_disable;
+    PFNGLENABLEPROC m_enable;
+    PFNGLBLENDFUNCPROC m_blendFunc;
+    PFNGLBEGINPROC m_begin;
+    PFNGLCOLOR4FPROC m_color4f;
+    PFNGLVERTEX3FPROC m_vertex3f;
+    PFNGLENDPROC m_end;
+};
+
+} // namespace
+
+TEST_CASE("render_black_fade_3d_draws_the_fade_quad", "[vid]")
+{
+    ChitinScope scope;
+    g_pChitin->cVideo.m_bIs3dAccelerated = TRUE;
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 10; // alpha = 1 - 10/NUM_FADE_FRAMES(20) = 0.5
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    const GLfloat w = static_cast<GLfloat>(CVideo::SCREENWIDTH) + CVideo3d::SUB_PIXEL_SHIFT;
+    const GLfloat h = static_cast<GLfloat>(CVideo::SCREENHEIGHT) + CVideo3d::SUB_PIXEL_SHIFT;
+    CHECK(recorder.calls
+        == std::vector<std::string> {
+            "disable 3553", // GL_TEXTURE_2D
+            "enable 3042", // GL_BLEND
+            "blend 770 771", // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            "begin 7", // GL_QUADS
+            "color 0 0 0 0.5", // black through zeroed corrections, half faded
+            "vertex 0 0 0",
+            "vertex 0 " + GlFl(h) + " 0",
+            "vertex " + GlFl(w) + " " + GlFl(h) + " 0",
+            "vertex " + GlFl(w) + " 0 0",
+            "end",
+            "disable 3042", // GL_BLEND
+        });
+}
+
+TEST_CASE("render_black_fade_3d_alpha_tracks_the_fade", "[vid]")
+{
+    ChitinScope scope;
+    g_pChitin->cVideo.m_bIs3dAccelerated = TRUE;
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 0; // fade not started: fully opaque black cover
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    auto colorLine = std::find_if(recorder.calls.begin(), recorder.calls.end(),
+        [](const std::string& s) { return s.compare(0, 5, "color") == 0; });
+    REQUIRE(colorLine != recorder.calls.end());
+    CHECK(*colorLine == "color 0 0 0 1");
+}
+
+TEST_CASE("render_black_fade_3d_skipped_without_3d_acceleration", "[vid]")
+{
+    ChitinScope scope; // m_bIs3dAccelerated defaults to FALSE
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 10;
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    CHECK(recorder.calls.empty());
 }
