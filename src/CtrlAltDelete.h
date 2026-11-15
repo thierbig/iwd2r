@@ -12,4 +12,7 @@
 // 0x4EC1C0
 void CtrlAltDelete_DisplayText(CString sText);
 
+// 0x4EC250
+void CtrlAltDelete_MoveToArea(CString sAreaName);
+
 #endif /* CTRLALTDELETE_H_ */
