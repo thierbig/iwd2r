@@ -527,8 +527,7 @@ SHORT CGameObject::TransferInventory(CGameObject* pReceiver)
                     continue;
                 }
 
-                CMessageContainerAddItem* pMessage =
-                    new CMessageContainerAddItem(*pItem, 0x7FFF, FALSE, m_id, pReceiver->GetId());
+                CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(*pItem, 0x7FFF, FALSE, m_id, pReceiver->GetId());
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
 
                 static_cast<CGameContainer*>(this)->RemoveItem(0);
@@ -570,8 +569,7 @@ SHORT CGameObject::TransferInventory(CGameObject* pReceiver)
                 CMessageRemoveItem* pRemoveMessage = new CMessageRemoveItem(nSlot, m_id, m_id);
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pRemoveMessage, FALSE);
 
-                CMessageContainerAddItem* pMessage =
-                    new CMessageContainerAddItem(*pItemCopy, 0x7FFF, FALSE, m_id, pReceiver->GetId());
+                CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(*pItemCopy, 0x7FFF, FALSE, m_id, pReceiver->GetId());
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
 
                 delete pItemCopy;
