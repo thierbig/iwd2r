@@ -29,6 +29,9 @@ public:
     // 0x5842C0
     void AddTextArg(CString sArg);
 
+    // 0x5840E0
+    void ParseArgs(CString sArgs);
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;

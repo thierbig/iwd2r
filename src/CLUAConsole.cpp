@@ -2,6 +2,8 @@
 
 #include "CtrlAltDelete.h"
 
+#include <cctype>
+
 // 0x4EDA50 CLUAConsole::~CLUAConsole() — 90 bytes (0x4EDA50-0x4EDAAA), a
 // caller-cleaned thiscall (plain `ret` at 0x4EDAA9; there is no deleting
 // wrapper because the object is a stack local of the Enter handler 0x77BF30).
@@ -204,4 +206,87 @@ void CLUAConsole::AddTextArg(CString sArg)
 {
     field_24.SetAtGrow(field_24.GetSize(), sArg);
     field_C++;
+}
+
+// 475 bytes (0x5840E0-0x5842BA). thiscall: edi = the console (ecx); the
+// one by-value CString parameter is callee-cleaned (`ret 4` at 0x5842B8).
+// An SEH frame with the trylevel stepping 0 -> 1 (0x584111) -> 2 (0x584197)
+// -> 3 (0x5841CD) -> 0 (0x58428D) -> -1 (0x58429B) spans the whole body.
+//
+// The parameter is trimmed in place first (TrimRight 0x7FAEFB at 0x584116,
+// TrimLeft 0x7FAF47 at 0x58411F), then a pre-scan (0x584124-0x584150)
+// locates the closing paren: a ')' as the first character jumps straight
+// to the loop (0x58412C/0x58412F); otherwise it looks for the first ')'
+// at sArgs[i+1] and rejects the line (-2 + CommandNotFound, 0x58427C) when
+// i reaches 0x80 (0x584131) or len-1 (0x58413C-0x584142, no ')' before the
+// end). The loop at 0x584152 splits the remainder on ",)" (literal
+// 0x8AF714, Find 0x7FD0D0 at 0x584178): a hit n sets sToken = Left(n)
+// (0x7FAA72 at 0x58418D) and sArgs = Right(len-n-1) (0x7FA9F6 at
+// 0x5841C3), a miss leaves sArgs whole; then sToken.TrimRight (0x5841E9)
+// and sArgs.TrimLeft (0x5841F2), an empty token loops (0x584200). A token
+// opening with '"' (len >= 2, 0x584208-0x584210) must close with '"'
+// (0x584217) or the line is rejected; the inner text goes to AddTextArg
+// as Mid(1, len-2) (length re-read through the GetLength thunk 0x41E160
+// at 0x58421D, Mid 0x7FA960 at 0x584234, call 0x5842C0 at 0x58423B).
+// Otherwise the token must start with a digit (isdigit 0x7E93D9 at
+// 0x584249) or '-' (0x584259): its atoi value (0x7E7B8E at 0x58425F) is
+// grown into the value table at the current size ([this+0x18], SetAtGrow
+// 0x7FB967 at 0x58426F) and field_8 counts it (0x584274). Any other first
+// character — including a bare ')' tail — is the silent, uncounted return
+// at 0x584289.
+//
+// NOTE: the split only consumes on a ",)" hit, so a trailing numeric token
+// without one ("5)") never advances sArgs and re-appends forever — the
+// exe's behavior when the line omits the conventional trailing comma. The
+// port mirrors it exactly; the dispatcher 0x5838A0 always hands a
+// ')'-terminated remainder.
+// 0x5840E0
+void CLUAConsole::ParseArgs(CString sArgs)
+{
+    sArgs.TrimRight();
+    sArgs.TrimLeft();
+
+    if (sArgs[0] != ')') {
+        int nLength = sArgs.GetLength();
+        for (int i = 0;; i++) {
+            if (i == 0x80 || i == nLength - 1) {
+                field_0 = -2;
+                CommandNotFound();
+                return;
+            }
+            if (sArgs[i + 1] == ')')
+                break;
+        }
+    }
+
+    for (;;) {
+        if (sArgs.GetLength() == 0)
+            return;
+
+        CString sToken = sArgs;
+        int n = sArgs.Find(",)");
+        if (n >= 0) {
+            sToken = sToken.Left(n);
+            sArgs = sArgs.Right(sArgs.GetLength() - n - 1);
+        }
+        sToken.TrimRight();
+        sArgs.TrimLeft();
+
+        if (sToken.GetLength() == 0)
+            continue;
+
+        if (sToken[0] == '"' && sToken.GetLength() >= 2) {
+            if (sToken[sToken.GetLength() - 1] != '"') {
+                field_0 = -2;
+                CommandNotFound();
+                return;
+            }
+            AddTextArg(sToken.Mid(1, sToken.GetLength() - 2));
+        } else if (isdigit(sToken[0]) || sToken[0] == '-') {
+            field_10.SetAtGrow(field_10.GetSize(), atoi(sToken));
+            field_8++;
+        } else {
+            return;
+        }
+    }
 }
