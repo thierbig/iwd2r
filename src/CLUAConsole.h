@@ -17,6 +17,9 @@ public:
     // 0x584400
     CString GetCommandWord();
 
+    // 0x584320
+    void CommandNotFound();
+
     /* 0000 */ DWORD field_0;
     /* 0004 */ CString field_4;
     /* 0008 */ DWORD field_8;

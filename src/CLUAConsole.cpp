@@ -1,5 +1,7 @@
 #include "CLUAConsole.h"
 
+#include "CtrlAltDelete.h"
+
 // 0x4EDA50 CLUAConsole::~CLUAConsole() — 90 bytes (0x4EDA50-0x4EDAAA), a
 // caller-cleaned thiscall (plain `ret` at 0x4EDAA9; there is no deleting
 // wrapper because the object is a stack local of the Enter handler 0x77BF30).
@@ -30,4 +32,36 @@ CLUAConsole::~CLUAConsole()
 CString CLUAConsole::GetCommandWord()
 {
     return field_4;
+}
+
+// 213 bytes (0x584320-0x5843F4). thiscall: ecx is the console. The console's
+// shared error reporter, keyed on the command id at +0x0: -3 prints the
+// "I don't know how you go here, try again!" literal (0x8AF718), -2 the
+// "Wrong Parameters : ..." literal (0x8AF744, double spaces and the
+// "seperate" typo as shipped), and -1 the "Command not found : " prefix
+// (0x8AF7DC) with GetCommandWord() appended; every other id prints
+// nothing. All arms fall through the store at 0x5843D2 leaving the id at
+// -1. The print call hands &this+0x38 to CtrlAltDelete_DisplayText
+// (0x4EC1C0) as its ecx, which that callee never reads.
+// 0x584320
+void CLUAConsole::CommandNotFound()
+{
+    switch (static_cast<int>(field_0)) {
+    case -3:
+        CtrlAltDelete_DisplayText("I don't know how you go here, try again!");
+        break;
+    case -2:
+        CtrlAltDelete_DisplayText("Wrong Parameters : Check the parameter list.  Strings must be in quotes.  Make sure to enclose parameters in () and seperate parameters with a comma.");
+        break;
+    case -1: {
+        CString sText = "Command not found : ";
+        sText += GetCommandWord();
+        CtrlAltDelete_DisplayText(sText);
+        break;
+    }
+    default:
+        break;
+    }
+
+    field_0 = -1;
 }
