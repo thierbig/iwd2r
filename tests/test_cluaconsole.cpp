@@ -13,7 +13,11 @@
 // a sprite, and CHECKVAR (0x4ED730), whose every arm ends in a
 // DisplayText call that the zeroed game's m_bGameLoaded guard turns into
 // a no-op while the dispatch id records which arm ran. The arms that need
-// a live world (HANS 0x4ED2C0 among them) stay evidence-pinned.
+// a live world (HANS 0x4ED2C0 among them) stay evidence-pinned, as do
+// ADDSPELL's (0x4ECC70) resref branches: the miss path walks the key
+// table (CDimmKeyTable::FindKey indexes m_pEntries with the hash, NULL
+// on the zeroed chitin) and the hit path loads a spell file; the class
+// branches run both new ports to the empty party guard and back.
 #define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
@@ -327,6 +331,72 @@ TEST_CASE("CLUAConsole.Execute drives CHECKVAR lines through every scope branch"
     cNone.field_C = 0;
     cNone.Execute("ctrlaltdelete:checkvar(\"TESTVAR\",\"AR9999\")");
     CHECK(cNone.field_0 == 0x12);
+
+    g_pBaldurChitin = previousBaldur;
+}
+
+TEST_CASE("CLUAConsole.Execute drives ADDSPELL class lines to the empty-party guard", "[clua]")
+{
+    CBaldurChitin* previousBaldur = g_pBaldurChitin;
+
+    // Zeroed chitin, engine world and game, as in the SETCHAPTER test.
+    // The class-name branches of 0x4ECC70 reach CtrlAltDelete_AddSpellClass
+    // (0x4EDCA0), whose spellcaster helpers are pure switches and whose
+    // party walk stops at the empty member list (head NULL at game+0x388E)
+    // before touching a sprite, so the observable is the dispatch id alone:
+    // field_0 stays 0x11, the ADDSPELL arm. The resref branches are not
+    // drivable here: FindKey indexes the zeroed chitin's NULL m_pEntries.
+    // Counts accumulate across Execute calls on one console, so each line
+    // gets a fresh one.
+    std::unique_ptr<unsigned char[]> baldur(new unsigned char[sizeof(CBaldurChitin)]());
+    std::unique_ptr<unsigned char[]> screen(new unsigned char[sizeof(CScreenWorld)]());
+    std::unique_ptr<unsigned char[]> game(new unsigned char[sizeof(CInfGame)]());
+    g_pBaldurChitin = reinterpret_cast<CBaldurChitin*>(baldur.get());
+    g_pBaldurChitin->m_pEngineWorld = reinterpret_cast<CScreenWorld*>(screen.get());
+    g_pBaldurChitin->m_pObjectGame = reinterpret_cast<CInfGame*>(game.get());
+
+    // "ALL" (one text argument, the default count 10 site): all seven
+    // spellcaster classes reach the empty-party guard.
+    CLUAConsole cAll;
+    cAll.field_0 = 0;
+    cAll.field_8 = 0;
+    cAll.field_C = 0;
+    cAll.Execute("ctrlaltdelete:addspell(\"ALL\")");
+    CHECK(cAll.field_0 == 0x11);
+
+    // A named class with the parsed count (the two-argument site).
+    CLUAConsole cBard;
+    cBard.field_0 = 0;
+    cBard.field_8 = 0;
+    cBard.field_C = 0;
+    cBard.Execute("ctrlaltdelete:addspell(\"BARD\", 3)");
+    CHECK(cBard.field_0 == 0x11);
+
+    // A named class with the default count.
+    CLUAConsole cSorcerer;
+    cSorcerer.field_0 = 0;
+    cSorcerer.field_8 = 0;
+    cSorcerer.field_C = 0;
+    cSorcerer.Execute("ctrlaltdelete:addspell(\"SORCERER\")");
+    CHECK(cSorcerer.field_0 == 0x11);
+
+    // No arguments: CountArgs' shape table (one string plus any values,
+    // id 0x11 maps to arm 2) reports zero strings, the arm stores -2 and
+    // the report runs through the game-loaded guard.
+    CLUAConsole cEmpty;
+    cEmpty.field_0 = 0;
+    cEmpty.field_8 = 0;
+    cEmpty.field_C = 0;
+    cEmpty.Execute("ctrlaltdelete:addspell()");
+    CHECK(cEmpty.field_0 == 0xFFFFFFFF);
+
+    // Two values: CountArgs reports three, the wrong-count tail again.
+    CLUAConsole cExtra;
+    cExtra.field_0 = 0;
+    cExtra.field_8 = 0;
+    cExtra.field_C = 0;
+    cExtra.Execute("ctrlaltdelete:addspell(\"WIZARD\", 1, 2)");
+    CHECK(cExtra.field_0 == 0xFFFFFFFF);
 
     g_pBaldurChitin = previousBaldur;
 }
