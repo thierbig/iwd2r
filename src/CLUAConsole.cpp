@@ -510,11 +510,9 @@ void CLUAConsole::Execute(CString sInput)
     case 12: { // SETCHAPTER
         int nArgs = CountArgs();
         if (nArgs == 0) {
-            // TODO: 0x5838A0 calls 0x4EDAB0 (not ported).
-            // 0x4EDAB0(-1).
+            CtrlAltDelete_SetChapter(-1);
         } else if (nArgs == 1) {
-            // TODO: 0x5838A0 calls 0x4EDAB0 (not ported).
-            // 0x4EDAB0(field_10.GetAt(0)).
+            CtrlAltDelete_SetChapter(field_10.GetAt(0));
         } else {
             field_0 = -2;
             CommandNotFound();

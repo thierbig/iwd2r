@@ -49,6 +49,9 @@ void CtrlAltDelete_Hans();
 // 0x4ED500
 void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD wUseCount3);
 
+// 0x4EDAB0
+void CtrlAltDelete_SetChapter(INT nChapter);
+
 // 0x4EDF60
 void CtrlAltDelete_JeffKAttacks();
 

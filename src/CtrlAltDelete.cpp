@@ -3,8 +3,8 @@
 #include "CAIAction.h"
 #include "CAIGroup.h"
 #include "CBaldurChitin.h"
-#include "CCreatureFile.h"
 #include "CChitin.h"
+#include "CCreatureFile.h"
 #include "CGameArea.h"
 #include "CGameObject.h"
 #include "CGameObjectArray.h"
@@ -425,6 +425,47 @@ void CtrlAltDelete_AddItem(CString sItem, WORD wUseCount1, WORD wUseCount2, WORD
         // straight into the epilogue); the pack handler's three calls place
         // one item each.
         return;
+    }
+}
+
+// 0x4EDAB0 void CtrlAltDelete_SetChapter(INT nChapter) — 492 bytes
+// (0x4EDAB0-0x4EDC9B), ret 0x4: one DWORD argument. The SETCHAPTER console
+// command: the resolver maps the word to id 0x25 and the dispatch arm calls
+// here with -1 when no argument was parsed and the parsed value otherwise,
+// handing the handler this+0x38. ecx is not read.
+//
+// Sets the chapter by action: a default-constructed CAIAction (the listing
+// inlines 0x403A40, leaving m_dest untouched) is re-aimed at INCREMENTCHAPTER
+// (161, the action id CGameAIBase's action switch routes to IncrementChapter)
+// with m_specificID as the chapter argument and m_specificID2 forced to 1 —
+// the handler drops m_specificID when m_specificID2 is zero. The action is
+// delivered to the protagonist: GetShare the sprite with THREAD_ASYNCH and
+// no timeout, call virtual slot 0x74 (CGameAIBase::AddAction) when the share
+// succeeded, and ReleaseShare — the original re-reads the game global and
+// re-runs GetProtagonist for the release id instead of keeping either
+// (0x4EDBF7).
+void CtrlAltDelete_SetChapter(INT nChapter)
+{
+    CAIAction cAction;
+
+    cAction.m_actionID = CAIAction::INCREMENTCHAPTER;
+    cAction.m_specificID = nChapter;
+    cAction.m_specificID2 = 1;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameObject* pObject = NULL;
+
+    if (pGame->GetObjectArray()->GetShare(pGame->GetProtagonist(),
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE)
+        == CGameObjectArray::SUCCESS) {
+        static_cast<CGameSprite*>(pObject)->AddAction(cAction);
+
+        pGame = g_pBaldurChitin->GetObjectGame();
+        pGame->GetObjectArray()->ReleaseShare(pGame->GetProtagonist(),
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
     }
 }
 
