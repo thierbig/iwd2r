@@ -338,6 +338,8 @@ set(IWD2R_ENGINE_SOURCES
     "src/CScreenWorld.h"
     "src/CScreenWorldMap.cpp"
     "src/CScreenWorldMap.h"
+    "src/CtrlAltDelete.cpp"
+    "src/CtrlAltDelete.h"
     "src/CSearchBitmap.cpp"
     "src/CSearchBitmap.h"
     "src/CSevenEyes.cpp"
