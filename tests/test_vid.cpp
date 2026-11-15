@@ -4155,3 +4155,70 @@ TEST_CASE("render_black_fade_3d_skipped_without_3d_acceleration", "[vid]")
 
     CHECK(recorder.calls.empty());
 }
+
+// CVidMode::DarkenRect (0x797E70), the 50% dark box behind floating text:
+// intersect against the clip, halve every pixel of the intersection
+// ((pixel >> 1) & 0x7F7F7F for the shim's 8-8-8 masks), unlock surface 0.
+// A bare CVidMode over one shim surface is enough - LockSurface only needs
+// m_nSurfaces/pSurfaces and g_pChitin for its alignment assert.
+TEST_CASE("vidmode_darken_rect_halves_only_the_clipped_rect", "[vid]")
+{
+    ChitinScope scope; // 32 bpp
+
+    IDirectDraw* dd = nullptr;
+    REQUIRE(DirectDrawCreate(nullptr, &dd, nullptr) == DD_OK);
+
+    DDSURFACEDESC req = {};
+    req.dwSize = sizeof(req);
+    req.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    req.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+    req.dwWidth = kWidth;
+    req.dwHeight = kHeight;
+    IDirectDrawSurface* surface = nullptr;
+    REQUIRE(dd->CreateSurface(&req, &surface, nullptr) == DD_OK);
+
+    DDSURFACEDESC ddsd = {};
+    ddsd.dwSize = sizeof(ddsd);
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    for (LONG y = 0; y < kHeight; y++) {
+        auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(ddsd.lpSurface) + y * ddsd.lPitch);
+        for (LONG x = 0; x < kWidth; x++) {
+            row[x] = 0x00FFFFFF;
+        }
+    }
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
+
+    CVidMode vidMode;
+    IDirectDrawSurface* surfaces[1] = { surface };
+    vidMode.m_nSurfaces = 1;
+    vidMode.pSurfaces = surfaces;
+
+    // (10,10)-(30,20) against the 24x16 clip: cols and rows are
+    // right-left and bottom-top, so exactly (10,10)-(24,16) halves.
+    CHECK(vidMode.DarkenRect(CRect(10, 10, 30, 20), 0, CRect(0, 0, kWidth, kHeight)) == TRUE);
+
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    const auto pixel = [&](int x, int y) {
+        const auto* row = reinterpret_cast<const DWORD*>(static_cast<const BYTE*>(ddsd.lpSurface) + y * ddsd.lPitch);
+        return row[x];
+    };
+    for (int y = 10; y < 16; y++) {
+        for (int x = 10; x < 24; x++) {
+            CHECK(pixel(x, y) == 0x007F7F7F);
+        }
+    }
+    // The frame outside the box is untouched, including the pixels just
+    // past its right and bottom edges (exclusive).
+    CHECK(pixel(0, 0) == 0x00FFFFFF);
+    CHECK(pixel(9, 9) == 0x00FFFFFF);
+    CHECK(pixel(23, 9) == 0x00FFFFFF);
+    CHECK(pixel(9, 15) == 0x00FFFFFF);
+    CHECK(pixel(23, 15) == 0x007F7F7F);
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
+
+    // An empty intersection returns FALSE and paints nothing.
+    CHECK(vidMode.DarkenRect(CRect(-8, -8, 0, 0), 0, CRect(0, 0, kWidth, kHeight)) == FALSE);
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    CHECK(pixel(0, 0) == 0x00FFFFFF);
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
+}
