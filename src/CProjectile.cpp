@@ -5043,11 +5043,11 @@ CProjectile85133C::CProjectile85133C()
 }
 
 // 0x57F390
-// The four-bolt spread: with the source held, take its position and build
-// the four corners of the rectangle whose diagonal is source->targetPos.
-// The target itself is the first; the other three are built from the source
-// position along (dx, -dy), (-dx, dy) and (-dx, -dy), each scaled to the
-// source-target distance. Then, once per corner, news a LightningBolt,
+// The four-bolt spread: with the source held, take its position and build a
+// cross around the source-to-target line: the target itself, the two
+// perpendiculars (-dy, dx) and (dy, -dx), then the point straight behind the
+// caster (-dx, -dy), each measured from the source and scaled to the
+// source-target distance. Then, once per point, news a LightningBolt,
 // copies this projectile's effects into it, retunes it (a 300-long rake,
 // 50 range, speed 20, 16 directions, TRA_09) and launches it through its
 // own Fire with the source's area/id and no target object. The share is
@@ -5075,8 +5075,9 @@ void CProjectile85133C::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
 
     CPoint points[4];
     points[0] = targetPos;
-    points[1] = IcewindMisc::sub_5847B0(sourcePos, dx, -dy, nDistance);
-    points[2] = IcewindMisc::sub_5847B0(sourcePos, -dx, dy, nDistance);
+    // sub_5847B0 is (pt, x, y, radius); esi = dx and edi = dy.
+    points[1] = IcewindMisc::sub_5847B0(sourcePos, -dy, dx, nDistance);
+    points[2] = IcewindMisc::sub_5847B0(sourcePos, dy, -dx, nDistance);
     points[3] = IcewindMisc::sub_5847B0(sourcePos, -dx, -dy, nDistance);
 
     for (int i = 0; i < 4; i++) {

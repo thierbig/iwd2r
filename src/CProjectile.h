@@ -126,12 +126,12 @@ public:
 class CProjectile85133C : public CProjectile {
 public:
     CProjectile85133C();
-    // 0x57F390. Fires four LightningBolt carriers at the corners of the
-    // rectangle whose diagonal is the source-to-target line: the target
-    // itself, then source + (dx, -dy), source + (-dx, dy) and source +
-    // (-dx, -dy). Each carrier is retuned to a 300-long rake (range 50,
-    // speed 20, 16 directions, TRA_09) and receives a copy of this
-    // projectile's effects before it launches.
+    // 0x57F390. Fires four LightningBolt carriers in a cross around the
+    // source-to-target line: the target itself, then source + (-dy, dx),
+    // source + (dy, -dx) (the two perpendiculars) and source + (-dx, -dy)
+    // (straight behind the caster). Each carrier is retuned to a 300-long
+    // rake (range 50, speed 20, 16 directions, TRA_09) and receives a copy
+    // of this projectile's effects before it launches.
     /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
 };
 

@@ -4516,13 +4516,15 @@ TEST_CASE("visual projectiles: the type-312 shot decodes to the bare flight", "[
     delete pProjectile;
 }
 
-// Type 312's Fire (0x57F390): four LightningBolt carriers at the corners
-// of the rectangle whose diagonal is source->target. The target itself is
-// first; the other three are built from the source position along
-// (dx, -dy), (-dx, dy) and (-dx, -dy), each scaled to trunc(sqrt(dx^2 +
-// dy^2)). A 30/40 offset makes that 50 exactly, so the aiming formula's
-// inputs are pinned without float rounding noise.
-TEST_CASE("visual projectiles: the type-312 Fire throws four bolts at the rectangle corners", "[visualprojectile][data]")
+// Type 312's Fire (0x57F390): four LightningBolt carriers in a cross around
+// the source->target line. The target itself is first; the helper
+// sub_5847B0(pt, x, y, radius) then builds the two perpendiculars and the
+// point straight behind the caster, each scaled to trunc(sqrt(dx^2 +
+// dy^2)). A 30/40 offset makes that 50 exactly, so every formula input and
+// axis is pinned without float rounding noise: |dx| != |dy| and the four
+// offsets differ in sign and magnitude, so a transposed, swapped or
+// un-negated argument (including the old rectangle formula) fails here.
+TEST_CASE("visual projectiles: the type-312 Fire throws four bolts in a cross", "[visualprojectile][data]")
 {
     WORLD_OR_SKIP(world);
     CGameArea* pArea = world.pArea;
@@ -4532,6 +4534,10 @@ TEST_CASE("visual projectiles: the type-312 Fire throws four bolts at the rectan
 
     const CPoint sourcePos = pSprite->GetPos();
     const CPoint targetPos(sourcePos.x + 30, sourcePos.y + 40);
+    // The formula's only inputs, pinned: dx = 30 and dy = 40, so the
+    // distance is exactly 50.
+    REQUIRE(targetPos.x - sourcePos.x == 30);
+    REQUIRE(targetPos.y - sourcePos.y == 40);
 
     // A source that is not in the object array: GetShare fails and no bolt
     // is fired (0x57F3DB -> 0x57F62B, the epilogue).
@@ -4555,25 +4561,23 @@ TEST_CASE("visual projectiles: the type-312 Fire throws four bolts at the rectan
     std::vector<CGameObject*> added = AddedObjects(pArea);
     REQUIRE(added.size() == 4);
 
-    // The four corners, in the exe's construction order, then the point
-    // each child's own Fire (0x580B30) feeds the base: the corner pushed
-    // m_beamRange (300) further along the source->corner heading. With a
-    // distance of 50 that is 1 + 300 / 50 = 7 times the offset.
-    const CPoint corners[4] = {
-        targetPos,
-        CPoint(sourcePos.x + 30, sourcePos.y - 40),
-        CPoint(sourcePos.x - 30, sourcePos.y + 40),
-        CPoint(sourcePos.x - 30, sourcePos.y - 40),
+    // The four spread points, in the exe's construction order, are the
+    // target (dx, dy), the two perpendiculars (-dy, dx) and (dy, -dx), then
+    // the point straight behind the caster (-dx, -dy). Each child's own
+    // Fire (0x580B30) then pushes its point m_beamRange (300) further
+    // along the source->point heading; at distance 50 that is
+    // 1 + 300 / 50 = 7 times the offset, so the observed launch points are
+    // spelled out below as exact source-relative literals rather than
+    // derived from the code under test.
+    const CPoint launched[4] = {
+        CPoint(sourcePos.x + 7 * 30, sourcePos.y + 7 * 40),
+        CPoint(sourcePos.x + 7 * -40, sourcePos.y + 7 * 30),
+        CPoint(sourcePos.x + 7 * 40, sourcePos.y + 7 * -30),
+        CPoint(sourcePos.x + 7 * -30, sourcePos.y + 7 * -40),
     };
-    const LONG nPush = 1 + 300 / 50;
-    CPoint launched[4];
-    for (int i = 0; i < 4; i++) {
-        launched[i] = CPoint(sourcePos.x + nPush * (corners[i].x - sourcePos.x),
-            sourcePos.y + nPush * (corners[i].y - sourcePos.y));
-    }
     std::vector<LONG> ids;
     for (int i = 0; i < 4; i++) {
-        INFO("corner " << i);
+        INFO("point " << i);
         CProjectileLightningBolt* pBolt = dynamic_cast<CProjectileLightningBolt*>(added[i]);
         REQUIRE(pBolt != nullptr);
         REQUIRE(pBolt->m_animation != nullptr);
