@@ -1806,6 +1806,70 @@ TEST_CASE("world keys: the Ctrl+D and Ctrl+I cheat keys", "[uimisc][worldkeys][d
     pGame->SelectToolbar();
 }
 
+// The 'G' (0x68A75A) and 'J' (0x68AA17) cheat-key arms of the same block.
+// Both end in CAIGroup::GroupAction(action, TRUE, NULL), whose override path
+// sets m_interrupt and the user-command pause on every group member; that is
+// the part observable without processing the queued CMessageAddAction.
+TEST_CASE("world keys: the Ctrl+G and Ctrl+J cheat keys queue group actions", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+    // Both arms need a non-empty party group to reach GroupAction.
+    REQUIRE(pGame->m_group.m_memberList.GetCount() > 0);
+
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const BOOL nInterrupt = pSprite->m_interrupt;
+    const SHORT nUserCommandPause = pSprite->m_userCommandPause;
+    const CPoint ptPointer = g_pChitin->m_ptPointer;
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+
+    // Ctrl+G (0x68A75A) queues action 177 aimed at the object named
+    // "door2616a" for the group.
+    pSprite->m_interrupt = FALSE;
+    pSprite->m_userCommandPause = 0;
+    PressKey(pWorld, 'G');
+    CHECK(pSprite->m_interrupt == TRUE);
+    CHECK(pSprite->m_userCommandPause == CGameSprite::USER_OVERRIDE_COUNT);
+
+    // Ctrl+J (0x68AA17) converts the pointer position through the visible
+    // area's CInfinity, clears the group's actions, and queues JUMPTOPOINT
+    // at the converted point.
+    g_pChitin->m_ptPointer = CPoint(1024, 512);
+    pSprite->m_interrupt = FALSE;
+    pSprite->m_userCommandPause = 0;
+    PressKey(pWorld, 'J');
+    CHECK(pSprite->m_interrupt == TRUE);
+    CHECK(pSprite->m_userCommandPause == CGameSprite::USER_OVERRIDE_COUNT);
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pSprite->m_interrupt = nInterrupt;
+    pSprite->m_userCommandPause = nUserCommandPause;
+    g_pChitin->m_ptPointer = ptPointer;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
 // CGameArea::Unmarshal (0x472DE0) keeps each entry point of the area file in
 // m_entryPoints (CPtrList::AddTail at 0x473F9B), where GetEntryPoint finds
 // the travel's destination.
