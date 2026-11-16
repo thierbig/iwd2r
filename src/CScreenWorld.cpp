@@ -813,7 +813,10 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 // 1 when it is zero, 0 when it holds any nonzero value.
                 g_pBaldurChitin->field_1A2A = (g_pBaldurChitin->field_1A2A == 0);
                 return;
-            case 'E': // TODO: 0x68A6BF (marks the visible area explored via CVisibilityMap::SetAreaExplored; cheat key, not ported).
+            case 'E': // 0x68A6BF
+                // Ctrl+E marks the visible area's every tile explored
+                // (the area's CVisibilityMap at +0x860).
+                pGame->m_gameAreas[pGame->m_visibleArea]->m_visibility.SetAreaExplored(); // 0x68A6DF
                 return;
             case 'F': // TODO: 0x68A6E9 (cycles the byte at this+0x15C through 15 values; cheat key, not ported).
                 return;
