@@ -106,6 +106,18 @@ CInfButtonArray::CInfButtonArray()
     m_nSelectedWeaponSet = 0;
 }
 
+// 0x59E980
+CInfButtonArray::~CInfButtonArray()
+{
+    // The only explicit statement of the original's destructor. Everything
+    // after it in the listing is the compiler-generated member destruction in
+    // reverse declaration order: the state stack at +0x1986 (the original's
+    // std::deque<INT> block teardown at +0x198A..+0x19B2), then the three
+    // CVidCells at +0x189C/+0x17C2/+0x16E8, then the array of twelve
+    // CInfButtonSettings at +0x0 (stride 0x1E0, ~CInfButtonSettings 0x587B80).
+    sub_587BD0();
+}
+
 // 0x587BD0
 void CInfButtonArray::sub_587BD0()
 {

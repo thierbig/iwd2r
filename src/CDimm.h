@@ -41,6 +41,7 @@ public:
     BOOL UncompressDirectory(const CString& sTempDir, const CString& sSaveDir);
     int Dump(CRes* pRes, int a2, int a3);
     int DumpAll();
+    void DebugDumpResourceLists(int nUnused);
     int FindDirectoryInDirectoryList(const CString& sDirName);
     BOOL FindFileInDirectoryList(const CString& sDirName, CString& sFileName);
     BOOL GetElementInDirectoryList(int a2, CString& a3);

@@ -36,6 +36,7 @@ public:
     static CGameButtonList* dword_8E6820;
 
     CInfButtonArray();
+    ~CInfButtonArray();
 
     static void GetSelectedQuickWeaponData(CButtonData& cButtonData);
     static BYTE GetSelectedModalMode();

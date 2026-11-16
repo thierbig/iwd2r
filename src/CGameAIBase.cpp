@@ -1,5 +1,7 @@
 #include "CGameAIBase.h"
 
+#include <math.h>
+
 #include "C2DArray.h"
 #include "CAIConditionResponse.h"
 #include "CAIResponse.h"
@@ -36,7 +38,9 @@
 #include "CUtil.h"
 #include "CVariableHash.h"
 #include "CWeather.h"
+#include "Icewind586B70.h"
 #include "IcewindCGameEffects.h"
+#include "msvc_atol.h"
 
 // 0x8485C4
 const SHORT CGameAIBase::ACTION_DONE = -1;
@@ -1890,11 +1894,14 @@ SHORT CGameAIBase::ExecuteAction()
         pTarget = GetTargetShareType(CGameObject::TYPE_SPRITE);
         if (pTarget != NULL) {
             bShare = TRUE;
-            // TODO: 0x4517A8 calls 0x7624F0 (not ported): the target sprite
-            // takes the spell-hit effect at the action's destination
-            // (m_curAction.GetDest(), source id 0, m_curAction.GetSpecifics(),
-            // GetSpecifics2()); its result is the action return, which keeps
-            // the ACTION_ERROR entry default here.
+            // 0x4517A8: the target sprite takes the spell-hit effect at the
+            // action's destination (source id 0 in the fifth argument slot).
+            returnValue = static_cast<CGameSprite*>(pTarget)->SpellHitEffect(
+                static_cast<CGameSprite*>(pTarget),
+                m_curAction.GetDest(),
+                0,
+                m_curAction.GetSpecifics(),
+                m_curAction.GetSpecifics2());
         } else {
             pTarget = GetTargetShareType(CGameObject::TYPE_CONTAINER);
             if (pTarget != NULL) {
@@ -1927,11 +1934,14 @@ SHORT CGameAIBase::ExecuteAction()
                 // without releasing the share sub_40CB20 acquired.
                 returnValue = ACTION_ERROR;
             } else {
-                // TODO: 0x451882 calls 0x7624F0 (not ported): the target
-                // sprite takes the spell-hit effect at the actee's position
-                // and id (pActee->GetPos(), pActee->GetId(),
-                // GetSpecifics(), GetSpecifics2()); its result is the action
-                // return, which keeps the ACTION_ERROR entry default here.
+                // 0x451882: the target sprite takes the spell-hit effect at
+                // the actee's position and id.
+                returnValue = static_cast<CGameSprite*>(pTarget)->SpellHitEffect(
+                    static_cast<CGameSprite*>(pTarget),
+                    pActee->GetPos(),
+                    pActee->GetId(),
+                    m_curAction.GetSpecifics(),
+                    m_curAction.GetSpecifics2());
                 g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
                     CGameObjectArray::THREAD_ASYNCH,
                     INFINITE);
@@ -2051,17 +2061,18 @@ SHORT CGameAIBase::ExecuteAction()
         goto release;
     case 295:
         // TransferInventory
-        // 0x451D81: the receiving sprite; a NULL result takes 0x451451
+        // 0x451D81: the giving object (target); a NULL result takes 0x451451
         // (ACTION_ERROR straight to release), as the entry default does here.
         pTarget = sub_45C290();
         if (pTarget != NULL) {
             bShare = TRUE;
             CGameObject* pActee = m_curAction.GetActee2().sub_40CCA0(this, FALSE);
             if (pActee != NULL) {
-                // TODO: 0x451DB6 calls 0x4C83F0 (not ported; annotated
-                // CGameObject::FloatText): the receiving sprite runs the
-                // transfer against the actee; its return is the action
-                // result, which keeps the ACTION_ERROR entry default here.
+                // 0x451DB6: the target object gives its whole inventory to
+                // the actee; the transfer's return (ACTION_DONE on a
+                // completed walk, ACTION_ERROR on an unusable side) is the
+                // action result.
+                returnValue = pTarget->TransferInventory(pActee);
                 g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pActee->GetId(),
                     CGameObjectArray::THREAD_ASYNCH,
                     INFINITE);
@@ -5338,9 +5349,10 @@ SHORT CGameAIBase::FireSpell(const CResRef& resRef, CGameObject* target)
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356, a
-        // member of the class DecodeProjectile builds for this type (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x4680E1) before the message
+        // copy at +0x20 (0x4680E7).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
@@ -5480,8 +5492,10 @@ SHORT CGameAIBase::FireSpellPoint(const CResRef& resRef, const CPoint& ptTarget)
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356 (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x4685D0) before the message
+        // copy at +0x20 (0x4685D6).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
@@ -5933,8 +5947,10 @@ SHORT CGameAIBase::ForceSpellPoint()
 
     if (pProjectile->m_projectileType == 304) {
         INT nRandom = rand() % 1000000;
-        // TODO: The original also stores it in the projectile's +0x356 (not
-        // ported yet).
+        // NOTE: The original also stores the seed in the projectile's +0x356
+        // (CProjectileWhirlwind::m_wanderSeed, 0x462373) before the message
+        // copy at +0x20 (0x462379).
+        static_cast<CProjectileWhirlwind*>(pProjectile)->m_wanderSeed = nRandom;
         pFire->field_20 = nRandom;
     }
 
@@ -7038,6 +7054,25 @@ static BOOL sub_45B290(const CString* psName, LPCTSTR szName)
     return strcmp(static_cast<LPCTSTR>(*psName), szName) != 0;
 }
 
+// 0x45B2D0
+// The LOS arm's world-to-grid conversion: signed division (cdq/idiv
+// in the original) of a position by the path-search grid's byte
+// constants (0x84D6A0/0x84D6A1 = GRID_SQUARE_SIZEX/SIZEY), stored
+// through the destination pointer.
+static CPoint* sub_45B2D0(CPoint* pDest, LONG x, LONG y)
+{
+    pDest->x = x / CPathSearch::GRID_SQUARE_SIZEX;
+    pDest->y = y / CPathSearch::GRID_SQUARE_SIZEY;
+    return pDest;
+}
+
+// 0x45B300
+// The LOS arm's squared distance between two grid points.
+static LONG sub_45B300(LONG x1, LONG y1, LONG x2, LONG y2)
+{
+    return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+}
+
 // 0x453840
 BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 {
@@ -7108,6 +7143,76 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
                 bResult = triggerCopy.m_specificID == 0;
             }
         }
+        break;
+    case 0x40C9:
+        // TriggerSetGlobal: set the named variable to the specifics, then
+        // post a CMessageSetVariable. The arm enters with TRUE (esi is 1
+        // from 0x459EAF) and never clears it, so even the two give-up
+        // exits below answer TRUE.
+        bResult = TRUE;
+        sString = triggerCopy.GetString1();
+        sString.MakeUpper();
+        sScope = sString.Left(6);
+        sName = sString.Right(sString.GetLength() - 6);
+        if (strcmp(sScope, "GLOBAL") == 0) {
+            CVariable* pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                g_pBaldurChitin->GetObjectGame()->GetVariables()->AddKey(variable);
+            }
+        } else if (strcmp(sScope, "LOCALS") == 0) {
+            if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                // NOTE: The original breaks through the release tail with
+                // esi still TRUE, reporting success without setting or
+                // posting anything.
+                break;
+            }
+
+            CVariable* pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                static_cast<CGameSprite*>(this)->GetLocalVariables()->AddKey(variable);
+            }
+        } else {
+            if (strcmp(sScope, "MYAREA") == 0) {
+                // NOTE: The area's name is read as a C string from the start
+                // of the area (its header's RESREF), as the original does.
+                sScope = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+            }
+
+            CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+            if (pArea == NULL) {
+                // NOTE: The original breaks through the release tail with
+                // esi still TRUE, reporting success without setting or
+                // posting anything.
+                break;
+            }
+
+            CVariable* pVariable = pArea->GetVariables()->FindKey(sName);
+            if (pVariable != NULL) {
+                pVariable->m_intValue = triggerCopy.GetSpecifics();
+            } else {
+                CVariable variable;
+                variable.SetName(sName);
+                variable.m_intValue = triggerCopy.GetSpecifics();
+                pArea->GetVariables()->AddKey(variable);
+            }
+        }
+
+        // Every completed set posts the change, caller and target both the
+        // setter's id (the original's 7-argument constructor hardcodes
+        // bIncrement FALSE and dwFlags 0, as the in-tree one does).
+        g_pBaldurChitin->GetMessageHandler()->AddMessage(
+            new CMessageSetVariable(sScope, sName, triggerCopy.GetSpecifics(), m_id, m_id),
+            FALSE);
         break;
     case 0x4034:
         // GlobalGT
@@ -7235,6 +7340,131 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = static_cast<ULONG>(pVariable->GetIntValue()) < nGameTime;
         }
         break;
+    case 0x403F:
+        // GlobalTimerExact(name, scope) (0x455636-0x4557E0): the same
+        // resolution as GlobalTimerExpired (0x4040) -- the name in
+        // string1, the scope in string2 uppercased and cut to six
+        // characters -- except that a missing variable answers FALSE
+        // (0x455731 and 0x4557DA reach the FALSE tail 0x45AB39), and
+        // the comparison is the world timer's game time EQUALING the
+        // variable's value (sub/neg/sbb/inc, the equality idiom,
+        // 0x45575B-0x455761).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = FALSE;
+                break;
+            }
+
+            ULONG nGameTime = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+            bResult = static_cast<ULONG>(pVariable->GetIntValue()) == nGameTime;
+        }
+        break;
+    case 0x4041:
+        // GlobalTimerNotExpired(name, scope) (0x455989-0x455B3B): the
+        // same resolution as 0x4040, and a missing variable also
+        // answers FALSE (all three branches' FindKey tests land on
+        // 0x455B09, the FALSE tail). TRUE while the timer runs: the
+        // world timer's game time strictly BELOW the variable's value
+        // (cmp edi,eax -- game time against value -- then sbb/neg,
+        // 0x455B31-0x455B35).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = FALSE;
+                break;
+            }
+
+            ULONG nGameTime = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->m_gameTime;
+            bResult = nGameTime < static_cast<ULONG>(pVariable->GetIntValue());
+        }
+        break;
+    case 0x40E3:
+        // GlobalTimerStarted(name, scope) (0x455CD1-0x455E43): the
+        // same resolution as 0x4040, but the value is never read --
+        // the answer is only whether the variable exists (jne to the
+        // TRUE tail 0x45AD47 at 0x455E37; the non-sprite LOCALS and
+        // missing-area cases leave through the FALSE tail 0x45A887).
+        {
+            sString = triggerCopy.m_string2;
+            sString.MakeUpper();
+            sScope = sString.Left(6);
+            sName = triggerCopy.m_string1;
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            bResult = pVariable != NULL;
+        }
+        break;
     case 0x400B:
         // Allegiance: the decoded cause's enemy-ally byte.
         triggerCopy.m_triggerCause.Decode(this);
@@ -7304,6 +7534,12 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4017:
+        // Race(object, race): the decoded cause's race byte against the
+        // trigger's specifics.
+        triggerCopy.Decode(this);
+        bResult = triggerCopy.GetCause().GetRace() == triggerCopy.GetSpecifics();
+        break;
     case 0x4018:
         // Range(object, range, mode): the squared search-grid distance to
         // the object (a door's nearer walk-to point) against (range + 1)
@@ -7370,6 +7606,13 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
             sub_4530F0(pObject2->GetAIType());
         }
+        break;
+    case 0x401D:
+        // Specifics(object, specifics): the decoded cause's specific byte
+        // against the trigger's specifics, through the same equality tail
+        // (0x454F87) the Race arm jumps to.
+        triggerCopy.Decode(this);
+        bResult = triggerCopy.GetCause().GetSpecific() == triggerCopy.GetSpecifics();
         break;
     case 0x400D:
         // Exists
@@ -7490,10 +7733,13 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = (static_cast<CGameSprite*>(pObject)->GetSpecialization() & nKit) == nKit;
         }
         break;
+    case 0x40E6:
     case 0x40E7:
     case 0x40E8:
-        // CheckSkillGT, CheckSkillLT: the object's skill m_specific2
-        // against the specifics.
+        // CheckSkill, CheckSkillGT, CheckSkillLT: the object's skill
+        // m_specific2 against the specifics. The 0x40E6 arm (0x455EDD) and
+        // 0x40E7's (0x455F32) are back to back and identical through the
+        // movsx skill load; only the final setcc differs (sete, setg, setl).
         {
             CGameSprite* pSprite = NULL;
             bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
@@ -7506,7 +7752,9 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
 
             // NOTE: The skill index is not checked, as in the original.
             INT nSkill = pSprite->GetDerivedStats()->m_nSkills[triggerCopy.m_specific2];
-            if (triggerCopy.m_triggerID == 0x40E7) {
+            if (triggerCopy.m_triggerID == 0x40E6) {
+                bResult = nSkill == triggerCopy.m_specificID;
+            } else if (triggerCopy.m_triggerID == 0x40E7) {
                 bResult = nSkill > triggerCopy.m_specificID;
             } else {
                 bResult = nSkill < triggerCopy.m_specificID;
@@ -7550,6 +7798,181 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
             return FALSE;
         }
+    case 0x4043:
+        // InParty: the trigger's object is a living party member. Every
+        // exit is a direct return, as 0x4042.
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            CGameObject* pCharacter;
+            triggerCopy.Decode(this);
+            LONG nInstance = triggerCopy.GetCause().GetInstance();
+
+            if (nInstance != -1) {
+                if (pGame->GetCharacterPortraitNum(nInstance) != -1) {
+                    // NOTE: The original does not check GetShare's return
+                    // code here and does not retry (unlike 0x4042): a
+                    // portrait holder is always a seated, shareable
+                    // character.
+                    pGame->GetObjectArray()->GetShare(nInstance,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+
+                    // Dead answers FALSE through 0x45AE25, alive TRUE
+                    // through 0x457A85; the share is released on both.
+                    BOOL bDead = (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                                     & STATE_DEAD)
+                        != 0;
+                    pGame->GetObjectArray()->ReleaseShare(nInstance,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return bDead ? FALSE : TRUE;
+                }
+            } else {
+                for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                    LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                    BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                    if (rc != CGameObjectArray::SUCCESS) {
+                        // NOTE: The original skips a character it cannot
+                        // share and keeps scanning (0x4042 gives up).
+                        continue;
+                    }
+
+                    BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
+                        && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                               & STATE_DEAD)
+                            == 0;
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+
+                    if (bMatch) {
+                        return TRUE;
+                    }
+                }
+            }
+
+            // The character-overflow scan is shared by both entries: the
+            // no-instance path falls through after the party loop, an
+            // instance without a portrait jumps here directly, skipping
+            // the loop (0x456375).
+            CTypedPtrArray<CPtrArray, int*>& overflow = pGame->GetCharacterOverflow();
+            for (int nIndex = 0; nIndex < overflow.GetSize(); nIndex++) {
+                LONG nCharacterId = static_cast<LONG>(reinterpret_cast<INT_PTR>(overflow.GetAt(nIndex)));
+                BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pCharacter,
+                    INFINITE);
+                if (rc != CGameObjectArray::SUCCESS) {
+                    continue;
+                }
+
+                BOOL bMatch = pCharacter->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)
+                    && (static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_generalState
+                           & STATE_DEAD)
+                        == 0;
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bMatch) {
+                    return TRUE;
+                }
+            }
+            return FALSE;
+        }
+    case 0x40A6:
+        // GlobalBitGlobal (0x457DC5-0x4582DF): both strings are uppercased
+        // and split at the first ':' into scope and name. string2 is
+        // resolved first into nLeftValue; every miss (absent variable,
+        // LOCALS on a non-sprite, unknown area) just leaves it 0. string1
+        // is then resolved into pVariable the same way, except LOCALS on a
+        // non-sprite (0x458202) and an unknown area (0x458255) answer FALSE
+        // directly. A miss answers specifics == 0 (0x4582A7, the usual
+        // neg/sbb/inc). On a hit only specifics == 1 can answer TRUE
+        // ((nLeftValue & value) != 0): the == 2 (OR, 0x4580F5) and == 3
+        // (XOR, 0x4581DB) compares, and their LOCALS and area copies, are
+        // unreachable in the original, because every path into them
+        // already required specifics == 1.
+        {
+            CString sString1 = triggerCopy.m_string1;
+            sString1.MakeUpper();
+            int nColon1 = sString1.Find(':');
+            CString sScope1 = sString1.Left(nColon1);
+            CString sName1 = sString1.Right(sString1.GetLength() - nColon1 - 1);
+
+            CString sString2 = triggerCopy.m_string2;
+            sString2.MakeUpper();
+            int nColon2 = sString2.Find(':');
+            CString sScope2 = sString2.Left(nColon2);
+            CString sName2 = sString2.Right(sString2.GetLength() - nColon2 - 1);
+
+            int nLeftValue = 0;
+            if (strcmp(sScope2, "GLOBAL") == 0) {
+                CVariable* pLeft = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName2);
+                if (pLeft != NULL) {
+                    nLeftValue = pLeft->GetIntValue();
+                }
+            } else if (strcmp(sScope2, "LOCALS") == 0) {
+                if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+                    CVariable* pLeft = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName2);
+                    if (pLeft != NULL) {
+                        nLeftValue = pLeft->GetIntValue();
+                    }
+                }
+            } else {
+                if (strcmp(sScope2, "MYAREA") == 0) {
+                    // NOTE: The area's name is read as a C string from the
+                    // start of the area (its header's RESREF), as the
+                    // original does.
+                    sScope2 = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope2);
+                if (pArea != NULL) {
+                    CVariable* pLeft = pArea->GetVariables()->FindKey(sName2);
+                    if (pLeft != NULL) {
+                        nLeftValue = pLeft->GetIntValue();
+                    }
+                }
+            }
+
+            CVariable* pVariable;
+            if (strcmp(sScope1, "GLOBAL") == 0) {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName1);
+            } else if (strcmp(sScope1, "LOCALS") == 0) {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName1);
+            } else {
+                if (strcmp(sScope1, "MYAREA") == 0) {
+                    // NOTE: The area's name is read as a C string from the
+                    // start of the area (its header's RESREF), as the
+                    // original does.
+                    sScope1 = reinterpret_cast<const char*>(m_pArea->m_header.m_areaName);
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope1);
+                if (pArea == NULL) {
+                    break;
+                }
+
+                pVariable = pArea->GetVariables()->FindKey(sName1);
+            }
+
+            if (pVariable == NULL) {
+                bResult = triggerCopy.GetSpecifics() == 0;
+            } else if (triggerCopy.GetSpecifics() == 1) {
+                bResult = (nLeftValue & pVariable->GetIntValue()) != 0;
+            }
+        }
+        break;
     case 0x40A7:
         // CreatureHidden: the object's hidden flag (base stats field_294).
         {
@@ -7601,9 +8024,126 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             }
         }
         break;
+    case 0x4083:
+    case 0x4084:
+    case 0x4085:
+    case 0x4086:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089): the
+        // area's battle song counter against the trigger's specifics, by
+        // equal (0x4083), less (0x4084, jumping to the setl tail 0x456AA3)
+        // and greater (0x4085, jumping to the setg tail 0x459A21); 0x4086
+        // answers the area type word AND the low word of the specifics,
+        // raw, not 0 or 1.
+        if (triggerCopy.m_triggerID == 0x4083) {
+            bResult = m_pArea->GetBattleSongCounter() == triggerCopy.GetSpecifics();
+        } else if (triggerCopy.m_triggerID == 0x4084) {
+            bResult = m_pArea->GetBattleSongCounter() < triggerCopy.GetSpecifics();
+        } else if (triggerCopy.m_triggerID == 0x4085) {
+            bResult = m_pArea->GetBattleSongCounter() > triggerCopy.GetSpecifics();
+        } else {
+            bResult = m_pArea->GetHeader()->m_areaType & (triggerCopy.GetSpecifics() & 0xFFFF);
+        }
+        break;
+    case 0x40AE:
+        // IsHeartOfFuryModeOn(): the nightmare-mode option's value itself is
+        // the answer, not a normalized 0 or 1.
+        bResult = g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nNightmareMode;
+        break;
+    case 0x40EE:
+        // IsExtendedNight(): bit 0x40 of the area type word; the raw value
+        // is the answer, not 0 or 1.
+        bResult = m_pArea->GetHeader()->m_areaType & 0x40;
+        break;
     case 0x40EF:
         // InCutsceneMode
         bResult = g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_mode == 0x142;
+        break;
+    case 0x4027:
+        // Delay(n): this sprite's AI round counter (field_54C, which
+        // ProcessAI increments when it runs this sprite's AI) divided by n
+        // (signed idiv) with the remainder compared by <= against the
+        // offscreen rounds counter (field_550, the short ProcessAI raises
+        // while this sprite is out of the viewport, capped at 120).
+        bResult = field_54C % triggerCopy.GetSpecifics() <= field_550;
+        break;
+    case 0x404E:
+    case 0x404F:
+    case 0x4050:
+        // PartyGold, PartyGoldGT, PartyGoldLT: the party gold dword of the
+        // game save against the trigger's specifics. The three arms share
+        // the same loads (GetObjectGame, GetGameSave, GetSpecifics); 0x404E
+        // compares inline with sete, while 0x404F and 0x4050 each answer a
+        // carry pair (cmp/sbb/neg: 1 iff the first operand is below the
+        // second as unsigned).
+        {
+            DWORD nPartyGold = g_pBaldurChitin->GetObjectGame()->GetGameSave()->m_nPartyGold;
+            if (triggerCopy.m_triggerID == 0x404E) {
+                bResult = nPartyGold == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x404F) {
+                bResult = nPartyGold > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nPartyGold < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x4066:
+        // HappinessGT(object, n): the trigger sprite's happiness against n
+        // by greater. As in HP (0x4010), a null sprite leaves through the
+        // early epilogue (0x45AB7A); the original then jumps straight into
+        // the setl/setg tail of the NumInParty arms below (0x45683F) with
+        // ax holding GetHappiness' short, so the greater-than compare is
+        // that other arm's code, entered with a different ax.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4067:
+        // HappinessLT(object, n): the trigger sprite's happiness against the
+        // specifics by less (sete is 0x4065, setg 0x4066; this arm compares
+        // in place at 0x4567F7 and jumps to the common epilogue rather than
+        // entering the NumInParty tail as 0x4066 does). As in HP (0x4010), a
+        // null sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x406A:
+    case 0x406B:
+    case 0x406C:
+        // NumInParty, NumInPartyGT, NumInPartyLT: GetNumCharacters' short
+        // (sign-extended, movsx) against the trigger's specifics. The three
+        // arms share the same loads; 0x406A answers equality through the
+        // sub/neg/sbb/inc sequence (1 iff the difference is zero), 0x406B
+        // and 0x406C compare that difference's operands directly (setg,
+        // setl).
+        {
+            LONG nNumInParty = g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+            if (triggerCopy.m_triggerID == 0x406A) {
+                bResult = nNumInParty == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x406B) {
+                bResult = nNumInParty > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nNumInParty < triggerCopy.GetSpecifics();
+            }
+        }
         break;
     case 0x40B5:
         // TotalItemCnt(object, n): the count of the items the named object
@@ -7860,10 +8400,2679 @@ BOOL CGameAIBase::EvaluateStatusTrigger(const CAITrigger& trigger)
             bResult = nCount < triggerCopy.GetSpecifics();
         }
         break;
+    case 0x401E:
+    case 0x4068:
+    case 0x4069:
+        // Time, TimeGT, TimeLT(I:Time*): the world timer's current hour (a
+        // byte, zero-extended) against the trigger's specifics. The three
+        // arms share the same loads; 0x401E answers equality through the
+        // sub/neg/sbb/inc sequence (1 iff the difference is zero), 0x4068
+        // and 0x4069 compare the operands directly (setg, setl).
+        {
+            LONG nHour = g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->GetCurrentHour();
+            if (triggerCopy.m_triggerID == 0x401E) {
+                bResult = nHour == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x4068) {
+                bResult = nHour > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nHour < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40B3:
+        // SummoningLimitGT(object, n): the summon registry's count of
+        // occupied slots (Icewind586B70::GetCount) against the specifics
+        // by greater. The sprite is resolved first only so the epilogue
+        // can release it; as in HP (0x4010), a null sprite leaves through
+        // the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = Icewind586B70::Instance()->GetCount() > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4094:
+    case 0x4095:
+    case 0x4096:
+        // Level, LevelGT, LevelLT(object, level): the trigger sprite's
+        // combined class level -- GetClassMaskLevel over the full class mask
+        // 0xFFF, the sum of its class levels -- against the specifics. The
+        // three arms share the same loads; 0x4094 answers equal through the
+        // sub/neg/sbb/inc idiom (as Happiness 0x4065), 0x4095 greater
+        // through the setg tail 0x459A21 and 0x4096 less through the setl
+        // tail 0x456AA3. As in HP (0x4010), a null sprite leaves through the
+        // early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nLevel = pSprite->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+            if (triggerCopy.m_triggerID == 0x4095) {
+                bResult = nLevel > triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x4096) {
+                bResult = nLevel < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel == triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40D5:
+        // IsCreatureHiddenInShadows(object): the resolved sprite's hide
+        // flag (sub_453170, m_bHiding) taken raw as the answer. As in
+        // IsActive (0x40D7), a cause that resolves to nothing zeroes
+        // bResult (0x45AB39) and falls into the release tail.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameSprite*>(pObject2)->sub_453170();
+        }
+        break;
+    case 0x40F5:
+        // IsPathCriticalObject(object): bit 0x2000 of the resolved
+        // object's base stats flags (the flag action 283
+        // SetCriticalPathObject sets and clears) shifted down and masked
+        // to 0/1. NOTE: as in the original, the object is not type-checked
+        // -- whatever sub_40CCA0 returns is read as a sprite.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            bResult = (static_cast<CGameSprite*>(pObject2)->GetBaseStats()->m_flags & 0x2000) != 0;
+        }
+        break;
+    case 0x4037:
+    case 0x4038:
+        // StateCheck, NotStateCheck(object, state): the trigger's state
+        // mask (the specifics) AND the trigger sprite's derived general
+        // state word. The two arms share the same loads; 0x4037 answers
+        // the nonzero test (neg/sbb/neg tail) and 0x4038 the zero test
+        // (neg/sbb/inc tail). As in HP (0x4010), a null sprite leaves
+        // through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            DWORD dwState = triggerCopy.GetSpecifics()
+                & pSprite->GetDerivedStats()->m_generalState;
+            if (triggerCopy.m_triggerID == 0x4037) {
+                bResult = dwState != 0;
+            } else {
+                bResult = dwState == 0;
+            }
+        }
+        break;
+    case 0x4064:
+        // HasWeaponEquiped(object): the trigger sprite's selected weapon
+        // slot (the equipment byte at +0xCC) against SLOT_FIST (10, the
+        // byte 0x85BD83), setne. As in HP (0x4010), a null sprite leaves
+        // through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetEquipment()->m_selectedWeapon
+                != CGameSpriteEquipment::SLOT_FIST;
+        }
+        break;
+    case 0x4065:
+        // Happiness(object, n): the trigger sprite's happiness against the
+        // specifics by equal (sub/neg/sbb/inc). The loads are HappinessGT's
+        // (0x4066); only the normalizer differs. As in HP (0x4010), a null
+        // sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetHappiness() == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407E:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089): the
+        // trigger's string1 against the current area's name, read as a C
+        // string from the start of the area (its header's RESREF, as the
+        // MYAREA scope in Global 0x400F reads it). The original builds two
+        // CStrings only to hand their buffers to CompareStrings (0x7E8182,
+        // lstrcmpi) and takes the raw compare as the answer -- 0 when the
+        // names match, nonzero when they differ -- so unlike every other
+        // arm nothing normalizes it to 0/1.
+        bResult = _stricmp(triggerCopy.m_string1,
+            reinterpret_cast<const char*>(m_pArea->m_header.m_areaName));
+        break;
+    case 0x40DB:
+    case 0x40DC:
+    case 0x40DD:
+        // HPLost, HPLostGT, HPLostLT(object, n): the trigger sprite's lost
+        // hit points -- the derived max (m_nMaxHitPoints) minus the base
+        // current (m_hitPoints), both sign-extended shorts -- against the
+        // specifics. The three arms share the same loads; 0x40DB answers
+        // equal through the sub/neg/sbb/inc idiom (as Happiness 0x4065),
+        // 0x40DC greater through its own setg (cmp edi,eax; setg cl) and
+        // 0x40DD less through the shared setl tail 0x4551AF, which other
+        // arms jump into as 0x4551AB. As in HP (0x4010), a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nHPLost = pSprite->GetDerivedStats()->m_nMaxHitPoints
+                - pSprite->GetBaseStats()->m_hitPoints;
+            if (triggerCopy.m_triggerID == 0x40DB) {
+                bResult = nHPLost == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x40DC) {
+                bResult = nHPLost > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nHPLost < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40E9:
+    case 0x40EA:
+    case 0x40EB:
+        // LevelInClass, LevelInClassGT, LevelInClassLT(object, level,
+        // class): the trigger sprite's level in the trigger's class (int1,
+        // m_specific2) -- CDerivedStats::GetClassLevel, whose UTIL_ASSERT
+        // fires for a class of 0 or less, as in the original -- against
+        // the specifics. The three arms share the same loads; 0x40E9
+        // answers equal through the sub/neg/sbb/inc idiom (as Happiness
+        // 0x4065), 0x40EA greater through the setg tail 0x459A21 and
+        // 0x40EB less through the setl tail 0x456AA3 (both tails are
+        // LevelGT/LT's, 0x4095/0x4096). As in HP (0x4010), a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nLevel = pSprite->GetDerivedStats()->GetClassLevel(triggerCopy.GetInt1());
+            if (triggerCopy.m_triggerID == 0x40EA) {
+                bResult = nLevel > triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x40EB) {
+                bResult = nLevel < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nLevel == triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x4014:
+    case 0x4015:
+    case 0x4016:
+        // Morale, MoraleGT, MoraleLT(object, n): the trigger sprite's base
+        // morale byte (m_morale, +0x264 of GetBaseStats) against the LOW
+        // byte of the specifics. The three arms share the same loads and
+        // differ only in the normalizer: 0x4014 answers sete (equal),
+        // 0x4015 sbb/neg after comparing the specifics byte first (morale
+        // greater) and 0x4016 sbb/neg after comparing the morale first
+        // (morale less); the byte compares are unsigned. As in HP (0x4010),
+        // a null sprite leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            BYTE nMorale = pSprite->GetBaseStats()->m_morale;
+            BYTE nSpecifics = static_cast<BYTE>(triggerCopy.GetSpecifics());
+            if (triggerCopy.m_triggerID == 0x4014) {
+                bResult = nMorale == nSpecifics;
+            } else if (triggerCopy.m_triggerID == 0x4015) {
+                bResult = nMorale > nSpecifics;
+            } else {
+                bResult = nMorale < nSpecifics;
+            }
+        }
+        break;
+    case 0x40EC:
+        // IsCreatureAreaFlag(object, flags): the trigger's flag mask (the
+        // specifics) AND the trigger sprite's base stats flags dword
+        // (m_flags, +0x8 of GetBaseStats -- the dword action 283's bit
+        // 0x2000 lives in), normalized by neg/sbb/neg to nonzero 1, as in
+        // StateCheck (0x4037). Unlike Morale above, a null sprite does NOT
+        // leave through the early epilogue: the arm zeroes bResult
+        // (0x454606) and falls into the release tail.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite != NULL) {
+                bResult = (triggerCopy.GetSpecifics()
+                    & pSprite->GetBaseStats()->m_flags) != 0;
+            }
+        }
+        break;
+    case 0x40B2:
+    case 0x40B4:
+        // SummoningLimit, SummoningLimitLT(object, n): the summon
+        // registry's count of occupied slots (Icewind586B70::GetCount)
+        // against the specifics. The two arms share the same loads
+        // (count first, then the specifics) and differ only in the
+        // normalizer: 0x40B2 answers the equality idiom sub/neg/sbb/inc
+        // (as Happiness 0x4065) and 0x40B4 the signed setl. As in
+        // SummoningLimitGT (0x40B3), the sprite is resolved first only so
+        // the epilogue can release it; a null sprite leaves through the
+        // early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            int nCount = Icewind586B70::Instance()->GetCount();
+            if (triggerCopy.m_triggerID == 0x40B2) {
+                bResult = nCount == triggerCopy.GetSpecifics();
+            } else {
+                bResult = nCount < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40E1:
+    case 0x40F4:
+        // SetLastMarkedObject, SetSpellTarget(object): resolve the decoded
+        // cause through sub_40CCA0 -- no type check, as in
+        // IsPathCriticalObject (0x40F5) -- and store its AI type in the
+        // last-marked-object slot (sub_4530F0 -> field_342, the slot action
+        // 281 MarkObject writes) or the spell-target slot (sub_45B6E0 ->
+        // field_3BA); a cause that resolves to nothing stores the constant
+        // NOONE (0x8C7708). The two arms are identical except for that
+        // final callee, and both always answer TRUE (the shared tail
+        // 0x45AD47 sets the result to 1 before the release block).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        {
+            const CAIObjectType& type = pObject2 != NULL ? pObject2->GetAIType()
+                                                         : CAIObjectType::NOONE;
+            if (triggerCopy.m_triggerID == 0x40E1) {
+                sub_4530F0(type);
+            } else {
+                sub_45B6E0(type);
+            }
+        }
+        bResult = TRUE;
+        break;
+    case 0x402D:
+        // HPPERCENTLT(object, n): the trigger sprite's hit points as a
+        // percentage -- the base current (m_hitPoints, sign-extended)
+        // scaled by 100 (lea eax,[eax+eax*4] twice, then shl 2) over the
+        // derived max (m_nMaxHitPoints), signed divide -- against the
+        // specifics by less. The arm carries no compare of its own: it
+        // jumps back to 0x4543BD, the setl tail of the arm before it in
+        // the listing (GetSpecifics; cmp esi,eax; setl dl). As in HP
+        // (0x4010), a null sprite leaves through the early epilogue
+        // (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40D4:
+        // CheckDoorFlags(object, flags): the trigger's flag mask (the
+        // specifics) AND the flags dword of the door the decoded cause
+        // resolves to (sub_40CB20 with TYPE_DOOR, the byte 0x84C503, then
+        // CGameDoor::GetFlags). The original takes the raw AND as the
+        // answer -- esi keeps the masked bits, nothing normalizes them to
+        // 0/1, as in the area-name arm 0x407E. A cause that resolves to
+        // nothing zeroes bResult (0x45AB39) and falls into the release
+        // tail, as in IsCreatureHiddenInShadows (0x40D5).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_DOOR, FALSE);
+        if (pObject2 != NULL) {
+            bResult = triggerCopy.GetSpecifics()
+                & static_cast<CGameDoor*>(pObject2)->GetFlags();
+        }
+        break;
+    case 0x40D8:
+        // IsRotation(object, n): the facing of the sprite the decoded
+        // cause resolves to (sub_40CB20 with TYPE_SPRITE, the byte
+        // 0x84C507, then CGameSprite::GetDirection, sign-extended) against
+        // the specifics by equal (sub/neg/sbb/inc). A cause that resolves
+        // to nothing jumps straight to the release tail 0x45AD4C with the
+        // result still zero from dispatch -- no in-arm zeroing, unlike
+        // IsCreatureHiddenInShadows (0x40D5).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameSprite*>(pObject2)->GetDirection()
+                == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x40DE:
+        // FallenPaladin(object): resolve the decoded cause to a sprite
+        // (sub_40CB20 with TYPE_SPRITE), then type-check it again through
+        // the vtable's GetObjectType against TYPE_SPRITE (a mismatch
+        // answers FALSE through the release tail). The answer needs the
+        // low three bits of the derived class mask set (test byte
+        // [eax+0x42],7 -- the mask's bit for a class is 1 << (class-1),
+        // so bits 0-2 are the first three classes) AND bit 9 of the base
+        // stats flags dword (test ch,2 of [eax+8], 0x200). A cause that
+        // resolves to nothing leaves through the early epilogue
+        // (0x45AB7A), as in HP (0x4010).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pFallen = static_cast<CGameSprite*>(pObject2);
+            bResult = (pFallen->GetDerivedStats()->m_classMask & 7) != 0
+                && (pFallen->GetBaseStats()->m_flags & 0x200) != 0;
+        }
+        break;
+    case 0x4028:
+    case 0x4029:
+    case 0x402A:
+        // NumCreature(object, n) with its LT (0x4029) and GT (0x402A)
+        // variants: count what the area finds around this object's
+        // position for the trigger's cause -- the RAW object spec out
+        // of the trigger (GetCause is just lea +6; no Decode runs
+        // first), over this object's visual range (vtable 0x98) and
+        // visible-terrain table (vtable 0x9C), with line of sight
+        // checked (push 1) and non-sprites not filtered (push 0) --
+        // then compare the list count (0x45B200) against the
+        // specifics. The three arms are identical except for that
+        // final compare: equal for 0x4028 (sub/neg/sbb/inc), setg for
+        // 0x402A, setl for 0x4029 (0x4028 and 0x402A/0x4029 even push
+        // the same seven arguments in a different interleave). Nothing
+        // is resolved, so both release slots stay NULL and the arms
+        // jump straight to the release tail.
+        {
+            CTypedPtrList<CPtrList, LONG*> targets;
+            m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            int nCount = targets.GetCount();
+            if (triggerCopy.m_triggerID == 0x4028) {
+                bResult = nCount == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x402A) {
+                bResult = nCount > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nCount < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x402C:
+        // HPPercent(object, n): the trigger sprite's hit points as a
+        // percentage -- the base current (m_hitPoints, sign-extended)
+        // scaled by 100 (lea eax,[eax+eax*4] twice, then shl 2) over
+        // the derived max (m_nMaxHitPoints), signed divide -- against
+        // the specifics by equal (sub/neg/sbb/inc). Identical to
+        // HPPERCENTLT (0x402D) except for the compare; a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x400A:
+        // Alignment(object, mask): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, not
+        // CAITrigger::Decode), then read the spec's alignment byte
+        // (m_nAlignment, +0x15). Six specifics values are mask tests
+        // -- 1, 2, 3, 0x10, 0x20 and 0x30, the ALIGNMNT masks --
+        // answered as (m_nAlignment & low byte of the specifics) !=
+        // 0; every other value is a straight 32-bit equality of the
+        // byte (zero-extended) against the specifics. Nothing was
+        // resolved, so the arm jumps straight to the release tail.
+        triggerCopy.m_triggerCause.Decode(this);
+        {
+            LONG nAlignment = triggerCopy.GetSpecifics();
+            if (nAlignment == 1 || nAlignment == 2 || nAlignment == 3
+                || nAlignment == 0x10 || nAlignment == 0x20 || nAlignment == 0x30) {
+                bResult = (triggerCopy.m_triggerCause.m_nAlignment & nAlignment) != 0;
+            } else {
+                bResult = triggerCopy.m_triggerCause.m_nAlignment == nAlignment;
+            }
+        }
+        break;
+    case 0x40AC: // unnamed in TRIGGER.IDS; the jump table sends both IDs
+                 // to the same arm, as with 0x40E1/0x40F4
+    case 0x40AD:
+        // CheckSpellState(object, n): the trigger sprite's derived
+        // spell-state bit -- the std::bitset<256> m_spellStates at
+        // +0xEC, bit number GetSpecifics(). The arm's two callees
+        // 0x45E380/0x45E390 are the compiler's std::bitset<256>::test
+        // helpers (0x45E380 builds the {bitset, index} pair, 0x45E390
+        // returns the bit); the tree's own bitset member supplies
+        // both. A null sprite leaves through the early epilogue
+        // (0x45AB7A), as in HP (0x4010).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = pSprite->GetDerivedStats()->m_spellStates.test(
+                triggerCopy.GetSpecifics());
+        }
+        break;
+    case 0x40D9:
+        // IsFacingSavedRotation(object): the sprite the decoded cause
+        // resolves to (sub_40CB20 with TYPE_SPRITE, the byte
+        // 0x84C507): its base-stats saved facing (the byte at +0x2E8,
+        // zero-extended) against its current direction (GetDirection,
+        // 0x45B720) by equal (sub si,ax; neg/sbb/inc on the 16-bit
+        // result). A cause that resolves to nothing jumps straight to
+        // the release tail 0x45AD4C with the result still zero from
+        // dispatch, as in IsRotation (0x40D8).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 != NULL) {
+            CGameSprite* pFacing = static_cast<CGameSprite*>(pObject2);
+            bResult = pFacing->GetBaseStats()->field_2E8 == pFacing->GetDirection();
+        }
+        break;
+    case 0x40ED:
+        // InTrap(object): decode the trigger, and if THIS object is a
+        // trigger (GetObjectType against TYPE_TRIGGER), resolve the
+        // decoded cause with the back-list check on (sub_40CCA0 --
+        // the arm passes the byte 0x84C507, TYPE_SPRITE/0x31, as the
+        // checkBackList BOOL, which is nonzero). With an object in
+        // hand the answer is this trigger's IsOverActivate at that
+        // object's position (vtable 0xB8, GetPos at 0x1C). Without
+        // one -- a caller that is not a trigger, or a cause that
+        // resolves to nothing -- the original stores 0xFFFFFFFE (-2,
+        // still TRUE for a BOOL) and jumps to the release tail.
+        triggerCopy.Decode(this);
+        if (GetObjectType() == CGameObject::TYPE_TRIGGER) {
+            pObject2 = triggerCopy.GetCause().sub_40CCA0(this, TRUE);
+        }
+        if (pObject2 != NULL) {
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(
+                pObject2->GetPos());
+        } else {
+            bResult = -2;
+        }
+        break;
+    case 0x4080: // unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089)
+    case 0x4081:
+    case 0x4082:
+        // NumCreature minus the party: count what the area finds around
+        // this object's position for the trigger's RAW cause -- the same
+        // seven-argument GetAllInRange as the NumCreature trio (0x4028):
+        // no Decode runs first, visual range (vtable 0x98),
+        // visible-terrain table (vtable 0x9C), line of sight checked,
+        // non-sprites not filtered -- then subtract GetNumCharacters()
+        // (sign-extended SHORT) and compare the difference against the
+        // specifics. The three arms are identical except for that final
+        // compare: 0x4080 by equal, jumping into the compare tail at
+        // 0x45451D (sub/neg/sbb/inc) that the HPLost arm shares,
+        // 0x4081 by setl, entering the setl block at 0x4551AF that
+        // 0x40DD HPLostLT shares, and 0x4082 by an inline setg
+        // (0x455229-0x45522D). Nothing is resolved, so the release
+        // slots stay NULL and the arms jump straight to the release
+        // tail.
+        {
+            CTypedPtrList<CPtrList, LONG*> targets;
+            m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            int nDifference = targets.GetCount()
+                - g_pBaldurChitin->GetObjectGame()->GetNumCharacters();
+            if (triggerCopy.m_triggerID == 0x4080) {
+                bResult = nDifference == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x4081) {
+                bResult = nDifference < triggerCopy.GetSpecifics();
+            } else {
+                bResult = nDifference > triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x402E:
+        // HPPercentGT(object, n): the trigger sprite's hit points as a
+        // percentage -- the same base current (m_hitPoints,
+        // sign-extended) scaled by 100 (lea eax,[eax+eax*4] twice, then
+        // shl 2) over the derived max (m_nMaxHitPoints), signed divide,
+        // as HPPercent (0x402C) -- against the specifics by setg.
+        // Identical to 0x402C except for the compare; a null sprite
+        // leaves through the early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nPercent = pSprite->GetBaseStats()->m_hitPoints * 100
+                / pSprite->GetDerivedStats()->m_nMaxHitPoints;
+            bResult = nPercent > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4019:
+    case 0x401A:
+    case 0x401B:
+        // Reputation(object, n) / ReputationGT(object, n) /
+        // ReputationLT(object, n): the trigger sprite's reputation
+        // against the specifics. The loads are one arm apart in the
+        // listing (0x45497D for 0x4019, 0x4549FD for 0x401A, 0x454A6E
+        // for 0x401B) and identical: for a party member --
+        // GetCharacterPortraitNum(GetId()) != -1 -- the reputation is
+        // the game's GetReputation() (sign-extended SHORT); for anyone
+        // else it is the base-stats reputation byte (+0x3C,
+        // zero-extended). Only the final compare differs -- 0x4019 an
+        // inline sete (0x4549EF-0x4549F3), 0x401A the shared setg tail,
+        // 0x401B setl (0x454AF9). A null sprite leaves through the
+        // early epilogue (0x45AB7A).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nReputation;
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(
+                    pSprite->GetId())
+                != -1) {
+                nReputation = g_pBaldurChitin->GetObjectGame()->GetReputation();
+            } else {
+                nReputation = pSprite->GetBaseStats()->m_reputation;
+            }
+            if (triggerCopy.m_triggerID == 0x4019) {
+                bResult = nReputation == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x401A) {
+                bResult = nReputation > triggerCopy.GetSpecifics();
+            } else {
+                bResult = nReputation < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x4097:
+        // TimerActive(n): walk this object's timer list (m_timers at
+        // +0x44E; the head-position read 0x45B210 and the walk
+        // 0x409800 are the list's GetHeadPosition/GetNext) and answer
+        // TRUE when a live timer's id (GetId, a zero-extended byte)
+        // equals the specifics. The original does not break out on a
+        // match -- it keeps scanning, which cannot change the answer
+        // once it is set -- and skips NULL node data. Nothing is
+        // resolved, so both release slots stay NULL and the arm jumps
+        // to the release tail; an empty list takes that jump from the
+        // head-position zero test with the result still zero.
+        {
+            POSITION pos = m_timers.GetHeadPosition();
+            while (pos != NULL) {
+                CGameTimer* pTimer = m_timers.GetNext(pos);
+                if (pTimer != NULL && pTimer->GetId() == triggerCopy.GetSpecifics()) {
+                    bResult = TRUE;
+                }
+            }
+        }
+        break;
+    case 0x407F:
+        // Unnamed in TRIGGER.IDS (the file jumps 0x407D -> 0x4089):
+        // decode the trigger and resolve its cause with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501, which accepts any
+        // object); when the object is a sprite (GetObjectType against
+        // TYPE_SPRITE -- anything else answers FALSE untouched),
+        // FindItemPersonal on the trigger's string1 with count 0 and
+        // no equipped-only flag, TRUE when a slot (not -1) comes
+        // back. A cause that resolves to nothing leaves through the
+        // early epilogue (0x45AB7A) with nothing shared; the sprite
+        // path releases the share inline (0x4570A3) before jumping to
+        // the release tail -- the same net effect as leaving pObject2
+        // set for the release label.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            bResult = static_cast<CGameSprite*>(pObject2)->FindItemPersonal(
+                          triggerCopy.GetString1(), 0, FALSE)
+                != -1;
+        }
+        break;
+    case 0x40C7:
+        // CheckAreaDiffLevel(n): which side of the current area's
+        // party-level band the party is on. The band is the area
+        // header's field_4C (lower bound) and field_4D (upper bound),
+        // the party level the header's field_4E -- the fields
+        // CGameArea stores from GetAveragePartyLevel and the spawn
+        // load tests with the same band idiom (0x460E9F).
+        // Specifics 1 answers party < lower; 2 answers lower <= party
+        // < upper (the original re-tests the lower bound inside);
+        // 3 answers upper <= party (its TRUE comes from jumping to
+        // the release tail's mov esi,1 at 0x45AD47). Any other value
+        // -- and a NULL area -- answers FALSE through the release
+        // tail. Nothing is resolved.
+        if (m_pArea != NULL) {
+            LONG nLevel = triggerCopy.GetSpecifics();
+            if (nLevel >= 1 && nLevel <= 3) {
+                CAreaFileHeader* pHeader = m_pArea->GetHeader();
+                INT nPartyLevel = pHeader->field_4E;
+                // The three bands are tested independently, not as an
+                // else-chain (0x459B0F, 0x459B1D, 0x459B37): with an
+                // upper bound below the lower one, a party under both
+                // answers TRUE for 1 and for 3.
+                if (nPartyLevel < pHeader->field_4C && nLevel == 1) {
+                    bResult = TRUE;
+                }
+                if (nPartyLevel < pHeader->field_4D) {
+                    if (nPartyLevel >= pHeader->field_4C && nLevel == 2) {
+                        bResult = TRUE;
+                    }
+                } else if (nLevel == 3) {
+                    bResult = TRUE;
+                }
+            }
+        }
+        break;
+    case 0x40D0:
+        // IsScriptName(s, object): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, as in
+        // Alignment 0x400A) and resolve it with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501, which accepts any
+        // object), then compare the object's script name
+        // (m_scriptName, +0x554, the 32-byte SCRIPTNAME) against the
+        // trigger's string1, case-insensitively. The original builds
+        // a CString of explicit length 32 from the script name only
+        // to marshal both buffers to CompareStrings (0x7E8182,
+        // lstrcmpi); the temps change nothing, so the answer is
+        // _stricmp == 0, as in the area-name arm 0x407E. A cause that
+        // resolves to nothing jumps straight to the release tail
+        // 0x45AD4C with the result still zero, as in
+        // IsFacingSavedRotation (0x40D9).
+        triggerCopy.m_triggerCause.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 != NULL) {
+            bResult = _stricmp(triggerCopy.m_string1,
+                          static_cast<CGameAIBase*>(pObject2)->m_scriptName)
+                == 0;
+        }
+        break;
+    case 0x40E5:
+        // IsPlayerNumber(object, n): resolve the decoded cause (whole-
+        // trigger Decode, then sub_40CCA0 with no back-list check, as in
+        // SetLastMarkedObject 0x40E1). A cause that resolves to nothing,
+        // or a specifics outside 1..6, leaves through 0x45AB39 -- result
+        // zero with the release tail, which is just an empty release
+        // here. Otherwise the player slot is read with the game's
+        // sub_45B610 (m_characters[n-1]) and the answer is slot ==
+        // GetId(), by the sub/neg/sbb/inc tail at 0x455ED1.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            INT nPlayer = triggerCopy.GetSpecifics();
+            if (nPlayer >= 1 && nPlayer <= 6) {
+                bResult = g_pBaldurChitin->GetObjectGame()->sub_45B610(
+                              static_cast<SHORT>(nPlayer - 1))
+                    == pObject2->GetId();
+            }
+        }
+        break;
+    case 0x4076:
+        // OpenState(object, n): resolve the decoded cause (whole-trigger
+        // Decode, then sub_40CCA0) and require a door -- GetObjectType
+        // against the byte 0x84C503 (TYPE_DOOR); anything else answers
+        // FALSE through the release tail. A null cause leaves through
+        // the early epilogue (0x45AB7A). For a door the open flag is
+        // sub_45B700 (m_dwFlags & 1): a nonzero specifics answers the
+        // flag as it is (esi = eax), a zero specifics inverts it through
+        // the sub/neg/sbb/inc tail at 0x456BF2 -- "is closed".
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+
+        if (pObject2->GetObjectType() == CGameObject::TYPE_DOOR) {
+            BOOL bOpen = static_cast<CGameDoor*>(pObject2)->sub_45B700();
+            if (triggerCopy.GetSpecifics() != 0) {
+                bResult = bOpen != FALSE;
+            } else {
+                bResult = bOpen == FALSE;
+            }
+        }
+        break;
+    case 0x407D:
+        // IsOverMe(object) (0x456C17-0x456EAA): only a trigger object
+        // takes this arm at all -- any other caller type answers FALSE
+        // through the early epilogue (0x456C24, the byte 0x84C509 is
+        // TYPE_TRIGGER). The trigger is decoded, then the cause resolves
+        // two ways. A cause carrying an instance goes through the
+        // resolver sub_40CCA0 (0x456DDE); a cause resolving to nothing
+        // answers FALSE through the release tail (0x456DE9). A cause
+        // without an instance asks the caller's area to find it: on the
+        // front vert list (GetVertListType against the byte 0x84C50C)
+        // the nine-argument GetNearest from m_id over the visual range
+        // and visible-terrain table, LOS checked and see-invisible BOTH
+        // hardcoded TRUE here (0x456C64/0x456C66 -- unlike sub_40CED0,
+        // which passes GetCanSeeInvisible), sleeping and dead not
+        // ignored, nearest index zero; any other vert-list type takes
+        // the point search sub_46DAE0 from m_pos with the same values.
+        // No hit (INVALID_INDEX, 0x456CD0) or an unshareable hit
+        // (0x456D16) answers FALSE through the early epilogue,
+        // releasing nothing; the share loop is the usual retry while
+        // SHARED/DENIED. The answer is then this trigger's
+        // IsOverActivate (vtable 0xB8 -- CGameTrigger's slot; the type
+        // gate above is what makes the cast safe) at the cause's
+        // position (GetPos vtable 0x1C). A hit records the cause in
+        // m_lTrigger (SetAndReturn 0x45B370) and posts a
+        // CMessageSetLastObject with type 0, caller and target both m_id
+        // (0x456D72/0x456E3D). The share is released inline either way
+        // and pObject nulled before the break -- the search path by the
+        // found id (0x456DA0), the instance path by the object's own
+        // GetId (0x456E71, the tail 0x4075 Contains jumps into as
+        // well) -- so the release tail only carries bResult.
+        if (GetObjectType() != CGameObject::TYPE_TRIGGER) {
+            return FALSE;
+        }
+
+        triggerCopy.Decode(this);
+
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                break;
+            }
+
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(pObject->GetPos());
+            if (bResult != FALSE) {
+                m_lTrigger.Set(pObject->GetAIType());
+                CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), 0, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        } else {
+            LONG nId;
+            if (GetVertListType() == CGameObject::LIST_FRONT) {
+                nId = m_pArea->GetNearest(m_id,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    FALSE,
+                    0,
+                    FALSE);
+            } else {
+                nId = m_pArea->sub_46DAE0(m_pos.x,
+                    m_pos.y,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    0,
+                    0);
+            }
+
+            if (nId == CGameObjectArray::INVALID_INDEX) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            BYTE rc;
+            do {
+                rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            bResult = static_cast<CGameTrigger*>(this)->IsOverActivate(pObject->GetPos());
+            if (bResult != FALSE) {
+                m_lTrigger.Set(pObject->GetAIType());
+                CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), 0, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        }
+        break;
+    case 0x403C:
+    case 0x403D:
+    case 0x403E:
+        // Reaction(object, n) / ReactionGT / ReactionLT: resolve the
+        // trigger sprite (virtual GetTriggerSprite at vtable 0xA4); a
+        // null sprite leaves through the early epilogue (0x45AB7A).
+        // 0x45D560 then computes the sprite's reaction byte from this
+        // AI object, the arm passes it to the sprite's feedback line
+        // (CGameSprite::FeedBack(29, reaction, 0, 0, -1, 0, 0); the
+        // word 0x85C0EC is 29), and the byte -- spilled to a stack
+        // temp and read back masked to 0xff -- is compared against the
+        // specifics. The three arms are byte-identical up to that
+        // compare: 0x403C sub/neg/sbb/inc (0x455540), 0x403D setg
+        // (0x4555B7), 0x403E setl (0x45562C).
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            BYTE nReaction = GetReaction(pSprite);
+            pSprite->FeedBack(29, nReaction, 0, 0, -1, 0, 0);
+            if (triggerCopy.m_triggerID == 0x403C) {
+                bResult = nReaction == triggerCopy.GetSpecifics();
+            } else if (triggerCopy.m_triggerID == 0x403D) {
+                bResult = static_cast<LONG>(nReaction) > triggerCopy.GetSpecifics();
+            } else {
+                bResult = static_cast<LONG>(nReaction) < triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40AF:
+        // Sequence(object, n): resolve the decoded cause (whole-trigger
+        // Decode, then sub_40CCA0); a cause that resolves to nothing
+        // falls to the release tail with the result zero. The object's
+        // type picks the sequence source: TYPE_STATIC reads the
+        // animation cell's current sequence id (GetVidCell ->
+        // CVidCell::GetCurrentSequenceId, a WORD zero-extended at
+        // 0x4589DA), TYPE_SPRITE reads GetSequence (a SHORT
+        // sign-extended at 0x4589BB), and every other type answers
+        // FALSE. Both paths compare against the specifics with the
+        // sub/neg/sbb/inc tail (0x4589BE / 0x4589EE).
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 != NULL) {
+            BYTE nType = pObject2->GetObjectType();
+            if (nType == CGameObject::TYPE_STATIC) {
+                bResult = static_cast<CGameStatic*>(pObject2)->GetVidCell()->GetCurrentSequenceId()
+                    == triggerCopy.GetSpecifics();
+            } else if (nType == CGameObject::TYPE_SPRITE) {
+                bResult = static_cast<CGameSprite*>(pObject2)->GetSequence()
+                    == triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x401F:
+        // TimeOfDay(n): which band of the day the world timer is in.
+        // The specifics gate is an unsigned compare against 3 (cmp eax,
+        // 3 / ja 0x455028 -- a negative specifics is huge unsigned and
+        // also falls through to FALSE); 0 through 3 then index the jump
+        // table at 0x45B1B4: 0 IsDay, 1 IsDusk, 2 IsNight, 3 IsDawn,
+        // each read through GetObjectGame()->GetWorldTimer() and
+        // truncated to a byte (and eax, 0xff) into the result. Nothing
+        // is resolved, so the arm takes the release tail.
+        {
+            LONG nBand = triggerCopy.GetSpecifics();
+            if (static_cast<ULONG>(nBand) <= 3) {
+                CTimerWorld* pWorldTimer
+                    = g_pBaldurChitin->GetObjectGame()->GetWorldTimer();
+                switch (nBand) {
+                case 0:
+                    bResult = pWorldTimer->IsDay();
+                    break;
+                case 1:
+                    bResult = pWorldTimer->IsDusk();
+                    break;
+                case 2:
+                    bResult = pWorldTimer->IsNight();
+                    break;
+                default:
+                    bResult = pWorldTimer->IsDawn();
+                    break;
+                }
+            }
+        }
+        break;
+    case 0x40AB:
+        // Difficulty(mode, n): the game's difficulty level
+        // (GetObjectGame()->GetOptions(), m_nDifficultyLevel at +0x6C)
+        // against the specifics, the compare picked by the trigger's
+        // int1 (m_specific2 +0x46, read through GetInt1): a dec/je
+        // chain takes 1 to equality (sete, 0x4588E3), 2 to less (setl,
+        // 0x4588B5), 3 to greater (setg, 0x458887); any other value
+        // zeroes the result. The specifics are read on every path, and
+        // nothing is resolved, so every exit takes the release tail.
+        {
+            LONG nMode = triggerCopy.GetInt1();
+            if (nMode >= 1 && nMode <= 3) {
+                LONG nDifficulty = static_cast<LONG>(
+                    g_pBaldurChitin->GetObjectGame()->GetOptions()->m_nDifficultyLevel);
+                if (nMode == 1) {
+                    bResult = nDifficulty == triggerCopy.GetSpecifics();
+                } else if (nMode == 2) {
+                    bResult = nDifficulty < triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nDifficulty > triggerCopy.GetSpecifics();
+                }
+            }
+        }
+        break;
+    case 0x40DF:
+        // IsAnimationID(object, n): resolve the trigger sprite; a null
+        // one leaves through the early epilogue (0x45AB7A). The
+        // sprite's current animation id -- GetAnimation (0x45B730)
+        // -> GetAnimationId (0x45B690), a WORD zero-extended
+        // (0x45ABFB-0x45ABFE) -- compares against the specifics
+        // through the shared equality tail (0x45451F), then the release
+        // tail. The original does not null-check the animation;
+        // GetAnimation returns the embedded object.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+            bResult = pSprite->GetAnimation()->GetAnimationId()
+                == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4077:
+    case 0x4078:
+        // NumItems(object, item, n) / NumItemsGT(object, item, n):
+        // decode the trigger and resolve its cause with TYPE_AIBASE
+        // (sub_40CB20 with the byte 0x84C501); a cause that resolves to
+        // nothing leaves through the early epilogue (0x45AB7A). The
+        // object's type picks the count -- a sprite reads
+        // CountItemPersonal on the trigger's string1 (0x71D3D0), a
+        // container builds a CResRef from string1 and reads CountItem
+        // (0x481830), both SHORTs sign-extended (0x456F02 / 0x456FAA)
+        // -- and every other type answers FALSE through the release
+        // tail (0x4570A1). 0x4077 compares for equality (sub/neg/sbb/
+        // inc, 0x456F0A), 0x4078 with setg (0x456FB6). The exe spells
+        // the whole walk twice, one arm per trigger (0x456EAB /
+        // 0x456F54); this port shares the body and picks the compare by
+        // trigger ID, the way the NumCreature trio does.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            BYTE nType = pObject2->GetObjectType();
+            if (nType == CGameObject::TYPE_SPRITE
+                || nType == CGameObject::TYPE_CONTAINER) {
+                SHORT nCount;
+                if (nType == CGameObject::TYPE_SPRITE) {
+                    nCount = static_cast<CGameSprite*>(pObject2)->CountItemPersonal(
+                        triggerCopy.GetString1());
+                } else {
+                    CResRef resItem(triggerCopy.GetString1());
+                    nCount = static_cast<CGameContainer*>(pObject2)->CountItem(resItem);
+                }
+                if (triggerCopy.m_triggerID == 0x4077) {
+                    bResult = nCount == triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nCount > triggerCopy.GetSpecifics();
+                }
+            }
+        }
+        break;
+    case 0x40C6:
+        // NearbyDialog(object): whether any dialog-capable creature is
+        // within range of this object. The range is the specifics when
+        // they are nonzero; otherwise it is the larger of the area's
+        // dimensions (the embedded CInfinity's nAreaX +0x80 against
+        // nAreaY +0x84 at 0x459A6F; the jle takes nAreaY). The
+        // caller's area is read as the raw member (+0x12, no null
+        // check, not the virtual getter), and GetNearestDialogMatch
+        // (0x46C460) gets the caller's id (+0x5C) and a CResRef built
+        // from the trigger's string1; the trigger answers TRUE when
+        // the match comes back anything but
+        // CGameObjectArray::INVALID_INDEX (setne against the global at
+        // 0x851878). Nothing is resolved, so the arm takes the release
+        // tail.
+        {
+            LONG nRange = triggerCopy.GetSpecifics();
+            if (nRange == 0) {
+                CInfinity* pInfinity = m_pArea->GetInfinity();
+                nRange = pInfinity->nAreaX > pInfinity->nAreaY
+                    ? pInfinity->nAreaX
+                    : pInfinity->nAreaY;
+            }
+            CResRef resDialog(triggerCopy.GetString1());
+            bResult = m_pArea->GetNearestDialogMatch(GetId(), resDialog, nRange)
+                != CGameObjectArray::INVALID_INDEX;
+        }
+        break;
+    case 0x40CF:
+        // CurrentAreaIs(object, n): decode the trigger's cause spec in
+        // place (CAIObjectType::Decode on m_triggerCause itself, the
+        // Alignment arm's pattern), resolve it with TYPE_AIBASE
+        // (sub_40CB20), and read the resolved object's area (the raw
+        // +0x12 member); a null object or a null area answers FALSE
+        // through the release tail. The area's resref (+0x1F0) is
+        // copied into a CString; the first character in "1234567890"
+        // (FindOneOf, 0x453B13) starts the number the original parses
+        // with ToNumberWrapper (0x7E7B8E, VC6 atol) -- no digit answers
+        // FALSE -- and the trigger answers TRUE when that number
+        // equals the specifics (0x453B32): area "AR1000" is area
+        // number 1000.
+        triggerCopy.m_triggerCause.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 != NULL && pObject2->m_pArea != NULL) {
+            CString sArea;
+            pObject2->m_pArea->m_resRef.CopyToString(sArea);
+            int nDigit = sArea.FindOneOf("1234567890");
+            if (nDigit >= 0) {
+                bResult = iwd2r_atol(sArea.GetBuffer(0) + nDigit)
+                    == triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x4071:
+    case 0x4072:
+    case 0x4073:
+        // NumDead / NumDeadGT / NumDeadLT(object, name, n): the engine
+        // keeps dead-count globals under the name "_DEAD" + the
+        // trigger's string1 (the global CString at 0x8D1408,
+        // DEAD_GLOBAL_PREFIX, concatenated 0x45689C). The name is
+        // looked up in the game's variable hash (CInfGame::
+        // GetVariables 0x4286A0, FindKey vtable+4); a hit reads
+        // CVariable::GetIntValue and compares it with the specifics --
+        // 0x4071 for equality (sub/neg/sbb/inc, 0x456926), 0x4072 with
+        // setg (0x4569E8), 0x4073 with setl (0x456AB0) -- and a miss
+        // answers from the specifics alone: 0x4071 specifics == 0
+        // (0x45693D), 0x4072 specifics < 0 (setl, 0x456A01), 0x4073
+        // specifics > 0 (setg, 0x456AC7). The three arms are
+        // byte-identical apart from those compare tails (0x456885 /
+        // 0x456947 / 0x456A0D); this port shares the body and picks
+        // the compare by trigger ID, the way the NumCreature trio
+        // does.
+        {
+            CString sName = DEAD_GLOBAL_PREFIX + triggerCopy.GetString1();
+            // The original calls sName.Left(32) and destroys the
+            // result without reading it (0x4568D5); the look-up below
+            // takes the untruncated name.
+            sName.Left(32);
+            CVariable* pVariable = g_pBaldurChitin->GetObjectGame()
+                                       ->GetVariables()
+                                       ->FindKey(sName);
+            if (pVariable != NULL) {
+                LONG nValue = pVariable->GetIntValue();
+                if (triggerCopy.m_triggerID == 0x4071) {
+                    bResult = nValue == triggerCopy.GetSpecifics();
+                } else if (triggerCopy.m_triggerID == 0x4072) {
+                    bResult = nValue > triggerCopy.GetSpecifics();
+                } else {
+                    bResult = nValue < triggerCopy.GetSpecifics();
+                }
+            } else {
+                LONG nSpecifics = triggerCopy.GetSpecifics();
+                if (triggerCopy.m_triggerID == 0x4071) {
+                    bResult = nSpecifics == 0;
+                } else if (triggerCopy.m_triggerID == 0x4072) {
+                    bResult = nSpecifics < 0;
+                } else {
+                    bResult = nSpecifics > 0;
+                }
+            }
+        }
+        break;
+    case 0x4075:
+        // Contains(object, item): decode the trigger and resolve its
+        // cause with the unfiltered resolver (sub_40CCA0, no type
+        // byte, 0x456AEA); a cause that resolves to nothing leaves
+        // through the early epilogue (0x45AB7A). The resolved object
+        // must be a container (the byte 0x11 at 0x84C502, 0x456B02)
+        // holding at least one item (GetNumItems 0x45B930, test ax,ax
+        // / jle 0x456B1A); anything else answers FALSE through the
+        // release tail. The walk visits every slot (GetItem 0x4802B0,
+        // bound re-read with movsx each iteration at 0x456B4A), skips
+        // the NULL ones, and stops at the first item whose resref
+        // (CResHelper::GetResRef 0x4699E0 into CResRef::operator==
+        // 0x78ABA0 with the trigger's string1) matches -- TRUE through
+        // the 0x456E7B tail; an exhausted walk leaves the entry FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+            CGameContainer* pContainer = static_cast<CGameContainer*>(pObject2);
+            for (SHORT i = 0; i < pContainer->GetNumItems(); i++) {
+                CItem* pItem = pContainer->GetItem(i);
+                if (pItem == NULL) {
+                    continue;
+                }
+                if (pItem->GetResRef() == triggerCopy.GetString1()) {
+                    bResult = TRUE;
+                    break;
+                }
+            }
+        }
+        break;
+    case 0x40B0:
+        // OnIsland(object): whether the trigger's sprite stands on the
+        // island of the AR1600 layout. GetTriggerSprite resolves the
+        // cause; a sprite that does not resolve answers TRUE through
+        // the 0x45AD47 tail (which sets esi to 1 before releasing,
+        // 0x458636), as does a sprite that is dead in either stat
+        // block -- the base file header's state (+0x18, GetBaseStats
+        // 0x453190) or the derived stats (+0, GetDerivedStats
+        // 0x4531A0), both tested for STATE_DEAD (test ch,8). A live
+        // sprite's position (GetPos vtable+0x1C, called once per
+        // coordinate at 0x458667 / 0x458672) then walks the exe's
+        // decision chain (0x458675-0x4586D5), in which every test
+        // answers at once:
+        //   x > 0x403               FALSE   (0x45867E)
+        //   y < 0x69                FALSE   (0x458687)
+        //   y > 0x24E               FALSE   (0x458692)
+        //   x < 0x2B4 && y < 0x24E  TRUE    (0x4586A5)
+        //   x < 0x3FA && y < 0x1CB  TRUE    (0x4586B8)
+        //   x >= 0x403              FALSE   (0x4586C4)
+        //   y >= 0x12D              FALSE   (0x4586CF)
+        //   otherwise               TRUE    (0x4586D5)
+        // (net island: the x band 0x3FA-0x403 with y 0x69-0x12D,
+        // flanked by two wider x bands that allow taller y.)
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original jumps to 0x45AD47, which answers
+                // TRUE; pObject is NULL, so the release tail is empty.
+                bResult = TRUE;
+                break;
+            }
+            if ((pSprite->GetBaseStats()->m_generalState & STATE_DEAD) != 0
+                || (pSprite->GetDerivedStats()->m_generalState & STATE_DEAD) != 0) {
+                bResult = TRUE;
+                break;
+            }
+            CPoint pt = pSprite->GetPos();
+            if (pt.x > 0x403) {
+                bResult = FALSE;
+            } else if (pt.y < 0x69) {
+                bResult = FALSE;
+            } else if (pt.y > 0x24E) {
+                bResult = FALSE;
+            } else if (pt.x < 0x2B4 && pt.y < 0x24E) {
+                bResult = TRUE;
+            } else if (pt.x < 0x3FA && pt.y < 0x1CB) {
+                bResult = TRUE;
+            } else if (pt.x >= 0x403) {
+                bResult = FALSE;
+            } else if (pt.y >= 0x12D) {
+                bResult = FALSE;
+            } else {
+                bResult = TRUE;
+            }
+        }
+        break;
+    case 0x40F0:
+        // HasItemInSlot(object, item, slot): decode the trigger and
+        // resolve its cause with the sprite-typed resolver (sub_40CB20
+        // with the byte 0x31 at 0x84C507); a cause that resolves to
+        // nothing answers FALSE through the release tail (je 0x45AD4C
+        // at 0x45A672), as do specifics of 24 or more (the word 24 at
+        // 0x855128, signed jge 0x45A68C). The slot number is the full
+        // LONG specifics; only its upper bound is checked, so a
+        // negative slot passes the guard and reads before m_items --
+        // a vanilla quirk this port keeps by indexing unchecked. The
+        // slot is read from the sprite's equipment (GetEquipment
+        // 0x45B740): an occupied slot answers whether the item's
+        // resref (CResHelper::GetResRef 0x4699E0) equals the
+        // trigger's string1 (CResRef::operator== 0x78ABA0), an empty
+        // slot whether the empty CString does (the global at
+        // 0x8C5CF8, CString operator== 0x45B270). The original reads
+        // GetSpecifics and GetEquipment twice each (0x45A692 /
+        // 0x45A6B9); the values cannot differ, so this port reads
+        // them once.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(
+            this, CGameObject::TYPE_SPRITE, FALSE);
+        if (pObject2 == NULL) {
+            break;
+        }
+        {
+            LONG nSlot = triggerCopy.GetSpecifics();
+            if (nSlot >= 24) {
+                break;
+            }
+            CItem* pItem = static_cast<CGameSprite*>(pObject2)
+                               ->GetEquipment()
+                               ->m_items[nSlot];
+            if (pItem == NULL) {
+                // NOTE: The empty side is the exe's global empty
+                // CString at 0x8C5CF8.
+                bResult = CString("") == triggerCopy.GetString1();
+            } else {
+                bResult = pItem->GetResRef() == triggerCopy.GetString1();
+            }
+        }
+        break;
+    case 0x4061:
+        // HasItem(resref, object): decode the trigger and resolve its
+        // cause with TYPE_AIBASE (sub_40CB20 with the byte 0x84C501,
+        // which accepts any object); a cause that resolves to nothing
+        // leaves through the early epilogue (0x45AB7A) with nothing
+        // shared. A sprite answers whether FindItemPersonal (0x71D310)
+        // finds the trigger's string1 in its equipment, or failing that
+        // FindItemBags (0x722530) in the bags there (both with count 0
+        // and no identification check); a container answers whether
+        // FindItemSlot (0x4817F0) holds the resref built from string1
+        // (the CResRef ctor 0x78A970; not-found is the -1 the setne at
+        // 0x4561A1 tests); any other type answers FALSE (xor esi,esi at
+        // 0x4570A1). Every resolved path releases the share inline
+        // (0x4570A3) before joining the release tail -- the same net
+        // effect as leaving pObject2 set for the release label.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+            CGameSprite* pSprite = static_cast<CGameSprite*>(pObject2);
+            bResult = pSprite->FindItemPersonal(triggerCopy.GetString1(), 0, FALSE) != -1
+                || pSprite->FindItemBags(triggerCopy.GetString1(), 0, FALSE) != -1;
+        } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+            CResRef resRef(triggerCopy.GetString1());
+            bResult = static_cast<CGameContainer*>(pObject2)->FindItemSlot(resRef) != -1;
+        }
+        break;
+    case 0x4079:
+        // NumItemsLT(resref, object, num): resolve the cause exactly as
+        // HasItem above (TYPE_AIBASE, nothing shared on a miss through
+        // the early epilogue 0x45AB7A). A sprite counts its equipment
+        // with CountItemPersonal (0x71D3D0), a container counts the
+        // resref built from string1 (CResRef ctor 0x78A970) with
+        // CountItem (0x481830); the container path joins the sprite
+        // path's compare (jmp 0x457050 into the movsx at 0x457050). The
+        // count, sign-extended from SHORT, answers strictly less than
+        // the specifics (setl 0x457061); any other type answers FALSE
+        // untouched (0x4570A1). All resolved paths release the share
+        // inline (0x4570A3), as above.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            SHORT nCount;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nCount = static_cast<CGameSprite*>(pObject2)->CountItemPersonal(
+                    triggerCopy.GetString1());
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_CONTAINER) {
+                CResRef resRef(triggerCopy.GetString1());
+                nCount = static_cast<CGameContainer*>(pObject2)->CountItem(resRef);
+            } else {
+                break;
+            }
+            bResult = static_cast<LONG>(nCount) < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407A:
+        // NumItemsParty(resref, num): the party's total count of the
+        // item (string1) equals the specifics. Nothing is decoded or
+        // resolved: walk the party (GetNumCharacters/GetCharacterId,
+        // the GetShare retried while it answers SHARED or DENIED), add
+        // each member's CountItemPersonal (0x71D3D0), sign-extended
+        // from SHORT, and release the share before the next member. The
+        // first member that cannot be shared leaves through the early
+        // epilogue (0x45AB7A) with nothing shared; an empty party skips
+        // the walk and compares 0. The original repeats this whole arm
+        // for 0x407B and 0x407C byte for byte except the final setcc
+        // (sete 0x4571BE / setg 0x4572A6 / setl 0x457391); this port
+        // repeats it too rather than share a helper the exe does not
+        // have. All three arms end in a bare jump to the release tail
+        // (0x45ADB7) with nothing left shared.
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal == triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407B:
+        // NumItemsPartyGT(resref, num): the same party walk as 0x407A,
+        // byte for byte, answering strictly greater than the specifics
+        // (setg 0x4572A6).
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal > triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x407C:
+        // NumItemsPartyLT(resref, num): the same party walk as 0x407A,
+        // byte for byte, answering strictly less than the specifics
+        // (setl 0x457391).
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->CountItemPersonal(triggerCopy.GetString1());
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = nTotal < triggerCopy.GetSpecifics();
+        }
+        break;
+    case 0x4090:
+        // unnamed in TRIGGER.IDS (the file jumps 0x4089 -> 0x4094): the
+        // party-member check behind InPartySlot-style scripts -- the
+        // object in the trigger must be the character occupying
+        // fixed-order portrait slot `specifics`, and that character must
+        // not be dead. Every exit from this arm is a direct return; it
+        // never reaches the release tail. With an instance on the cause
+        // (0x457466), GetFixedOrderCharacterPortraitNum 0x5AF510 maps it
+        // to its slot and a slot mismatch answers FALSE at once
+        // (0x4574E9, nothing shared yet); a matching slot takes ONE
+        // GetShare whose return code is never checked (0x4574B9) and
+        // reads STATE_DEAD out of the sprite's derived stat block
+        // (GetDerivedStats 0x4531A0, first dword). Not dead releases
+        // the share by the instance and answers TRUE (0x457584 through
+        // the TRUE tail 0x457A85); dead releases the same way and
+        // answers FALSE (0x4574E2). With no instance (0x45761A), the
+        // specifics name the slot directly through CInfGame::sub_45B610
+        // (m_characters lookup, INVALID_INDEX past six), one GetShare
+        // whose failure answers FALSE WITHOUT a release (0x457687), then
+        // the sprite must pass OfType against the decoded cause
+        // (0x40AFE0 with FALSE, FALSE) AND carry no STATE_DEAD bit --
+        // both hold for the TRUE exit, either failing for the FALSE one
+        // (0x4576BB). The original re-derives the slot id before each
+        // release; the value cannot differ, so this port reads it once.
+        triggerCopy.Decode(this);
+
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            INT nInstance = triggerCopy.GetCause().GetInstance();
+            SHORT nSlot = g_pBaldurChitin->GetObjectGame()->GetFixedOrderCharacterPortraitNum(nInstance);
+            if (nSlot != triggerCopy.GetSpecifics()) {
+                return FALSE;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject2,
+                INFINITE);
+
+            if ((static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->m_generalState & STATE_DEAD) == 0) {
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nInstance,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                return TRUE;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            return FALSE;
+        }
+
+        {
+            LONG nId = g_pBaldurChitin->GetObjectGame()->sub_45B610(static_cast<SHORT>(triggerCopy.GetSpecifics()));
+            BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject2,
+                INFINITE);
+
+            if (rc != CGameObjectArray::SUCCESS) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; the failed share
+                // holds nothing to release.
+                return FALSE;
+            }
+
+            if (pObject2->GetAIType().OfType(triggerCopy.GetCause(), FALSE, FALSE)) {
+                if ((static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->m_generalState & STATE_DEAD) == 0) {
+                    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    return TRUE;
+                }
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nId,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            return FALSE;
+        }
+    case 0x40DA:
+        // Frame(object, start, end): decode the trigger and resolve its
+        // cause with the untyped resolver sub_40CCA0 (a NOONE cause
+        // resolves to nothing); a cause that resolves to nothing
+        // answers FALSE through the release tail (je 0x45AD4C at
+        // 0x45A7C6). The band is the specifics and int1 in either
+        // order: the exe calls its max(const int&, const int&) and
+        // min(const int&, const int&) instantiations (0x45EAC0/
+        // 0x45EA80), reading each getter twice; the values cannot
+        // differ, so this port reads each once. A static's frame is its
+        // vid cell's current frame id (GetVidCell 0x45B940,
+        // GetCurrentFrameId 0x45B2B0, sign-extended from WORD), a
+        // sprite's its animation's current frame (GetAnimation
+        // 0x45B730, the inline CGameAnimation::GetCurrentFrame, vtable
+        // slot 0xC8); any other type answers FALSE untouched (jne to
+        // the release tail at 0x45A7FB/0x45A809). The frame,
+        // sign-extended from SHORT, answers TRUE only inside the closed
+        // band: above the max FALSE (jg 0x45A887), at or above the min
+        // TRUE (0x45AD47), below FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            break;
+        }
+        {
+            LONG nBound1 = triggerCopy.GetSpecifics();
+            LONG nBound2 = triggerCopy.GetInt1();
+            LONG nMax = nBound1 > nBound2 ? nBound1 : nBound2;
+            LONG nMin = nBound1 < nBound2 ? nBound1 : nBound2;
+            SHORT nFrame;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_STATIC) {
+                nFrame = static_cast<SHORT>(
+                    static_cast<CGameStatic*>(pObject2)->GetVidCell()->GetCurrentFrameId());
+            } else if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nFrame = static_cast<CGameSprite*>(pObject2)->GetAnimation()->GetCurrentFrame();
+            } else {
+                break;
+            }
+            if (nFrame > nMax) {
+                bResult = FALSE;
+            } else if (nFrame >= nMin) {
+                bResult = TRUE;
+            } else {
+                bResult = FALSE;
+            }
+        }
+        break;
+    case 0x40D6:
+        // ChargeCount(item, object, ability, number, operation): decode
+        // the trigger and resolve its cause with the untyped resolver
+        // sub_40CCA0; a cause that resolves to nothing stores 0xFFFFFFFE
+        // (-2, still TRUE for a BOOL) and jumps to the release tail
+        // (0x45A5FE). A container answers FALSE untouched (cmp al,0x11
+        // at 0x45A466, je 0x45AD4C), and so does anything that is not a
+        // sprite (xor esi at 0x45A472). A sprite looks string1 up
+        // personally (FindItemPersonal 0x71D310, count 0, no
+        // equipped-only flag): no slot (cmp bx,-1 at 0x45A494) or an
+        // empty slot answers FALSE, otherwise the item's usage count
+        // for the specifics' ability (GetUsageCount 0x4E84B0) is
+        // compared against int1 as int2 says: 1 equal (the
+        // sub/neg/sbb/inc equality idiom at 0x45A519), 2 less (setl
+        // 0x45A50F), 3 greater (setg 0x45A4F2); anything else answers
+        // FALSE.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+        if (pObject2 == NULL) {
+            bResult = -2;
+            break;
+        }
+        {
+            BYTE objectType = pObject2->GetObjectType();
+            if (objectType == CGameObject::TYPE_CONTAINER) {
+                break;
+            }
+            if (objectType != CGameObject::TYPE_SPRITE) {
+                break;
+            }
+            SHORT nSlot = static_cast<CGameSprite*>(pObject2)->FindItemPersonal(
+                triggerCopy.GetString1(), 0, FALSE);
+            if (nSlot == -1) {
+                break;
+            }
+            CItem* pItem
+                = static_cast<CGameSprite*>(pObject2)->GetEquipment()->m_items[nSlot];
+            if (pItem == NULL) {
+                break;
+            }
+            WORD nCount = pItem->GetUsageCount(triggerCopy.GetSpecifics());
+            switch (triggerCopy.GetInt2()) {
+            case 1:
+                bResult = static_cast<LONG>(nCount) == triggerCopy.GetInt1();
+                break;
+            case 2:
+                bResult = static_cast<LONG>(nCount) < triggerCopy.GetInt1();
+                break;
+            case 3:
+                bResult = static_cast<LONG>(nCount) > triggerCopy.GetInt1();
+                break;
+            default:
+                bResult = FALSE;
+                break;
+            }
+        }
+        break;
+    case 0x40AA:
+        // CheckPartyLevel(level): the lowest level in the party (each
+        // member's derived stats byte at +0x46, through the min
+        // instantiation over two byte references 0x45EAA0, inlined
+        // here as in the Frame arm), with the initial 0xFF an empty
+        // party never replaces. The walk is the 0x407A party walk; the
+        // first member that cannot be shared leaves through the early
+        // epilogue (0x45AB7A) with nothing shared. The answer is
+        // specifics <= that minimum (setle 0x458840).
+        {
+            BYTE nMin = 0xFF;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                BYTE nLevel = static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+                nMin = nMin < nLevel ? nMin : nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            bResult = triggerCopy.GetSpecifics() <= static_cast<LONG>(nMin);
+        }
+        break;
+    case 0x40D3:
+        // AnyPCOnMap(): TRUE as soon as a living party member stands in
+        // this object's area. The party size is read once and cached
+        // (0x45A27E; most arms re-read it every iteration). A member
+        // that cannot be shared is simply skipped (0x45A39F; nothing
+        // was shared, so nothing is released), and so is a dead one
+        // (STATE_DEAD 0x800 in the derived stats' m_generalState, test
+        // ch,8 at 0x45A2FE), released first. The first living member
+        // whose GetArea() (0x40CB00) equals this object's sets TRUE
+        // and, after its share is released, jumps straight to the
+        // release tail (cmp esi,1; je 0x45AD4C).
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            SHORT nCount = pGame->GetNumCharacters();
+            for (SHORT nIndex = 0; nIndex < nCount; nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x45A39F); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameSprite* pMember = static_cast<CGameSprite*>(pCharacter);
+                if ((pMember->GetDerivedStats()->m_generalState & STATE_DEAD) != 0) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    continue;
+                }
+
+                bResult = pMember->GetArea() == GetArea();
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bResult) {
+                    break;
+                }
+            }
+        }
+        break;
+    case 0x40F7:
+        // PCInStore(): TRUE for the first party member whose
+        // sub_45B710 (the int at +0x70F2) answers nonzero, its share
+        // released on the way out through the TRUE tail (0x45AD47).
+        // Unlike the rest of the family this walk does NOT retry the
+        // GetShare: a non-SUCCESS share calls UtilAssert (original
+        // CGameAIBase.cpp line 6035) and returns -2 through the raw
+        // return path (0x45AE25) without the release tail -- dead
+        // code since UtilAssert never returns, ported faithfully. An
+        // empty party answers FALSE through the release tail.
+        {
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pCharacter,
+                    INFINITE);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // __FILE__: C:\Projects\Icewind2\src\Baldur\CGameAIBase.cpp
+                    // __LINE__: 6035
+                    UTIL_ASSERT(FALSE);
+                    return -2;
+                }
+
+                if (static_cast<CGameSprite*>(pCharacter)->sub_45B710() != 0) {
+                    pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                    bResult = TRUE;
+                    break;
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+        }
+        break;
+    case 0x4013:
+        // LOS(object, range): decode the trigger and resolve its cause
+        // with the LOS resolver sub_40D050 (TYPE_AIBASE, no back
+        // list); a cause that resolves to nothing leaves through the
+        // early epilogue (0x45AB7A) with nothing shared. A sprite
+        // target also asks Orderable (0x728460, FALSE); anything else
+        // keeps FALSE. Both positions go through the path-search grid
+        // conversion (sub_45B2D0) and the squared grid distance
+        // (sub_45B300) must not exceed the squared range -- the exe
+        // reads GetSpecifics twice and squares the two reads (they
+        // cannot differ), so this port reads it once. In range, the
+        // area's CheckLOS (0x46A820) runs from the target's position
+        // to this object's, with this object's visible terrain table
+        // (vtable slot 0x9C) and the Orderable answer; out of range or
+        // blocked answers FALSE (the FALSE stub 0x45AB39). On success
+        // the resolved object's type is marked as the last object
+        // (sub_4530F0 with an 0x40AE80 type whose only set fields are
+        // that type byte and instance -1) before the TRUE tail.
+        triggerCopy.Decode(this);
+        pObject2 = triggerCopy.GetCause().sub_40D050(this, CGameObject::TYPE_AIBASE, FALSE);
+        if (pObject2 == NULL) {
+            // NOTE: The original leaves through its early epilogue
+            // (0x45AB7A) without releasing anything; nothing is shared.
+            return FALSE;
+        }
+        {
+            BOOL bOrderable = FALSE;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                bOrderable = static_cast<CGameSprite*>(pObject2)->Orderable(FALSE);
+            }
+
+            const CPoint& rTargetPos = pObject2->GetPos();
+            CPoint ptTargetGrid;
+            sub_45B2D0(&ptTargetGrid, rTargetPos.x, rTargetPos.y);
+            const CPoint& rThisPos = GetPos();
+            CPoint ptThisGrid;
+            sub_45B2D0(&ptThisGrid, rThisPos.x, rThisPos.y);
+            LONG nDistanceSq = sub_45B300(ptTargetGrid.x, ptTargetGrid.y, ptThisGrid.x, ptThisGrid.y);
+
+            LONG nRange = triggerCopy.GetSpecifics() + 1;
+            if (nDistanceSq > nRange * nRange) {
+                bResult = FALSE;
+                break;
+            }
+
+            if (!GetArea()->CheckLOS(rTargetPos, rThisPos, GetVisibleTerrainTable(), bOrderable)) {
+                bResult = FALSE;
+                break;
+            }
+
+            bResult = TRUE;
+            CAIObjectType typeMarked(pObject2->GetObjectType(), 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+            sub_4530F0(typeMarked);
+        }
+        break;
+    case 0x40B8:
+        // PartyLevelVS(object): the party's average level against the
+        // named object's combined class level, by equal. The cause
+        // resolves through sub_40CB20 (TYPE_AIBASE, no back list); a
+        // cause that resolves to nothing leaves through the early
+        // epilogue (0x45AB7A) with nothing shared. The walk is the
+        // 0x407A party walk; each shared member adds its derived stats
+        // level byte (+0x46, zero-extended), and the first member that
+        // cannot be shared leaves through the early epilogue too. The
+        // sum is divided by a party count read fresh after the walk --
+        // the original divides by zero for an empty party, mirrored
+        // here. A non-sprite target compares against 0, a sprite
+        // against its derived stats' GetAtOffset(STAT_CLASSLEVELSUM)
+        // (word 0x84848C, 0x5F) -- equal through sete 0x4591AC.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage == nTarget;
+        }
+        break;
+    case 0x40B9:
+        // PartyLevelVSGT(object): greater. The original repeats the
+        // whole 0x40B8 arm byte for byte except the final comparison
+        // (setg 0x459301); this port repeats it too rather than share
+        // a helper the exe does not have.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->m_nLevel;
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage > nTarget;
+        }
+        break;
+    case 0x40C0:
+        // PartyLevelVSLT(object): less. Same shape as 0x40B8 -- the
+        // original spells the whole arm again -- except each member
+        // contributes GetClassMaskLevel(0xFFF) (the sum of its class
+        // levels, a LONG) instead of the level byte, and the final
+        // comparison is setl 0x45945E.
+        {
+            triggerCopy.Decode(this);
+            pObject2 = triggerCopy.GetCause().sub_40CB20(this, CGameObject::TYPE_AIBASE, FALSE);
+            if (pObject2 == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nTarget = 0;
+            if (pObject2->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nTarget = static_cast<CGameSprite*>(pObject2)->GetDerivedStats()->GetAtOffset(
+                    STAT_CLASSLEVELSUM);
+            }
+            bResult = nAverage < nTarget;
+        }
+        break;
+    case 0x40C4:
+        // CheckPartyAverageLevel(): no object is resolved -- the trigger
+        // copy is not even decoded; the arm reads its int1 and specifics
+        // directly. The walk is the 0x407A party walk over
+        // GetClassMaskLevel(0xFFF) (the sum of each member's class
+        // levels), the first member that cannot be shared leaving
+        // through the early epilogue (0x45AB7A). The sum is divided by
+        // a party count read fresh after the walk (the original divides
+        // by zero for an empty party, mirrored here). int1 picks the
+        // comparison of that average against the specifics: 1 equal
+        // (sete 0x4599D9), 2 less (setl 0x459A01), 3 greater (setg
+        // 0x459A2D); any other mode keeps the entry FALSE through the
+        // FALSE stub 0x45AB39, still through the release tail.
+        {
+            LONG nTotal = 0;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original gives up at the first character it
+                    // cannot share (the early epilogue 0x45AB7A), without
+                    // trying the rest.
+                    return FALSE;
+                }
+
+                nTotal += static_cast<CGameSprite*>(pCharacter)->GetDerivedStats()->GetClassMaskLevel(0xFFF);
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+
+            LONG nAverage = nTotal / static_cast<LONG>(pGame->GetNumCharacters());
+            LONG nMode = triggerCopy.GetInt1();
+            if (nMode == 1) {
+                bResult = nAverage == triggerCopy.GetSpecifics();
+            } else if (nMode == 2) {
+                bResult = nAverage < triggerCopy.GetSpecifics();
+            } else if (nMode == 3) {
+                bResult = nAverage > triggerCopy.GetSpecifics();
+            }
+        }
+        break;
+    case 0x40C5:
+        // ItemIsIdentified(resref): whether the first party member that
+        // carries the named item has it identified -- FindItemPersonal
+        // (0x71D310), then FindItemBags (0x722530) for one inside a
+        // bag, and the found item's m_flags bit 0 (+0x20, which the
+        // original reads through the trivial CGameEffectList
+        // GetPosCurrent getter 0x452F30 reused on the CItem). NOTE:
+        // when FindItemBags finds it the slot is the bag's own
+        // equipment slot, so the flags tested are the bag's -- mirrored
+        // from the listing. The party count is read once and cached
+        // (0x459D77; most arms re-read it every iteration). A member
+        // that cannot be shared is simply skipped (0x459E89; nothing
+        // was shared, so nothing is released), as in AnyPCOnMap
+        // (0x40D3); a member without the item is released and the walk
+        // continues; the first member that has it -- identified or not
+        // -- ends the walk after its share is released.
+        {
+            triggerCopy.Decode(this);
+            CString sName(triggerCopy.GetString1());
+
+            BOOL bIdentified = FALSE;
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            SHORT nCount = pGame->GetNumCharacters();
+            for (SHORT nIndex = 0; nIndex < nCount; nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x459E89); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameSprite* pMember = static_cast<CGameSprite*>(pCharacter);
+                SHORT nSlot = pMember->FindItemPersonal(sName, 0, FALSE);
+                if (nSlot == -1) {
+                    nSlot = pMember->FindItemBags(sName, 0, FALSE);
+                }
+
+                if (nSlot != -1) {
+                    CItem* pItem = pMember->GetEquipment()->m_items[nSlot];
+                    if (pItem != NULL && (pItem->m_flags & 1) != 0) {
+                        bIdentified = TRUE;
+                    }
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (nSlot != -1) {
+                    break;
+                }
+            }
+
+            bResult = bIdentified;
+        }
+        break;
+    case 0x40F6:
+        // AnyPCSeesEnemy (0x45A96F-0x45AAE8): whether any party
+        // member sees an enemy. The object type is local -- the
+        // eleven-argument constructor (0x40AE80) with every field
+        // zero except EA_ENEMY (0x847C40) and instance -1 -- decoded
+        // against each shared party member (the walk re-reads
+        // GetNumCharacters every iteration), then resolved to a
+        // TYPE_SPRITE it matches (sub_40CB20, no back list). A
+        // resolved target is checked with SeeTarget (0x44DAC0,
+        // bSeeDead FALSE) and its share released; the member's share
+        // is always released. A member that cannot be shared is
+        // simply skipped (0x45AA0D; nothing was shared, so nothing is
+        // released), as in ItemIsIdentified (0x40C5) -- unlike
+        // NumItemsParty (0x407A), which gives up. The walk stops at
+        // the first member whose SeeTarget answers exactly 1
+        // (0x45AAD0 skips the increment), leaving that answer as the
+        // trigger's answer; a member with no matching target keeps
+        // the previous answer and the walk continues.
+        {
+            CAIObjectType type(CAIObjectType::EA_ENEMY, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+
+            CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+            for (SHORT nIndex = 0; nIndex < pGame->GetNumCharacters(); nIndex++) {
+                LONG nCharacterId = pGame->GetCharacterId(nIndex);
+                CGameObject* pCharacter;
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pCharacter,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc != CGameObjectArray::SUCCESS) {
+                    // NOTE: The original skips a member it cannot share
+                    // (0x45AA0D); nothing was shared, so nothing is
+                    // released.
+                    continue;
+                }
+
+                CGameAIBase* pMember = static_cast<CGameAIBase*>(pCharacter);
+                type.Decode(pMember);
+                CGameObject* pTarget = type.sub_40CB20(pMember, CGameObject::TYPE_SPRITE, FALSE);
+                if (pTarget != NULL) {
+                    bResult = pMember->SeeTarget(pTarget, FALSE);
+
+                    pGame->GetObjectArray()->ReleaseShare(pTarget->GetId(),
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+
+                pGame->GetObjectArray()->ReleaseShare(nCharacterId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+
+                if (bResult == 1) {
+                    break;
+                }
+            }
+        }
+        break;
+    case 0x40A5:
+        // BitGlobal(name, mask, op) (0x457B5A-0x457DC4): the variable
+        // named by the first string, scope prefix and all -- MakeUpper
+        // runs over the whole string before the colon split, so the
+        // name is uppercased too, unlike the GlobalTimer arms, which
+        // take scope and name from separate strings; there is no
+        // trimming, unlike the IncrementGlobalOnce action. A missing
+        // variable in a scope that was found answers as though its
+        // value were zero (specifics == 0, 0x457C4F); a scope naming
+        // no area answers FALSE outright. The bit operation is chosen
+        // by int1 in the compare block at 0x457D40: every mode compare
+        // is a jne to the release tail, so a mode other than 1 (AND)
+        // releases FALSE before the OR and XOR blocks are ever
+        // reached -- the original's OR (2) and XOR (3) paths are dead
+        // code, mirrored below.
+        {
+            sString = triggerCopy.GetString1();
+            sString.MakeUpper();
+            int nColon = sString.Find(':');
+            sScope = sString.Left(nColon);
+            sName = sString.Right(sString.GetLength() - nColon - 1);
+
+            CVariable* pVariable;
+            if (sScope == "GLOBAL") {
+                pVariable = g_pBaldurChitin->GetObjectGame()->GetVariables()->FindKey(sName);
+            } else if (sScope == "LOCALS") {
+                if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                    bResult = FALSE;
+                    break;
+                }
+                pVariable = static_cast<CGameSprite*>(this)->GetLocalVariables()->FindKey(sName);
+            } else {
+                if (sScope == "MYAREA") {
+                    sScope = reinterpret_cast<const char*>(m_pArea->GetHeader());
+                }
+
+                CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sScope);
+                if (pArea == NULL) {
+                    break;
+                }
+                pVariable = pArea->GetVariables()->FindKey(sName);
+            }
+
+            if (pVariable == NULL) {
+                bResult = triggerCopy.GetSpecifics() == 0;
+                break;
+            }
+
+            if (triggerCopy.GetInt1() != 1) {
+                break;
+            }
+            if ((pVariable->GetIntValue() & triggerCopy.GetSpecifics()) != 0) {
+                bResult = TRUE;
+                break;
+            }
+            if (triggerCopy.GetInt1() == 2
+                && (pVariable->GetIntValue() | triggerCopy.GetSpecifics()) != 0) {
+                // Dead in the original: int1 is 1 here, and a mode-2
+                // trigger released FALSE at the first compare.
+                bResult = TRUE;
+                break;
+            }
+            if (triggerCopy.GetInt1() == 3) {
+                // Dead in the original, as above.
+                bResult = (pVariable->GetIntValue() ^ triggerCopy.GetSpecifics()) != 0;
+            }
+        }
+        break;
+    case 0x40A8:
+        // HelpEx(object, field) (0x458318-0x4584EC): whether the
+        // trigger sprite's AI-type field named by the specifics (1 EA,
+        // 2 general, 3 race, 4 class, 5 specific, 6 gender, 7 alignment
+        // -- jump table 0x45B1C4) still matches the same field of
+        // m_lHelp, the object type of the last help shout this object
+        // took; the checked field of m_lHelp is then set to 0xFF, so
+        // the match can fire only once. Every field but class compares
+        // for equality (sub/neg/sbb/inc); class answers the raw AND of
+        // the two class bytes, as the area type word does in 0x4086.
+        // A specifics outside 1-7 jumps straight to the release tail
+        // with the result still FALSE.
+        {
+            CGameSprite* pSprite = NULL;
+            bNoRelease = GetTriggerSprite(triggerCopy, &pSprite);
+            pObject = pSprite;
+            if (pSprite == NULL) {
+                // NOTE: The original leaves through its early epilogue
+                // (0x45AB7A) without releasing anything; nothing is shared.
+                return FALSE;
+            }
+
+            switch (triggerCopy.GetSpecifics()) {
+            case 1:
+                bResult = pSprite->GetAIType().GetEnemyAlly() == m_lHelp.GetEnemyAlly();
+                m_lHelp.SetEnemyAlly(0xFF);
+                break;
+            case 2:
+                bResult = pSprite->GetAIType().GetGeneral() == m_lHelp.GetGeneral();
+                m_lHelp.SetGeneral(0xFF);
+                break;
+            case 3:
+                bResult = pSprite->GetAIType().GetRace() == m_lHelp.GetRace();
+                m_lHelp.SetRace(0xFF);
+                break;
+            case 4:
+                bResult = pSprite->GetAIType().GetClass() & m_lHelp.GetClass();
+                m_lHelp.SetClass(0xFF);
+                break;
+            case 5:
+                bResult = pSprite->GetAIType().GetSpecific() == m_lHelp.GetSpecific();
+                m_lHelp.SetSpecific(0xFF);
+                break;
+            case 6:
+                bResult = pSprite->GetAIType().GetGender() == m_lHelp.GetGender();
+                m_lHelp.SetGender(0xFF);
+                break;
+            case 7:
+                bResult = pSprite->GetAIType().GetAlignment() == m_lHelp.GetAlignment();
+                m_lHelp.SetAlignment(0xFF);
+                break;
+            }
+        }
+        break;
+    case 0x40CA:
+    case 0x40CB:
+    case 0x40CC:
+        // NumCreaturesLTMyLevel, NumCreaturesATMyLevel and
+        // NumCreaturesGTMyLevel (object) (0x459B45-0x459D59): the area
+        // finds everything around this sprite for the trigger's
+        // decoded cause (CAITrigger::Decode runs first, unlike the
+        // NumCreature trio 0x4028-0x402A, which passes the raw spec)
+        // over the visual range and visible-terrain table, with line
+        // of sight checked and non-sprites not filtered; when this
+        // sprite is on the area's front vert list (GetVertListType()
+        // == 0, the byte at 0x84C50C) the search goes through the
+        // eight-argument GetAllInRange (0x46CD20) from its vert-list
+        // position, and is skipped entirely when that position is
+        // NULL, leaving an empty list. With a specifics of zero the
+        // list count itself is compared against this sprite's level
+        // (GetLevel 0x7238A0, the class-level sum); otherwise the
+        // count only gates the walk (a non-positive count answers
+        // FALSE at once), every shared list member that is a sprite
+        // adds its level to the sum, and the sum is compared: less for
+        // 0x40CA, equal for 0x40CB, greater for 0x40CC (the arm reads
+        // its own trigger id back through 0x452B80 for those three
+        // compares). A member that cannot be shared is skipped
+        // without a release, as in AnyPCSeesEnemy (0x40F6); a member
+        // that was shared is always released.
+        {
+            if (GetObjectType() != CGameObject::TYPE_SPRITE) {
+                break;
+            }
+            if (m_pArea == NULL) {
+                break;
+            }
+            triggerCopy.Decode(this);
+
+            CTypedPtrList<CPtrList, LONG*> targets;
+            if (GetVertListType() == 0) {
+                POSITION posVertList = GetVertListPos();
+                if (posVertList != NULL) {
+                    m_pArea->GetAllInRange(posVertList, m_pos, triggerCopy.GetCause(),
+                        GetVisualRange(), GetVisibleTerrainTable(), targets, TRUE, FALSE);
+                }
+            } else {
+                m_pArea->GetAllInRange(m_pos, triggerCopy.GetCause(), GetVisualRange(),
+                    GetVisibleTerrainTable(), targets, TRUE, FALSE);
+            }
+
+            int nSum = targets.GetCount();
+            if (nSum <= 0) {
+                break;
+            }
+
+            LONG nMyLevel = static_cast<CGameSprite*>(this)->GetLevel();
+
+            if (triggerCopy.GetSpecifics() != 0) {
+                nSum = 0;
+
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+                POSITION pos = targets.GetHeadPosition();
+                while (pos != NULL) {
+                    LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(targets.GetNext(pos)));
+
+                    CGameObject* pMember;
+                    if (pGame->GetObjectArray()->GetShare(nId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            &pMember,
+                            INFINITE)
+                        == CGameObjectArray::SUCCESS) {
+                        if (pMember->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                            nSum += static_cast<CGameSprite*>(pMember)->GetLevel();
+                        }
+
+                        pGame->GetObjectArray()->ReleaseShare(nId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            INFINITE);
+                    }
+                }
+            }
+
+            if (triggerCopy.m_triggerID == 0x40CA) {
+                bResult = nSum < nMyLevel;
+            } else if (triggerCopy.m_triggerID == 0x40CB) {
+                bResult = nSum == nMyLevel;
+            } else {
+                bResult = nSum > nMyLevel;
+            }
+        }
+        break;
+    case 0x4074:
+        // Detect(object) (0x454C17-0x454F51). The trigger is decoded
+        // first (0x454C1C); the cause then resolves two ways.
+        //
+        // A cause carrying an instance goes through the resolver
+        // sub_40CCA0 (0x454DCD). A NULL resolution breaks FALSE through
+        // the release tail with nothing shared (0x454DD8). Both
+        // positions convert to path-search grid squares (sub_45B2D0,
+        // the cause at 0x454DF4 and the caller at 0x454E19) and the
+        // squared grid distance comes from sub_45B300. A sprite cause
+        // contributes Orderable(FALSE) (0x728460 at 0x454E4A, gated on
+        // the TYPE_SPRITE byte 0x84C507 at 0x454E3D); anything else
+        // contributes 0. The visual range is fetched twice fresh and
+        // the two fetches multiplied (0x454E55/0x454E62/0x454E6B, both
+        // sign-extended). A squared distance past the squared range
+        // (0x454E6E/0x454E70) skips the LOS block outright -- only the
+        // same-area test can still answer TRUE; inside it the LOS is
+        // the caller's area's CheckLOS from the cause's position to the
+        // caller's over the visible-terrain table with the orderable
+        // byte (0x46A820 at 0x454E93), and that answer is ANDed
+        // unconditionally with the cause seating in this same area
+        // (GetArea 0x40CB00, 0x454EAE-0x454EB6). A FALSE answer
+        // releases the share inline by GetId, nulls pObject and breaks
+        // FALSE through 0x456E71 (0x454EB8). A TRUE answer asks
+        // m_lTrigger.Equal against the cause's AI type (0x40CC40 at
+        // 0x454ED0): already the last-seen object breaks TRUE as is
+        // (0x454ED7) with no bookkeeping; otherwise a party-member
+        // cause (GetCharacterPortraitNum 0x5AF4E0 at 0x454EF4) sets
+        // m_canBeSeen to 4 * (VISIBLE_DELAY + 1) (0x454F0E), the type
+        // is recorded in m_lTrigger (0x45B370 at 0x454F1E), and a
+        // CMessageSetLastObject with the cause's AI type, type
+        // CAITRIGGER_SEE (0x401C), caller and target both m_id is
+        // posted (0x454F48) before the same inline release and a TRUE
+        // break.
+        //
+        // A cause without an instance never shares anything. The
+        // caller's area finds it -- the same search 0x407D uses: on the
+        // front vert list the nine-argument GetNearest (0x46B160) from
+        // m_id over the visual range and visible-terrain table, LOS and
+        // see-invisible both hardcoded TRUE (0x454C51/0x454C53),
+        // nearest index zero, dead not ignored; any other vert-list
+        // type takes the point search sub_46DAE0 from m_pos with the
+        // same hardcoded values (0x454C83/0x454C85). No hit
+        // (INVALID_INDEX, 0x454CBD) breaks FALSE through the release
+        // tail, releasing nothing. A hit that is a party member
+        // (0x5AF4E0 at 0x454CD1) sets m_canBeSeen (0x454CEB) before the
+        // answer turns TRUE (0x454CF7). m_lTrigger already holding
+        // that instance id breaks TRUE as is (0x454D01); otherwise a
+        // type carrying only that instance is built (0x40AE80 at
+        // 0x454D26, SetInstance 0x45B470 at 0x454D3B), recorded in
+        // m_lTrigger (0x45B370 at 0x454D4A), and a CMessageSetLastObject
+        // with the DECODED cause -- the search's spec, not the found
+        // object's type -- type CAITRIGGER_SEE and caller and target
+        // both m_id is posted (0x454D81) before a TRUE break through
+        // the tail.
+        triggerCopy.Decode(this);
+        if (triggerCopy.GetCause().GetInstance() != -1) {
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                // NOTE: 0x454DD8 falls through to the release tail with
+                // nothing shared and the prologue FALSE.
+                break;
+            }
+
+            CPoint ptCauseGrid;
+            sub_45B2D0(&ptCauseGrid, pObject->GetPos().x, pObject->GetPos().y);
+            CPoint ptThisGrid;
+            sub_45B2D0(&ptThisGrid, GetPos().x, GetPos().y);
+            LONG nDistanceSq = sub_45B300(ptThisGrid.x,
+                ptThisGrid.y,
+                ptCauseGrid.x,
+                ptCauseGrid.y);
+
+            BOOLEAN nOrderable = 0;
+            if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) {
+                nOrderable = static_cast<CGameSprite*>(pObject)->Orderable(FALSE);
+            }
+
+            LONG nRangeSq = static_cast<LONG>(GetVisualRange()) * static_cast<LONG>(GetVisualRange());
+
+            bResult = FALSE;
+            if (nDistanceSq <= nRangeSq) {
+                bResult = m_pArea->CheckLOS(pObject->GetPos(),
+                              GetPos(),
+                              GetVisibleTerrainTable(),
+                              nOrderable)
+                    != FALSE;
+            }
+            bResult = bResult != FALSE && pObject->GetArea() == m_pArea;
+            if (bResult == FALSE) {
+                // NOTE: releases inline by GetId and breaks FALSE
+                // through 0x456E71; nothing reaches the release tail.
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                pObject = NULL;
+                break;
+            }
+
+            if (m_lTrigger.Equal(pObject->GetAIType()) != FALSE) {
+                // Already the last-seen object: TRUE with no bookkeeping
+                // (0x454ED7).
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+                pObject = NULL;
+                break;
+            }
+
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(pObject->GetId()) != -1) {
+                m_canBeSeen = 4 * (CGameObject::VISIBLE_DELAY + 1);
+            }
+            m_lTrigger.Set(pObject->GetAIType());
+            CMessage* message = new CMessageSetLastObject(pObject->GetAIType(), CAITRIGGER_SEE, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+        } else {
+            LONG nId;
+            if (GetVertListType() == CGameObject::LIST_FRONT) {
+                nId = m_pArea->GetNearest(m_id,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    FALSE,
+                    0,
+                    FALSE);
+            } else {
+                nId = m_pArea->sub_46DAE0(m_pos.x,
+                    m_pos.y,
+                    triggerCopy.GetCause(),
+                    GetVisualRange(),
+                    GetVisibleTerrainTable(),
+                    TRUE,
+                    TRUE,
+                    0,
+                    0);
+            }
+            if (nId == CGameObjectArray::INVALID_INDEX) {
+                // NOTE: 0x454CBD jumps to the release tail; nothing was
+                // shared and the prologue FALSE carries.
+                break;
+            }
+
+            if (g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(nId) != -1) {
+                m_canBeSeen = 4 * (CGameObject::VISIBLE_DELAY + 1);
+            }
+            bResult = TRUE;
+            if (m_lTrigger.GetInstance() != nId) {
+                CAIObjectType type(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+                type.SetInstance(nId);
+                m_lTrigger.Set(type);
+                CMessage* message = new CMessageSetLastObject(triggerCopy.GetCause(), CAITRIGGER_SEE, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+            }
+        }
+        break;
+    case 0x4092:
+        // Unnamed (TRIGGER.IDS jumps 0x4089-0x4093)
+        // (0x4576DD-0x457A97). The named object is string1: a type
+        // carrying only that name is built (SetName) BEFORE the trigger
+        // decodes. The cause and then the named type each resolve
+        // through sub_40CCA0; a NULL resolution is a direct FALSE
+        // return (0x457755) releasing nothing. Each hit contributes
+        // only its position -- the share is released inline by GetId
+        // before the math. The three squared distances come from
+        // sub_45B300 over raw (unconverted) positions. Guard one
+        // (0x457932): me-cause must not EXCEED me-named; guard two
+        // (0x457948): cause-named must not exceed me-named. Both
+        // compares are strict-greater only -- the fnstsw/test ah,0x41
+        // form jumps on strictly-greater while equality and NaN
+        // continue -- and a failure cleans up and answers FALSE
+        // directly (0x457755). The three square roots (0x45795E/
+        // 0x45797A/0x457990) give the law of cosines at the caller:
+        // acos((meCauseSq + meNamedSq - causeNamedSq) / ((meNamed *
+        // meCause) * 2.0)) (0x4579D9). The angle is then scaled by
+        // * 360 / 2 * 3.1415926535 (0x4579EF/0x457A04/0x457A0A) --
+        // theta * 180 * pi rather than 180/pi, a unit bug that shrinks
+        // the cone to roughly three degrees; ported verbatim. The final
+        // compare against 30.0 (0x457A10) succeeds on scaled < 30.0 or
+        // an unordered (NaN) scaled and answers TRUE (0x457A8E); a
+        // failure answers FALSE directly (0x457764). Every exit of this
+        // arm returns directly, bypassing the release tail.
+        {
+            CPoint ptCause;
+            CPoint ptNamed;
+            CAIObjectType typeNamed(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0);
+            typeNamed.SetName(triggerCopy.GetString1());
+            triggerCopy.Decode(this);
+
+            pObject = triggerCopy.GetCause().sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                // NOTE: direct return through the FALSE cleanup
+                // 0x457755; nothing is shared.
+                return FALSE;
+            }
+            ptCause = pObject->GetPos();
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+
+            pObject = typeNamed.sub_40CCA0(this, FALSE);
+            if (pObject == NULL) {
+                return FALSE;
+            }
+            ptNamed = pObject->GetPos();
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(pObject->GetId(),
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+            pObject = NULL;
+
+            double dMeCauseSq = static_cast<double>(sub_45B300(m_pos.x, m_pos.y, ptCause.x, ptCause.y));
+            double dMeNamedSq = static_cast<double>(sub_45B300(m_pos.x, m_pos.y, ptNamed.x, ptNamed.y));
+            double dCauseNamedSq = static_cast<double>(sub_45B300(ptCause.x, ptCause.y, ptNamed.x, ptNamed.y));
+
+            if (dMeCauseSq > dMeNamedSq) {
+                return FALSE;
+            }
+            if (dCauseNamedSq > dMeNamedSq) {
+                return FALSE;
+            }
+
+            double dMeCause = sqrt(dMeCauseSq);
+            double dMeNamed = sqrt(dMeNamedSq);
+            double dCauseNamed = sqrt(dCauseNamedSq);
+
+            double angle = acos((dMeCause * dMeCause + dMeNamed * dMeNamed - dCauseNamed * dCauseNamed)
+                / ((dMeNamed * dMeCause) * 2.0));
+            double scaled = angle * 360.0 / 2.0 * 3.1415926535;
+
+            if (!(scaled < 30.0) && scaled == scaled) {
+                return FALSE;
+            }
+            return TRUE;
+        }
     default:
-        // TODO: Every trigger not listed above (the byte table 0x45B0C4 and
-        // the jump table 0x45AE40, cases 0x453BDE-0x45AD4C) is not ported;
-        // it answers FALSE until it is.
+        // Trigger IDs outside the table (the byte table 0x45B0C4 indexes
+        // 0x400A-0x40F7 into the jump table 0x45AE40) and the table entries
+        // that point at 0x45AD4C answer FALSE, as in the original.
         bResult = FALSE;
         break;
     }
@@ -7897,6 +11106,38 @@ BOOL CGameAIBase::GetTriggerSprite(CAITrigger& trigger, CGameSprite** ppSprite)
     }
 
     return FALSE;
+}
+
+// 0x45D560
+BYTE CGameAIBase::GetReaction(CGameSprite* pSprite)
+{
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const CAIObjectType& typeAI = pSprite->GetAIType();
+
+    SHORT nReputationBand;
+    if (typeAI.m_nEnemyAlly == CAIObjectType::EA_PC) {
+        nReputationBand = pGame->m_nReputation / 10;
+    } else {
+        nReputationBand = pSprite->m_derivedStats.m_nReputation;
+    }
+
+    BYTE nReaction = static_cast<BYTE>(m_reactionRoll
+        + pGame->GetRuleTables().m_tReactionModCharisma.GetAtLong(
+            CPoint(pSprite->m_derivedStats.m_nCHR - 1, 0))
+        + pGame->GetRuleTables().m_tReactionModReputation.GetAtLong(
+            CPoint(nReputationBand - 1, 0)));
+
+    if (GetObjectType() == CGameObject::TYPE_SPRITE
+        && (typeAI.m_nClassMask & CLASSMASK_RANGER) != 0
+        && pGame->GetRuleTables().IsHatedRace(
+            typeAI, static_cast<CGameSprite*>(this)->m_baseStats)) {
+        if (nReaction < 4) {
+            return 0;
+        }
+        nReaction = static_cast<BYTE>(nReaction - 4);
+    }
+
+    return nReaction;
 }
 
 // 0x44DAC0

@@ -449,6 +449,7 @@ public:
 
     void AddBlood(SHORT nHeight, SHORT nDirection, SHORT nType);
     void RemoveReplacementFromArea();
+    void sub_6F3B80(CGameArea* pNewArea, CPoint pos, LONG posZ, BYTE listType, POSITION posVertList, BOOLEAN bInfravision);
     void AIUpdateWalk();
     void SetPath(LONG* pPath, SHORT nPath);
     void ComputeWaypoint(CPoint& result, LONG** ppPath, SHORT* pnPath, SHORT delay, BYTE* pReachedEnd);
@@ -471,6 +472,8 @@ public:
     void PlaySound(BYTE soundID, BOOL showText, BOOL showCircle, BOOL overrideOption);
     void VerbalConstant(LONG verbalConstant);
     SHORT SpellCastEffect(const CString& sVoice, const CString& sCast, LONG nID1, LONG nID2, LONG nID3);
+    SHORT SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget, LONG targetId,
+        DWORD nType, LONG nHeight);
     LONG GetLength(LONG verbalConstant);
     BOOL IsSpellSchool(BYTE spellSchool);
     void SetFootstepChannel();

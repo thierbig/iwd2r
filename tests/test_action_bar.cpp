@@ -505,6 +505,29 @@ TEST_CASE("action bar: the constructor's defaults", "[actionbar][data]")
     }
 }
 
+// The destructor (0x59E980): the one explicit statement tears the global
+// button list down; the member destruction after it is compiler-generated.
+TEST_CASE("action bar: the destructor tears the global button list down", "[actionbar][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    // The constructor's SetState(0, 0) also runs sub_587BD0, so populate the
+    // global only after the bar exists.
+    std::unique_ptr<CInfButtonArray> pBar = std::make_unique<CInfButtonArray>();
+    CGameButtonList* pList = new CGameButtonList();
+    pList->AddTail(LevelEntry(1));
+    pList->AddTail(LevelEntry(2));
+    CInfButtonArray::dword_8E6820 = pList;
+
+    pBar.reset();
+    CHECK(CInfButtonArray::dword_8E6820 == NULL);
+}
+
 // SetState (0x589110) pushes the state it leaves, ResetState (0x588FF0) and
 // sub_589FF0 pop it; field_19B2 is the stack's size.
 TEST_CASE("action bar: the state stack", "[actionbar][data]")

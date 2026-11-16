@@ -196,6 +196,43 @@ BOOLEAN CGameSpy::sub_4D0980()
     return m_bWSAStarted;
 }
 
+// Creates one non-blocking socket, if winsock was started (byte at +0x0
+// gates the whole body): the second argument picks the transport, 1 a
+// datagram socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP), anything else a
+// stream socket (AF_INET, SOCK_STREAM, protocol 0). An INVALID_SOCKET
+// return fails outright; the socket is then switched to non-blocking
+// (ioctlsocket FIONBIO with argument 1) and a failure there closes it and
+// fails too. On success the handle is stored through the first argument.
+// The caller (CScreenConnection::HandleEMEvent, 0x600CC1) passes 0, i.e.
+// the stream socket; the tree omits that whole call site (ADR 0002).
+//
+// 0x4D0B20
+BOOLEAN CGameSpy::sub_4D0B20(SOCKET* pSocket, BYTE bDatagram)
+{
+    if (m_bWSAStarted == FALSE) {
+        return FALSE;
+    }
+
+    SOCKET hSocket;
+    if (bDatagram == 1) {
+        hSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    } else {
+        hSocket = socket(AF_INET, SOCK_STREAM, 0);
+    }
+    if (hSocket == INVALID_SOCKET) {
+        return FALSE;
+    }
+
+    unsigned long bNonBlocking = 1;
+    if (ioctlsocket(hSocket, FIONBIO, &bNonBlocking) != 0) {
+        closesocket(hSocket);
+        return FALSE;
+    }
+
+    *pSocket = hSocket;
+    return TRUE;
+}
+
 // Takes one datagram off the query socket (+0x0E): a peek first (flags 2)
 // proves one is pending, then the zeroed buffer is read for real (flags 0).
 // The sender's address, its host-order port and the length go back to the

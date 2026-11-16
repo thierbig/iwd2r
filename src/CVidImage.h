@@ -14,8 +14,11 @@ class CResTile;
 class CVidImage {
 public:
     static DWORD rgbTempPal[256];
+    static DWORD rgbDualTempPal[256];
     static BYTE* m_pBlendTable;
     static INT m_nBlendTableRefs;
+
+    static BOOL BuildBlendTable();
 
     CVidImage();
     ~CVidImage();
@@ -44,15 +47,20 @@ public:
     void SetRes(CResTile* pNewResTiles);
     BOOL Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, const CRect& rClip, DWORD dwFlags);
     BOOL Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, CResTile* pResStencil, const CRect& rClip, DWORD dwFlags);
+    BOOL Render(LPDIRECTDRAWSURFACE pSurface, INT x, INT y, const CRect& rClip, CResTile* pResDualTile, BYTE nDitherSeed, DWORD dwFlags);
 
     BOOL BltTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
     BOOL BltStencilTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pStencilData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
 
+    BOOL BltDualTile8To16(WORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pDualData, CResTile* pResDualTile, BYTE nDitherSeed, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
+
     BOOL BltTile8To24(DWORD* pSurface, LONG lPitch, BYTE* pData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
     BOOL BltStencilTile8To24(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pStencilData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
+    BOOL BltDualTile8To24(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pDualData, CResTile* pResDualTile, BYTE nDitherSeed, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
 
     BOOL BltTile8To32(DWORD* pSurface, LONG lPitch, BYTE* pData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
     BOOL BltStencilTile8To32(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pStencilData, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
+    BOOL BltDualTile8To32(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pDualData, CResTile* pResDualTile, BYTE nDitherSeed, const CSize& blitSize, LONG nDataJump, DWORD dwFlags);
 
     BOOL BltStencilTile8to32_3d(DWORD* pSurface, LONG lPitch, BYTE* pData, BYTE* pStencilData, const CSize& blitSize, LONG nDataJump, DWORD dwAlpha, DWORD dwFlags);
     BOOL ReadyTexture(INT nTextureId, DWORD dwFlags, DWORD dwAlpha);

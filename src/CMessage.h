@@ -60,6 +60,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_EXIT_DIALOG_MODE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_EXIT_STORE_MODE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FIRE_PROJECTILE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_SPELL_HIT_EFFECT_SECONDARY_PROJECTILE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_INSERT_ACTION;
     static const BYTE MSG_SUBTYPE_CMESSAGE_INSERT_RESPONSE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_LEAVE_PARTY;
@@ -122,7 +123,9 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_92;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_PROTAGONIST;
     static const BYTE MSG_SUBTYPE_CMESSAGE_START_COMBAT_MUSIC;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_95;
     static const BYTE MSG_SUBTYPE_CMESSAGE_96;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_CHAPTER_DONE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SCREENSHAKE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_DEMAND;
     static const BYTE MSG_SUBTYPE_CMESSAGE_WEAPON_IMMUNITIES_UPDATE;
@@ -207,6 +210,7 @@ public:
     static const BYTE MSG_SUBTYPE_MPSETTINGS_DEMAND_NIGHTMAREMODE;
 
     static const BYTE MSG_TYPE_MAPWORLD;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_START_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS;
     static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
@@ -359,6 +363,8 @@ public:
     BOOLEAN SendMapWorldCancelRequestToServer();
     BOOLEAN SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID idController, LONG nLeavingEdge);
     BOOLEAN SendMapWorldRevealArea(CString sAreaResRef);
+    BOOLEAN SendMapWorldStartRequest(SHORT nDirection);
+    BOOLEAN OnMapWorldStartRequest(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendMovieRequestToServer(CResRef cResMovie);
     BOOLEAN MovieAnnounceStatus(CResRef cResMovie);
     BOOLEAN SendReformPartyAnnounceStatus();
@@ -366,6 +372,7 @@ public:
     void TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime);
     void TimeChangeToServer(ULONG deltaTime);
     BOOLEAN OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BYTE sub_438710(LONG nCharacterId, LONG nTriggerId, CString sAreaName);
     BOOLEAN OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void CleanLeaveAreaLuaRequest();
@@ -512,6 +519,15 @@ public:
     /* 001C */ BOOLEAN m_bLastArbitrationLockStatus;
 };
 
+// A queued action (vtable 0x847B24, 0xDC bytes): SEND, so the action is
+// handed to the player who controls the target sprite. On the wire: the
+// target's remote ids, the action id, then each of the action's three
+// CAIObjectTypes (length-prefixed name, nine one-byte selectors, class mask,
+// the instance's remote ids, the five special-case bytes), the three
+// specific ids, the two strings and the destination point. The action's
+// m_internalFlags and the CAIObjectType location fields are not sent;
+// UnmarshalMessage copies each decoded object into the action through
+// CAIObjectType::Set, so those unsent fields keep their pre-message values.
 class CMessageAddAction : public CMessage {
 public:
     CMessageAddAction(const CAIAction& action, LONG caller, LONG target);
@@ -519,6 +535,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIAction m_action;
@@ -1571,6 +1589,31 @@ public:
     /* 0010 */ LONG m_masterId;
 };
 
+// The link message of IcewindCGameEffectDominate (opcode 263, 0x5645A0;
+// vtable 0x84D37C, 0x14 bytes). The effect allocates it inline at 0x56485D
+// with the dominated sprite's id in +0x04, +0x08 and +0x0C and the
+// controlling sprite's id in +0x10, then calls AddMessage. On the receiving
+// machine Run registers the pair with the dismissed-summon table
+// (Icewind586B70::sub_586F20) and changes no object itself. The original
+// C++ class name is unrecovered; the tree names it by its verified subtype
+// 95 (getter 0x4F6BB0), like CMessage89/CMessage96/CMessage97.
+class CMessage95 : public CMessage {
+public:
+    // NOTE: Out-of-line ctor 0x4F6B80; the effect's copy at 0x56485D is the
+    // same store sequence inlined. Arg order: both link ids, then caller and
+    // target for CMessage.
+    CMessage95(LONG link1Id, LONG link2Id, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ LONG m_link1Id;
+    /* 0010 */ LONG m_link2Id;
+};
+
 // The SaveGame action's message (vtable 0x84888C): saves the game under a
 // name made of the strref's text.
 class CMessageSaveGame : public CMessage {
@@ -1636,6 +1679,26 @@ public:
 };
 #pragma pack(pop)
 
+// The chapter screen's Done button pressed on the machines that do not own
+// it (vtable 0x84D3B4, 0xC bytes; subtype 98, getter 0x4F6CB0). The hosting
+// machine constructs it in CScreenChapter::OnDoneButtonClick (0x5D4190) when
+// it leaves the chapter screen mid-game, with the party slot 1 id in both
+// m_sourceId and m_targetId. MarshalMessage writes the target sprite's remote
+// ids; UnmarshalMessage maps them back to a local sprite id. Run presses the
+// same button wherever the chapter screen is the active engine. The original
+// C++ class name is unrecovered; the tree names it by its verified purpose,
+// like CMessageFloatText/CMessageSetProtagonist.
+class CMessageChapterDone : public CMessage {
+public:
+    CMessageChapterDone(LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+};
+
 class CMessage90 : public CMessage {
 public:
     CMessage90(LONG caller, LONG target, int a3);
@@ -1679,6 +1742,7 @@ public:
 class CMessageMoveGlobal : public CMessage {
 public:
     CMessageMoveGlobal(const CString& sArea, const CPoint& ptStart, LONG caller, LONG target);
+    ~CMessageMoveGlobal() override;
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
@@ -1791,6 +1855,28 @@ public:
 class CMessageFireProjectile : public CMessage {
 public:
     CMessageFireProjectile(WORD projectileType, LONG projectileTargetId, const CPoint& projectileTarget, LONG height, LONG caller, LONG target, unsigned char a7);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ WORD m_projectileType;
+    /* 000E */ LONG m_projectileTargetId;
+    /* 0012 */ CPoint m_projectileTarget;
+    /* 001A */ LONG m_height;
+    /* 001E */ unsigned char field_1E;
+    /* 0020 */ int field_20;
+};
+
+// The spell-hit projectile a sprite reports to the other players' machines
+// (vtable 0x84D4F4, subtype 115). Its ctor stores the projectile type it
+// receives plus one, so the message carries 0x1001+n for a spell-hit type n
+// and 0xD3 for the reserved 0xD2, the two forms DecodeProjectile understands.
+class CMessageSpellHitEffectSecondaryProjectile : public CMessage {
+public:
+    CMessageSpellHitEffectSecondaryProjectile(WORD projectileType, LONG projectileTargetId, const CPoint& projectileTarget, LONG height, LONG caller, LONG target, unsigned char a7);
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;

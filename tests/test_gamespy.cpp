@@ -88,6 +88,16 @@ struct SocketLog {
     int nStartupCalls = 0;
     int nCleanupCalls = 0;
     int nSocketCalls = 0;
+    // The socket helper's stream arm (SOCK_STREAM, protocol 0); the fake
+    // accepts it only when a test asks for it.
+    bool bAllowStream = false;
+    bool bIoctlFails = false;
+    struct SocketArgs {
+        int af;
+        int type;
+        int protocol;
+    };
+    std::vector<SocketArgs> socketArgs;
     SOCKET nNextSocket = 100;
     std::vector<SOCKET> opened;
     std::vector<SOCKET> closed;
@@ -137,7 +147,10 @@ int FakeCleanup()
 SOCKET FakeSocket(int af, int type, int protocol)
 {
     g_log.nSocketCalls++;
-    if (g_log.bSocketFails || af != AF_INET || type != SOCK_DGRAM || protocol != IPPROTO_UDP) {
+    g_log.socketArgs.push_back({ af, type, protocol });
+    const bool bDatagram = af == AF_INET && type == SOCK_DGRAM && protocol == IPPROTO_UDP;
+    const bool bStream = g_log.bAllowStream && af == AF_INET && type == SOCK_STREAM && protocol == 0;
+    if (g_log.bSocketFails || (!bDatagram && !bStream)) {
         return INVALID_SOCKET;
     }
     SOCKET handle = g_log.nNextSocket++;
@@ -147,7 +160,7 @@ SOCKET FakeSocket(int af, int type, int protocol)
 
 int FakeIoctl(SOCKET, long command, unsigned long* argument)
 {
-    if (command != FIONBIO || argument == nullptr || *argument != 1) {
+    if (g_log.bIoctlFails || command != FIONBIO || argument == nullptr || *argument != 1) {
         return SOCKET_ERROR;
     }
     return 0;
@@ -298,6 +311,73 @@ TEST_CASE("gamespy: with the inert winsock the heartbeat never starts", "[gamesp
     CHECK(spy.sub_4D2060() == FALSE);
     CHECK(spy.m_bHeartbeatActive == FALSE);
     CHECK(spy.m_bWSAStarted == FALSE);
+}
+
+TEST_CASE("gamespy: the socket helper refuses to run before winsock starts", "[gamespy]")
+{
+    SocketScope sockets;
+    CGameSpy spy;
+    InitSpy(spy);
+
+    SOCKET hSocket = INVALID_SOCKET;
+    CHECK(spy.sub_4D0B20(&hSocket, 0) == FALSE);
+    CHECK(spy.sub_4D0B20(&hSocket, 1) == FALSE);
+    CHECK(g_log.nSocketCalls == 0);
+    CHECK(hSocket == INVALID_SOCKET);
+}
+
+TEST_CASE("gamespy: the socket helper opens a non-blocking socket for either transport", "[gamespy]")
+{
+    SocketScope sockets;
+    g_log.bAllowStream = true;
+    CGameSpy spy;
+    InitSpy(spy);
+    spy.m_bWSAStarted = TRUE;
+
+    SOCKET hStream = INVALID_SOCKET;
+    CHECK(spy.sub_4D0B20(&hStream, 0) == TRUE);
+    CHECK(hStream == 100);
+    REQUIRE(g_log.socketArgs.size() == 1);
+    CHECK(g_log.socketArgs[0].af == AF_INET);
+    CHECK(g_log.socketArgs[0].type == SOCK_STREAM);
+    CHECK(g_log.socketArgs[0].protocol == 0);
+
+    SOCKET hDatagram = INVALID_SOCKET;
+    CHECK(spy.sub_4D0B20(&hDatagram, 1) == TRUE);
+    CHECK(hDatagram == 101);
+    REQUIRE(g_log.socketArgs.size() == 2);
+    CHECK(g_log.socketArgs[1].af == AF_INET);
+    CHECK(g_log.socketArgs[1].type == SOCK_DGRAM);
+    CHECK(g_log.socketArgs[1].protocol == IPPROTO_UDP);
+
+    CHECK(g_log.closed.empty());
+}
+
+TEST_CASE("gamespy: the socket helper fails closed when the socket or the ioctl fails", "[gamespy]")
+{
+    SocketScope sockets;
+    CGameSpy spy;
+    InitSpy(spy);
+    spy.m_bWSAStarted = TRUE;
+
+    SECTION("socket returns INVALID_SOCKET")
+    {
+        g_log.bSocketFails = true;
+        SOCKET hSocket = INVALID_SOCKET;
+        CHECK(spy.sub_4D0B20(&hSocket, 1) == FALSE);
+        CHECK(hSocket == INVALID_SOCKET);
+        CHECK(g_log.closed.empty());
+    }
+
+    SECTION("ioctlsocket fails so the socket is closed")
+    {
+        g_log.bIoctlFails = true;
+        SOCKET hSocket = INVALID_SOCKET;
+        CHECK(spy.sub_4D0B20(&hSocket, 1) == FALSE);
+        CHECK(hSocket == INVALID_SOCKET);
+        REQUIRE(g_log.closed.size() == 1);
+        CHECK(g_log.closed[0] == 100);
+    }
 }
 
 TEST_CASE("gamespy: the heartbeat opens both sockets, binds the query port and closes them", "[gamespy]")

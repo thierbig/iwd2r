@@ -1,5 +1,6 @@
 #include "CBaldurProjector.h"
 
+#include "C2DArray.h"
 #include "CBaldurChitin.h"
 #include "CInfGame.h"
 #include "CScreenWorld.h"
@@ -29,12 +30,68 @@ void CBaldurProjector::sub_43E300(HBINK bnk)
     int nDestY = (CVideo::SCREENHEIGHT - bnk->height) / 2;
 
     if (nDestX >= 0 && nDestY >= 0) {
+        // 0x43E3AB: the subtitle band sits four font heights above the
+        // bottom of the screen.
+        int nBandY = CVideo::SCREENHEIGHT - field_14A.GetFontHeight(1) * 4;
+        // 0x43E3B5: in widescreen mode (field_4A28) the movie is drawn at
+        // twice its native width - the subtitle band follows the widened
+        // movie, not the native-width CopyToBuffer position below.
+        int nDestXWide = (CVideo::SCREENWIDTH - bnk->width * ((g_pBaldurChitin->field_4A28 != 0) ? 2 : 1)) / 2;
+
         if (field_65A > 0) {
             field_65A--;
             g_pChitin->pActiveEngine->pVidMode->EraseScreen(CVIDINF_SURFACE_BACK, RGB(0, 0, 0));
         }
 
-        // TODO: Incomplete (subtitles).
+        // 0x43E3F7: advance the movie-subtitle overlay one frame (the exe's
+        // single NULL test at 0x43E3FE also guards the composite below).
+        if (pProjectorSubtitles != NULL) {
+            pProjectorSubtitles->field_4++;
+
+            if (pProjectorSubtitles->m_pLines != NULL) {
+                CProjectorSubtitlesLine* pLine = &pProjectorSubtitles->m_pLines[pProjectorSubtitles->field_C];
+
+                if (pLine->field_0 > 0 && pProjectorSubtitles->field_4 >= pLine->field_0) {
+                    pProjectorSubtitles->m_sText = pLine->m_sText;
+                    pProjectorSubtitles->field_C++;
+
+                    // Same erase blt as the ctor: clear the band the line
+                    // renders into before drawing it (same rect as both the
+                    // dest and the src of the fill).
+                    CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+                    DDBLTFX fx;
+                    fx.dwSize = sizeof(fx);
+                    fx.dwFillColor = pVidMode->ConvertToSurfaceRGB(0);
+
+                    HRESULT hr;
+                    do {
+                        hr = g_pChitin->cVideo.cVidBlitter.Blt(pVidMode->pSurfaces[8], &pProjectorSubtitles->rcRect, NULL, &pProjectorSubtitles->rcRect, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+                        pVidMode->CheckResults(hr);
+                    } while (hr == DDERR_SURFACELOST || hr == DDERR_WASSTILLDRAWING);
+
+                    pProjectorSubtitles->Render();
+                }
+            }
+
+            // 0x43E4DD: composite the subtitle band onto the movie back
+            // buffer every frame - BinkCopyToBuffer below overwrites the
+            // surface each frame, so the band has to go on after the movie
+            // pixels. The band's y is re-derived from the current font
+            // height unless the prologue's value already leaves more than
+            // four font heights above it; with the prologue's own math the
+            // compare is equal, so the recompute (the second GetFontHeight)
+            // is the path that runs.
+            int nCompositeFontHeight = field_14A.GetFontHeight(1);
+
+            if (CVideo::SCREENHEIGHT - nBandY <= nCompositeFontHeight * 4) {
+                nBandY = CVideo::SCREENHEIGHT - field_14A.GetFontHeight(1) * 4;
+            }
+
+            CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+            pSurface->BltFast(nDestXWide, nBandY, pVidMode->pSurfaces[8], &pProjectorSubtitles->rcRect, DDBLTFAST_WAIT);
+        }
 
         m_pfnBinkDoFrame(bnk);
 
@@ -253,7 +310,12 @@ void CBaldurProjector::EngineActivated()
         }
     }
 
-    // TODO: Incomplete.
+    // 0x43ECDC: reset any overlay left over from a previous movie.
+    if (pProjectorSubtitles != NULL) {
+        pProjectorSubtitles->field_4 = 0;
+        pProjectorSubtitles->field_C = 0;
+        pProjectorSubtitles->m_sText = "";
+    }
 
     if (g_pChitin->cVideo.m_bIs3dAccelerated) {
         SelectEngine(pLastEngine);
@@ -281,7 +343,18 @@ void CBaldurProjector::EngineActivated()
         m_bThreadPriorityChanged = SetThreadPriority(GetCurrentThread(), 15);
 
         if (g_pBaldurChitin->GetObjectGame()->GetOptions()->m_bDisplayMovieSubtitles) {
-            // TODO: Incomplete.
+            // 0x43EE00: operator_new(0x24) is evaluated before the LoadLines
+            // call (MSVC new-expression order), so a failed LoadLines still
+            // constructs with a NULL line list.
+            int nSubtitlesColor = 0;
+            int nWidth = m_hBink->width;
+            if (g_pBaldurChitin->field_4A28 != 0) {
+                nWidth <<= 1;
+            }
+
+            pProjectorSubtitles = new CProjectorSubtitles(
+                CProjectorSubtitles::LoadLines(m_currentMovieResRef, &nSubtitlesColor, nWidth), nWidth);
+            pProjectorSubtitles->m_rgbColor = nSubtitlesColor;
         }
     }
 
@@ -546,6 +619,63 @@ void CBaldurProjector::TimerAsynchronousUpdate()
     LeaveCriticalSection(&(g_pChitin->field_3AC));
 }
 
+// 0x43F6D0
+CProjectorSubtitles::CProjectorSubtitles(CProjectorSubtitlesLine* pLines, int nWidth)
+{
+    m_sText = "";
+    field_4 = 0;
+    m_pLines = pLines;
+    field_C = 0;
+    m_rgbColor = 0xFFFFFF;
+
+    CVidMode* pVidMode = g_pChitin->pActiveEngine->pVidMode;
+
+    // The pixel format is filled from the back surface, but dwFlags does not
+    // name DDSD_PIXELFORMAT, so CreateSurface never reads it - faithful.
+    DDSURFACEDESC surfaceDesc = { 0 };
+    surfaceDesc.dwSize = sizeof(surfaceDesc);
+    surfaceDesc.dwFlags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH;
+    surfaceDesc.dwWidth = nWidth;
+    surfaceDesc.dwHeight = g_pBaldurChitin->m_pEngineProjector->field_14A.GetFontHeight(1) * 4;
+    surfaceDesc.ddpfPixelFormat.dwSize = sizeof(surfaceDesc.ddpfPixelFormat);
+    pVidMode->pSurfaces[CVIDINF_SURFACE_BACK]->GetPixelFormat(&surfaceDesc.ddpfPixelFormat);
+
+    rcRect.left = 0;
+    rcRect.top = 0;
+    rcRect.right = surfaceDesc.dwWidth;
+    rcRect.bottom = surfaceDesc.dwHeight;
+
+    surfaceDesc.ddsCaps.dwCaps = (g_pChitin->cVideo.m_nBpp == 0x10
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftSrcKeyBlt
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftSrcKeyBltFast
+                                     && !g_pChitin->cVideo.cVidBlitter.m_bSoftMirrorBlt)
+        ? (DDSCAPS_OFFSCREENPLAIN | DDSCAPS_VIDEOMEMORY)
+        : (DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY);
+
+    if (g_pChitin->cVideo.m_pDirectDraw2->CreateSurface(&surfaceDesc, &pVidMode->pSurfaces[8], NULL) != DD_OK) {
+        // The retry only rewrites dwCaps; the rest of the descriptor (including
+        // the filled pixel format) is reused as-is.
+        surfaceDesc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+
+        if (g_pChitin->cVideo.m_pDirectDraw2->CreateSurface(&surfaceDesc, &pVidMode->pSurfaces[8], NULL) != DD_OK) {
+            pVidMode->pSurfaces[8] = NULL;
+        }
+    }
+
+    // The erase blt runs even when CreateSurface failed (pSurfaces[8] == NULL)
+    // - the original passes the null surface straight to Blt. The same rect is
+    // passed as both the dest and the src rect of the fill.
+    DDBLTFX fx;
+    fx.dwSize = sizeof(fx);
+    fx.dwFillColor = pVidMode->ConvertToSurfaceRGB(0);
+
+    HRESULT hr;
+    do {
+        hr = g_pChitin->cVideo.cVidBlitter.Blt(pVidMode->pSurfaces[8], &rcRect, NULL, &rcRect, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+        pVidMode->CheckResults(hr);
+    } while (hr == DDERR_SURFACELOST || hr == DDERR_WASSTILLDRAWING);
+}
+
 // 0x43F900
 void CProjectorSubtitles::Unload()
 {
@@ -568,4 +698,156 @@ void CProjectorSubtitles::Unload()
     }
 
     m_sText.~CString();
+}
+
+// 0x43F9B0
+void CProjectorSubtitles::Render()
+{
+    if (m_sText.GetLength() <= 0) {
+        return;
+    }
+
+    CVidFont& cFont = g_pBaldurChitin->m_pEngineProjector->field_14A;
+
+    int nTextWidth = cFont.GetStringLength(m_sText, 1);
+
+    // The original copies the rect twice (0x43FA00 and 0x43FA14) but only this
+    // one is ever read - the second copy is dead and not ported.
+    CRect rcClip(rcRect);
+
+    int nMaxWidth = rcRect.right - rcRect.left;
+
+    BOOLEAN bFits = 0;
+    int nLineCount = 0;
+    CString asLines[4];
+
+    if (nTextWidth < nMaxWidth) {
+        bFits = 1;
+        nLineCount = 1;
+    } else {
+        CString sText(m_sText);
+        CString sBuilding;
+
+        for (int nLine = 0; nLine < 4; nLine++) {
+            int nLength = sText.GetLength();
+            if (nLength < 0) {
+                continue;
+            }
+
+            int nIndex = 0;
+            while (nIndex != nLength) {
+                sBuilding += sText.GetAt(nIndex);
+
+                if (cFont.GetStringLength(sBuilding, 1) > nMaxWidth) {
+                    // The line outgrew the band: break it at the last space at
+                    // or before the overflowing char.
+                    while (nIndex >= 0 && sBuilding.GetAt(nIndex) != ' ') {
+                        nIndex--;
+                    }
+
+                    if (nIndex < 0) {
+                        // No space in the line - it is dropped and the outer
+                        // loop retries with the next band.
+                        break;
+                    }
+
+                    asLines[nLine] = sBuilding.Left(nIndex);
+                    sText = sText.Right(sText.GetLength() - nIndex - 1);
+                    nLineCount++;
+                    sBuilding = "";
+                    break;
+                }
+
+                nIndex++;
+            }
+
+            if (nIndex == nLength) {
+                // The rest of the text fits the band - store it whole.
+                asLines[nLine] = sText;
+                nLineCount++;
+                break;
+            }
+        }
+    }
+
+    int nFontHeight = cFont.GetFontHeight(1);
+
+    if (bFits) {
+        int nX = (rcClip.right - rcClip.left) / 2 - nTextWidth / 2;
+        cFont.SetColor(m_rgbColor, 0, 0);
+        cFont.TextOut(m_sText, nX, nFontHeight, rcClip, 8);
+        return;
+    }
+
+    if (nLineCount <= 0) {
+        return;
+    }
+
+    CString* pLine = asLines;
+    do {
+        cFont.SetColor(m_rgbColor, 0, 0);
+        cFont.TextOut(*pLine, 0, nFontHeight, rcClip, 8);
+
+        // The original calls GetFontHeight(1) twice per line and discards the
+        // first result - only the second feeds the advance.
+        nFontHeight += cFont.GetFontHeight(1);
+
+        pLine++;
+        nLineCount--;
+    } while (nLineCount != 0);
+}
+
+// 0x428AD0
+CProjectorSubtitlesLine* CProjectorSubtitles::LoadLines(CResRef cMovie, int* pnColor, int nWidth)
+{
+    C2DArray c2dArray;
+    STR_RES strRes;
+    CString sError;
+
+    c2dArray.Load(cMovie);
+    if (!c2dArray.Demand()) {
+        return NULL;
+    }
+    c2dArray.Release();
+
+    SHORT nRows = c2dArray.GetHeight();
+
+    // new[] with a count word at p-4 and 8-byte elements; MSVC6 new returns
+    // NULL on failure, and the exe still writes the packed color first.
+    CProjectorSubtitlesLine* pLines = new CProjectorSubtitlesLine[nRows - 2];
+
+    // Column 0 of rows 0-2 packs the subtitle color, low byte of each cell.
+    *pnColor = (c2dArray.GetAtLong(CPoint(0, 0)) & 0xFF)
+        | ((c2dArray.GetAtLong(CPoint(0, 1)) & 0xFF) << 8)
+        | ((c2dArray.GetAtLong(CPoint(0, 2)) & 0xFF) << 16);
+
+    if (pLines == NULL) {
+        return NULL;
+    }
+
+    CPoint pt(0, 3);
+    int i = 0;
+    for (; i < nRows - 3; i++, pt.y++) {
+        pLines[i].field_0 = c2dArray.GetAtLong(pt);
+        LONG nStrRef = c2dArray.GetAtLong(CPoint(1, pt.y));
+
+        if (g_pBaldurChitin->m_cTlkTable.Fetch(nStrRef, strRes)) {
+            pLines[i].m_sText = strRes.szText;
+        } else {
+            // NOTE: the exe never frees this buffer; kept faithful.
+            char* pMovieName = new char[9];
+            cMovie.CopyToString(pMovieName);
+            sError.Format("STR REF %d not found while playing %s movie", nStrRef, pMovieName);
+            CUtil::UtilAssert(0x127B, "C:\\Projects\\Icewind2\\src\\Baldur\\CBaldurChitin.cpp", "FALSE", sError);
+        }
+    }
+
+    // 0x428E67: the element past the last filled one is the {0, ""} stop
+    // marker (the per-frame advance gates on field_0 > 0). The exe indexes it
+    // by the loop counter, so a table with fewer than four rows still writes
+    // element 0.
+    pLines[i].field_0 = 0;
+    pLines[i].m_sText = "";
+
+    return pLines;
 }

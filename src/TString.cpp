@@ -209,6 +209,61 @@ UINT TString::MaxSize() const
     return 0xFFFFFFFD;
 }
 
+// The native basic_string::erase. The count clamps to the characters from
+// nPos; the tail memmoves over the hole. An emptied shared buffer drops its
+// reference, an emptied frozen buffer only zeroes its length, and any other
+// result shrinks in place (growing first only if capacity somehow lacks the
+// shorter length, which erase itself never needs).
+// 0x56DA10
+TString& TString::Delete(UINT nPos, UINT nCount)
+{
+    if (static_cast<UINT>(m_nLen) < nPos) {
+        Xran();
+    }
+
+    // The original inlines Detach (0x44BD40) here.
+    Detach();
+
+    UINT nRemaining = static_cast<UINT>(m_nLen) - nPos;
+    if (nCount > nRemaining) {
+        nCount = nRemaining;
+    }
+    if (nCount == 0) {
+        return *this;
+    }
+
+    memmove(m_pData + nPos, m_pData + nPos + nCount, nRemaining - nCount);
+
+    UINT nNewLength = static_cast<UINT>(m_nLen) - nCount;
+    if (MaxSize() < nNewLength) {
+        Xlen();
+    }
+
+    if (m_pData != NULL) {
+        BYTE references = static_cast<BYTE>(m_pData[-1]);
+        if (references != 0 && references != 0xFF) {
+            if (nNewLength == 0) {
+                m_pData[-1] = static_cast<char>(references - 1);
+                Tidy(FALSE);
+                return *this;
+            }
+        } else if (nNewLength == 0) {
+            m_nLen = 0;
+            m_pData[0] = 0;
+            return *this;
+        }
+    } else if (nNewLength == 0) {
+        return *this;
+    }
+
+    if (static_cast<UINT>(m_nRes) < nNewLength) {
+        Grow(nNewLength);
+    }
+    m_nLen = static_cast<INT>(nNewLength);
+    m_pData[nNewLength] = 0;
+    return *this;
+}
+
 // 0x4C5ED0
 // Parameters retain the old int API; native comparisons interpret their bits as
 // unsigned sizes, including npos and high-bit counts.

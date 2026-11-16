@@ -2804,9 +2804,9 @@ CProjectile* CProjectile::DecodeProjectile(WORD nProjectileType, CGameAIBase* pS
         //   so they stay unwired;
         // - TODO: 0x5201C0 (type 45): builds the CProjectile84E9C0 (ctor
         //   0x535F20, like types 119-142) and then overwrites its vtable
-        //   with 0x84D838 - a CProjectile84E9C0-derived class whose
-        //   constructor is fully inlined at the call site; the class is not
-        //   ported;
+        //   with 0x84D838 - the memberless derived class
+        //   CProjectile84D838 (its Fire 0x5367C0 is in tree); the decoder
+        //   arm itself is not ported;
         // DEVIATION (temporary): unported type -> instant projectile. The
         // original reaches the fallback below only for types out of range
         // and for the assert entries listed above. Until the other cases
@@ -3513,6 +3513,34 @@ CProjectile84DE94::CProjectile84DE94()
     : CProjectileBAM(CResRef("SPLightB"))
 {
     m_nBounces = CGameObjectArray::INVALID_INDEX;
+}
+
+// 0x530010
+// The searing light launches one wall-rebounding bolt per call (the child
+// ctor 0x57D390, type 207). The body then copies every effect of this shot
+// into the child — each through the effect's own Copy vtable slot, stamped
+// with the child's projectile type (still 0 on a fresh ctor: the exe reads
+// [child+0x6E]) and appended to the child's effect list; this shot keeps
+// its own list — hands m_nBounces (+0x2A0) to the child's +0x2B2, and
+// launches the child with the source id in BOTH id slots (the original
+// never reads the target argument), the same target point, height and type.
+// The child's dispatch is its own slot 0x6C (0x57D700 in the exe, parked
+// here; ours inherits CProjectileSingleTarget::Fire).
+void CProjectile84DE94::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)target;
+
+    CProjectileReboundingBolt* pChild = new CProjectileReboundingBolt();
+
+    POSITION pos = m_effectList.GetHeadPosition();
+    while (pos != NULL) {
+        CGameEffect* pEffect = m_effectList.GetNext(pos)->Copy();
+        pEffect->m_projectileType = pChild->m_projectileType;
+        pChild->m_effectList.AddTail(pEffect);
+    }
+
+    pChild->m_nBounces = m_nBounces;
+    pChild->Fire(pArea, source, source, targetPos, nHeight, nType);
 }
 
 // 0x531360
@@ -4956,7 +4984,7 @@ IcewindCProjectileChainLightning::IcewindCProjectileChainLightning(const std::se
 // base binds the cell, the strike tracker's ctor 0x55ACC0 runs as the
 // implicit member init at +0x2B6, then the retune: the bolt starts
 // unbounced (-1 — the type-207 decode stamps 1, and the searing light's
-// parked Fire 0x530010 hands its own count down per rebound), sequence 0,
+// Fire 0x530010 hands its own count down per rebound), sequence 0,
 // render flag 8, both height gates cleared, 16 directions, TRA_09b fire
 // sound, the speed doubled with a native WORD shift, a 60-tick duration,
 // and the tracker armed (strike interval 33, service period 2, range 50).
@@ -5136,6 +5164,32 @@ CProjectileWallOfMoonlight::CProjectileWallOfMoonlight()
     m_loopFireSound = TRUE;
 }
 
+// 0x5820B0
+// Vtable slot 0x70 of both walls (0x8514CC and 0x851664 hold this one
+// function). The first arrival starts the wall's ARE_P22 loop: the resref
+// goes through the sound helper's request path (TRUE, TRUE), then it is made
+// fire-and-forget and bound to channel 15 of the area at the wall's
+// position; the byte at +0x2B2 and field_1DE are latched TRUE. A later
+// arrival takes the early exit, which only re-latches both flags — it does
+// not touch the sound. The CResHelper::SetResRef request sequence lives in
+// the sound helper (a private STL/CRT routine is not ported here).
+void CProjectileWallOfMoonlight::OnArrival()
+{
+    if (field_2B2 != 0) {
+        field_2B2 = 1;
+        field_1DE = TRUE;
+        return;
+    }
+
+    m_loopSound.SetResRef(CResRef("ARE_P22"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    field_2B2 = 1;
+    field_1DE = TRUE;
+}
+
 // 0x5806C0
 // The line-beam carrier's ctor: the spell's travel BAM goes through the
 // base (the char* argument folds through a CResRef temp), then the strike
@@ -5227,4 +5281,25 @@ CProjectileWallOfFire::CProjectileWallOfFire()
     field_1C2 = FALSE;
     m_fireSoundRef = "AFT_P21";
     m_loopFireSound = TRUE;
+}
+
+// 0x5820B0
+// The Wall of Fire's copy of the shared arrival body (see
+// CProjectileWallOfMoonlight::OnArrival; the exe holds one function at slot
+// 0x70 of both 0x8514CC and 0x851664, which COMDAT folding reproduces here).
+void CProjectileWallOfFire::OnArrival()
+{
+    if (field_2B2 != 0) {
+        field_2B2 = 1;
+        field_1DE = TRUE;
+        return;
+    }
+
+    m_loopSound.SetResRef(CResRef("ARE_P22"), TRUE, TRUE);
+    m_loopSound.SetFireForget(TRUE);
+    m_loopSound.SetChannel(15, reinterpret_cast<DWORD_PTR>(m_pArea));
+    m_loopSound.Play(m_pos.x, m_pos.y, 0, FALSE);
+
+    field_2B2 = 1;
+    field_1DE = TRUE;
 }

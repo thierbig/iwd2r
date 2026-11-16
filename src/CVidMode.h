@@ -137,6 +137,7 @@ public:
     /* 00A0 */ virtual BOOL DrawLine24(INT nXFrom, INT nYFrom, INT nXTo, INT nYTo, BYTE* pSurface, LONG lpitch, const CRect& rSurface, DWORD color, BOOLEAN bClipped);
     /* 00A4 */ virtual BOOL DrawLine32(INT nXFrom, INT nYFrom, INT nXTo, INT nYTo, DWORD* pSurface, LONG lpitch, const CRect& rSurface, DWORD color, BOOLEAN bClipped);
     /* 00A8 */ virtual BOOL DrawRect(const CRect& r, UINT nSurface, const CRect& rClip, COLORREF rgbColor);
+    /* 00AC */ virtual BOOL DarkenRect(const CRect& r, UINT nSurface, const CRect& rClip);
     /* 00B0 */ virtual BOOL OutlinePoly(const CPoint* pPoly, SHORT nVertices, const CRect& rSurface, COLORREF rgbColor, const CPoint& ptOffset);
     /* 00B4 */ virtual BOOL EraseScreen(UINT nSurface, COLORREF rgbColor);
     /* 00B8 */ virtual BOOL Flip(BOOL bRenderCursor);

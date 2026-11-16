@@ -68,6 +68,8 @@ public:
 
     void FloatText(STRREF strRef, int a2, int a3);
 
+    SHORT TransferInventory(CGameObject* pReceiver);
+
     CGameArea* GetArea();
     LONG GetId();
     BOOLEAN InControl();

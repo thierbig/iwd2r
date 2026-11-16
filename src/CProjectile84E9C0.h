@@ -25,4 +25,17 @@ public:
     /* 032B */ BYTE m_nTransValue;
 };
 
+// The type-45 smoke jet (vtable 0x84D838): a memberless subclass whose
+// construction is fully inlined in the DecodeProjectile type-45 arm
+// (0x5201C0 - it news 0x32C bytes, runs the CProjectile84E9C0 constructor
+// and stamps this class's vtable at 0x520223, then re-stores an empty
+// m_fireSoundRef). It overrides only Fire (and the destructor the compiler
+// generates for the memberless class, 0x529990/0x5299B0); everything else
+// is the base class.
+class CProjectile84D838 : public CProjectile84E9C0 {
+public:
+    CProjectile84D838(const CString& sAnimation, const CString& sSound, const CString& sPalette, DWORD dwFlags, BYTE nTransValue);
+    /* 006C */ void Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType) override;
+};
+
 #endif /* CPROJECTILE84E9C0_H_ */

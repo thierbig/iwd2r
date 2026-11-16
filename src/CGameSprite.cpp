@@ -1238,6 +1238,115 @@ BOOL CGameSprite::GetCanSeeInvisible()
         || (m_baseStats.m_flags & 0x10000) != 0;
 }
 
+// 0x6F3B80
+// The old-area placement helper. Unlike AddToArea (0x6F40F0) it does not call
+// CGameObject::AddToArea, does not set field_562C and leaves m_currentArea
+// alone: it only puts the sprite back where a slot reply found it. The caller
+// guards pNewArea.
+void CGameSprite::sub_6F3B80(CGameArea* pNewArea, CPoint pos, LONG posZ, BYTE listType, POSITION posVertList, BOOLEAN bInfravision)
+{
+    m_pos = pos;
+    m_posZ = posZ;
+    m_pArea = pNewArea;
+    m_posVertList = posVertList;
+    m_listType = listType;
+    m_bInfravisionOn = bInfravision;
+
+    m_posExact.x = m_pos.x << 10;
+    m_posExact.y = (m_pos.y << 12) / 3;
+    m_posOld = m_pos;
+
+    if (m_active && m_activeAI && m_activeImprisonment) {
+        CheckIfVisible();
+    }
+
+    switch (listType) {
+    case CGAMEOBJECT_LIST_FRONT:
+        if (m_active
+            && m_activeAI
+            && m_activeImprisonment
+            && (m_derivedStats.m_generalState & STATE_DEAD) == 0) {
+            // NOTE: Uninline.
+            pNewArea->AddToMarkers(m_id);
+
+            m_pArea->m_search.AddObject(CPoint(m_pos.x / CPathSearch::GRID_SQUARE_SIZEX,
+                                            m_pos.y / CPathSearch::GRID_SQUARE_SIZEY),
+                m_typeAI.GetEnemyAlly(),
+                m_animation.GetPersonalSpace(),
+                field_54A8,
+                field_7430);
+        }
+        break;
+    case CGAMEOBJECT_LIST_BACK:
+        if (m_active && m_activeAI && m_activeImprisonment) {
+            pNewArea->IncrHeightDynamic(m_pos);
+        }
+        break;
+    case CGAMEOBJECT_LIST_FLIGHT:
+        break;
+    default:
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+        // __LINE__: 1386
+        UTIL_ASSERT(FALSE);
+    }
+
+    SetFootstepChannel();
+
+    if ((m_derivedStats.m_generalState & STATE_SILENCED) == 0) {
+        if (g_pBaldurChitin->GetObjectGame()->GetOptions()->m_bFootStepsSounds
+            || g_pBaldurChitin->GetObjectGame()->GetCharacterPortraitNum(m_id) == -1) {
+            char* pSndReady = m_animation.GetSndReady();
+            if (*pSndReady != '\0') {
+                m_sndReady.SetResRef(CResRef(pSndReady), TRUE, TRUE);
+                delete pSndReady;
+                m_sndReady.SetLoopingFlag(1);
+                m_sndReady.Play(m_pos.x, m_pos.y, m_posZ, FALSE);
+            }
+        }
+    }
+
+    if (m_bGlobal) {
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+        if (pGame->GetCharacterPortraitNum(m_id) != -1
+            && (!pGame->GetGameSave()->field_1AC || InControl())) {
+            if (Animate()) {
+                m_posLastVisMapEntry = pos;
+                pNewArea->m_visibility.AddCharacter(m_posLastVisMapEntry,
+                    m_id,
+                    m_visibleTerrainTable);
+            }
+
+            // NOTE: The original compares the BYTE count with 0xFF
+            // (`cmp al, 0xff`); our BYTE against the int -1 never matched.
+            if (pNewArea->m_nCharacters != 0xFF) {
+                pNewArea->m_nCharacters++;
+            } else {
+                pNewArea->m_nCharacters = 1;
+            }
+        }
+    } else if (m_type == 1) {
+        pNewArea->m_nRandomMonster++;
+    }
+
+    if (!g_pBaldurChitin->GetObjectGame()->m_bInLoadGame
+        && !g_pBaldurChitin->GetObjectGame()->m_bInLoadArea
+        && !g_pBaldurChitin->GetObjectGame()->m_bInAreaTransition
+        && !g_pBaldurChitin->GetBaldurMessage()->m_bInOnObjectAdd) {
+        BYTE* pData = STATICBUFFER;
+        DWORD dwSize;
+        MarshalMessage(&pData, &dwSize);
+        g_pBaldurChitin->GetBaldurMessage()->ObjectAdd(m_id, GetObjectType(), pData, dwSize);
+
+        if (InControl()
+            && g_pChitin->cNetwork.GetSessionOpen() == TRUE) {
+            m_cLastSpriteUpdate.Initialize(TRUE);
+            CMessage* message = new CMessageSpriteUpdate(this, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(message, FALSE);
+        }
+    }
+}
+
 // 0x6F40F0
 void CGameSprite::AddToArea(CGameArea* pNewArea, const CPoint& pos, LONG posZ, BYTE listType)
 {
@@ -26187,8 +26296,9 @@ SHORT CGameSprite::LeaveArea()
 
     if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
         if (g_pChitin->cNetwork.m_bIsHost != TRUE) {
-            // NOTE: The client asks the host (CBaldurMessage 0x435150, not
-            // ported) and stops here.
+            // The client asks the host to start the map world and stops here;
+            // the host's answer comes back through OnMapWorldStartRequest.
+            g_pBaldurChitin->GetBaldurMessage()->SendMapWorldStartRequest(nDirection);
             return ACTION_DONE;
         }
 
@@ -27509,6 +27619,52 @@ SHORT CGameSprite::SpellCastEffect(const CString& sVoice, const CString& sCast, 
     g_pBaldurChitin->GetMessageHandler()->AddMessage(pRelease, FALSE);
 
     field_753A = 0;
+    return ACTION_DONE;
+}
+
+// 0x7624F0
+// The SpellHitEffectPoint (290) and SpellHitEffectSprite (291) executor, run
+// on the target sprite: it decodes the projectile named by the action's
+// specifics and fires it at the point the arm resolved.  The reserved type
+// 0xD2 decodes the plain 0xD3 projectile from the hit object itself; every
+// other type goes through the spell-hit table, which also receives the
+// sprite as the hit object.  The message posted for the other machines
+// carries the type the decoder understands (0x1000 + n, or 0xD3), and the
+// return is the global ACTION_DONE word the container sibling reports too.
+SHORT CGameSprite::SpellHitEffect(CGameAIBase* pHitObject, const CPoint& ptTarget,
+    LONG targetId, DWORD nType, LONG nHeight)
+{
+    WORD projectileType;
+    CProjectile* pProjectile;
+
+    // The 0x76250F test: the 0xD2 branch keeps the type in the message; the
+    // other branch reports it offset by 0x1000.
+    if (nType != 0xd2) {
+        pProjectile = CProjectile::DecodeSpellHitProjectile(nType,
+            static_cast<CGameSprite*>(pHitObject),
+            FALSE);
+        projectileType = static_cast<WORD>(nType + 0x1000);
+    } else {
+        pProjectile = CProjectile::DecodeProjectile(0xd3, pHitObject, 0);
+        projectileType = static_cast<WORD>(nType);
+    }
+
+    // At 0x762554 a failed allocation still posts the NULL message.
+    g_pBaldurChitin->GetMessageHandler()->AddMessage(
+        new CMessageSpellHitEffectSecondaryProjectile(projectileType,
+            targetId,
+            ptTarget,
+            nHeight,
+            m_id,
+            m_id,
+            0),
+        FALSE);
+
+    // At 0x7625AF Fire is called through vtable slot 0x6C with the point
+    // copied by value.
+    pProjectile->Fire(m_pArea, m_id, targetId, ptTarget, nHeight, static_cast<SHORT>(nType));
+
+    // At 0x7625D2 the action return is the global ACTION_DONE word.
     return ACTION_DONE;
 }
 

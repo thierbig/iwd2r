@@ -18,10 +18,12 @@
 #include "CScreenStore.h"
 #include "CScreenWorldMap.h"
 #include "CStore.h"
+#include "CUIControlEdit.h"
 #include "CUIControlFactory.h"
 #include "CUIControlTextDisplay.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
+#include "CVidInf.h"
 #include "ScreenLayout.h"
 
 // 0x85A1EC
@@ -167,7 +169,7 @@ CScreenWorld::CScreenWorld()
     field_14A = 0;
     m_pActiveDialogDisplay = NULL;
     m_pActiveChatDisplay = NULL;
-    field_156 = 0;
+    m_bCheatKeysEnabled = 0;
     field_F37 = 0;
     field_15A = 1;
     m_newViewSize.left = 0;
@@ -516,7 +518,7 @@ void CScreenWorld::EngineGameInit()
     field_14A = 0;
     m_pActiveDialogDisplay = NULL;
     m_pActiveChatDisplay = NULL;
-    field_156 = 0;
+    m_bCheatKeysEnabled = 0;
     field_F37 = 0;
     field_15A = 1;
     m_newViewSize.left = 0;
@@ -653,10 +655,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
 
             if (nKey == pGame->m_pKeymap[24]
                 && pGame->m_pKeymapFlags[24] == m_bCtrlKeyDown) {
-                // NOTE: 0x694510 (the multiplayer chat's panel) runs only
-                // under a provider other than the null one (its gate at
-                // 0x6945C1), so a single-player host session returns from
-                // it at once; not called.
+                BeginChatMessage();
                 sub_693710();
                 continue;
             }
@@ -735,10 +734,176 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
         CAITrigger hotKey(CAITRIGGER_HOTKEY, nKey);
         pGame->m_group.AddTrigger(hotKey);
 
-        if (field_156 && m_bCtrlKeyDown && nKey != pGame->m_pKeymap[22]) {
-            // TODO: Incomplete. 0x68956A-0x68BC5D: the cheat keys (Ctrl
-            // with `field_156`, which ours never sets) for the party leader
-            // and the area; the original returns after one.
+        if (m_bCheatKeysEnabled && m_bCtrlKeyDown && nKey != pGame->m_pKeymap[22]) {
+            if (nKey == 'O') {
+                // 0x68B24D: Ctrl+O dumps the resource lists (the CDimm at
+                // g_pBaldurChitin+0x542); the original passes 0 and returns.
+                g_pBaldurChitin->cDimm.DebugDumpResourceLists(0);
+                return;
+            }
+
+            // 0x68956A-0x68988E: the cheat-key scaffold. The original
+            // builds the party-leader and area object types, three
+            // CAIActions, two CStrings, and the group leader before
+            // dispatching on the key.
+            CAIObjectType cAIObjectType1( // 0x68956A
+                0, 0, 0, 0, 0, 0, 0, 0,
+                (pGame->m_nCharacters > 0) ? pGame->m_characterPortraits[0] : CGameObjectArray::INVALID_INDEX, 0, 0);
+            CAIObjectType cAIObjectType2( // 0x6895A6
+                0, 0, 0, 0, 0, 0, 0, 0, pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked, 0, 0);
+            CAIAction cAIAction1; // 0x6895E6
+            CAIAction cAIAction2; // 0x6896AE
+            CAIAction cAIAction3; // 0x689776
+            CString sString1; // 0x68983D
+            CString sString2; // 0x68983D
+            LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
+                ? pGame->m_group.GetGroupLeader()
+                : CGameObjectArray::INVALID_INDEX;
+            // NOTE: cAIObjectType1/2, cAIAction2/3, and sString2 are not
+            // read by the cheat keys ported below; the TODO cases in the
+            // switch still use them.
+
+            switch (nKey) { // 0x689876
+            case '1': // 0x689D78 ('6' and '7' share the jump-table target)
+            case '6':
+            case '7':
+                pGame->StepAnimation(nKey);
+                return;
+            case '2': { // 0x6898A9
+                // DWORD 35 at 0x847F84 (fade speed) and SHORT 202 at
+                // 0x847906: the FadeToColor() action (ACTION.IDS 202).
+                cAIAction1 = CAIAction(202, CPoint(35, 0), 0, -1);
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x689A9D
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                return;
+            }
+            case '3': { // 0x689B00
+                // SHORT 203 at 0x847908: the FadeFromColor() action
+                // (ACTION.IDS 203).
+                cAIAction1 = CAIAction(203, CPoint(35, 0), 0, -1);
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x689CFE
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                return;
+            }
+            case '4': // 0x689D57
+                pGame->field_4AB2 = !pGame->field_4AB2;
+                return;
+            case '8': // 0x689D8F
+                g_pBaldurChitin->m_bFontRectOutline = ~g_pBaldurChitin->m_bFontRectOutline;
+                g_pBaldurChitin->GetActiveEngine()->GetManager()->InvalidateRect(NULL);
+                return;
+            case '9': { // 0x689DBF
+                // 0x689DD9: the area's CInfinity video mode (+0x4E8); the
+                // DWORD it inverts at +0x170 is CVidInf::field_170.
+                CVidInf* pVidMode = static_cast<CVidInf*>(pGame->m_gameAreas[pGame->m_visibleArea]->GetInfinity()->pVidMode);
+                if (pVidMode != NULL) {
+                    pVidMode->field_170 = ~pVidMode->field_170; // 0x689DE7
+                }
+                return;
+            }
+            case 'A': // TODO: 0x689DFA (walks the sprite array with GetDeny, filtering on the bytes at 0x85186C-0x851873; cheat key, not ported).
+                return;
+            case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
+                return;
+            case 'C': { // 0x68A337
+                // Ctrl+C increments the chapter: it builds an
+                // INCREMENTCHAPTER action (SHORT 161 at 0x8478B6) whose
+                // string1 is the next chapter text resref ("chptxt%d" at
+                // 0x8B5EA4, N = the CHAPTER global's value + 1; a missing
+                // variable counts as 0), sends it to the party group, then
+                // shows "You are now in chapter: %d" (0x8B5E88) with a
+                // freshly recomputed N.
+                cAIAction1 = CAIAction(CAIAction::INCREMENTCHAPTER, CPoint(-1, -1), 0, -1);
+                CVariable* pVariable
+                    = g_pBaldurChitin->m_pObjectGame->GetVariables()->FindKey(CInfGame::CHAPTER_GLOBAL); // 0x68A550
+                sString1.Format("chptxt%d", (pVariable != NULL ? pVariable->m_intValue : 0) + 1); // 0x68A57A
+                cAIAction1.SetString1(sString1); // 0x68A599
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x68A5F7
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                pVariable = g_pBaldurChitin->m_pObjectGame->GetVariables()->FindKey(CInfGame::CHAPTER_GLOBAL); // 0x68A623
+                sString1.Format("You are now in chapter: %d", (pVariable != NULL ? pVariable->m_intValue : 0) + 1); // 0x68A64D
+                DisplayText(CString(""), sString1, -1, FALSE); // 0x68A685
+                return;
+            }
+            case 'D': // 0x68A6A2
+                // Ctrl+D writes the flag at chitin+0x1A2A as (field == 0):
+                // 1 when it is zero, 0 when it holds any nonzero value.
+                g_pBaldurChitin->field_1A2A = (g_pBaldurChitin->field_1A2A == 0);
+                return;
+            case 'E': // 0x68A6BF
+                // Ctrl+E marks the visible area's every tile explored
+                // (the area's CVisibilityMap at +0x860).
+                pGame->m_gameAreas[pGame->m_visibleArea]->m_visibility.SetAreaExplored(); // 0x68A6DF
+                return;
+            case 'F': { // 0x68A6E9
+                // Ctrl+F advances the party facing value (field_15C,
+                // cycling 0-15) and broadcasts a CMessageChangeDirection
+                // with the new facing for the group leader. The original
+                // also handles operator new returning NULL by queuing a
+                // NULL message; unreachable with a throwing new.
+                if (++field_15C > 0xF) {
+                    field_15C = 0; // 0x68A6FF
+                }
+                CMessageChangeDirection* pMessage
+                    = new CMessageChangeDirection(field_15C, nGroupLeader, nGroupLeader); // 0x68A704
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68A736
+                return;
+            }
+            case 'G': // TODO: 0x68A75A (builds a CAIObjectType and assigns it a CString; cheat key, not ported).
+                return;
+            case 'I': // 0x68AA08
+                // Ctrl+I sets field_10C8 to 1.
+                field_10C8 = 1;
+                return;
+            case 'J': // TODO: 0x68AA17 (operates on the party group via g_pChitin; cheat key, not ported).
+                return;
+            case 'K': // TODO: 0x68AC95 (queries the visible area's sprite array; cheat key, not ported).
+                return;
+            case 'M': // TODO: 0x68B1D0 (toggles the console like Ctrl+Tab, through the shared block at 0x68B234; cheat key, not ported).
+                return;
+            case 'Q': // TODO: 0x68B264 (builds a CAIObjectType from the word at 0x8477A8; cheat key, not ported).
+                return;
+            case 'R': // TODO: 0x68B4F7 (allocates an object with operator new; cheat key, not ported).
+                return;
+            case 'S': // TODO: 0x68B5B7 (clamps the WORD at this+0x15A; cheat key, not ported).
+                return;
+            case 'X': // TODO: 0x68B6BE (acts at the mouse pointer via the visible area; cheat key, not ported).
+                return;
+            case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
+            case 'Z': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
+                return;
+            case VK_TAB: { // 0x68BB6B (the cheat re-check makes the tooltip branch unreachable here)
+                if (m_bCtrlKeyDown) {
+                    // The command line.
+                    if (!m_cUIManager.m_bHidden) {
+                        field_F37 = ~field_F37; // 0x68BB81
+                        if (field_F37 != 0) {
+                            StartCommand(); // 0x68BB97
+                            CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(m_cUIManager.GetPanel(6)->GetControl(0)); // 0x68BB9E
+                            pEdit->field_8A6 = 0;
+                            pEdit->field_8A2 = CGameObjectArray::INVALID_INDEX;
+                        } else if (field_EA4 == 6) { // 0x68B234 (shared with the Ctrl+M cheat key)
+                            StopCommand();
+                        }
+                    }
+                } else { // 0x68BBC7
+                    CGameArea* pArea = pGame->GetVisibleArea();
+                    const CPoint& ptPointer = g_pChitin->m_ptPointer;
+                    if (pArea->m_iPicked != CGameObjectArray::INVALID_INDEX // 0x68BC08
+                        || ptPointer.x < pArea->GetInfinity()->rViewPort.left
+                        || ptPointer.x >= pArea->GetInfinity()->rViewPort.right
+                        || ptPointer.y < pArea->GetInfinity()->rViewPort.top
+                        || ptPointer.y >= pArea->GetInfinity()->rViewPort.bottom) {
+                        m_cUIManager.ForceToolTip(); // 0x68BC34
+                        pArea->m_nToolTip = pArea->m_pGame->m_cOptions.m_nTooltips;
+                    }
+                }
+                return;
+            }
+            default: // 0x68B972
+                break;
+            }
+
             return;
         }
 
@@ -1187,10 +1352,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 break;
             case 24:
-                // NOTE: 0x694510 (the multiplayer chat's panel) runs only
-                // under a provider other than the null one (its gate at
-                // 0x6945C1), so a single-player host session returns from
-                // it at once; not called.
+                BeginChatMessage();
                 sub_693710();
                 break;
             case 25: {
@@ -4396,6 +4558,53 @@ void CScreenWorld::CheckEndOfHardPause()
 
         g_pBaldurChitin->GetObjectGame()->GetMultiplayerSettings()->SetListenToJoinOption(m_bEndMajorEventListenToJoin, TRUE);
     }
+}
+
+// 0x694510
+void CScreenWorld::BeginChatMessage()
+{
+    if (!g_pBaldurChitin->cNetwork.GetSessionOpen()) {
+        return;
+    }
+
+    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL) {
+        return;
+    }
+
+    if (!GetManager()->GetPanel(22)->m_bActive) {
+        return;
+    }
+
+    if (g_pBaldurChitin->m_pEngineWorld->GetManager()->m_bHidden != FALSE) {
+        m_nAutoHideInterface = 0;
+        g_pBaldurChitin->m_pEngineWorld->UnhideInterface();
+    }
+
+    // Both session gates are re-read to pick the chat bar itself (22) or
+    // the main panel (0) (0x694590-0x6945B4).
+    CUIPanel* pPanel = GetManager()->GetPanel(
+        g_pBaldurChitin->cNetwork.GetSessionOpen()
+                && g_pChitin->cNetwork.GetServiceProvider() != CNetwork::SERV_PROV_NULL
+            ? 22
+            : 0);
+
+    // The control carrying the edit: 5 on the panels numbered 19 and 21,
+    // 3 on panel 22, none anywhere else (0x6945D6-0x6945ED).
+    int nControl = -1;
+    if (pPanel->m_nID == 19 || pPanel->m_nID == 21) {
+        nControl = 5;
+    } else if (pPanel->m_nID == 22) {
+        nControl = 3;
+    }
+
+    CUIControlBase* pControl = pPanel->GetControl(nControl);
+    if (pControl == NULL) {
+        return;
+    }
+
+    // The empty text is passed by value through vtable +0x70,
+    // CUIControlEdit::SetText (0x69460C-0x694615).
+    static_cast<CUIControlEdit*>(pControl)->SetText(CString(""));
 }
 
 // 0x693710
