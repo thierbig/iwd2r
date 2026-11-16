@@ -6,12 +6,20 @@
 // The Lua debug console's command buffer: the stack object the dispatcher
 // 0x5838A0 (Execute, "CLUAConsole" in docs/followups.md's original note)
 // parses each entered "CtrlAltDelete:" line into. The Lua console edit's
-// Enter handler (0x77BF30, not ported; iwd2r has no Lua runtime) constructs
-// one per line at its ebp-0xB8 and reaches the destructor 0x4EDA50 through
-// its SEH unwind pad. Layout from those two listings; the offsets are the
+// Enter handler (0x77BF30, CUIControlEditLua::OnEditReturn) constructs one
+// per line and destroys it at scope end (the destructor 0x4EDA50 through
+// its SEH unwind pad). Layout from those two listings; the offsets are the
 // exe's, the field names are the tree's.
 class CLUAConsole {
 public:
+    // 0x77C350
+    // The Enter handler's inlined per-line construction: the empty-string
+    // store for +0x4 at 0x77C350, the array ctors for +0x10 (0x7FB907 at
+    // 0x77C366) and +0x24 (0x7FB98E at 0x77C377), and the five zero stores
+    // at 0x77C37C-0x77C38C. A body so the handler (and the tests) build
+    // one the way the exe does; the members with ctors carry their own.
+    CLUAConsole();
+
     ~CLUAConsole();
 
     // 0x584400

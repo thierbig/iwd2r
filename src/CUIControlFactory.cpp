@@ -2,6 +2,8 @@
 
 #include "CBaldurChitin.h"
 #include "CBaldurEngine.h"
+#include "CLUAConsole.h"
+#include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
 #include "CMessage.h"
@@ -4596,6 +4598,141 @@ CUIControlEditLua::CUIControlEditLua(CUIPanel* panel, UI_CONTROL_EDIT* controlIn
 // 0x77BE60
 CUIControlEditLua::~CUIControlEditLua()
 {
+}
+
+// 0x77BF30
+// The Lua console edit's Enter handler (1,410 bytes, 0x77BF30-0x77C4BF): a
+// vtable-slot-26 override (+0x68; the vtable is 0x85D54C). SEH frame over
+// the locals, the trylevel state byte stepping through the arms; the
+// by-value sText parameter is destroyed here at 0x77C492 (ret 4).
+//
+// Four arms: the INI history save, the capture dump (a sprite or area
+// dumped into the edit, closing the console), the cheat-prefix chat send,
+// and the console itself. Two stack "" CStrings at S+0x1C/S+0x20
+// (0x77C0ED-0x77C0F6) are constructed and destroyed without any use —
+// dead initialization the compiler kept, omitted here.
+void CUIControlEditLua::OnEditReturn(CString sText)
+{
+    CString sKey("String0");
+
+    // History save: "String0".."String9" under "Lua Edit" (0x77BF68-0x77BFD9),
+    // the counterpart of the ctor's load. The count byte caps the loop.
+    for (BYTE nIndex = 0; nIndex < field_873; nIndex++) {
+        sKey.SetAt(sKey.GetLength() - 1, nIndex + '0');
+        WritePrivateProfileStringA("Lua Edit",
+            sKey,
+            field_874[nIndex].GetString(),
+            g_pBaldurChitin->GetIniFileName());
+    }
+
+    // A pending capture dumps itself into the edit and closes the console
+    // (0x77BFDD-0x77C0CE).
+    if (field_8A6 != 0) {
+        if (field_8A2 == CGameObjectArray::INVALID_INDEX) {
+            // No sprite captured: the visible area (the count byte at
+            // CInfGame+0x37E0 indexing the table at +0x37E2, 0x77C06D).
+            CInfGame* pGame = g_pBaldurChitin->m_pObjectGame;
+            pGame->m_gameAreas[pGame->m_visibleArea]->DebugDump(sText, TRUE);
+        } else {
+            CGameObject* pObject;
+            if (g_pBaldurChitin->m_pObjectGame->m_cObjectArray.GetShare(
+                    field_8A2, CGameObjectArray::THREAD_ASYNCH, &pObject, INFINITE)
+                != CGameObjectArray::SUCCESS) {
+                // The share missed (0x77C02B jumps to the epilogue): the
+                // capture resets below never run; only the parameter is
+                // destroyed. Plain return.
+                return;
+            }
+
+            // Virtual slot +0x30: CGameObject::DebugDump (0x77C037-0x77C041).
+            pObject->DebugDump(sText, TRUE);
+
+            g_pBaldurChitin->m_pObjectGame->m_cObjectArray.ReleaseShare(
+                field_8A2, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+        }
+
+        field_8A6 = 0;
+        field_8A2 = CGameObjectArray::INVALID_INDEX;
+
+        // The exe stores the world screen's field_F37 = 0 inline at
+        // 0x77C0B6 before the call; StopCommand's own body opens with
+        // that store (0x6912A0), so one call reproduces both.
+        g_pBaldurChitin->m_pEngineWorld->StopCommand();
+
+        return;
+    }
+
+    // The cheat prefix (TLK 0x358F): a line starting with it goes to the
+    // chat sender as the message after the prefix (0x77C0D3-0x77C21C).
+    STR_RES strRes;
+    g_pBaldurChitin->m_cTlkTable.Fetch(0x358F, strRes);
+
+    // NOTE: GetBuffer(1) with no ReleaseBuffer is the exe's spelling
+    // (0x77C11D-0x77C145): it only forces each buffer unique for the
+    // compare; neither string changes.
+    if (strncmp(sText.GetBuffer(1),
+            strRes.szText.GetBuffer(1),
+            strRes.szText.GetLength())
+        == 0) {
+        if (g_pBaldurChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+            // The marker literal [0x84C960] is -1 at rest.
+            g_pBaldurChitin->m_pEngineWorld->DisplayText(
+                CString(""),
+                CString("You are not connected to multiplayer."),
+                -1,
+                FALSE);
+        } else {
+            // The message: the line minus the prefix (0x77C1D3-0x77C20B).
+            CString sMessage = sText.Right(sText.GetLength() - strRes.szText.GetLength());
+            g_pBaldurChitin->m_cBaldurMessage.SendChatMessage(sMessage);
+        }
+
+        return;
+    }
+
+    // A "name:" line whispers a player when the name is one
+    // (0x77C221-0x77C34B).
+    int nColon = CUtil::Find(sText, ':', 0);
+    if (nColon != -1) {
+        // NOTE: The exe's DBCS guard (0x77C244-0x77C26C) loops with no
+        // body: both TRUE tests branch back to the field_1A0 reload with
+        // nColon unchanged, so a colon counted as a trail byte cannot
+        // terminate the guard. Kept as found (the condition holds real
+        // calls, so it is not elided); on SBCS installs the guard is
+        // skipped outright.
+        while (g_pChitin->field_1A0 != 0
+            && (CUtil::IsDBCSTrailByte(sText, nColon) || IsDBCSLeadByte(':'))) {
+        }
+
+        // bl = (FindPlayerIDByName != 0) at 0x77C2A0; a hit whispers.
+        if (g_pBaldurChitin->cNetwork.FindPlayerIDByName(sText.Left(nColon), FALSE) != 0) {
+            if (g_pBaldurChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+                g_pBaldurChitin->m_pEngineWorld->DisplayText(
+                    CString(""),
+                    CString("You are not connected to multiplayer."),
+                    -1,
+                    FALSE);
+            } else {
+                g_pBaldurChitin->m_cBaldurMessage.SendChatMessage(sText);
+            }
+
+            return;
+        }
+    }
+
+    // The console itself: echo the line, then run the dispatcher
+    // (0x77C350-0x77C429). The exe builds the console inline here — ours
+    // is the ctor 0x77C350 — and runs the member dtors at scope exit
+    // (0x77C3FC-0x77C42A), which is this scope's end.
+    CLUAConsole cLuaConsole;
+
+    g_pBaldurChitin->m_pEngineWorld->DisplayText(CString(""), sText, -1, FALSE);
+
+    // NOTE: The exe forces sText's buffer unique with GetBuffer(1)
+    // (0x77C3E4) and hands the raw data pointer as Execute's by-value
+    // parameter; ours passes sText normally, which carries the same text
+    // into the same body (Execute copies it before anything else).
+    cLuaConsole.Execute(sText);
 }
 
 // -----------------------------------------------------------------------------

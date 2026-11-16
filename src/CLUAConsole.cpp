@@ -4,6 +4,23 @@
 
 #include <cctype>
 
+// 0x77C350 CLUAConsole::CLUAConsole() — inlined into the Enter handler
+// 0x77BF30 at 0x77C350-0x77C38C: the empty-string store for the member at
+// +0x4 (0x77C350), the CDWordArray ctor 0x7FB907 for the value table at
+// +0x10 (0x77C366), the CStringArray ctor 0x7FB98E for the token store at
+// +0x24 (0x77C377), then the zero stores for +0x38/+0x3C (0x77C37C) and
+// +0x0/+0xC/+0x8 (0x77C384-0x77C38C). The initializer list spells the
+// five DWORD stores; the class-type members default-construct, which is
+// the exe's exact store sequence.
+CLUAConsole::CLUAConsole()
+    : field_0(0)
+    , field_8(0)
+    , field_C(0)
+    , field_38(0)
+    , field_3C(0)
+{
+}
+
 // 0x4EDA50 CLUAConsole::~CLUAConsole() — 90 bytes (0x4EDA50-0x4EDAAA), a
 // caller-cleaned thiscall (plain `ret` at 0x4EDAA9; there is no deleting
 // wrapper because the object is a stack local of the Enter handler 0x77BF30).
