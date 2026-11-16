@@ -2052,11 +2052,12 @@ SHORT CGameAIBase::ExecuteAction()
             goto release;
         }
         bShare = TRUE;
-        // TODO: 0x451D73 calls 0x7625F0 (not ported): equips the item named
-        // by m_curAction.GetString1() (a CString temp the listing builds at
-        // 0x451D6C) on the target sprite, with m_curAction.GetSpecifics()
-        // and GetSpecifics2() as the remaining arguments; its result is the
-        // action return, which keeps the ACTION_ERROR entry default here.
+        // 0x451D73: the target equips or unequips the item named by string1
+        // with the action's two numbers; its result is the action result.
+        returnValue = static_cast<CGameSprite*>(pTarget)->XEquipItem(
+            m_curAction.GetString1(),
+            m_curAction.GetSpecifics(),
+            m_curAction.GetSpecifics2());
         goto release;
     case 295:
         // TransferInventory

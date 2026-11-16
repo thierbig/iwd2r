@@ -1,7 +1,7 @@
 ---
 address: 0x44DC10
 name: CGameAIBase::ExecuteAction (Task 83e arms)
-exemption: "dispatcher over engine state, as the parent file 44DC10.md records; the arms this batch ported that are observable without game data are driven through ExecuteAction by tests/test_ai.cpp [ai][data] (commit 7f36d3eb): 290, 291, 292, 294, 295, 296 on their no-target/no-resolver paths (the return codes the exe's tails force), and 297 fully (the queued CMessageScreenShake). Not driven and why: the success cores of 290/291/294 are calls to 0x7624F0/0x482040/0x7625F0, which src does not recover (TODOs in the arms); 295's receiving-sprite resolver 0x45C290 is unported, so its branch never resolves; 296's markup call 0x5C9C90 is unported (the arm still answers the ACTION_DONE the exe forces after it). Case 293 UnHide (0x45197F-0x451D30) was excluded from this run by the task and keeps its stub"
+exemption: "dispatcher over engine state, as the parent file 44DC10.md records; the arms this batch ported that are observable without game data are driven through ExecuteAction by tests/test_ai.cpp [ai][data] (commit 7f36d3eb): 290, 291, 292, 294, 295, 296 on their no-target/no-resolver paths (the return codes the exe's tails force), and 297 fully (the queued CMessageScreenShake). Not driven and why: the success cores of 290/291 are calls to 0x7624F0/0x482040, which src does not recover (TODOs in the arms); 294's core was 0x7625F0, ported later and now covered by 7625F0.md and 44DC10-arms-294.md; 295's receiving-sprite resolver 0x45C290 is unported, so its branch never resolves; 296's markup call 0x5C9C90 is unported (the arm still answers the ACTION_DONE the exe forces after it). Case 293 UnHide (0x45197F-0x451D30) was excluded from this run by the task and keeps its stub"
 kind: replay
 parity_waiver: "none needed for 83e: the row's own waiver in 44DC10.md (asm lints 2026-11-10 83d) already covers the columns, and parity ran 0 RED after each range. The new RE004 lints at src/CGameAIBase.cpp:1413/:1418/:1439 (sub_40CB20, sub_761650, sub_40CCA0) are the same category the 83d waiver records: in-tree helpers called by their existing address-derived names (CAIObjectType::sub_40CB20 CAIObjectType.cpp, CGameSprite::sub_761650 CGameSprite.cpp, CAIObjectType::sub_40CCA0 CAIObjectType.cpp); descriptive renames are a follow-up"
 ghidra_version: 12.1.4
@@ -68,8 +68,8 @@ else calls these ranges.
   bShare is set. The share path: bShare, GetSpecifics2, GetSpecifics, the
   GetString1 0x41E1B0 CString temp (the push-ecx sret slot, tracked at
   [esp+0x34]), then 0x7625F0 on the target with (CString, GetSpecifics,
-  GetSpecifics2) -- not ported (TODO); its return goes to esi and the arm
-  jumps 0x44E1DE.
+  GetSpecifics2) -- ported as CGameSprite::XEquipItem (7625F0.md,
+  44DC10-arms-294.md); its return goes to esi and the arm jumps 0x44E1DE.
 - 295 TransferInventory (0x451D7F-0x451DED, d1c4f984) -- 0x45C290
   (annotated CGameSprite_B3AUTO_0045c290) on this, a __thiscall returning
   the receiving sprite -- not ported (TODO), so in tree pTarget stays null

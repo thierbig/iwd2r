@@ -31872,6 +31872,67 @@ SHORT CGameSprite::PlayBardSong()
     return ACTION_DONE;
 }
 
+// 0x7625F0
+// The XEquipItem helper of CGameAIBase::ExecuteAction case 294 (the only
+// caller, 0x451D73). The item named by the action's string1 is looked up in
+// any personal slot. With the action's second number non-zero it is equipped
+// into the slot the first number names: the item already in that slot is
+// unequipped and the two array pointers swap. With the second number zero it
+// is unequipped where it is and, when that slot is one of the 18 equipment
+// slots, moved to the first blank of the 24 inventory slots (from slot 18),
+// or onto the ground pile when all of them are full; an item that was
+// already in the inventory stays there.
+//
+// The owner is CGameSprite, not CGameAIBase: the body indexes m_equipment
+// (+0x4AD8) off this and runs FindItemPersonal, CItem::Equip/Unequip and
+// CGameAIBase::PutItemGround on it. Ghidra files the export as
+// FUN_007625f0 under CGameSprite.cpp.
+SHORT CGameSprite::XEquipItem(CString sName, LONG nSlot, LONG nEquip)
+{
+    SHORT nFound = FindItemPersonal(sName, 0, FALSE);
+    if (nFound == -1) {
+        return ACTION_ERROR;
+    }
+
+    if (nEquip != 0) {
+        m_equipment.m_items[nFound]->Equip(this, nSlot, FALSE);
+        if (m_equipment.m_items[nSlot] != NULL) {
+            m_equipment.m_items[nSlot]->Unequip(this, nSlot, TRUE, FALSE);
+        }
+
+        // NOTE: The original sign-extends this destination index's low word
+        // (movsx edx, di at 0x76266B) while the test above and the two calls
+        // use the full dword. Identical for every in-range slot; kept.
+        SHORT nIndex = static_cast<SHORT>(nSlot);
+        CItem* pItem = m_equipment.m_items[nFound];
+        m_equipment.m_items[nFound] = m_equipment.m_items[nIndex];
+        m_equipment.m_items[nIndex] = pItem;
+    } else {
+        m_equipment.m_items[nFound]->Unequip(this, nFound, TRUE, FALSE);
+
+        // The second lookup scans the 18 equipment slots only, so an item
+        // that was already in the inventory is not moved.
+        SHORT nEquiped = FindItemPersonal(sName, 0, TRUE);
+        if (nEquiped != -1) {
+            INT nBlank = 0;
+            while (nBlank < CScreenInventory::PERSONAL_INVENTORY_SIZE
+                && m_equipment.m_items[18 + nBlank] != NULL) {
+                nBlank++;
+            }
+
+            if (nBlank < CScreenInventory::PERSONAL_INVENTORY_SIZE) {
+                m_equipment.m_items[18 + nBlank] = m_equipment.m_items[nEquiped];
+            } else {
+                PutItemGround(m_equipment.m_items[nEquiped]);
+            }
+
+            m_equipment.m_items[nEquiped] = NULL;
+        }
+    }
+
+    return ACTION_DONE;
+}
+
 // 0x762740
 BOOL CGameSprite::HasClassMask(DWORD dwMask)
 {
