@@ -1756,6 +1756,90 @@ int CDimm::LocalReadResource(CRes* pRes, DWORD nNumberOfBytesToRead, DWORD nOffs
     return nBytesRead;
 }
 
+// 0x787400
+void CDimm::DebugDumpResourceLists(int nUnused)
+{
+    (void)nUnused;
+
+    // The defunct Ctrl+O debug dump (CScreenWorld::OnKeyDown's cheat block,
+    // call at 0x68B24D): for every entry in all seven lists, re-derive the
+    // resource's base name (the key-table resref) and its type extension,
+    // into locals that are never read. NOTE: The original also sums each
+    // entry's CRes::nSize (+0x14, accumulated before the key-table null
+    // check) into three group totals -- freed in ebp, serviced in
+    // [esp+0x18], requested in [esp+0x20] -- and never reads those either;
+    // the port keeps the walks and the string re-derivation, drops the
+    // dead totals. The strings are one pair shared by all seven walks, as
+    // in the exe ([esp+0x10]/[esp+0x14]). Walk order is the exe's
+    // (0x78743D-0x78770B): freed, serviced high/medium/low, requested
+    // high/medium/low.
+    CString sRes;
+    CString sText;
+
+    POSITION pos = m_lFreed.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lFreed.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lServicedHigh.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lServicedHigh.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lServicedMedium.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lServicedMedium.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lServicedLow.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lServicedLow.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lRequestedHigh.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lRequestedHigh.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lRequestedMedium.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lRequestedMedium.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+
+    pos = m_lRequestedLow.GetHeadPosition();
+    while (pos != NULL) {
+        CRes* pRes = static_cast<CRes*>(m_lRequestedLow.GetNext(pos));
+        if (pRes != NULL && pRes->m_pDimmKeyTableEntry != NULL) {
+            pRes->m_pDimmKeyTableEntry->resRef.CopyToString(sText);
+            g_pChitin->TranslateType(pRes->m_pDimmKeyTableEntry->nResType, sRes);
+        }
+    }
+}
+
 // #binary-identical
 // 0x787740
 BOOL CDimm::MemoryAlmostFull()

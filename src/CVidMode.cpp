@@ -1383,6 +1383,102 @@ BOOL CVidMode::DrawLine16(INT nXFrom, INT nYFrom, INT nXTo, INT nYTo, WORD* pSur
     return TRUE;
 }
 
+// 0x797E70
+//
+// Halves every pixel of the rect on the surface: the 50% dark box floating
+// text is drawn over.
+BOOL CVidMode::DarkenRect(const CRect& r, UINT nSurface, const CRect& rClip)
+{
+    CRect rDst;
+    if (!IntersectRect(&rDst, &rClip, &r)) {
+        return FALSE;
+    }
+
+    // The intersected rect clamped against the clip again. rDst is already
+    // inside rClip (it is r n rClip), so this is the same rect and the
+    // offsets below are 0; the original does both (0x797EB0-0x797F70).
+    CRect rLock(max(rDst.left, rClip.left),
+        max(rDst.top, rClip.top),
+        min(rDst.right, rClip.right),
+        min(rDst.bottom, rClip.bottom));
+
+    INT dx = rDst.left - rLock.left;
+    INT dy = rDst.top - rLock.top;
+    // The original counts (rDst.right - rLock.left) - dx and
+    // (rDst.bottom - rLock.top) - dy, which is the rect's own width and
+    // height.
+    INT nCols = rDst.right - rDst.left;
+    INT nRows = rDst.bottom - rDst.top;
+
+    DDSURFACEDESC ddsd;
+    ddsd.dwSize = sizeof(ddsd);
+
+    if (!LockSurface(nSurface, &ddsd, rLock)) {
+        return FALSE;
+    }
+
+    // Each channel's own bits with its top bit dropped, summed
+    // (0x797F3E-0x797F66): 0x7F7F7F for an 8-8-8 format.
+    DWORD dwHalveMask = ((ddsd.ddpfPixelFormat.dwRBitMask >> 1) & ddsd.ddpfPixelFormat.dwRBitMask)
+        + ((ddsd.ddpfPixelFormat.dwGBitMask >> 1) & ddsd.ddpfPixelFormat.dwGBitMask)
+        + ((ddsd.ddpfPixelFormat.dwBBitMask >> 1) & ddsd.ddpfPixelFormat.dwBBitMask);
+
+    switch (g_pChitin->cVideo.GetBitsPerPixels()) {
+    case 16: {
+        BYTE* pPixel = reinterpret_cast<BYTE*>(ddsd.lpSurface) + ddsd.lPitch * dy + dx * 2;
+        INT nRowJump = ddsd.lPitch - nCols * 2;
+        for (INT y = 0; y < nRows; y++) {
+            for (INT x = 0; x < nCols; x++) {
+                WORD* pValue = reinterpret_cast<WORD*>(pPixel);
+                *pValue = static_cast<WORD>((*pValue >> 1) & dwHalveMask);
+                pPixel += 2;
+            }
+            pPixel += nRowJump;
+        }
+        break;
+    }
+    case 24: {
+        BYTE* pPixel = reinterpret_cast<BYTE*>(ddsd.lpSurface) + ddsd.lPitch * dy + dx * 3;
+        INT nRowJump = ddsd.lPitch - nCols * 3;
+        for (INT y = 0; y < nRows; y++) {
+            for (INT x = 0; x < nCols; x++) {
+                // A 4-byte store over 3-byte pixels: it also writes the next
+                // pixel's first byte with this pixel's top byte, which is 0
+                // once the halve mask is applied, so every pixel after a
+                // row's first reads its low byte as 0 (0x797FEB-0x798031).
+                DWORD dwPixel = (pPixel[1] << 16) | (pPixel[2] << 8) | pPixel[0];
+                *reinterpret_cast<DWORD*>(pPixel) = (dwPixel >> 1) & dwHalveMask;
+                pPixel += 3;
+            }
+            pPixel += nRowJump;
+        }
+        break;
+    }
+    case 32: {
+        BYTE* pPixel = reinterpret_cast<BYTE*>(ddsd.lpSurface) + ddsd.lPitch * dy + dx * 4;
+        INT nRowJump = ddsd.lPitch - nCols * 4;
+        for (INT y = 0; y < nRows; y++) {
+            for (INT x = 0; x < nCols; x++) {
+                DWORD* pValue = reinterpret_cast<DWORD*>(pPixel);
+                *pValue = (*pValue >> 1) & dwHalveMask;
+                pPixel += 4;
+            }
+            pPixel += nRowJump;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
+    // NOTE: The original inlines the unlock for surface 0 whatever nSurface
+    // was locked (0x7980AA-0x7980CA); its one caller, CInfinity::DarkenRect,
+    // passes 0.
+    UnLockSurface(0, ddsd.lpSurface);
+
+    return TRUE;
+}
+
 // 0x7980E0
 BOOL CVidMode::DrawRect(const CRect& r, UINT nSurface, const CRect& rClip, COLORREF rgbColor)
 {

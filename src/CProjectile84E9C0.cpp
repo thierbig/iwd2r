@@ -159,3 +159,38 @@ void CProjectile84E9C0::Fire(CGameArea* pArea, LONG source, LONG target, CPoint 
     ptTarget.y++;
     CGameObject::AddToArea(pArea, ptTarget, nHeight, CGameObject::LIST_FRONT);
 }
+
+// NOTE: Inlined at the DecodeProjectile type-45 arm (0x5201C0): the arm
+// news 0x32C bytes, runs the CProjectile84E9C0 constructor and then stamps
+// this class's vtable (0x520223) - which is what a derived constructor
+// emits anyway - before re-storing an empty m_fireSoundRef.
+CProjectile84D838::CProjectile84D838(const CString& sAnimation, const CString& sSound, const CString& sPalette, DWORD dwFlags, BYTE nTransValue)
+    : CProjectile84E9C0(sAnimation, sSound, sPalette, dwFlags, nTransValue)
+{
+}
+
+// 0x5367C0
+void CProjectile84D838::Fire(CGameArea* pArea, LONG source, LONG target, CPoint targetPos, LONG nHeight, SHORT nType)
+{
+    (void)nType;
+
+    m_sourceId = source;
+    m_targetId = target;
+    m_pArea = pArea;
+
+    DeliverEffects();
+
+    BYTE rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Add(&m_id, this, INFINITE);
+    if (rc != CGameObjectArray::SUCCESS) {
+        delete this;
+        return;
+    }
+
+    // The jet anchors at the position it was given (no target-object
+    // branch like the base Fire) and its loop state comes from the
+    // projectile's own fire-sound loop flag.
+    CGameObject::AddToArea(pArea, targetPos, nHeight, CGameObject::LIST_FRONT);
+
+    // NOTE: Inlined PlaySound in the original.
+    PlaySound(m_fireSoundRef, m_loopFireSound, FALSE);
+}

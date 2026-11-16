@@ -59,6 +59,9 @@ public:
 
     TString& AssignString(const TString& source, UINT start, UINT count); // 0x45E870
 
+    // The native basic_string::erase: throws std::out_of_range past the end.
+    TString& Delete(UINT nPos, UINT nCount); // 0x56DA10
+
     int Compare(int nPos, int nCount, const char* pStr2, int nLen2) const; // 0x4C5ED0
 
 private:

@@ -255,4 +255,21 @@ public:
     /* 0F6A */ CRITICAL_SECTION field_F6A;
 };
 
+// The prefix of DirectPlay's DPSESSIONDESC2A that the session-enumeration
+// callback reads (the tree carries no DirectPlay headers): dwFlags at +4,
+// the instance GUID at +8, the ANSI session name pointer at +0x30.
+typedef struct dpenumsession_desc_st {
+    DWORD dwSize;
+    DWORD dwFlags;
+    GUID guidInstance;
+    GUID guidApplication;
+    DWORD dwMaxPlayers;
+    DWORD dwCurrentPlayers;
+    LPCSTR lpszSessionName;
+} DPENUMSESSION_DESC;
+
+// The DirectPlay session-enumeration callback (0x7A6895, defined in
+// CNetwork.cpp).
+BOOL CALLBACK EnumSessionsCallback(const DPENUMSESSION_DESC* lpSessionDesc, DWORD dwTimeout, LPVOID lpContext, BOOL* lpbDone);
+
 #endif /* CNETWORK_H_ */

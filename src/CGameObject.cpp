@@ -1,13 +1,16 @@
 #include "CGameObject.h"
 
 #include "CBaldurChitin.h"
+#include "CGameAIBase.h"
 #include "CGameArea.h"
+#include "CGameContainer.h"
 #include "CGameObjectArray.h"
 #include "CGameSprite.h"
 #include "CGameText.h"
 #include "CGameTrigger.h"
 #include "CInfCursor.h"
 #include "CInfGame.h"
+#include "CMessage.h"
 #include "CScreenWorld.h"
 #include "CTimerWorld.h"
 #include "CUtil.h"
@@ -486,6 +489,128 @@ void CGameObject::FloatText(STRREF strRef, int a2, int a3)
         const CPoint& ptTrap = static_cast<CGameTrigger*>(this)->m_posTrapOrigin;
         pText->SetPositionInView(CPoint(ptTrap.x, (-3 - static_cast<BYTE>(pText->m_nLines)) * 5 + ptTrap.y));
     }
+}
+
+// TransferInventory: the action-295 core (the Ghidra import list mislabeled
+// this CGameObject::FloatText by address proximity; the real one is
+// 0x4C80E0 above). Every movable item on `this` leaves for pReceiver
+// through the message queue - four walks, one per giver and receiver kind.
+// A sprite giver hands over the equipped items whose ITM file flags carry
+// 0x4 (the droppable bit DropItem and DropInventory test), the fist slot
+// excluded: a CMessageRemoveItem takes the item off the giver, then a
+// CMessageAddItem (sprite receiver) or a CMessageContainerAddItem
+// (container receiver, slot 0x7FFF, no compression) hands it over, each
+// staged through a heap CItem copy. A container giver runs its whole list
+// instead - GetItem(0) and RemoveItem(0) per pass, no flag tests and no
+// staging copy - and a pass whose GetItem(0) finds nothing only burns the
+// index. Whenever the receiver is a sprite with a character portrait, the
+// 0x8518C2 feedback (3) sounds first, as GiveItem does. A side that is
+// neither container nor sprite returns ACTION_ERROR without moving
+// anything; every completed walk returns ACTION_DONE.
+//
+// 0x4C83F0
+SHORT CGameObject::TransferInventory(CGameObject* pReceiver)
+{
+    SHORT nReturn = CGameAIBase::ACTION_DONE;
+
+    if (m_objectType == TYPE_CONTAINER) {
+        // 0x4C87AE: the count is read once, up front; every pass with a
+        // real item removes the head, so the list walks down under the
+        // pre-read count.
+        SHORT nCount = static_cast<CGameContainer*>(this)->GetNumItems();
+
+        BYTE receiverType = pReceiver->GetObjectType();
+        if (receiverType == TYPE_CONTAINER) {
+            for (SHORT index = 0; index < nCount; index++) {
+                CItem* pItem = static_cast<CGameContainer*>(this)->GetItem(0);
+                if (pItem == NULL) {
+                    continue;
+                }
+
+                CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(*pItem, 0x7FFF, FALSE, m_id, pReceiver->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+                static_cast<CGameContainer*>(this)->RemoveItem(0);
+            }
+        } else if (receiverType == TYPE_SPRITE) {
+            for (SHORT index = 0; index < nCount; index++) {
+                CItem* pItem = static_cast<CGameContainer*>(this)->GetItem(0);
+                if (pItem == NULL) {
+                    continue;
+                }
+
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+                if (pGame->GetCharacterPortraitNum(pReceiver->GetId()) != -1) {
+                    // NOTE: The WORD at 0x8518C2 (3).
+                    pGame->FeedBack(3, 0, TRUE);
+                }
+
+                CMessageAddItem* pMessage = new CMessageAddItem(*pItem, m_id, pReceiver->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+                static_cast<CGameContainer*>(this)->RemoveItem(0);
+            }
+        } else {
+            nReturn = CGameAIBase::ACTION_ERROR;
+        }
+    } else if (m_objectType == TYPE_SPRITE) {
+        BYTE receiverType = pReceiver->GetObjectType();
+        if (receiverType == TYPE_CONTAINER) {
+            for (int nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+                CItem* pItem = static_cast<CGameSprite*>(this)->m_equipment.m_items[nSlot];
+                if (nSlot == CGameSpriteEquipment::SLOT_FIST
+                    || pItem == NULL
+                    || (pItem->GetFlagsFile() & 0x4) == 0) {
+                    continue;
+                }
+
+                CItem* pItemCopy = new CItem(*pItem);
+
+                CMessageRemoveItem* pRemoveMessage = new CMessageRemoveItem(nSlot, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pRemoveMessage, FALSE);
+
+                CMessageContainerAddItem* pMessage = new CMessageContainerAddItem(*pItemCopy, 0x7FFF, FALSE, m_id, pReceiver->GetId());
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+                delete pItemCopy;
+            }
+        } else if (receiverType == TYPE_SPRITE) {
+            for (int nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+                CItem* pItem = static_cast<CGameSprite*>(this)->m_equipment.m_items[nSlot];
+                if (nSlot == CGameSpriteEquipment::SLOT_FIST
+                    || pItem == NULL
+                    || (pItem->GetFlagsFile() & 0x4) == 0) {
+                    continue;
+                }
+
+                CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+                if (pGame->GetCharacterPortraitNum(pReceiver->GetId()) != -1) {
+                    // NOTE: The WORD at 0x8518C2 (3).
+                    pGame->FeedBack(3, 0, TRUE);
+                }
+
+                CItem* pItemCopy = new CItem(*pItem);
+
+                CMessageRemoveItem* pRemoveMessage = new CMessageRemoveItem(nSlot, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pRemoveMessage, FALSE);
+
+                // 0x4C8595: the add message is built on a default CItem and
+                // then filled from the heap copy through CItem::operator= -
+                // the original's inlined shape, kept.
+                CMessageAddItem* pMessage = new CMessageAddItem(CItem(), m_id, pReceiver->GetId());
+                pMessage->m_item = *pItemCopy;
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
+
+                delete pItemCopy;
+            }
+        } else {
+            nReturn = CGameAIBase::ACTION_ERROR;
+        }
+    } else {
+        nReturn = CGameAIBase::ACTION_ERROR;
+    }
+
+    return nReturn;
 }
 
 // 0x78E750

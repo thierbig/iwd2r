@@ -72,6 +72,7 @@ public:
     /* 00B0 */ virtual void AutoPause(DWORD type);
     /* 00B4 */ virtual BOOL GetCanSeeInvisible();
 
+    BYTE GetReaction(CGameSprite* pSprite);
     void CheckTimers(LONG cycles);
     void ClearTriggers();
     BOOL CheckAppropriateTarget(CSpell* pSpell, CGameAIBase* pTarget);

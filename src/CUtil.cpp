@@ -322,3 +322,29 @@ void CUtil::TrimRight(CString& sString)
 
     sString = sString.Left(nEnd + 1);
 }
+
+// 0x781630
+DWORD CUtil::RotateFieldRight(DWORD nValue, BYTE nBits, BYTE nLowBits)
+{
+    if (nValue == 0 || nBits == 0 || nLowBits == 0 || nLowBits >= nBits) {
+        return nValue;
+    }
+
+    // __FILE__: C:\Projects\Icewind2\src\chitin\ChUtil.cpp
+    // __LINE__: 1161
+    UTIL_ASSERT(nBits <= 32);
+
+    // The low nLowBits of the nBits-wide field rotate to its top (0x7816E7:
+    // value >> (nBits - nLowBits), masked to nLowBits one-bits at
+    // 0x7816EB-0x7816F0); the rest shifts up (0x7816ED).
+    DWORD nRotated = (nValue >> (nBits - nLowBits)) & ((1 << nLowBits) - 1);
+    DWORD nShifted = nValue << nLowBits;
+
+    // Only a field narrower than 4 bits is masked back to its width
+    // (0x7816F2: nBits < 4).
+    if (nBits < 4) {
+        nShifted &= (1 << nBits) - 1;
+    }
+
+    return nRotated | nShifted;
+}

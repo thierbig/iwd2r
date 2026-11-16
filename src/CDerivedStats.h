@@ -574,6 +574,7 @@ public:
     int GetXP();
     BYTE GetLevel();
     DWORD GetSorcererWizardLevel();
+    BYTE SumSorcererWizardLevels();
     DWORD GetBardMonkRogueLevel();
     void Marshal(BYTE** pStats, LONG* nStats);
     void Unmarshal(BYTE* pStats, LONG nStats);

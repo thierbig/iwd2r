@@ -24,8 +24,10 @@ CGameSound::CGameSound(CGameArea* pArea, CAreaFileSoundObject* pSoundObject)
 
     m_bLoopPlaying = FALSE;
 
-    // TODO: Some strange call, check.
-    m_timeOfDayActive = m_soundObject.m_timeOfDayActive;
+    // The active-hours bit field rotates right by one bit (0x4C8BF5: nBits
+    // 18 from the byte at 0x84EC0F, nLowBits 1).
+    m_timeOfDayActive
+        = CUtil::RotateFieldRight(m_soundObject.m_timeOfDayActive, 18, 1);
 
     if (m_timeOfDayActive == 0x3FFC0) {
         m_timeOfDayActive = 0x3FFF80;

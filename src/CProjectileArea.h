@@ -166,6 +166,8 @@ public:
 class CProjectileCircleOfDeath : public CProjectileArea {
 public:
     CProjectileCircleOfDeath();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
+    LONG sub_571A60(); // re-lint: disable RE004 (address-named; original name unknown)
 };
 
 // Entangle (projectile type 235, vtable 0x84F4E4): EntangX and lingering
@@ -211,6 +213,7 @@ public:
 class CProjectileHoldAnimal : public CProjectileArea {
 public:
     CProjectileHoldAnimal();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
 // Hold Monster (vtable 0x84F928): the same EnchanX burst on ARE_M21, one
@@ -219,6 +222,7 @@ public:
 class CProjectileHoldMonster : public CProjectileArea {
 public:
     CProjectileHoldMonster();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
 // Hold Person (projectile type 190, vtable 0x84F9C4): EnchanX, 150 around;
@@ -235,6 +239,7 @@ public:
 class CProjectileHaltUndead : public CProjectileArea {
 public:
     CProjectileHaltUndead();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
 // Ice Storm (vtable 0x84FAFC): the IStormX burst (no sound of its own),
@@ -284,6 +289,7 @@ public:
 class CProjectilePowerWordKill : public CProjectileArea {
 public:
     CProjectilePowerWordKill();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
 // Produce Fire (vtable 0x84FE08): the PFireX burst on EFF_P45, then the
@@ -457,6 +463,7 @@ public:
 class CProjectileSymbolOfDeath : public CProjectileArea {
 public:
     CProjectileSymbolOfDeath();
+    /* 0094 */ void ApplyToTargets(std::list<LONG>& targets) override;
 };
 
 // Dispel Magic (projectile type 246, vtable 0x850C0C): AbjuraX, 150 around;

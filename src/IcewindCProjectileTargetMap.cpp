@@ -178,3 +178,53 @@ std::map<LONG, CPoint> IcewindCProjectileTargetMap::GatherTargets()
 
     return targets;
 }
+
+// 0x55B1B0
+// Vtable slot 1 of 0x84EEB0, the wall's gather. Each corner offset at
+// +0x3C..+0x58 is added to the owner's position (GetPos is asked once per
+// corner, as the binary's four vtable-slot-0x1C calls are) to make the wall's
+// four-point polygon; the bounding rect takes the min/max over those four
+// points. GetAllInPoly then collects the front list only (the seventh
+// argument is FALSE) -- every object of any type inside the rect and the
+// polygon -- passing the *area's* visible terrain table at +0x40A as the
+// terrain argument (the base gather passes the owner's own table instead;
+// GetAllInPoly only asserts it non-null).
+// The ids are deduplicated into the same default-valued map the base gather
+// returns; m_nRange is not read. The corners themselves are only written by
+// 0x55B010, which the exe never calls, so this reads the ctor state as the
+// original does (docs/evidence/55B1B0.md).
+std::map<LONG, CPoint> IcewindCProjectileWallTargetMap::GatherTargets()
+{
+    CProjectile* pOwner = static_cast<CProjectile*>(m_pOwner);
+    CPoint poly[4];
+    poly[0] = pOwner->GetPos() + m_corners[0];
+    poly[1] = pOwner->GetPos() + m_corners[1];
+    poly[2] = pOwner->GetPos() + m_corners[2];
+    poly[3] = pOwner->GetPos() + m_corners[3];
+
+    CRect bounds;
+    bounds.left = min(min(poly[0].x, poly[1].x), min(poly[2].x, poly[3].x));
+    bounds.top = min(min(poly[0].y, poly[1].y), min(poly[2].y, poly[3].y));
+    bounds.right = max(max(poly[0].x, poly[1].x), max(poly[2].x, poly[3].x));
+    bounds.bottom = max(max(poly[0].y, poly[1].y), max(poly[2].y, poly[3].y));
+
+    std::map<LONG, CPoint> targets;
+    CTypedPtrList<CPtrList, LONG*> inPoly(10);
+
+    CGameArea* pArea = pOwner->GetArea();
+    pArea->GetAllInPoly(bounds,
+        poly,
+        4,
+        CAIObjectType::ANYONE,
+        pArea->m_visibleTerrainTable,
+        inPoly,
+        FALSE);
+
+    POSITION pos = inPoly.GetHeadPosition();
+    while (pos != NULL) {
+        LONG nId = static_cast<LONG>(reinterpret_cast<INT_PTR>(inPoly.GetNext(pos)));
+        targets.insert(std::make_pair(nId, CPoint(0, 0)));
+    }
+
+    return targets;
+}

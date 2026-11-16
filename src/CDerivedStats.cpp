@@ -407,6 +407,24 @@ void CDerivedStats::Reload(CGameSprite* pSprite, CCreatureFileHeader* pCreature,
     }
 }
 
+// Copies a list of owned CResRef objects: walks the source list node by
+// node, allocates a new 8-byte CResRef for each entry, copies the value
+// with CResRef::operator= (0x78AC30) and appends the copy to the
+// destination with CPtrList::AddTail (0x7FBE4E). The original is a
+// __thiscall on the destination list taking the source by reference and
+// returning the destination; here both lists are explicit arguments.
+//
+// 0x4E7680
+static void CopyResRefList(CPtrList& listDst, const CPtrList& listSrc)
+{
+    for (POSITION pos = listSrc.GetHeadPosition(); pos != NULL;) {
+        CResRef* pData = static_cast<CResRef*>(listSrc.GetNext(pos));
+        CResRef* pCopy = new CResRef();
+        *pCopy = *pData;
+        listDst.AddTail(pCopy);
+    }
+}
+
 // 0x445330
 CDerivedStats& CDerivedStats::operator=(const CDerivedStats& other)
 {
@@ -542,8 +560,12 @@ CDerivedStats& CDerivedStats::operator=(const CDerivedStats& other)
     m_naturalImmunities = other.m_naturalImmunities;
     m_whenStruckList = other.m_whenStruckList;
 
-    // TODO: Incomplete. The six lists at +0x4AC to +0x538 (0x4E7680,
-    // 0x4E7720; 0x445CC4-0x445D1E), whose element types are unknown.
+    CopyResRefList(field_4AC, other.field_4AC);
+    CopyResRefList(field_4C8, other.field_4C8);
+
+    // TODO: Incomplete. The four lists at +0x4E4 to +0x538 go through a
+    // second helper (0x4E7720; 0x445CE8-0x445D1E) whose elements are
+    // copied as plain 8-byte values, not covered in the tree.
 
     field_128 = other.field_128;
     field_12C = other.field_12C;
@@ -1158,6 +1180,37 @@ DWORD CDerivedStats::GetSorcererWizardLevel()
 {
     // NOTE: Uninline.
     return GetClassMaskLevel(CLASSMASK_SORCERER | CLASSMASK_WIZARD);
+}
+
+// 0x4478C0
+BYTE CDerivedStats::SumSorcererWizardLevels()
+{
+    DWORD dwMask = CLASSMASK_SORCERER | CLASSMASK_WIZARD;
+    DWORD dwClassMask = m_classMask & dwMask;
+    DWORD nLevel = 0;
+
+    if (dwClassMask != 0) {
+        DWORD dwCurrentClassMask = 1;
+        for (int index = 0; index < CAIOBJECT_CLASS_MAX; index++) {
+            if (dwCurrentClassMask > dwMask) {
+                break;
+            }
+
+            if ((dwClassMask & dwCurrentClassMask) != 0) {
+                nLevel += m_nClassLevels[index];
+            }
+
+            dwCurrentClassMask <<= 1;
+        }
+    }
+
+    // The original sums twice and returns 1 when the first sum is below 1;
+    // the second sum is the same value.
+    if (nLevel < 1) {
+        return 1;
+    }
+
+    return static_cast<BYTE>(nLevel);
 }
 
 // 0x4473F0

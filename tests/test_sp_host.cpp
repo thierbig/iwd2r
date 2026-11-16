@@ -579,3 +579,50 @@ TEST_CASE("sp-host: ObjectControlRequest asks the host for a remote object", "[s
     network.m_idLocalPlayer = nLocalPlayer;
     network.m_nServiceProvider = nProvider;
 }
+
+// CScreenWorld::BeginChatMessage (0x694510), the first half of the chat
+// key's keymap-24 arm: it re-opens the interface and clears the chat edit
+// under a provider other than the null one, which a single-player host
+// session never has. Both early gates precede every panel access, so the
+// state the unhide arm would clear is the observable: armed with the
+// interface hidden and the auto-hide timer running, the call must leave
+// both untouched.
+TEST_CASE("sp-host: the chat key's panel reset returns under the null provider", "[sp-host][chat][data]")
+{
+    if (engine_world::DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(engine_world::StartEngine(error));
+    INFO(error);
+    engine_world::FramePump pump;
+
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+
+    // Gate 1 (0x694521): no session open, nothing happens.
+    pWorld->GetManager()->m_bHidden = TRUE;
+    pWorld->m_nAutoHideInterface = 1;
+
+    pWorld->BeginChatMessage();
+
+    CHECK(pWorld->GetManager()->m_bHidden == TRUE);
+    CHECK(pWorld->m_nAutoHideInterface == 1);
+
+    // Gate 2 (0x69452D): the single-player host session — session open,
+    // null provider — returns at the provider gate.
+    {
+        HostSession hostSession;
+        REQUIRE(g_pChitin->cNetwork.GetSessionOpen() == TRUE);
+        REQUIRE(g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL);
+
+        pWorld->GetManager()->m_bHidden = TRUE;
+        pWorld->m_nAutoHideInterface = 1;
+
+        pWorld->BeginChatMessage();
+
+        CHECK(pWorld->GetManager()->m_bHidden == TRUE);
+        CHECK(pWorld->m_nAutoHideInterface == 1);
+    }
+
+    pWorld->GetManager()->m_bHidden = FALSE;
+}

@@ -331,6 +331,49 @@ TEST_CASE("derived stats containers copy and clear", "[derived]")
     CHECK(stats.m_damageReductions.size() == 1);
 }
 
+TEST_CASE("derived stats copy duplicates the resref lists", "[derived]")
+{
+    CDerivedStats stats;
+    stats.field_4AC.AddTail(new CResRef("SPWI112"));
+    stats.field_4AC.AddTail(new CResRef("SPIN100"));
+    stats.field_4C8.AddTail(new CResRef("SPWM123"));
+
+    CDerivedStats copy;
+    copy = stats;
+
+    REQUIRE(copy.field_4AC.GetCount() == 2);
+    REQUIRE(copy.field_4C8.GetCount() == 1);
+
+    // Each entry is a fresh CResRef with the source's value, not the
+    // source's pointer.
+    POSITION srcPos = stats.field_4AC.GetHeadPosition();
+    CResRef* srcFirst = static_cast<CResRef*>(stats.field_4AC.GetNext(srcPos));
+
+    POSITION pos = copy.field_4AC.GetHeadPosition();
+    CResRef* first = static_cast<CResRef*>(copy.field_4AC.GetNext(pos));
+    CResRef* second = static_cast<CResRef*>(copy.field_4AC.GetNext(pos));
+    CHECK(first != srcFirst);
+    CHECK(*first == "SPWI112");
+    CHECK(*second == "SPIN100");
+
+    POSITION posC8 = copy.field_4C8.GetHeadPosition();
+    CHECK(*static_cast<CResRef*>(copy.field_4C8.GetNext(posC8)) == "SPWM123");
+
+    // The lists hold raw pointers; nothing in the class frees them.
+    pos = copy.field_4AC.GetHeadPosition();
+    while (pos != NULL) {
+        delete static_cast<CResRef*>(copy.field_4AC.GetNext(pos));
+    }
+    posC8 = copy.field_4C8.GetHeadPosition();
+    while (posC8 != NULL) {
+        delete static_cast<CResRef*>(copy.field_4C8.GetNext(posC8));
+    }
+    srcPos = stats.field_4AC.GetHeadPosition();
+    while (srcPos != NULL) {
+        delete static_cast<CResRef*>(stats.field_4AC.GetNext(srcPos));
+    }
+}
+
 TEST_CASE("derived stats reload adds the creature's damage reduction", "[derived]")
 {
     CCreatureFileHeader creature;

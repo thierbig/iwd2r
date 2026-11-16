@@ -17,6 +17,7 @@
 #include "CVidImage.h"
 #include "CVidInf.h"
 #include "CVidPoly.h"
+#include "CVideo3d.h"
 #include "CVisibility.h"
 #include "CWarp.h"
 
@@ -25,6 +26,8 @@
 #include <cstring>
 #include <ios>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -1618,6 +1621,17 @@ TEST_CASE("outline_poly32", "[vid]")
 // the last image.
 TEST_CASE("vid_image_blend_table", "[vid]")
 {
+    // 0x7ACCB0 also builds the table standalone — the 24/32-bpp tile
+    // blitters call it when they find no table — so drive it directly and
+    // put the previous table back for the constructor checks below.
+    BYTE* pSavedTable = CVidImage::m_pBlendTable;
+    CHECK(CVidImage::BuildBlendTable() != FALSE);
+    REQUIRE(CVidImage::m_pBlendTable != nullptr);
+    CHECK(CVidImage::m_pBlendTable[0] == 0);
+    CHECK(CVidImage::m_pBlendTable[63 * 0x800 + 63 * 0x20 + 31] == 63);
+    delete[] CVidImage::m_pBlendTable;
+    CVidImage::m_pBlendTable = pSavedTable;
+
     const INT refsBefore = CVidImage::m_nBlendTableRefs;
     {
         CVidImage image;
@@ -3965,4 +3979,246 @@ TEST_CASE("vid: BltBmp8To16 paints 8-bit indices through the palette into 16-bit
     CHECK(canvas[index(2, 1)] == static_cast<WORD>(pal[2]));
     CHECK(canvas[index(3, 1)] == static_cast<WORD>(pal[3]));
     CHECK(canvas[index(0, 1)] == 0x7C00); // the pack: pure red, five bits
+}
+
+// ---------------------------------------------------------------------------
+// CVidMode::RenderBlackFade3d (0x7BD9D0)
+//
+// The 3d renderer's fade: a fullscreen quad, black through
+// ApplyBrightnessContrast, alpha 1 - m_nFade / NUM_FADE_FRAMES, drawn with
+// blending enabled and texturing disabled. The GL entry points are static
+// function pointers on CVideo3d, so the test swaps them for recorders and
+// drives the function through a bare chitin with an accelerated cVideo and a
+// warp as the active engine (the inlined GetCurrentVideoMode reads
+// pActiveEngine->pVidMode). CheckResults3d(0) queries no GL state, so the
+// log holds only the draw calls.
+
+namespace {
+
+struct GlRecorder {
+    std::vector<std::string> calls;
+};
+
+GlRecorder* g_glRecorder = nullptr;
+
+void GlLog(std::string s)
+{
+    if (g_glRecorder != nullptr) {
+        g_glRecorder->calls.push_back(std::move(s));
+    }
+}
+
+std::string GlFl(GLfloat v)
+{
+    std::ostringstream os;
+    os << v;
+    return os.str();
+}
+
+// Swaps the seven GL entry points RenderBlackFade3d uses for recorders and
+// restores them on scope exit.
+class GlStubScope {
+public:
+    GlStubScope()
+    {
+        m_disable = CVideo3d::glDisable;
+        m_enable = CVideo3d::glEnable;
+        m_blendFunc = CVideo3d::glBlendFunc;
+        m_begin = CVideo3d::glBegin;
+        m_color4f = CVideo3d::glColor4f;
+        m_vertex3f = CVideo3d::glVertex3f;
+        m_end = CVideo3d::glEnd;
+
+        CVideo3d::glDisable = [](GLenum cap) { GlLog("disable " + std::to_string(cap)); };
+        CVideo3d::glEnable = [](GLenum cap) { GlLog("enable " + std::to_string(cap)); };
+        CVideo3d::glBlendFunc = [](GLenum sfactor, GLenum dfactor) {
+            GlLog("blend " + std::to_string(sfactor) + " " + std::to_string(dfactor));
+        };
+        CVideo3d::glBegin = [](GLenum mode) { GlLog("begin " + std::to_string(mode)); };
+        CVideo3d::glColor4f = [](GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
+            GlLog("color " + GlFl(r) + " " + GlFl(g) + " " + GlFl(b) + " " + GlFl(a));
+        };
+        CVideo3d::glVertex3f = [](GLfloat x, GLfloat y, GLfloat z) {
+            GlLog("vertex " + GlFl(x) + " " + GlFl(y) + " " + GlFl(z));
+        };
+        CVideo3d::glEnd = []() { GlLog("end"); };
+    }
+
+    ~GlStubScope()
+    {
+        CVideo3d::glDisable = m_disable;
+        CVideo3d::glEnable = m_enable;
+        CVideo3d::glBlendFunc = m_blendFunc;
+        CVideo3d::glBegin = m_begin;
+        CVideo3d::glColor4f = m_color4f;
+        CVideo3d::glVertex3f = m_vertex3f;
+        CVideo3d::glEnd = m_end;
+    }
+
+    GlStubScope(const GlStubScope&) = delete;
+    GlStubScope& operator=(const GlStubScope&) = delete;
+
+private:
+    PFNGLDISABLEPROC m_disable;
+    PFNGLENABLEPROC m_enable;
+    PFNGLBLENDFUNCPROC m_blendFunc;
+    PFNGLBEGINPROC m_begin;
+    PFNGLCOLOR4FPROC m_color4f;
+    PFNGLVERTEX3FPROC m_vertex3f;
+    PFNGLENDPROC m_end;
+};
+
+} // namespace
+
+TEST_CASE("render_black_fade_3d_draws_the_fade_quad", "[vid]")
+{
+    ChitinScope scope;
+    g_pChitin->cVideo.m_bIs3dAccelerated = TRUE;
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 10; // alpha = 1 - 10/NUM_FADE_FRAMES(20) = 0.5
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    const GLfloat w = static_cast<GLfloat>(CVideo::SCREENWIDTH) + CVideo3d::SUB_PIXEL_SHIFT;
+    const GLfloat h = static_cast<GLfloat>(CVideo::SCREENHEIGHT) + CVideo3d::SUB_PIXEL_SHIFT;
+    CHECK(recorder.calls
+        == std::vector<std::string> {
+            "disable 3553", // GL_TEXTURE_2D
+            "enable 3042", // GL_BLEND
+            "blend 770 771", // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            "begin 7", // GL_QUADS
+            "color 0 0 0 0.5", // black through zeroed corrections, half faded
+            "vertex 0 0 0",
+            "vertex 0 " + GlFl(h) + " 0",
+            "vertex " + GlFl(w) + " " + GlFl(h) + " 0",
+            "vertex " + GlFl(w) + " 0 0",
+            "end",
+            "disable 3042", // GL_BLEND
+        });
+}
+
+TEST_CASE("render_black_fade_3d_alpha_tracks_the_fade", "[vid]")
+{
+    ChitinScope scope;
+    g_pChitin->cVideo.m_bIs3dAccelerated = TRUE;
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 0; // fade not started: fully opaque black cover
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    auto colorLine = std::find_if(recorder.calls.begin(), recorder.calls.end(),
+        [](const std::string& s) { return s.compare(0, 5, "color") == 0; });
+    REQUIRE(colorLine != recorder.calls.end());
+    CHECK(*colorLine == "color 0 0 0 1");
+}
+
+TEST_CASE("render_black_fade_3d_skipped_without_3d_acceleration", "[vid]")
+{
+    ChitinScope scope; // m_bIs3dAccelerated defaults to FALSE
+
+    CWarp warp;
+    CVidMode vidMode;
+    vidMode.m_nFade = 10;
+    warp.pVidMode = &vidMode;
+    g_pChitin->pActiveEngine = &warp;
+
+    GlRecorder recorder;
+    GlRecorder* previousRecorder = g_glRecorder;
+    g_glRecorder = &recorder;
+    {
+        GlStubScope stubs;
+        CVidMode::RenderBlackFade3d();
+    }
+    g_glRecorder = previousRecorder;
+
+    CHECK(recorder.calls.empty());
+}
+
+// CVidMode::DarkenRect (0x797E70), the 50% dark box behind floating text:
+// intersect against the clip, halve every pixel of the intersection
+// ((pixel >> 1) & 0x7F7F7F for the shim's 8-8-8 masks), unlock surface 0.
+// A bare CVidMode over one shim surface is enough - LockSurface only needs
+// m_nSurfaces/pSurfaces and g_pChitin for its alignment assert.
+TEST_CASE("vidmode_darken_rect_halves_only_the_clipped_rect", "[vid]")
+{
+    ChitinScope scope; // 32 bpp
+
+    IDirectDraw* dd = nullptr;
+    REQUIRE(DirectDrawCreate(nullptr, &dd, nullptr) == DD_OK);
+
+    DDSURFACEDESC req = {};
+    req.dwSize = sizeof(req);
+    req.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    req.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+    req.dwWidth = kWidth;
+    req.dwHeight = kHeight;
+    IDirectDrawSurface* surface = nullptr;
+    REQUIRE(dd->CreateSurface(&req, &surface, nullptr) == DD_OK);
+
+    DDSURFACEDESC ddsd = {};
+    ddsd.dwSize = sizeof(ddsd);
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    for (LONG y = 0; y < kHeight; y++) {
+        auto* row = reinterpret_cast<DWORD*>(static_cast<BYTE*>(ddsd.lpSurface) + y * ddsd.lPitch);
+        for (LONG x = 0; x < kWidth; x++) {
+            row[x] = 0x00FFFFFF;
+        }
+    }
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
+
+    CVidMode vidMode;
+    IDirectDrawSurface* surfaces[1] = { surface };
+    vidMode.m_nSurfaces = 1;
+    vidMode.pSurfaces = surfaces;
+
+    // (10,10)-(30,20) against the 24x16 clip: cols and rows are
+    // right-left and bottom-top, so exactly (10,10)-(24,16) halves.
+    CHECK(vidMode.DarkenRect(CRect(10, 10, 30, 20), 0, CRect(0, 0, kWidth, kHeight)) == TRUE);
+
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    const auto pixel = [&](int x, int y) {
+        const auto* row = reinterpret_cast<const DWORD*>(static_cast<const BYTE*>(ddsd.lpSurface) + y * ddsd.lPitch);
+        return row[x];
+    };
+    for (int y = 10; y < 16; y++) {
+        for (int x = 10; x < 24; x++) {
+            CHECK(pixel(x, y) == 0x007F7F7F);
+        }
+    }
+    // The frame outside the box is untouched, including the pixels just
+    // past its right and bottom edges (exclusive).
+    CHECK(pixel(0, 0) == 0x00FFFFFF);
+    CHECK(pixel(9, 9) == 0x00FFFFFF);
+    CHECK(pixel(23, 9) == 0x00FFFFFF);
+    CHECK(pixel(9, 15) == 0x00FFFFFF);
+    CHECK(pixel(23, 15) == 0x007F7F7F);
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
+
+    // An empty intersection returns FALSE and paints nothing.
+    CHECK(vidMode.DarkenRect(CRect(-8, -8, 0, 0), 0, CRect(0, 0, kWidth, kHeight)) == FALSE);
+    REQUIRE(surface->Lock(nullptr, &ddsd, DDLOCK_WAIT, nullptr) == DD_OK);
+    CHECK(pixel(0, 0) == 0x00FFFFFF);
+    REQUIRE(surface->Unlock(nullptr) == DD_OK);
 }

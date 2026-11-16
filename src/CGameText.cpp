@@ -204,9 +204,13 @@ void CGameText::Render(CGameArea* pArea, CVidMode* pVidMode, int a3)
             INFINITE);
     }
 
-    // 0x5CDD00: the world-to-screen transform of the padded text bounds, fed
-    // to CVidMode vtable slot 0xAC (0x797E70) -- both unrecovered, so the
-    // call is omitted.
+    // The 50% dark box behind the text: the text bounds padded 4 wide / 2
+    // tall around the reference point (0x4CBED1-0x4CBF22).
+    CRect rDarken(m_pos.x - ptReference.x - 4,
+        m_pos.y - m_posZ - ptReference.y - 2,
+        m_pos.x + ptReference.x + 4,
+        m_pos.y - m_posZ + ptReference.y + 2);
+    pInfinity->DarkenRect(rDarken);
 
     CPoint ptPos(m_pos.x, m_pos.y - m_posZ);
     pInfinity->FXPrep(rFXRect, dwRenderFlags, a3, ptPos, ptReference);

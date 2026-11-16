@@ -13,31 +13,41 @@
 #define CBALDURPROJECTOR_VIRTUAL_KEYS 2
 
 // #guess: the 8-byte line of the subtitle overlay's list (the list at +0x08 of
-// CProjectorSubtitles): a 4-byte field and the text. The element destructor the
-// exe passes to array_destruct (0x428F80) destroys the CString at +4.
+// CProjectorSubtitles): the frame the line turns current at and the text. The
+// element destructor the exe passes to array_destruct (0x428F80) destroys the
+// CString at +4.
 struct CProjectorSubtitlesLine { // #guess name
-    /* 0000 */ DWORD field_0; // #guess: the line's timing/offset
+    /* 0000 */ DWORD field_0; // #guess: elapsed-frame count that makes the line current (0 = end sentinel)
     /* 0004 */ CString m_sText;
 };
 
 // #guess: the movie-subtitle overlay at the engine global 0x8CFF30 (0x24
 // bytes). Neither IEex nor WSO names the type or the global; the layout is the
-// disassembly's (ctor FUN_0043f6d0 0x43F6D0, teardown FUN_0043f900 0x43F900)
-// and only the teardown is ported here - the global is created by
-// EngineActivated's subtitle block (0x43EC20), which stays a TODO.
+// disassembly's (ctor FUN_0043f6d0 0x43F6D0, teardown FUN_0043f900 0x43F900).
+// EngineActivated's subtitle block (0x43EC20) creates it around each movie and
+// sub_43E300 advances it per frame; the surface it owns lives in the video
+// mode's pSurfaces[8].
 class CProjectorSubtitles { // #guess name
 public:
+    CProjectorSubtitles(CProjectorSubtitlesLine* pLines, int nWidth); // 0x43F6D0
+    void Render(); // 0x43F9B0
+
     void Unload(); // 0x43F900
+
+    // NOTE: The body at 0x428AD0 is subtitle machinery the original compiled
+    // into CBaldurChitin.cpp (its assert names that file at line 0x127B); it
+    // exists to build this class's line list, so it is ported here.
+    static CProjectorSubtitlesLine* LoadLines(CResRef cMovie, int* pnColor, int nWidth); // 0x428AD0
 
     /* 0000 */ CString m_sText;
     /* 0004 */ int field_4;
     /* 0008 */ CProjectorSubtitlesLine* m_pLines; // #guess: a new[] array, count at -4
     /* 000C */ int field_C;
     /* 0010 */ COLORREF m_rgbColor;
-    /* 0014 */ int field_14;
-    /* 0018 */ int field_18;
-    /* 001C */ int field_1C;
-    /* 0020 */ int field_20;
+    // The ctor (0x43F6D0) builds this as { 0, 0, nWidth, fontHeight * 4 } - the
+    // erase/fill rectangle the surface is cleared with (same rect passed to
+    // both the dest and src of the clearing blt).
+    /* 0014 */ RECT rcRect;
 };
 
 // NOTE: Incomplete, but the rest is not used in the code.
