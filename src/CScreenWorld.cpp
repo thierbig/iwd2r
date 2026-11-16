@@ -802,8 +802,93 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 return;
             }
-            case 'A': // TODO: 0x689DFA (walks the sprite array with GetDeny, filtering on the bytes at 0x85186C-0x851873; cheat key, not ported).
+            case 'A': { // 0x689DFA
+                // Ctrl+A plays the current animation-sequence counter (the
+                // WORD at 0x15A, the one Ctrl+S steps) on the GROUP LEADER
+                // (nGroupLeader, not m_iPicked): the leader sprite is denied
+                // to this thread, SetSequence plays the sequence, the
+                // sequence test flag (CGameSprite+0x56EC) is set, and the
+                // matching "Sequence <name>" line is shown through
+                // DisplayText before the deny is released. The counter is
+                // not stepped here (unlike Ctrl+S); a failed deny returns
+                // without releasing. The case order follows the jump
+                // table's body emission at 0x68BEF4; 14-16 share the
+                // default arm.
+                CGameSprite* pSprite;
+
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetDeny( // 0x689E20
+                        nGroupLeader,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        reinterpret_cast<CGameObject**>(&pSprite),
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) { // 0x68A017
+                    SHORT& nSequence = reinterpret_cast<SHORT&>(field_15A);
+                    pSprite->SetSequence(nSequence); // 0x68A025
+                    pSprite->m_sequenceTest = 1; // 0x68A02E
+
+                    switch (nSequence) {
+                    case 0:
+                        sString1 = "Sequence Attack"; // 0x68A048
+                        break;
+                    case 1:
+                        sString1 = "Sequence Awake"; // 0x68A04F
+                        break;
+                    case 2:
+                        sString1 = "Sequence Cast"; // 0x68A056
+                        break;
+                    case 3:
+                        sString1 = "Sequence Conjure"; // 0x68A05D
+                        break;
+                    case 4:
+                        sString1 = "Sequence Damage"; // 0x68A064
+                        break;
+                    case 5:
+                        sString1 = "Sequence Die"; // 0x68A06B
+                        break;
+                    case 17:
+                        sString1 = "Sequence Sleep"; // 0x68A072
+                        break;
+                    case 6:
+                        sString1 = "Sequence Turn"; // 0x68A079
+                        break;
+                    case 7:
+                        sString1 = "Sequence Ready"; // 0x68A080
+                        break;
+                    case 8:
+                        sString1 = "Sequence Shoot"; // 0x68A087
+                        break;
+                    case 9:
+                        sString1 = "Sequence Twitch"; // 0x68A08E
+                        break;
+                    case 10:
+                        sString1 = "Sequence Walk"; // 0x68A095
+                        break;
+                    case 11:
+                        sString1 = "Sequence Slash"; // 0x68A09C
+                        break;
+                    case 12:
+                        sString1 = "Sequence Backslash"; // 0x68A0A3
+                        break;
+                    case 13:
+                        sString1 = "Sequence Jab"; // 0x68A0AA
+                        break;
+                    default:
+                        sString1 = "Unknown sequence"; // 0x68A0B1
+                        break;
+                    }
+
+                    DisplayText(CString(""), sString1, -1, FALSE); // 0x68A0EC
+                    pGame->GetObjectArray()->ReleaseDeny( // 0x68A11F
+                        nGroupLeader,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
                 return;
+            }
             case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
                 return;
             case 'C': { // 0x68A337
