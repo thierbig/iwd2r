@@ -816,7 +816,9 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 return;
             case 'G': // TODO: 0x68A75A (builds a CAIObjectType and assigns it a CString; cheat key, not ported).
                 return;
-            case 'I': // TODO: 0x68AA08 (sets the DWORD at this+0x10C8 to 1; cheat key, not ported).
+            case 'I': // 0x68AA08
+                // Ctrl+I sets field_10C8 to 1.
+                field_10C8 = 1;
                 return;
             case 'J': // TODO: 0x68AA17 (operates on the party group via g_pChitin; cheat key, not ported).
                 return;
