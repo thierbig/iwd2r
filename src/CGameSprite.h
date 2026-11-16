@@ -676,6 +676,7 @@ public:
     void sub_756930(CItem* pItem, CItem* pLauncher);
     SHORT EquipItem();
     SHORT FindTraps();
+    SHORT Berserk();
     SHORT Panic();
     SHORT PickPockets(CGameSprite* pTarget);
     SHORT Turn();

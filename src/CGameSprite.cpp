@@ -15175,8 +15175,7 @@ SHORT CGameSprite::ExecuteAction()
         goto done;
     case 124:
         // Berserk
-        // TODO: 0x72A3E3-0x72A3F3 not ported (0x75A4B0).
-        returnValue = ACTION_ERROR;
+        returnValue = Berserk();
         goto done;
     case 127:
         // CutSceneId (0x72AE43-0x72AE54)
@@ -29376,6 +29375,61 @@ SHORT CGameSprite::Turn()
         g_pBaldurChitin->GetObjectGame()->SetState(0);
         g_pBaldurChitin->GetObjectGame()->GetButtonArray()->UpdateButtons();
     }
+
+    return ACTION_DONE;
+}
+
+// 0x75A4B0
+SHORT CGameSprite::Berserk()
+{
+    m_curAction.m_specificID--;
+    if (m_berserkActive == FALSE || m_curAction.m_specificID <= 0) {
+        return ACTION_DONE;
+    }
+
+    CAIObjectType type;
+    CAIAction action;
+
+    if (rand() % 100 < 25) {
+        LONG target = m_pArea->GetNearest(m_id,
+            CAIObjectType::ANYONE,
+            GetVisualRange(),
+            m_terrainTable,
+            TRUE,
+            GetCanSeeInvisible(),
+            FALSE,
+            0,
+            FALSE);
+        if (target != CGameObjectArray::INVALID_INDEX) {
+            AddAction(m_curAction);
+
+            type.m_nInstance = target;
+            CAIAction attack(CAIAction::ATTACK, type, 0, 0, 0);
+            action = attack;
+        }
+    } else {
+        CAIObjectType enemy = m_typeAI.GetEnemyOf();
+        LONG target = m_pArea->GetNearest(m_id,
+            enemy,
+            GetVisualRange(),
+            m_terrainTable,
+            TRUE,
+            GetCanSeeInvisible(),
+            FALSE,
+            0,
+            FALSE);
+        AddAction(m_curAction);
+
+        if (target == CGameObjectArray::INVALID_INDEX) {
+            // TODO: 0x75AA1B calls 0x75AAC0 (not ported).
+        } else {
+            type.m_nInstance = target;
+            CAIAction attack(CAIAction::ATTACK, type, 0, 0, 0);
+            action = attack;
+        }
+    }
+
+    AddAction(action);
 
     return ACTION_DONE;
 }
