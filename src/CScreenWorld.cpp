@@ -944,7 +944,9 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
 
                 field_F37 = ~field_F37; // 0x68B22C
-                StopCommandIfCommandLineActive(); // 0x68B234 (shared with Ctrl+Tab)
+                if (field_EA4 == 6) { // 0x68B234 (shared with Ctrl+Tab)
+                    StopCommand();
+                }
                 return;
             }
             case 'Q': { // 0x68B264
@@ -1067,8 +1069,8 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                             CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(m_cUIManager.GetPanel(6)->GetControl(0)); // 0x68BB9E
                             pEdit->field_8A6 = 0;
                             pEdit->field_8A2 = CGameObjectArray::INVALID_INDEX;
-                        } else {
-                            StopCommandIfCommandLineActive(); // 0x68B234 (shared with the Ctrl+M cheat key)
+                        } else if (field_EA4 == 6) { // 0x68B234 (shared with the Ctrl+M cheat key)
+                            StopCommand();
                         }
                     }
                 } else { // 0x68BBC7
@@ -3864,17 +3866,6 @@ void CScreenWorld::StopCommand()
     }
 
     field_EA4 = -1;
-}
-
-// The block at 0x68B234, inlined inside OnKeyDown in the original: the
-// command line may only take the screen back when panel 6 (the command
-// line itself) is the active panel. Shared by the Ctrl+Tab and Ctrl+M
-// handlers.
-void CScreenWorld::StopCommandIfCommandLineActive()
-{
-    if (field_EA4 == 6) {
-        StopCommand();
-    }
 }
 
 // FIXME: `cResStore` should be reference.
