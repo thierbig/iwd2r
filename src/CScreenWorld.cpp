@@ -927,8 +927,25 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 return;
             }
-            case 'M': // TODO: 0x68B1D0 (toggles the console like Ctrl+Tab, through the shared block at 0x68B234; cheat key, not ported).
+            case 'M': { // 0x68B1D0
+                // Ctrl+M opens the command line the way Ctrl+Tab does, but
+                // marks the edit control (field_8A6 = 1) with the visible
+                // area's picked sprite (m_iPicked) as its subject. Unlike
+                // Ctrl+Tab there is no m_bHidden guard, and a second press
+                // closes the line through the block at 0x68B234.
+                if (field_F37 == 0) { // 0x68B1D8
+                    field_F37 = 0xFF; // 0x68B1DC (~0, constant-folded)
+                    StartCommand(); // 0x68B1E3
+                    CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(m_cUIManager.GetPanel(6)->GetControl(0)); // 0x68B20E
+                    pEdit->field_8A6 = 1; // 0x68B21A
+                    pEdit->field_8A2 = pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked; // 0x68B221
+                    return;
+                }
+
+                field_F37 = ~field_F37; // 0x68B22C
+                StopCommandIfCommandLineActive(); // 0x68B234 (shared with Ctrl+Tab)
                 return;
+            }
             case 'Q': // TODO: 0x68B264 (builds a CAIObjectType from the word at 0x8477A8; cheat key, not ported).
                 return;
             case 'R': // TODO: 0x68B4F7 (allocates an object with operator new; cheat key, not ported).
@@ -950,8 +967,8 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                             CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(m_cUIManager.GetPanel(6)->GetControl(0)); // 0x68BB9E
                             pEdit->field_8A6 = 0;
                             pEdit->field_8A2 = CGameObjectArray::INVALID_INDEX;
-                        } else if (field_EA4 == 6) { // 0x68B234 (shared with the Ctrl+M cheat key)
-                            StopCommand();
+                        } else {
+                            StopCommandIfCommandLineActive(); // 0x68B234 (shared with the Ctrl+M cheat key)
                         }
                     }
                 } else { // 0x68BBC7
@@ -3747,6 +3764,17 @@ void CScreenWorld::StopCommand()
     }
 
     field_EA4 = -1;
+}
+
+// 0x68B234
+void CScreenWorld::StopCommandIfCommandLineActive()
+{
+    // The command line may only take the screen back when panel 6 (the
+    // command line itself) is the active panel. Inlined in the original;
+    // shared by the Ctrl+Tab and Ctrl+M handlers.
+    if (field_EA4 == 6) {
+        StopCommand();
+    }
 }
 
 // FIXME: `cResStore` should be reference.
