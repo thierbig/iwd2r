@@ -1870,6 +1870,112 @@ TEST_CASE("world keys: the Ctrl+G and Ctrl+J cheat keys queue group actions", "[
     pGame->SelectToolbar();
 }
 
+// The 'K' (0x68AC95) cheat-key arm: it takes the visible area's picked
+// sprite (m_iPicked) on THREAD_ASYNCH and, when this client may command it,
+// queues action 21 — a WORD at 0x8477AC that CAIAction.cpp never names — as
+// a CMessageAddAction with the picked id as both caller and target. PressKey
+// drives OnKeyDown directly, so the message stays unprocessed in the
+// handler's public queue and its contents can be checked.
+TEST_CASE("world keys: the Ctrl+K cheat key queues action 21 on the picked sprite", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+    CGameArea* pArea = pGame->m_gameAreas[pGame->m_visibleArea];
+
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const LONG nPicked = pArea->m_iPicked;
+    const INT nServiceProvider = g_pChitin->cNetwork.m_nServiceProvider;
+    const PLAYER_ID idLocalPlayer = g_pChitin->cNetwork.m_idLocalPlayer;
+    const BOOLEAN bLeader = pGame->m_singlePlayerPermissions.GetSinglePermission(CGamePermission::LEADER);
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+    ClearMessages();
+
+    // Every key also fires the HotKey trigger, which queues a
+    // CMessageSetTrigger per group member ahead of the cheat
+    // switch, so one party member means one extra queued message per
+    // press; the tail is the arm's own CMessageAddAction.
+    pArea->m_iPicked = pSprite->GetId();
+    PressKey(pWorld, 'K');
+    CHECK(MessageCount() == 2);
+    if (MessageCount() == 2) {
+        CMessage* pTail = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail();
+        CHECK(pTail->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(pTail->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION);
+        CMessageAddAction* pMessage = static_cast<CMessageAddAction*>(pTail);
+        CHECK(pMessage->m_action.m_actionID == 21);
+        CHECK(pMessage->m_targetId == pArea->m_iPicked);
+        CHECK(pMessage->m_sourceId == pArea->m_iPicked);
+    }
+    // The arm released the share it took: the same id can be shared again
+    // at once.
+    CGameObject* pShared;
+    CHECK(pGame->GetObjectArray()->GetShare(pArea->m_iPicked, CGameObjectArray::THREAD_ASYNCH, &pShared, INFINITE) == CGameObjectArray::SUCCESS);
+    pGame->GetObjectArray()->ReleaseShare(pArea->m_iPicked, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    ClearMessages();
+
+    // The gate also passes when the local player owns the sprite under a
+    // real service; the arm queues its AddAction while the HotKey
+    // SetTrigger ahead of it survives Send for the same reason.
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_IPX;
+    g_pChitin->cNetwork.m_idLocalPlayer = pSprite->m_remotePlayerID;
+    PressKey(pWorld, 'K');
+    CHECK(MessageCount() == 2);
+    if (MessageCount() == 2) {
+        CMessage* pTail = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail();
+        CHECK(pTail->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION);
+        CHECK(static_cast<CMessageAddAction*>(pTail)->m_action.m_actionID == 21);
+    }
+    ClearMessages();
+
+    // With a service, no local ownership and the LEADER permission off,
+    // the gate fails: nothing reaches the queue (the HotKey message is
+    // dropped by Send for the same reasons the arm's would be).
+    g_pChitin->cNetwork.m_idLocalPlayer = pSprite->m_remotePlayerID ^ 1;
+    pGame->m_singlePlayerPermissions.SetSinglePermission(CGamePermission::LEADER, FALSE);
+    PressKey(pWorld, 'K');
+    CHECK(MessageCount() == 0);
+    g_pChitin->cNetwork.m_nServiceProvider = nServiceProvider;
+    g_pChitin->cNetwork.m_idLocalPlayer = idLocalPlayer;
+    pGame->m_singlePlayerPermissions.SetSinglePermission(CGamePermission::LEADER, bLeader);
+    ClearMessages();
+
+    // An invalid picked id fails the GetShare (BAD_INDEX, not retried), so
+    // the arm queues nothing; only the HotKey message is on the queue.
+    pArea->m_iPicked = CGameObjectArray::INVALID_INDEX;
+    PressKey(pWorld, 'K');
+    CHECK(MessageCount() == 1);
+    if (MessageCount() == 1) {
+        CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail()->GetMsgSubType()
+            == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TRIGGER);
+    }
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pArea->m_iPicked = nPicked;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
 // CGameArea::Unmarshal (0x472DE0) keeps each entry point of the area file in
 // m_entryPoints (CPtrList::AddTail at 0x473F9B), where GetEntryPoint finds
 // the travel's destination.
