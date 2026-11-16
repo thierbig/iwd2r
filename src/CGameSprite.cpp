@@ -19755,9 +19755,9 @@ void CGameSprite::ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem,
             m_pArea->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
             break;
         case 6:
+            m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
             break;
         case 7:
-            m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
             break;
         case 8:
             m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
@@ -19799,9 +19799,9 @@ void CGameSprite::ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem,
                 m_pArea->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
                 break;
             case 6:
+                m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
                 break;
             case 7:
-                m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
                 break;
             case 8:
                 m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
