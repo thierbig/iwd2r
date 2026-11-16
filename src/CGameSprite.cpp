@@ -29534,7 +29534,8 @@ SHORT CGameSprite::Berserk()
         AddAction(m_curAction);
 
         if (target == CGameObjectArray::INVALID_INDEX) {
-            // TODO: 0x75AA1B calls 0x75AAC0 (not ported).
+            // 0x75AA05-0x75AA4F: nobody to attack, so wait six ticks.
+            action = CAIAction(CAIAction::WAIT, 6);
         } else {
             type.m_nInstance = target;
             CAIAction attack(CAIAction::ATTACK, type, 0, 0, 0);

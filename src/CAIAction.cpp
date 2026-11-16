@@ -211,6 +211,22 @@ CAIAction::CAIAction(SHORT actionID, const CAIObjectType& actee, LONG specificID
     m_internalFlags = 0;
 }
 
+// 0x75AAC0
+CAIAction::CAIAction(SHORT actionID, LONG specificID)
+{
+    // NOTE: Like the other constructors it creates and immediately destroys
+    // a `CAIAction` instance (0x75AB46-0x75AC5F) whose properties are unused.
+    if (1) {
+        CAIAction action;
+    }
+
+    m_actionID = actionID;
+    m_specificID = specificID;
+    m_specificID2 = 0;
+    m_specificID3 = 0;
+    m_internalFlags = 0;
+}
+
 // 0x5BCE50
 CAIAction::CAIAction(SHORT actionID, const CAIObjectType& actee, const CString& string1, LONG specificID, LONG specificID2)
 {
