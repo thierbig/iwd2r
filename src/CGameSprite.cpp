@@ -19736,12 +19736,11 @@ void CGameSprite::ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem,
         IcewindMisc::sub_5860F0(this, pEffect);
 
         switch (pEffect->m_targetType) {
-        case 1:
-            {
-                CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
-                g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
-            }
+        case 1: {
+            CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
+            g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
             continue;
+        }
         case 2:
             pProjectile->AddEffect(pEffect);
             continue;
@@ -19780,12 +19779,11 @@ void CGameSprite::ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem,
             IcewindMisc::sub_5860F0(this, pEffect);
 
             switch (pEffect->m_targetType) {
-            case 1:
-                {
-                    CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
-                    g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
-                }
+            case 1: {
+                CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
                 continue;
+            }
             case 2:
                 pProjectile->AddEffect(pEffect);
                 continue;
