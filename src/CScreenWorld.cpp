@@ -741,9 +741,66 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 return;
             }
 
-            // TODO: Incomplete. 0x68956A-0x68BC5D: the remaining cheat keys
-            // (Ctrl with `m_bCheatKeysEnabled`, which ours never sets) for
-            // the party leader and the area; the original returns after one.
+            // 0x68956A-0x68988E: the cheat-key scaffold. The original
+            // builds the party-leader and area object types, three
+            // CAIActions, two CStrings, and the group leader before
+            // dispatching on the key.
+            CAIObjectType cAIObjectType1( // 0x68956A
+                0, 0, 0, 0, 0, 0, 0, 0,
+                (pGame->m_nCharacters > 0) ? pGame->m_characterPortraits[0] : CGameObjectArray::INVALID_INDEX, 0, 0);
+            CAIObjectType cAIObjectType2( // 0x6895A6
+                0, 0, 0, 0, 0, 0, 0, 0, pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked, 0, 0);
+            CAIAction cAIAction1; // 0x6895E6
+            CAIAction cAIAction2; // 0x6896AE
+            CAIAction cAIAction3; // 0x689776
+            CString sString1; // 0x68983D
+            CString sString2; // 0x68983D
+            LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
+                                    ? pGame->m_group.GetGroupLeader()
+                                    : CGameObjectArray::INVALID_INDEX;
+            // NOTE: cAIObjectType1/2, cAIAction2/3, sString1/2, and
+            // nGroupLeader are not read by the cheat keys ported below;
+            // the TODO cases in the switch still use them.
+            (void)nGroupLeader;
+
+            switch (nKey) { // 0x689876
+            case 'A': // TODO: 0x689DFA (walks the sprite array with GetDeny, filtering on the bytes at 0x85186C-0x851873; cheat key, not ported).
+                return;
+            case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
+                return;
+            case 'C': // TODO: 0x68A337 (builds a CAIObjectType from the word at 0x8478B6; cheat key, not ported).
+                return;
+            case 'D': // TODO: 0x68A6A2 (toggles the DWORD at g_pBaldurChitin+0x1A2A; cheat key, not ported).
+                return;
+            case 'E': // TODO: 0x68A6BF (marks the visible area explored via CVisibilityMap::SetAreaExplored; cheat key, not ported).
+                return;
+            case 'F': // TODO: 0x68A6E9 (cycles the byte at this+0x15C through 15 values; cheat key, not ported).
+                return;
+            case 'G': // TODO: 0x68A75A (builds a CAIObjectType and assigns it a CString; cheat key, not ported).
+                return;
+            case 'I': // TODO: 0x68AA08 (sets the DWORD at this+0x10C8 to 1; cheat key, not ported).
+                return;
+            case 'J': // TODO: 0x68AA17 (operates on the party group via g_pChitin; cheat key, not ported).
+                return;
+            case 'K': // TODO: 0x68AC95 (queries the visible area's sprite array; cheat key, not ported).
+                return;
+            case 'M': // TODO: 0x68B1D0 (toggles the console like Ctrl+Tab, through the shared block at 0x68B234; cheat key, not ported).
+                return;
+            case 'Q': // TODO: 0x68B264 (builds a CAIObjectType from the word at 0x8477A8; cheat key, not ported).
+                return;
+            case 'R': // TODO: 0x68B4F7 (allocates an object with operator new; cheat key, not ported).
+                return;
+            case 'S': // TODO: 0x68B5B7 (clamps the WORD at this+0x15A; cheat key, not ported).
+                return;
+            case 'X': // TODO: 0x68B6BE (acts at the mouse pointer via the visible area; cheat key, not ported).
+                return;
+            case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
+            case 'Z': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
+                return;
+            default: // 0x68B972
+                break;
+            }
+
             return;
         }
 
