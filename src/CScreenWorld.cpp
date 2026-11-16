@@ -882,8 +882,51 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 pGame->m_group.GroupAction(cAIAction2, TRUE, NULL); // 0x68AC8B
                 return;
             }
-            case 'K': // TODO: 0x68AC95 (queries the visible area's sprite array; cheat key, not ported).
+            case 'K': { // 0x68AC95
+                // Ctrl+K queues action 21 (WORD at 0x8477AC, no named
+                // constant in CAIAction.cpp, whose IDs jump from DIALOGUE 8
+                // to MOVETOPOINT 23) on the visible
+                // area's picked sprite (m_iPicked), which is also both the
+                // message's caller and target. The share is taken with
+                // THREAD_ASYNCH (byte at 0x851873) and released whatever
+                // the gate decides; the message only goes out when this
+                // client may command the sprite: single player, the local
+                // player owns it, or the LEADER permission
+                // (m_bPermissions[6] at CInfGame+0x1BB0) is granted. The
+                // original also handles operator new returning NULL by
+                // queuing a NULL message; unreachable with a throwing new.
+                CGameSprite* pSprite;
+
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare(
+                        pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked, // 0x68ACB6
+                        CGameObjectArray::THREAD_ASYNCH,
+                        reinterpret_cast<CGameObject**>(&pSprite),
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED); // 0x68ACD1
+
+                if (rc == CGameObjectArray::SUCCESS) { // 0x68ACE1
+                    if (g_pChitin->cNetwork.GetServiceProvider() == CNetwork::SERV_PROV_NULL // 0x68AEC8
+                        || g_pChitin->cNetwork.m_idLocalPlayer == pSprite->m_remotePlayerID // 0x68AED4
+                        || pGame->m_singlePlayerPermissions.GetSinglePermission( // 0x68AEEF
+                               CGamePermission::LEADER)
+                            == TRUE) {
+                        cAIAction1 = CAIAction(21, CPoint(-1, -1), 0, -1); // 0x68AEFC
+                        CMessageAddAction* pMessage = new CMessageAddAction( // 0x68B0EE
+                            cAIAction1,
+                            pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                            pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                        g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B18E
+                    }
+
+                    pGame->GetObjectArray()->ReleaseShare( // 0x68B193
+                        pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
                 return;
+            }
             case 'M': // TODO: 0x68B1D0 (toggles the console like Ctrl+Tab, through the shared block at 0x68B234; cheat key, not ported).
                 return;
             case 'Q': // TODO: 0x68B264 (builds a CAIObjectType from the word at 0x8477A8; cheat key, not ported).
