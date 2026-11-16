@@ -760,9 +760,9 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
                 ? pGame->m_group.GetGroupLeader()
                 : CGameObjectArray::INVALID_INDEX;
-            // NOTE: cAIObjectType1/2, cAIAction2/3, and sString2 are not
-            // read by the cheat keys ported below; the TODO cases in the
-            // switch still use them.
+            // NOTE: cAIObjectType1/2 and cAIAction2/3 are not read by the
+            // cheat keys ported below; the TODO cases in the switch still
+            // use them.
 
             switch (nKey) { // 0x689876
             case '1': // 0x689D78 ('6' and '7' share the jump-table target)
@@ -1184,8 +1184,31 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 DisplayText(CString(""), sString1, -1, FALSE); // 0x68B6A1
                 return;
             }
-            case 'X': // TODO: 0x68B6BE (acts at the mouse pointer via the visible area; cheat key, not ported).
+            case 'X': { // 0x68B6BE
+                // Ctrl+X shows the pointer's diagnostics: the visible
+                // area's CInfinity converts g_pChitin->m_ptPointer to world
+                // coordinates, Format builds "Mouse Position:%ld,%ld  Tile
+                // Position:%ld,%ld  Search Square:%ld,%ld" (0x8B5E34) with
+                // the world point, its tile point (64ths) and its search
+                // square (x in 16ths, y in 12ths), and the area resref is
+                // appended as " Area: " (0x8B5FC8) through
+                // CResRef::CopyToString before the line goes out through
+                // DisplayText.
+                CPoint ptWorld = pGame->m_gameAreas[pGame->m_visibleArea] // 0x68B6F4
+                                     ->m_cInfinity.GetWorldCoordinates(g_pChitin->m_ptPointer);
+                sString1.Format( // 0x68B73F
+                    "Mouse Position:%ld,%ld  Tile Position:%ld,%ld  Search Square:%ld,%ld",
+                    ptWorld.x,
+                    ptWorld.y,
+                    ptWorld.x / 64,
+                    ptWorld.y / 64,
+                    ptWorld.x / 16,
+                    ptWorld.y / 12);
+                pGame->m_gameAreas[pGame->m_visibleArea]->m_resRef.CopyToString(sString2); // 0x68B76D
+                sString1 += " Area: " + sString2; // 0x68B784, 0x68B796
+                DisplayText(CString(""), sString1, -1, FALSE); // 0x68B7D8
                 return;
+            }
             case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
             case 'Z': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
                 return;
