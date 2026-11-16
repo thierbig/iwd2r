@@ -4,6 +4,7 @@
 #include "CBaldurProjector.h"
 #include "CDeathSound.h"
 #include "CGameArea.h"
+#include "CGameEffect.h"
 #include "CGameSprite.h"
 #include "CIcon.h"
 #include "CInfCursor.h"
@@ -963,8 +964,24 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B5A2 (tail shared with Ctrl+R)
                 return;
             }
-            case 'R': // TODO: 0x68B4F7 (allocates an object with operator new; cheat key, not ported).
+            case 'R': { // 0x68B4F7
+                // Ctrl+R heals the picked sprite: a CGameEffectHeal (the
+                // default ctor sets m_effectID to CGAMEEFFECT_HEAL 17) with
+                // m_effectAmount 500 (0x1F4) and m_dwFlags 0x10000, queued
+                // in a CMessageAddEffect whose caller and target are both
+                // the visible area's picked sprite (m_iPicked). The
+                // original also handles operator new returning NULL by
+                // queuing a NULL message; unreachable with a throwing new.
+                CGameEffectHeal* pEffect = new CGameEffectHeal(); // 0x68B518 (base ctor 0x452C80, vtable 0x84AD9C)
+                pEffect->m_effectAmount = 500; // 0x68B537
+                pEffect->m_dwFlags = 0x10000; // 0x68B53E
+                CMessageAddEffect* pMessage = new CMessageAddEffect( // 0x68B587 (inlined ctor, vtable 0x8487CC)
+                    pEffect,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B5A2
                 return;
+            }
             case 'S': // TODO: 0x68B5B7 (clamps the WORD at this+0x15A; cheat key, not ported).
                 return;
             case 'X': // TODO: 0x68B6BE (acts at the mouse pointer via the visible area; cheat key, not ported).
