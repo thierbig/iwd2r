@@ -778,6 +778,14 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                     CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
                 return;
             }
+            case '3': { // 0x689B00
+                // SHORT 203 at 0x847908: the FadeFromColor() action
+                // (ACTION.IDS 203).
+                cAIAction1 = CAIAction(203, CPoint(35, 0), 0, -1);
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x689CFE
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                return;
+            }
             case '4': // 0x689D57
                 pGame->field_4AB2 = !pGame->field_4AB2;
                 return;
