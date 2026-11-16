@@ -770,6 +770,14 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             case '7':
                 pGame->StepAnimation(nKey);
                 return;
+            case '2': { // 0x6898A9
+                // DWORD 35 at 0x847F84 (fade speed) and SHORT 202 at
+                // 0x847906: the FadeToColor() action (ACTION.IDS 202).
+                cAIAction1 = CAIAction(202, CPoint(35, 0), 0, -1);
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x689A9D
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                return;
+            }
             case '4': // 0x689D57
                 pGame->field_4AB2 = !pGame->field_4AB2;
                 return;
