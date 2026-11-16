@@ -946,8 +946,23 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 StopCommandIfCommandLineActive(); // 0x68B234 (shared with Ctrl+Tab)
                 return;
             }
-            case 'Q': // TODO: 0x68B264 (builds a CAIObjectType from the word at 0x8477A8; cheat key, not ported).
+            case 'Q': { // 0x68B264
+                // Ctrl+Q queues action 19 (WORD at 0x8477A8, no named
+                // constant in CAIAction.cpp, whose IDs jump from DIALOGUE 8
+                // to MOVETOPOINT 23) on the visible area's picked sprite
+                // (m_iPicked), which is also both the message's caller and
+                // target. Unlike Ctrl+K there is no share and no
+                // may-command gate: the message goes out unconditionally.
+                // The original also handles operator new returning NULL by
+                // queuing a NULL message; unreachable with a throwing new.
+                cAIAction1 = CAIAction(19, CPoint(-1, -1), 0, -1); // 0x68B264
+                CMessageAddAction* pMessage = new CMessageAddAction( // 0x68B49F (inlined ctor)
+                    cAIAction1,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B5A2 (tail shared with Ctrl+R)
                 return;
+            }
             case 'R': // TODO: 0x68B4F7 (allocates an object with operator new; cheat key, not ported).
                 return;
             case 'S': // TODO: 0x68B5B7 (clamps the WORD at this+0x15A; cheat key, not ported).
