@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <climits>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -5095,6 +5096,114 @@ TEST_CASE("visual projectiles: the type-312 shot decodes to the bare flight", "[
     CHECK(pBare->m_fireSoundRef == "");
     CHECK(pBare->m_arrivalSoundRef == "");
     delete pProjectile;
+}
+
+// Type 312's Fire (0x57F390): four LightningBolt carriers in a cross around
+// the source->target line. The target itself is first; the helper
+// sub_5847B0(pt, x, y, radius) then builds the two perpendiculars and the
+// point straight behind the caster, each scaled to trunc(sqrt(dx^2 +
+// dy^2)). A 30/40 offset makes that 50 exactly, so every formula input and
+// axis is pinned without float rounding noise: |dx| != |dy| and the four
+// offsets differ in sign and magnitude, so a transposed, swapped or
+// un-negated argument (including the old rectangle formula) fails here.
+TEST_CASE("visual projectiles: the type-312 Fire throws four bolts in a cross", "[visualprojectile][data]")
+{
+    WORLD_OR_SKIP(world);
+    CGameArea* pArea = world.pArea;
+    CGameSprite* pSprite = world.pCharacter;
+    pArea->SortLists();
+    ClearMessages();
+
+    const CPoint sourcePos = pSprite->GetPos();
+    const CPoint targetPos(sourcePos.x + 30, sourcePos.y + 40);
+    // The formula's only inputs, pinned: dx = 30 and dy = 40, so the
+    // distance is exactly 50.
+    REQUIRE(targetPos.x - sourcePos.x == 30);
+    REQUIRE(targetPos.y - sourcePos.y == 40);
+
+    // A source that is not in the object array: GetShare fails and no bolt
+    // is fired (0x57F3DB -> 0x57F62B, the epilogue).
+    CProjectile85133C* pNoSource = new CProjectile85133C();
+    pNoSource->Fire(pArea, CGameObjectArray::INVALID_INDEX, CGameObjectArray::INVALID_INDEX, targetPos, 0, 0);
+    CHECK(AddedObjects(pArea).empty());
+    delete pNoSource;
+
+    CProjectile85133C* pBare = new CProjectile85133C();
+    ITEM_EFFECT itemEffect = { };
+    itemEffect.effectID = 0x1A;
+    itemEffect.effectAmount = 7;
+    CGameEffectAC* pParentEffect = new CGameEffectAC(&itemEffect, sourcePos, pSprite->GetId(), targetPos);
+    pBare->AddEffect(pParentEffect);
+    REQUIRE(pBare->m_effectList.GetCount() == 1);
+
+    iwd2r_srand(71);
+    pBare->Fire(pArea, pSprite->GetId(), CGameObjectArray::INVALID_INDEX, targetPos, 0, 0);
+    CHECK(Draws(71, iwd2r_rand_state()) == 0);
+
+    std::vector<CGameObject*> added = AddedObjects(pArea);
+    REQUIRE(added.size() == 4);
+
+    // The four spread points, in the exe's construction order, are the
+    // target (dx, dy), the two perpendiculars (-dy, dx) and (dy, -dx), then
+    // the point straight behind the caster (-dx, -dy). Each child's own
+    // Fire (0x580B30) then pushes its point m_beamRange (300) further
+    // along the source->point heading; at distance 50 that is
+    // 1 + 300 / 50 = 7 times the offset, so the observed launch points are
+    // spelled out below as exact source-relative literals rather than
+    // derived from the code under test.
+    const CPoint launched[4] = {
+        CPoint(sourcePos.x + 7 * 30, sourcePos.y + 7 * 40),
+        CPoint(sourcePos.x + 7 * -40, sourcePos.y + 7 * 30),
+        CPoint(sourcePos.x + 7 * 40, sourcePos.y + 7 * -30),
+        CPoint(sourcePos.x + 7 * -30, sourcePos.y + 7 * -40),
+    };
+    std::vector<LONG> ids;
+    for (int i = 0; i < 4; i++) {
+        INFO("point " << i);
+        CProjectileLightningBolt* pBolt = dynamic_cast<CProjectileLightningBolt*>(added[i]);
+        REQUIRE(pBolt != nullptr);
+        REQUIRE(pBolt->m_animation != nullptr);
+        CHECK(pBolt->m_animation->GetResRef() == CResRef("LightnT"));
+        CHECK(pBolt->m_beamRange == 300);
+        CHECK(pBolt->m_targetMap.m_nRange == 50);
+        CHECK(pBolt->m_targetMap.m_pOwner == pBolt);
+        CHECK(pBolt->m_targetMap.m_servicePeriod == 2);
+        CHECK(pBolt->m_targetMap.m_strikeInterval == 33);
+        CHECK(pBolt->m_speed == 20);
+        CHECK(pBolt->field_1D8 == 16);
+        CHECK(pBolt->m_bHasHeight == TRUE);
+        CHECK(pBolt->field_1C2 == TRUE);
+        CHECK(pBolt->m_fireSoundRef == CResRef("TRA_09"));
+        // The launch's own ids: the source's area/id, no target object.
+        CHECK(pBolt->m_sourceId == pSprite->GetId());
+        CHECK(pBolt->m_targetId == CGameObjectArray::INVALID_INDEX);
+        CHECK(pBolt->m_pArea == pArea);
+        CHECK(pBolt->m_targetPos.x == launched[i].x);
+        CHECK(pBolt->m_targetPos.y == launched[i].y);
+        // The effect is a copy, not the parent's object, and the child's
+        // AddEffect stamps its own (base) projectile type.
+        REQUIRE(pBolt->m_effectList.GetCount() == 1);
+        CGameEffect* pCopy = pBolt->m_effectList.GetHead();
+        REQUIRE(pCopy != nullptr);
+        CHECK(pCopy != pParentEffect);
+        CHECK(pCopy->m_effectID == 0x1A);
+        CHECK(pCopy->m_effectAmount == 7);
+        CHECK(pCopy->m_projectileType == 0);
+        ids.push_back(pBolt->GetId());
+    }
+    CHECK(ids[0] != CGameObjectArray::INVALID_INDEX);
+    CHECK(std::set<LONG>(ids.begin(), ids.end()).size() == 4);
+    // The parent keeps its own effect.
+    CHECK(pBare->m_effectList.GetCount() == 1);
+    CHECK(pBare->m_effectList.GetHead() == pParentEffect);
+
+    delete pBare;
+    pArea->SortLists();
+    for (CGameObject* pObject : added) {
+        static_cast<CProjectile*>(pObject)->RemoveSelf();
+    }
+    pArea->SortLists();
+    ClearMessages();
 }
 
 TEST_CASE("visual projectiles: the chain-lightning hop decodes to its carrier", "[visualprojectile][data]")
