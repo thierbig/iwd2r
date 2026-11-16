@@ -896,6 +896,46 @@ TEST_CASE("sprite: RunAwayFromNoLeaveArea (250) runs for the action's duration a
     ClearMessages();
 }
 
+TEST_CASE("sprite: Berserk (124) counts down its duration and stops when berserk ends", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+
+    // Berserk off: the duration still ticks down and the action is done
+    // without queueing anything.
+    pCharacter->m_berserkActive = FALSE;
+    pCharacter->SetCurrAction(CAIAction(124, CAIObjectType::ANYONE, 5, 0, 0));
+    CHECK(pCharacter->Berserk() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curAction.m_specificID == 4);
+    CHECK(handler.m_messageList.IsEmpty());
+
+    // Berserk on but the duration spent: the counter runs down to 0 and the
+    // action is done. The rand()/GetNearest re-targeting arms (the 25% anyone
+    // sweep and the enemy-of sweep) are not asserted: which arm runs depends
+    // on rand() and on what the area's lists hold.
+    pCharacter->m_berserkActive = TRUE;
+    pCharacter->SetCurrAction(CAIAction(124, CAIObjectType::ANYONE, 1, 0, 0));
+    CHECK(pCharacter->Berserk() == CGameAIBase::ACTION_DONE);
+    CHECK(pCharacter->m_curAction.m_specificID == 0);
+    CHECK(handler.m_messageList.IsEmpty());
+    ClearMessages();
+}
+
 TEST_CASE("sprite: Interact (168) records the interaction and opens the actor's dialog", "[ai][data]")
 {
     if (DataDir() == nullptr) {
