@@ -866,8 +866,22 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 // Ctrl+I sets field_10C8 to 1.
                 field_10C8 = 1;
                 return;
-            case 'J': // TODO: 0x68AA17 (operates on the party group via g_pChitin; cheat key, not ported).
+            case 'J': { // 0x68AA17
+                // Ctrl+J teleports the party to the pointer: the visible
+                // area's CInfinity converts g_pChitin->m_ptPointer (+0x1906)
+                // to world coordinates, the group's pending actions are
+                // cleared, and JUMPTOPOINT (48 at 0x8477D2) is queued for
+                // the whole group.
+                CPoint ptWorld = pGame->m_gameAreas[pGame->m_visibleArea] // 0x68AA3D
+                    ->m_cInfinity.GetWorldCoordinates(g_pChitin->m_ptPointer);
+                if (pGame->m_group.m_memberList.GetCount() == 0) { // 0x68AA64
+                    return;
+                }
+                pGame->m_group.ClearActions(); // 0x68AA71
+                cAIAction2 = CAIAction(CAIAction::JUMPTOPOINT, ptWorld, 0, -1); // 0x68AA7D
+                pGame->m_group.GroupAction(cAIAction2, TRUE, NULL); // 0x68AC8B
                 return;
+            }
             case 'K': // TODO: 0x68AC95 (queries the visible area's sprite array; cheat key, not ported).
                 return;
             case 'M': // TODO: 0x68B1D0 (toggles the console like Ctrl+Tab, through the shared block at 0x68B234; cheat key, not ported).
