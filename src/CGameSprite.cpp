@@ -19704,6 +19704,121 @@ reevaluate:
     }
 }
 
+// 0x71F860
+void CGameSprite::ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem, SHORT nAbility, const CPoint& targetPos)
+{
+    if (pItem == NULL) {
+        return;
+    }
+
+    pItem->Demand();
+
+    ITEM_ABILITY* pAbility = pItem->GetAbility(nAbility);
+    if (pAbility == NULL) {
+        pItem->Release();
+        return;
+    }
+
+    SHORT launcherSlot;
+    CItem* pLauncher = GetLauncher(pAbility, launcherSlot);
+
+    ITEM_ABILITY* pLauncherAbility = NULL;
+    if (pLauncher != NULL) {
+        pLauncher->Demand();
+        pLauncherAbility = pLauncher->GetAbility(0);
+    }
+
+    for (INT effectIndex = 0; effectIndex < pAbility->effectCount; ++effectIndex) {
+        CGameEffect* pEffect = pItem->GetAbilityEffect(nAbility, effectIndex, this);
+        pEffect->m_source = m_pos;
+        pEffect->m_sourceID = m_id;
+        pEffect->m_target = targetPos;
+        IcewindMisc::sub_5860F0(this, pEffect);
+
+        switch (pEffect->m_targetType) {
+        case 1:
+            {
+                CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
+            }
+            continue;
+        case 2:
+            pProjectile->AddEffect(pEffect);
+            continue;
+        case 3:
+            ApplyEffectToParty(pEffect);
+            break;
+        case 4:
+            m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+            break;
+        case 5:
+            m_pArea->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+            break;
+        case 6:
+            break;
+        case 7:
+            m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
+            break;
+        case 8:
+            m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
+            break;
+        default:
+            UTIL_ASSERT(FALSE);
+            continue;
+        }
+        delete pEffect;
+    }
+
+    pItem->Release();
+
+    if (pLauncherAbility != NULL) {
+        for (INT effectIndex = 0; effectIndex < pLauncherAbility->effectCount; ++effectIndex) {
+            CGameEffect* pEffect = pLauncher->GetAbilityEffect(0, effectIndex, this);
+            pEffect->m_source = m_pos;
+            pEffect->m_sourceID = m_id;
+            pEffect->m_target = targetPos;
+            IcewindMisc::sub_5860F0(this, pEffect);
+
+            switch (pEffect->m_targetType) {
+            case 1:
+                {
+                    CMessage* selfMessage = new CMessageAddEffect(pEffect, m_id, m_id);
+                    g_pBaldurChitin->GetMessageHandler()->AddMessage(selfMessage, FALSE);
+                }
+                continue;
+            case 2:
+                pProjectile->AddEffect(pEffect);
+                continue;
+            case 3:
+                ApplyEffectToParty(pEffect);
+                break;
+            case 4:
+                m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, NULL);
+                break;
+            case 5:
+                m_pArea->ApplyEffectToSprites(pEffect, TRUE, FALSE, 0, NULL);
+                break;
+            case 6:
+                break;
+            case 7:
+                m_pArea->ApplyEffectToSprites(pEffect, FALSE, TRUE, m_typeAI.m_nSpecific, NULL);
+                break;
+            case 8:
+                m_pArea->ApplyEffectToSprites(pEffect, FALSE, FALSE, 0, this);
+                break;
+            default:
+                UTIL_ASSERT(FALSE);
+                continue;
+            }
+            delete pEffect;
+        }
+    }
+
+    if (pLauncher != NULL) {
+        pLauncher->Release();
+    }
+}
+
 // 0x739B60
 SHORT CGameSprite::Swing(CGameSprite* target)
 {
@@ -20008,11 +20123,9 @@ SHORT CGameSprite::Swing(CGameSprite* target)
                             field_5632);
                         m_curProjectile->AddEffect(pDamage);
 
-                        // TODO: 0x73A85B calls CGameSprite 0x71F860 (not
-                        // ported; outside this stream's grant) with the
-                        // projectile, the weapon, the ability and the
-                        // target's position: the ammunition's and the
-                        // launcher's effects on the projectile.
+                        // The ammunition's and the launcher's effects join
+                        // the shot.
+                        ApplyProjectileEffects(m_curProjectile, curWeapon, nAbility, target->GetPos());
                     }
                 }
 

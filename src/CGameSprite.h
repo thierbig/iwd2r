@@ -615,6 +615,7 @@ public:
     SHORT Attack(CGameSprite* target);
     SHORT AttackReevaluate();
     SHORT Swing(CGameSprite* target);
+    void ApplyProjectileEffects(CProjectile* pProjectile, CItem* pItem, SHORT nAbility, const CPoint& targetPos);
     SHORT GetCriticalHitBonus();
     BOOL Hit(CGameSprite* target, CItem* curWeapon, SHORT nAbility, BOOL* pCritical, BOOL bOffHand, BYTE nAttackCount);
     BOOL sub_73C490(CGameSprite* target);
