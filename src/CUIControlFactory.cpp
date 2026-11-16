@@ -2,10 +2,10 @@
 
 #include "CBaldurChitin.h"
 #include "CBaldurEngine.h"
-#include "CLUAConsole.h"
 #include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
+#include "CLUAConsole.h"
 #include "CMessage.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
