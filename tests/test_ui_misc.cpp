@@ -12,6 +12,7 @@
 #include "CGameArea.h"
 #include "CGameAreaNotes.h"
 #include "CGameContainer.h"
+#include "CGameEffect.h"
 #include "CGameObjectArray.h"
 #include "CGameSprite.h"
 #include "CGameTrigger.h"
@@ -35,6 +36,7 @@
 #include "CScreenWorld.h"
 #include "CScreenWorldMap.h"
 #include "CTimerWorld.h"
+#include "CUIControlFactory.h"
 #include "CUIControlScrollBar.h"
 #include "CUIControlTextDisplay.h"
 #include "CUIManager.h"
@@ -1971,6 +1973,261 @@ TEST_CASE("world keys: the Ctrl+K cheat key queues action 21 on the picked sprit
     pWorld->m_bCtrlKeyDown = FALSE;
     pWorld->m_bCheatKeysEnabled = FALSE;
     pArea->m_iPicked = nPicked;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
+// The 'M' (0x68B1D0) cheat-key arm: Ctrl+M opens the command line the way
+// Ctrl+Tab does, but marks the edit control (field_8A6 = 1) with the visible
+// area's picked sprite as its subject. A second press runs the block at
+// 0x68B234 that the Ctrl+Tab arm shares, and that block only calls
+// StopCommand while panel 6 (the command line) is the active panel.
+TEST_CASE("world keys: the Ctrl+M cheat key opens the command line on the picked sprite", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+    CGameArea* pArea = pGame->m_gameAreas[pGame->m_visibleArea];
+
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const LONG nPicked = pArea->m_iPicked;
+    const unsigned char nF37 = pWorld->field_F37;
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+
+    // Open: field_F37 flips to ~0, the command line becomes the active
+    // panel, and the edit control takes the picked id as its subject.
+    pArea->m_iPicked = pSprite->GetId();
+    pWorld->field_F37 = 0;
+    PressKey(pWorld, 'M');
+    CHECK(pWorld->field_F37 == 0xFF);
+    CHECK(pWorld->field_EA4 == 6);
+    CHECK(pWorld->m_cUIManager.GetPanel(6)->m_bActive == TRUE);
+    CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(pWorld->m_cUIManager.GetPanel(6)->GetControl(0));
+    REQUIRE(pEdit != NULL);
+    CHECK(pEdit->field_8A6 == 1);
+    CHECK(pEdit->field_8A2 == pArea->m_iPicked);
+
+    // A second press runs the shared block: the command line is the active
+    // panel, so StopCommand closes it and resets field_F37.
+    PressKey(pWorld, 'M');
+    CHECK(pWorld->field_F37 == 0);
+    CHECK(pWorld->field_EA4 == -1);
+    CHECK(pWorld->m_cUIManager.GetPanel(6)->m_bActive == FALSE);
+
+    // The shared block guards on the active panel: with another panel in
+    // control while the line is open, the press still toggles field_F37
+    // off, but panel 6 is left as it is.
+    PressKey(pWorld, 'M');
+    CHECK(pWorld->field_F37 == 0xFF);
+    pWorld->field_EA4 = -1;
+    PressKey(pWorld, 'M');
+    CHECK(pWorld->field_F37 == 0);
+    CHECK(pWorld->field_EA4 == -1);
+    CHECK(pWorld->m_cUIManager.GetPanel(6)->m_bActive == TRUE);
+
+    // Close the line so the screen is left the way the harness expects it.
+    pWorld->field_F37 = 0xFF;
+    pWorld->field_EA4 = 6;
+    PressKey(pWorld, 'M');
+    CHECK(pWorld->m_cUIManager.GetPanel(6)->m_bActive == FALSE);
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pWorld->field_F37 = nF37;
+    pArea->m_iPicked = nPicked;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
+// The 'Q' (0x68B264) and 'R' (0x68B4F7) cheat-key arms: Q queues action 19
+// (the WORD at 0x8477A8) as a CMessageAddAction and R a
+// default-constructed CGameEffectHeal (effect id CGAMEEFFECT_HEAL) with
+// m_effectAmount 500 and m_dwFlags 0x10000 as a CMessageAddEffect, both with
+// the visible area's picked id as caller and target. Unlike Ctrl+K, neither
+// arm takes a share or checks the may-command gate; delivery is the SEND
+// comm type's business. PressKey drives OnKeyDown directly, so the messages
+// stay unprocessed in the handler's public queue.
+TEST_CASE("world keys: the Ctrl+Q and Ctrl+R cheat keys queue messages without a gate", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+    CGameArea* pArea = pGame->m_gameAreas[pGame->m_visibleArea];
+
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const LONG nPicked = pArea->m_iPicked;
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+    pArea->m_iPicked = pSprite->GetId();
+    ClearMessages();
+
+    // One party member means one CMessageSetTrigger per press ahead of the
+    // arm's own message.
+    PressKey(pWorld, 'Q');
+    CHECK(MessageCount() == 2);
+    if (MessageCount() == 2) {
+        CMessage* pTail = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail();
+        CHECK(pTail->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(pTail->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_ACTION);
+        CMessageAddAction* pAction = static_cast<CMessageAddAction*>(pTail);
+        CHECK(pAction->m_action.m_actionID == 19);
+        CHECK(pAction->m_targetId == pArea->m_iPicked);
+        CHECK(pAction->m_sourceId == pArea->m_iPicked);
+    }
+    ClearMessages();
+
+    PressKey(pWorld, 'R');
+    CHECK(MessageCount() == 2);
+    if (MessageCount() == 2) {
+        CMessage* pTail = g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail();
+        CHECK(pTail->GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+        CHECK(pTail->GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ADD_EFFECT);
+        CMessageAddEffect* pEffectMessage = static_cast<CMessageAddEffect*>(pTail);
+        REQUIRE(pEffectMessage->m_effect != NULL);
+        CHECK(pEffectMessage->m_effect->m_effectID == CGAMEEFFECT_HEAL);
+        CHECK(pEffectMessage->m_effect->m_effectAmount == 500);
+        CHECK(pEffectMessage->m_effect->m_dwFlags == 0x10000);
+        CHECK(pEffectMessage->m_targetId == pArea->m_iPicked);
+        CHECK(pEffectMessage->m_sourceId == pArea->m_iPicked);
+    }
+    ClearMessages();
+
+    // No share and no gate in the arms themselves, but both messages are
+    // SEND comm type: with an invalid picked id, CMessageHandler::Send drops
+    // the message after the arm hands it over (Ctrl+K instead drops at the
+    // arm's own GetShare), so only the HotKey SetTrigger stays queued.
+    pArea->m_iPicked = CGameObjectArray::INVALID_INDEX;
+    PressKey(pWorld, 'Q');
+    CHECK(MessageCount() == 1);
+    if (MessageCount() == 1) {
+        CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail()->GetMsgSubType()
+            == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TRIGGER);
+    }
+    ClearMessages();
+
+    PressKey(pWorld, 'R');
+    CHECK(MessageCount() == 1);
+    if (MessageCount() == 1) {
+        CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.GetTail()->GetMsgSubType()
+            == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TRIGGER);
+    }
+    ClearMessages();
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pArea->m_iPicked = nPicked;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
+// The 'S' (0x68B5B7) cheat-key arm: each press steps the WORD at 0x15A
+// within 0..0x11 — a negative value resets to 0, a value past 0x11 wraps to
+// 0 — and shows the matching "Sequence <name>" line through DisplayText.
+TEST_CASE("world keys: the Ctrl+S cheat key steps the animation-sequence counter", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const int nField15A = pWorld->field_15A;
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+
+    // The arm works on the WORD at 0x15A inside the int field; every value
+    // in this scenario leaves the upper bytes zero, so plain int reads and
+    // writes observe the word directly.
+    pWorld->field_15A = 0;
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 1);
+
+    pWorld->field_15A = 5;
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 6);
+
+    // 16 steps to 17, the table's last named entry.
+    pWorld->field_15A = 16;
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 17);
+
+    // Past the end wraps to 0.
+    pWorld->field_15A = 17;
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 0);
+
+    pWorld->field_15A = 100;
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 0);
+
+    // A negative word resets to 0 rather than stepping; the negative values
+    // are written as unsigned so the upper bytes stay zero and the int
+    // reads the word back.
+    pWorld->field_15A = 0xFFFF; // -1 as a word
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 0);
+
+    pWorld->field_15A = 0xFFFD; // -3 as a word
+    PressKey(pWorld, 'S');
+    CHECK(pWorld->field_15A == 0);
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pWorld->field_15A = nField15A;
     pGame->m_pKeymap[22] = nKeymap22;
     pGame->GetGameSave()->m_mode = nMode;
     pGame->SelectToolbar();
