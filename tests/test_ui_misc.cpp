@@ -1746,6 +1746,66 @@ const SHORT LEAVEAREANAME = 93;
 
 } // namespace
 
+// The cheat-key block of CScreenWorld::OnKeyDown (0x6872D0) with Ctrl held.
+TEST_CASE("world keys: the Ctrl+D and Ctrl+I cheat keys", "[uimisc][worldkeys][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    CGameSprite* pSprite = PartyMember();
+    if (pSprite == NULL) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    HostSession session;
+    REQUIRE(session.Open());
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    const DWORD nMode = pGame->GetGameSave()->m_mode;
+    CScreenWorld* pWorld = WorldWithInput(pSprite);
+    // The scaffold reads the visible area; the session puts the party in
+    // AR1000.
+    REQUIRE(pGame->m_gameAreas[pGame->m_visibleArea] != NULL);
+
+    // The cheat block runs only when the key is not the keymap's slot 22;
+    // clear that slot so the install's Keymap.ini cannot matter.
+    const BYTE nKeymap22 = pGame->m_pKeymap[22];
+    pGame->m_pKeymap[22] = 0;
+    const int nFlag1A2A = g_pBaldurChitin->field_1A2A;
+    const int nField10C8 = pWorld->field_10C8;
+
+    pWorld->m_bCheatKeysEnabled = TRUE;
+    pWorld->m_bCtrlKeyDown = TRUE;
+
+    // Ctrl+D (0x68A6A2) normalizes the chitin flag at 0x1A2A: 0 -> 1, any
+    // nonzero value -> 0.
+    g_pBaldurChitin->field_1A2A = 0;
+    PressKey(pWorld, 'D');
+    CHECK(g_pBaldurChitin->field_1A2A == 1);
+    g_pBaldurChitin->field_1A2A = 1;
+    PressKey(pWorld, 'D');
+    CHECK(g_pBaldurChitin->field_1A2A == 0);
+    g_pBaldurChitin->field_1A2A = 5;
+    PressKey(pWorld, 'D');
+    CHECK(g_pBaldurChitin->field_1A2A == 0);
+
+    // Ctrl+I (0x68AA08) sets the world screen's field at 0x10C8 to 1.
+    pWorld->field_10C8 = 0;
+    PressKey(pWorld, 'I');
+    CHECK(pWorld->field_10C8 == 1);
+
+    pWorld->m_bCtrlKeyDown = FALSE;
+    pWorld->m_bCheatKeysEnabled = FALSE;
+    pWorld->field_10C8 = nField10C8;
+    g_pBaldurChitin->field_1A2A = nFlag1A2A;
+    pGame->m_pKeymap[22] = nKeymap22;
+    pGame->GetGameSave()->m_mode = nMode;
+    pGame->SelectToolbar();
+}
+
 // CGameArea::Unmarshal (0x472DE0) keeps each entry point of the area file in
 // m_entryPoints (CPtrList::AddTail at 0x473F9B), where GetEntryPoint finds
 // the travel's destination.
