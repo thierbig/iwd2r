@@ -889,8 +889,53 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 return;
             }
-            case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
+            case 'B': { // 0x68A129
+                // Ctrl+B advances the speed cheat value (field_15C, cycling
+                // 0-22), shows "Speed %d" through DisplayText, then queues
+                // two effects on the picked sprite: Restore Movement Rate
+                // (163, flags 1, duration type 1) and Movement Rate (126)
+                // with the speed value as its amount, duration type 4 and a
+                // one-tick duration. The original also handles operator new
+                // returning NULL by queuing a NULL message; unreachable
+                // with a throwing new.
+                if (++field_15C > 0x16) {
+                    field_15C = 0; // 0x68A144
+                }
+                sString1.Format("Speed %d", field_15C); // 0x68A15A ("Speed %d" 0x8B5EB0)
+                DisplayText(CString(""), sString1, -1, FALSE); // 0x68A192
+
+                // Restore Movement Rate.
+                ITEM_EFFECT* pItemEffect = new ITEM_EFFECT; // 0x68A1A9
+                CGameEffect::ClearItemEffect(pItemEffect, CGAMEEFFECT_RESTOREMOVEMENTRATE); // 0x68A1B6
+                pItemEffect->dwFlags = 1; // 0x68A1BB
+                // NOTE: The duration type is the WORD constant at 0x8491AA (1).
+                pItemEffect->durationType = 1; // 0x68A1CC
+                CGameEffect* pEffect = CGameEffect::DecodeEffect( // 0x68A1FE
+                    pItemEffect, CPoint(-1, -1), -1, CPoint(-1, -1));
+                CMessageAddEffect* pMessage = new CMessageAddEffect( // 0x68A207 (inlined ctor, vtable 0x8487CC)
+                    pEffect,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68A269
+                delete pItemEffect; // 0x68A26F
+
+                // Movement Rate with the speed value as its amount.
+                pItemEffect = new ITEM_EFFECT; // 0x68A276
+                CGameEffect::ClearItemEffect(pItemEffect, CGAMEEFFECT_MOVEMENTRATE_126); // 0x68A282
+                pItemEffect->effectAmount = field_15C; // 0x68A296
+                // NOTE: The duration type is the WORD constant at 0x8491B0 (4).
+                pItemEffect->durationType = 4; // 0x68A29F
+                pItemEffect->duration = 1; // 0x68A2AB
+                pEffect = CGameEffect::DecodeEffect( // 0x68A2D4
+                    pItemEffect, CPoint(-1, -1), -1, CPoint(-1, -1));
+                pMessage = new CMessageAddEffect( // 0x68A2DD (inlined ctor, vtable 0x8487CC)
+                    pEffect,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B960
+                delete pItemEffect; // 0x68B96A
                 return;
+            }
             case 'C': { // 0x68A337
                 // Ctrl+C increments the chapter: it builds an
                 // INCREMENTCHAPTER action (SHORT 161 at 0x8478B6) whose
