@@ -701,6 +701,7 @@ public:
     SHORT JoinParty();
     SHORT RemoveSpell();
     SHORT SetAtOffset(DWORD stat, DWORD value, BOOL modify);
+    SHORT RunAwayFrom(CGameSprite* pTarget);
     SHORT RunAwayFromNoLeaveArea(CGameSprite* pTarget);
     SHORT Hide();
     SHORT ForceHide(CGameSprite* pSprite);
