@@ -873,7 +873,7 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 // cleared, and JUMPTOPOINT (48 at 0x8477D2) is queued for
                 // the whole group.
                 CPoint ptWorld = pGame->m_gameAreas[pGame->m_visibleArea] // 0x68AA3D
-                    ->m_cInfinity.GetWorldCoordinates(g_pChitin->m_ptPointer);
+                                     ->m_cInfinity.GetWorldCoordinates(g_pChitin->m_ptPointer);
                 if (pGame->m_group.m_memberList.GetCount() == 0) { // 0x68AA64
                     return;
                 }
