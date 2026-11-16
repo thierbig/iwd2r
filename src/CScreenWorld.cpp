@@ -759,10 +759,9 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
                 ? pGame->m_group.GetGroupLeader()
                 : CGameObjectArray::INVALID_INDEX;
-            // NOTE: cAIObjectType1/2, cAIAction2/3, sString1/2, and
-            // nGroupLeader are not read by the cheat keys ported below;
-            // the TODO cases in the switch still use them.
-            (void)nGroupLeader;
+            // NOTE: cAIObjectType1/2, cAIAction2/3, and sString2 are not
+            // read by the cheat keys ported below; the TODO cases in the
+            // switch still use them.
 
             switch (nKey) { // 0x689876
             case '1': // 0x689D78 ('6' and '7' share the jump-table target)
@@ -818,8 +817,20 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 // (the area's CVisibilityMap at +0x860).
                 pGame->m_gameAreas[pGame->m_visibleArea]->m_visibility.SetAreaExplored(); // 0x68A6DF
                 return;
-            case 'F': // TODO: 0x68A6E9 (cycles the byte at this+0x15C through 15 values; cheat key, not ported).
+            case 'F': { // 0x68A6E9
+                // Ctrl+F advances the party facing value (field_15C,
+                // cycling 0-15) and broadcasts a CMessageChangeDirection
+                // with the new facing for the group leader. The original
+                // also handles operator new returning NULL by queuing a
+                // NULL message; unreachable with a throwing new.
+                if (++field_15C > 0xF) {
+                    field_15C = 0; // 0x68A6FF
+                }
+                CMessageChangeDirection* pMessage
+                    = new CMessageChangeDirection(field_15C, nGroupLeader, nGroupLeader); // 0x68A704
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68A736
                 return;
+            }
             case 'G': // TODO: 0x68A75A (builds a CAIObjectType and assigns it a CString; cheat key, not ported).
                 return;
             case 'I': // 0x68AA08
