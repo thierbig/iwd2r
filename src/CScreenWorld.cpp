@@ -849,8 +849,19 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68A736
                 return;
             }
-            case 'G': // TODO: 0x68A75A (builds a CAIObjectType and assigns it a CString; cheat key, not ported).
+            case 'G': { // 0x68A75A
+                // Ctrl+G queues an action on the party group: WORD 177 at
+                // 0x8478D6 (an action ID with no named constant in
+                // CAIAction.cpp; it sits between INCREMENTCHAPTER 161 at
+                // 0x8478B6 and MOVETOOBJECTFOLLOW 180 at 0x8478DD) aimed at
+                // the object named "door2616a" (0x8B5E7C).
+                CAIObjectType cDoor(0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0); // 0x68A766
+                cDoor.m_sName = "door2616a"; // 0x68A79C
+                cAIAction2 = CAIAction(177, cDoor, 0, 0, 0); // 0x68A7B9 (ctor 0x408E80 inlined)
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x68A9EB
+                    cAIAction2, TRUE, NULL);
                 return;
+            }
             case 'I': // 0x68AA08
                 // Ctrl+I sets field_10C8 to 1.
                 field_10C8 = 1;
