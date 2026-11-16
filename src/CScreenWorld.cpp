@@ -982,8 +982,76 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B5A2
                 return;
             }
-            case 'S': // TODO: 0x68B5B7 (clamps the WORD at this+0x15A; cheat key, not ported).
+            case 'S': { // 0x68B5B7
+                // Ctrl+S steps the animation-sequence counter (the WORD at
+                // 0x15A, cycling 0-0x11) and shows the matching
+                // "Sequence <name>" line through DisplayText. The case
+                // order follows the jump table's body emission at
+                // 0x68BF3C; 14-16 share the default arm.
+                SHORT& nSequence = reinterpret_cast<SHORT&>(field_15A); // 0x68B5B9
+                SHORT nPrevious = nSequence;
+                nSequence = nPrevious + 1;
+                if (nPrevious < 0) { // 0x68B5CD
+                    nSequence = 0;
+                }
+                if (nSequence > 0x11) { // 0x68B5E0
+                    nSequence = 0;
+                }
+
+                switch (nSequence) {
+                case 0:
+                    sString1 = "Sequence Attack"; // 0x68B5FA
+                    break;
+                case 1:
+                    sString1 = "Sequence Awake"; // 0x68B601
+                    break;
+                case 2:
+                    sString1 = "Sequence Cast"; // 0x68B608
+                    break;
+                case 3:
+                    sString1 = "Sequence Conjure"; // 0x68B60F
+                    break;
+                case 4:
+                    sString1 = "Sequence Damage"; // 0x68B616
+                    break;
+                case 5:
+                    sString1 = "Sequence Die"; // 0x68B61D
+                    break;
+                case 17:
+                    sString1 = "Sequence Sleep"; // 0x68B624
+                    break;
+                case 6:
+                    sString1 = "Sequence Turn"; // 0x68B62B
+                    break;
+                case 7:
+                    sString1 = "Sequence Ready"; // 0x68B632
+                    break;
+                case 8:
+                    sString1 = "Sequence Shoot"; // 0x68B639
+                    break;
+                case 9:
+                    sString1 = "Sequence Twitch"; // 0x68B640
+                    break;
+                case 10:
+                    sString1 = "Sequence Walk"; // 0x68B647
+                    break;
+                case 11:
+                    sString1 = "Sequence Slash"; // 0x68B64E
+                    break;
+                case 12:
+                    sString1 = "Sequence Backslash"; // 0x68B655
+                    break;
+                case 13:
+                    sString1 = "Sequence Jab"; // 0x68B65C
+                    break;
+                default:
+                    sString1 = "Unknown sequence"; // 0x68B663
+                    break;
+                }
+
+                DisplayText(CString(""), sString1, -1, FALSE); // 0x68B6A1
                 return;
+            }
             case 'X': // TODO: 0x68B6BE (acts at the mouse pointer via the visible area; cheat key, not ported).
                 return;
             case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
