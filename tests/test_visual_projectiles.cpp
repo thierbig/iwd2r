@@ -5129,7 +5129,7 @@ TEST_CASE("visual projectiles: the type-312 Fire throws four bolts in a cross", 
     delete pNoSource;
 
     CProjectile85133C* pBare = new CProjectile85133C();
-    ITEM_EFFECT itemEffect = { };
+    ITEM_EFFECT itemEffect = {};
     itemEffect.effectID = 0x1A;
     itemEffect.effectAmount = 7;
     CGameEffectAC* pParentEffect = new CGameEffectAC(&itemEffect, sourcePos, pSprite->GetId(), targetPos);
