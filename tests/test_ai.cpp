@@ -2866,6 +2866,203 @@ TEST_CASE("ai: ExecuteAction 293 UnHide clears hiding and reports the effect str
     ClearMessages();
 }
 
+// 294 XEquipItem's success core, CGameSprite::XEquipItem (0x7625F0), driven
+// through CGameAIBase::ExecuteAction on a live sprite in AR3000 (the pile
+// lookup the full pack needs). The item named by string1 is looked up in any
+// personal slot; with the action's second number set it is equipped into the
+// slot the first number names, the item already there is unequipped and the
+// two pointers swap; with it zero the item is unequipped in place and, from
+// an equipment slot, moved to the first blank of the 24 inventory slots
+// (slot 18 onward), or onto the ground pile when all of them are full.
+TEST_CASE("ai: ExecuteAction 294 XEquipItem equips with a swap and unequips to the pack",
+    "[ai][data][ar3000]")
+{
+    REQUIRE_ENGINE();
+    ClearMessages();
+
+    // The main loop's drawn frames: the area load waits for m_bDisplayStale
+    // to clear (tests/test_effects.cpp's AR3000 pump).
+    std::atomic<bool> pumpRunning(true);
+    std::thread pump([&pumpRunning] {
+        while (pumpRunning) {
+            g_pChitin->m_bDisplayStale = FALSE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    struct JoinPump {
+        std::atomic<bool>& running;
+        std::thread& pump;
+        ~JoinPump()
+        {
+            running = false;
+            pump.join();
+        }
+    } joinPump { pumpRunning, pump };
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->NewGame(FALSE, FALSE);
+    CGameArea* pArea = pGame->LoadArea(CString("AR3000"), 0, FALSE, FALSE);
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+
+    CGameAIBase* pCaller = AddAIObject();
+    pCaller->m_pArea = pArea;
+    CGameSprite* pTarget = MakeSprite();
+    pTarget->m_pArea = pArea;
+    pTarget->m_pos = CPoint(9 * CPathSearch::GRID_SQUARE_SIZEX,
+        9 * CPathSearch::GRID_SQUARE_SIZEY);
+    CGameSpriteEquipment* pEquipment = pTarget->GetEquipment();
+
+    // The conditions GetTargetShareType and CItem::Equip/Unequip read,
+    // pinned: the target is a sprite whose immunity list does not hold the
+    // caller's AI type (else the resolver releases it and answers NULL), the
+    // caller is no sprite (so the blind distance test is not taken), the
+    // target has an animation, and every item resref this case uses is a
+    // plain type 34 item (CItem::sub_4E9250's no-op arm, so the armor,
+    // helmet, shield and weapon animation branches stay out) with no
+    // equipped effects (so Unequip does not enter its effect-list and
+    // world-timer work).
+    REQUIRE(pTarget->GetObjectType() == CGameObject::TYPE_SPRITE);
+    REQUIRE_FALSE(pTarget->m_derivedStats.m_cImmunitiesAIType.OnList(pCaller->m_typeAI));
+    REQUIRE(pCaller->GetObjectType() != CGameObject::TYPE_SPRITE);
+    REQUIRE(pTarget->GetAnimation() != NULL);
+    REQUIRE(pTarget->GetAnimation()->m_animation != NULL);
+    auto pinGem = [](const char* sResRef, WORD nType) {
+        CItem gem(CResRef(sResRef), 1, 0, 0, 0, 0);
+        REQUIRE(gem.GetItemType() == nType);
+        REQUIRE(gem.pRes != NULL);
+        REQUIRE(gem.pRes->GetEquipedEffectNo() == 0);
+    };
+    pinGem("00GEM01", 34);
+    pinGem("00GEM02", 34);
+    pinGem("00GEM03", 34);
+
+    // The action's actee is the target sprite; string1 the item, specifics
+    // the destination slot and specifics2 the mode, as the arm reads them.
+    const CAIObjectType actee(0, 0, 0, 0, 0, 0, 0, 0, pTarget->m_id, 0, 0);
+    auto xEquip = [&](const char* sName, LONG nSlot, LONG nEquip) -> SHORT {
+        CAIAction action;
+        action.m_actionID = 294;
+        action.m_acteeID = actee;
+        action.m_string1 = sName;
+        action.m_specificID = nSlot;
+        action.m_specificID2 = nEquip;
+        pCaller->SetCurrAction(action);
+        return pCaller->ExecuteAction();
+    };
+
+    // The seed state: the slots this case uses are blank.
+    REQUIRE(pEquipment->m_items[2] == NULL);
+    REQUIRE(pEquipment->m_items[3] == NULL);
+    REQUIRE(pEquipment->m_items[5] == NULL);
+    REQUIRE(pEquipment->m_items[18] == NULL);
+    REQUIRE(pEquipment->m_items[19] == NULL);
+    REQUIRE(pEquipment->m_items[20] == NULL);
+
+    // An item the sprite does not carry: ACTION_ERROR (the FindItemPersonal
+    // -1 test at 0x762620), with every slot untouched.
+    CHECK(xEquip("NOSUCHIT", 2, 1) == CGameAIBase::ACTION_ERROR);
+    CHECK(pEquipment->m_items[2] == NULL);
+    CHECK(pEquipment->m_items[18] == NULL);
+
+    // Equip mode into a blank slot: the item moves from its inventory slot
+    // to the named one, the same pointer.
+    CItem* pGem01 = new CItem(CResRef("00GEM01"), 1, 0, 0, 0, 0);
+    pEquipment->m_items[18] = pGem01;
+    CHECK(xEquip("00GEM01", 2, 1) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[2] == pGem01);
+    CHECK(pEquipment->m_items[18] == NULL);
+    delete pEquipment->m_items[2];
+    pEquipment->m_items[2] = NULL;
+
+    // Equip mode into an occupied slot: the item there is unequipped and the
+    // two pointers swap -- the newcomer takes the destination, the old
+    // occupant the source's slot.
+    CItem* pGem02 = new CItem(CResRef("00GEM02"), 1, 0, 0, 0, 0);
+    CItem* pGem01b = new CItem(CResRef("00GEM01"), 2, 0, 0, 0, 0);
+    pEquipment->m_items[3] = pGem02;
+    pEquipment->m_items[18] = pGem01b;
+    CHECK(xEquip("00GEM01", 3, 1) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[3] == pGem01b);
+    CHECK(pEquipment->m_items[18] == pGem02);
+    CHECK(pEquipment->m_items[2] == NULL);
+
+    // Unequip mode from an equipment slot with the pack's first slot blank:
+    // the item lands in slot 18, the same pointer.
+    delete pEquipment->m_items[18];
+    pEquipment->m_items[18] = NULL;
+    CItem* pBelt = new CItem(CResRef("00GEM02"), 3, 0, 0, 0, 0);
+    pEquipment->m_items[5] = pBelt;
+    CHECK(xEquip("00GEM02", 0, 0) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[5] == NULL);
+    CHECK(pEquipment->m_items[18] == pBelt);
+
+    // Unequip mode with slot 18 occupied: the first blank is slot 19, and
+    // the item already there stays put.
+    CItem* pRing = new CItem(CResRef("00GEM02"), 4, 0, 0, 0, 0);
+    pEquipment->m_items[5] = pRing;
+    CHECK(xEquip("00GEM02", 0, 0) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[5] == NULL);
+    CHECK(pEquipment->m_items[18] == pBelt);
+    CHECK(pEquipment->m_items[19] == pRing);
+
+    // Unequip mode for an item already in the pack: the second lookup
+    // (restricted to the 18 equipment slots) misses it, so it stays in its
+    // slot -- unequipped in place, nothing moved to the blank slots.
+    delete pEquipment->m_items[3];
+    pEquipment->m_items[3] = NULL;
+    CItem* pPack = new CItem(CResRef("00GEM01"), 5, 0, 0, 0, 0);
+    pEquipment->m_items[20] = pPack;
+    CHECK(xEquip("00GEM01", 0, 0) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[20] == pPack);
+    CHECK(pEquipment->m_items[5] == NULL);
+    ClearMessages();
+
+    // A full pack: the item in the equipment slot goes to the ground pile
+    // (the 0x7626FC PutItemGround call) and its slot is cleared. The pile
+    // takes a copy through CMessageContainerAddItem; the original pointer is
+    // handed to the disposable list.
+    for (SHORT nSlot = 18; nSlot < 18 + CScreenInventory::PERSONAL_INVENTORY_SIZE; nSlot++) {
+        if (pEquipment->m_items[nSlot] == NULL) {
+            pEquipment->m_items[nSlot] = new CItem(CResRef("00GEM02"), 1, 0, 0, 0, 0);
+        }
+    }
+    CItem* pGround = new CItem(CResRef("00GEM03"), 2, 0, 0, 0, 0);
+    pEquipment->m_items[5] = pGround;
+    CHECK(xEquip("00GEM03", 0, 0) == CGameAIBase::ACTION_DONE);
+    CHECK(pEquipment->m_items[5] == NULL);
+    CHECK(pGame->m_lDisposableItems.Find(pGround) != NULL);
+    g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
+    {
+        LONG nPileId = pGame->GetGroundPile(pTarget->m_id);
+        REQUIRE(nPileId != CGameObjectArray::INVALID_INDEX);
+        CGameContainer* pPile = NULL;
+        REQUIRE(pGame->GetObjectArray()->GetShare(nPileId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    reinterpret_cast<CGameObject**>(&pPile),
+                    INFINITE)
+            == CGameObjectArray::SUCCESS);
+        int nPileItems = 0;
+        for (SHORT nSlot = 0; nSlot < pPile->GetNumItems(); nSlot++) {
+            CItem* pItem = pPile->GetItem(nSlot);
+            if (pItem != NULL && pItem->GetResRef() == CResRef("00GEM03")) {
+                CHECK(pItem->GetUsageCount(0) == 2);
+                nPileItems++;
+            }
+        }
+        CHECK(nPileItems == 1);
+        pGame->GetObjectArray()->ReleaseShare(nPileId, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+    }
+
+    // Leave the sprite empty for the tests that share the object array.
+    for (SHORT nSlot = 0; nSlot < 51; nSlot++) {
+        delete pEquipment->m_items[nSlot];
+        pEquipment->m_items[nSlot] = NULL;
+    }
+    ClearMessages();
+}
+
 // Task 83o's case 68 CallLightning and case 131 Kill arms, driven through
 // ExecuteAction on a live sprite. Case 68 aims the caller's area infinity at
 // the target's position and queues a death effect (flags 0x100); case 131

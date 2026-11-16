@@ -704,6 +704,7 @@ public:
     SHORT DropItem(CItem* pItem);
     void sub_761990();
     SHORT PlayBardSong();
+    SHORT XEquipItem(CString sName, LONG nSlot, LONG nEquip);
     BOOL HasClassMask(DWORD dwMask);
     INT GetClassLevel(INT iClassType);
     void SetClassLevel(INT iClassType, INT nLevel);
