@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-06",
+  "at": "2026-11-16",
   "ghidra": {
     "functions": 11740,
     "bytes": 3959733,
@@ -9,15 +9,15 @@
     }
   },
   "recovered": {
-    "functions": 7473,
-    "bytes": 3412855
+    "functions": 7618,
+    "bytes": 3537868
   },
   "verified": {
-    "functions": 576,
-    "bytes": 617143,
+    "functions": 575,
+    "bytes": 607984,
     "by_kind": {
       "oracle": 208,
-      "replay": 147,
+      "replay": 146,
       "trace": 221
     }
   },
