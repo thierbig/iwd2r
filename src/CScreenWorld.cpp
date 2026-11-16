@@ -808,7 +808,10 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 return;
             case 'C': // TODO: 0x68A337 (builds a CAIObjectType from the word at 0x8478B6; cheat key, not ported).
                 return;
-            case 'D': // TODO: 0x68A6A2 (toggles the DWORD at g_pBaldurChitin+0x1A2A; cheat key, not ported).
+            case 'D': // 0x68A6A2
+                // Ctrl+D writes the flag at chitin+0x1A2A as (field == 0):
+                // 1 when it is zero, 0 when it holds any nonzero value.
+                g_pBaldurChitin->field_1A2A = (g_pBaldurChitin->field_1A2A == 0);
                 return;
             case 'E': // TODO: 0x68A6BF (marks the visible area explored via CVisibilityMap::SetAreaExplored; cheat key, not ported).
                 return;
