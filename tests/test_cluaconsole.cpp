@@ -176,6 +176,21 @@ TEST_CASE("CLUAConsole.CommandNotFound leaves the id unknown without printing", 
     CHECK(c.field_0 == 0xFFFFFFFF);
 }
 
+TEST_CASE("CLUAConsole's ctor is the handler's inlined per-line construction", "[clua]")
+{
+    // The zero stores 0x77C37C-0x77C38C and the empty "" at +0x4
+    // (0x77C350); both arrays start empty (0x77C366, 0x77C377).
+    CLUAConsole c;
+    CHECK(c.field_0 == 0);
+    CHECK(c.field_8 == 0);
+    CHECK(c.field_C == 0);
+    CHECK(c.field_38 == 0);
+    CHECK(c.field_3C == 0);
+    CHECK(c.field_4 == "");
+    CHECK(c.field_10.GetSize() == 0);
+    CHECK(c.field_24.GetSize() == 0);
+}
+
 TEST_CASE("CLUAConsole.Execute returns silently on the empty line", "[clua]")
 {
     CLUAConsole c;
