@@ -84,8 +84,9 @@ public:
     void CancelPopup();
     void StartCommand();
     void StopCommand();
-    // 0x68B234: the shared tail of the Ctrl+Tab and Ctrl+M command-line
-    // toggles; stops the command line only while panel 6 is active.
+    // The shared tail of the Ctrl+Tab and Ctrl+M command-line toggles
+    // (the block at 0x68B234); stops the command line only while panel 6
+    // is active.
     void StopCommandIfCommandLineActive();
     void StartStore(const CAIObjectType& cAIProprietor, const CAIObjectType& cAICustomer, CResRef cResStore, BOOLEAN bInitiate);
     void StopStore();

@@ -3866,12 +3866,12 @@ void CScreenWorld::StopCommand()
     field_EA4 = -1;
 }
 
-// 0x68B234
+// The block at 0x68B234, inlined inside OnKeyDown in the original: the
+// command line may only take the screen back when panel 6 (the command
+// line itself) is the active panel. Shared by the Ctrl+Tab and Ctrl+M
+// handlers.
 void CScreenWorld::StopCommandIfCommandLineActive()
 {
-    // The command line may only take the screen back when panel 6 (the
-    // command line itself) is the active panel. Inlined in the original;
-    // shared by the Ctrl+Tab and Ctrl+M handlers.
     if (field_EA4 == 6) {
         StopCommand();
     }
