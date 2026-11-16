@@ -1209,9 +1209,57 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 DisplayText(CString(""), sString1, -1, FALSE); // 0x68B7D8
                 return;
             }
-            case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
-            case 'Z': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
+            case 'Y':
+            case 'Z': { // 0x68B7F2
+                // Ctrl+Y and Ctrl+Z share one arm: they chunk the picked
+                // sprite. The 0x30 buffer holds death effect 13 with the
+                // same fill CGameAIBase's ChunkCreature action queues
+                // (dwFlags 8, numDice 0, amount 0x31); the picked sprite is
+                // shared, and when it is a sprite its sub_761650 runs
+                // before the share is released. The fill happens whether or
+                // not the share succeeded. The original also handles
+                // operator new returning NULL by queuing a NULL message;
+                // unreachable with a throwing new.
+                ITEM_EFFECT* pItemEffect = new ITEM_EFFECT; // 0x68B7F4
+                CGameEffect::ClearItemEffect(pItemEffect, CGAMEEFFECT_DEATH); // 0x68B800
+
+                CGameObject* pObject;
+
+                BYTE rc;
+                do {
+                    rc = pGame->GetObjectArray()->GetShare( // 0x68B842
+                        pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pObject,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) {
+                    if (pObject->GetObjectType() == CGameObject::TYPE_SPRITE) { // 0x68B865 (byte 0x84C507)
+                        static_cast<CGameSprite*>(pObject)->sub_761650(); // 0x68B874
+                    }
+                    pGame->GetObjectArray()->ReleaseShare( // 0x68B8AB
+                        pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+
+                pItemEffect->dwFlags = 8; // 0x68B8C0
+                pItemEffect->numDice = 0; // 0x68B8C7
+                pItemEffect->effectAmount = 0x31; // 0x68B8CA
+                CGameEffect* pEffect = CGameEffect::DecodeEffect( // 0x68B8EF
+                    pItemEffect, CPoint(-1, -1), -1, CPoint(-1, -1));
+                // NOTE: the listing first stores vtable 0x847B40 (0x68B93A)
+                // and overwrites it with the real one; only CMessageAddEffect
+                // (vtable 0x8487CC) is constructed here.
+                CMessageAddEffect* pMessage = new CMessageAddEffect( // 0x68B8F8 (inlined ctor)
+                    pEffect,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked,
+                    pGame->m_gameAreas[pGame->m_visibleArea]->m_iPicked);
+                g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE); // 0x68B960
+                delete pItemEffect; // 0x68B96A
                 return;
+            }
             case VK_TAB: { // 0x68BB6B (the cheat re-check makes the tooltip branch unreachable here)
                 if (m_bCtrlKeyDown) {
                     // The command line.
