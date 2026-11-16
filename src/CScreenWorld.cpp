@@ -23,6 +23,7 @@
 #include "CUIControlTextDisplay.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
+#include "CVidMode.h"
 #include "ScreenLayout.h"
 
 // 0x85A1EC
@@ -756,14 +757,33 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             CString sString1; // 0x68983D
             CString sString2; // 0x68983D
             LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
-                                    ? pGame->m_group.GetGroupLeader()
-                                    : CGameObjectArray::INVALID_INDEX;
+                ? pGame->m_group.GetGroupLeader()
+                : CGameObjectArray::INVALID_INDEX;
             // NOTE: cAIObjectType1/2, cAIAction2/3, sString1/2, and
             // nGroupLeader are not read by the cheat keys ported below;
             // the TODO cases in the switch still use them.
             (void)nGroupLeader;
 
             switch (nKey) { // 0x689876
+            case '1': // 0x689D78 ('6' and '7' share the jump-table target)
+            case '6':
+            case '7':
+                pGame->StepAnimation(nKey);
+                return;
+            case '4': // 0x689D57
+                pGame->field_4AB2 = !pGame->field_4AB2;
+                return;
+            case '8': // 0x689D8F
+                g_pBaldurChitin->m_bFontRectOutline = ~g_pBaldurChitin->m_bFontRectOutline;
+                g_pBaldurChitin->GetActiveEngine()->GetManager()->InvalidateRect(NULL);
+                return;
+            case '9': { // 0x689DBF
+                CVidMode* pVidMode = pGame->m_gameAreas[pGame->m_visibleArea]->GetInfinity()->pVidMode;
+                if (pVidMode != NULL) {
+                    pVidMode->field_170 = ~pVidMode->field_170; // 0x689DE7
+                }
+                return;
+            }
             case 'A': // TODO: 0x689DFA (walks the sprite array with GetDeny, filtering on the bytes at 0x85186C-0x851873; cheat key, not ported).
                 return;
             case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
