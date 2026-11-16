@@ -805,8 +805,26 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 return;
             case 'B': // TODO: 0x68A129 (cycles the byte at this+0x15C through 22 values; cheat key, not ported).
                 return;
-            case 'C': // TODO: 0x68A337 (builds a CAIObjectType from the word at 0x8478B6; cheat key, not ported).
+            case 'C': { // 0x68A337
+                // Ctrl+C increments the chapter: it builds an
+                // INCREMENTCHAPTER action (SHORT 161 at 0x8478B6) whose
+                // string1 is the next chapter text resref ("chptxt%d" at
+                // 0x8B5EA4, N = the CHAPTER global's value + 1; a missing
+                // variable counts as 0), sends it to the party group, then
+                // shows "You are now in chapter: %d" (0x8B5E88) with a
+                // freshly recomputed N.
+                cAIAction1 = CAIAction(CAIAction::INCREMENTCHAPTER, CPoint(-1, -1), 0, -1);
+                CVariable* pVariable
+                    = g_pBaldurChitin->m_pObjectGame->GetVariables()->FindKey(CInfGame::CHAPTER_GLOBAL); // 0x68A550
+                sString1.Format("chptxt%d", (pVariable != NULL ? pVariable->m_intValue : 0) + 1); // 0x68A57A
+                cAIAction1.SetString1(sString1); // 0x68A599
+                g_pBaldurChitin->GetObjectGame()->GetGroup()->GroupAction( // 0x68A5F7
+                    CAIAction(CAIAction::NO_ACTION, CPoint(-1, -1), 0, -1), TRUE, &cAIAction1);
+                pVariable = g_pBaldurChitin->m_pObjectGame->GetVariables()->FindKey(CInfGame::CHAPTER_GLOBAL); // 0x68A623
+                sString1.Format("You are now in chapter: %d", (pVariable != NULL ? pVariable->m_intValue : 0) + 1); // 0x68A64D
+                DisplayText(CString(""), sString1, -1, FALSE); // 0x68A685
                 return;
+            }
             case 'D': // 0x68A6A2
                 // Ctrl+D writes the flag at chitin+0x1A2A as (field == 0):
                 // 1 when it is zero, 0 when it holds any nonzero value.
