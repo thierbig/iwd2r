@@ -533,6 +533,7 @@ public:
     BOOL CheckLauncherType(const ITEM_ABILITY* ability, CItem* pLauncher);
     BOOL ReadyCursor();
     void ReadySpell(SHORT buttonNum, INT nType, BOOLEAN firstCall);
+    void ReadySpell(CString sSpellResref);
     void ReadyItem(SHORT buttonNum, BOOLEAN firstCall);
     void ReadyOffInternalList(CButtonData buttonData, BOOLEAN firstCall);
     void sub_71A0E0(CButtonData buttonData, BOOLEAN firstCall);

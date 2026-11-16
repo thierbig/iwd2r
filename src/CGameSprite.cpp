@@ -10549,6 +10549,84 @@ void CGameSprite::ReadySpell(SHORT buttonNum, INT nType, BOOLEAN firstCall)
     }
 }
 
+// 0x719180
+void CGameSprite::ReadySpell(CString sSpellResref)
+{
+    CAIAction action;
+    CSpell cSpell(sSpellResref);
+    cSpell.Demand();
+
+    SHORT nCasterLevel = GetCasterLevel(&cSpell, 0, 0);
+    if (nCasterLevel <= 1) {
+        nCasterLevel = 1;
+    }
+
+    SPELL_ABILITY* pBestAbility = NULL;
+    for (INT abilityNum = 0; abilityNum < cSpell.GetAbilityCount(); abilityNum++) {
+        if (cSpell.GetAbility(abilityNum)->minCasterLevel > nCasterLevel) {
+            break;
+        }
+
+        // FIXME: Calls `GetAbility` one more time.
+        pBestAbility = cSpell.GetAbility(abilityNum);
+    }
+
+    m_currentUseButton.m_abilityId.m_res = sSpellResref;
+    // NOTE: The original dereferences `pBestAbility` here, before the NULL check below.
+    m_currentUseButton.m_abilityId.m_targetType = pBestAbility->actionType;
+
+    ReadyCursor();
+
+    if (pBestAbility != NULL) {
+        switch (pBestAbility->actionType) {
+        case 1:
+            g_pBaldurChitin->GetObjectGame()->SetState(2);
+            g_pBaldurChitin->GetObjectGame()->SetIconIndex(20);
+            g_pBaldurChitin->GetObjectGame()->m_iconResRef = "";
+            break;
+        case 2:
+            // __FILE__: C:\Projects\Icewind2\src\Baldur\ObjCreature.cpp
+            // __LINE__: 18474
+            UTIL_ASSERT(FALSE);
+            break;
+        case 3:
+            g_pBaldurChitin->GetObjectGame()->SetState(2);
+            g_pBaldurChitin->GetObjectGame()->SetIconIndex(20);
+            g_pBaldurChitin->GetObjectGame()->m_iconResRef = "";
+            break;
+        case 4:
+            g_pBaldurChitin->GetObjectGame()->SetState(1);
+            g_pBaldurChitin->GetObjectGame()->SetIconIndex(20);
+            g_pBaldurChitin->GetObjectGame()->m_iconResRef = "";
+            break;
+        case 5:
+            // FIXME: One time is usually enough.
+            g_pBaldurChitin->GetObjectGame()->SetLastClick(CPoint(-1, -1));
+            g_pBaldurChitin->GetObjectGame()->SetLastClick(CPoint(-1, -1));
+            g_pBaldurChitin->GetObjectGame()->SetState(0);
+            g_pBaldurChitin->GetObjectGame()->GetButtonArray()->SetSelectedButton(100);
+            g_pBaldurChitin->GetObjectGame()->GetButtonArray()->UpdateState();
+
+            action = CAIAction(CAIAction::SPELL, m_typeAI, sSpellResref, 0,
+                m_currentUseButton.m_abilityId.m_nClass | (m_currentUseButton.m_abilityId.field_1E << 8));
+            action.m_specificID3 = m_currentUseButton.m_abilityId.field_1D;
+            ClearActions(FALSE);
+            m_userCommandPause = 75;
+            m_triggerId = CGameObjectArray::INVALID_INDEX;
+            AddAction(action);
+            m_interrupt = TRUE;
+            break;
+        case 6:
+            g_pBaldurChitin->GetObjectGame()->SetState(0);
+            g_pBaldurChitin->GetObjectGame()->GetButtonArray()->SetSelectedButton(100);
+            g_pBaldurChitin->GetObjectGame()->GetButtonArray()->UpdateState();
+            break;
+        }
+    }
+
+    cSpell.Release();
+}
+
 // 0x719860
 void CGameSprite::ReadyItem(SHORT buttonNum, BOOLEAN firstCall)
 {
