@@ -20,6 +20,7 @@
 #include "CMessage.h"
 #include "CObjectMarker.h"
 #include "CPathSearch.h"
+#include "CProjectile.h"
 #include "CResDLG.h"
 #include "CScreenConnection.h"
 #include "CScreenCreateChar.h"
@@ -933,6 +934,79 @@ TEST_CASE("sprite: Berserk (124) counts down its duration and stops when berserk
     CHECK(pCharacter->Berserk() == CGameAIBase::ACTION_DONE);
     CHECK(pCharacter->m_curAction.m_specificID == 0);
     CHECK(handler.m_messageList.IsEmpty());
+    ClearMessages();
+}
+
+TEST_CASE("sprite: ApplyProjectileEffects rides the ammunition's effects on the projectile", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+    ClearMessages();
+    CMessageHandler& handler = g_pBaldurChitin->m_cMessageHandler;
+
+    CProjectile* pProjectile = CProjectile::DecodeProjectile(1, pCharacter, 0);
+    REQUIRE(pProjectile != NULL);
+    CHECK(pProjectile->m_effectList.IsEmpty());
+
+    // No ammunition: nothing is demanded and nothing rides.
+    pCharacter->ApplyProjectileEffects(pProjectile, NULL, 0, pCharacter->GetPos());
+    CHECK(pProjectile->m_effectList.IsEmpty());
+    CHECK(handler.m_messageList.IsEmpty());
+
+    // The fist: every character has it, and no item launches it, but it
+    // carries no item effects (its damage is engine-side), so still nothing
+    // rides and nothing is queued.
+    CItem* pFist = new CItem(CResRef("00FIST"), 0, 0, 0, 0, 0);
+    pFist->Demand();
+    const ITEM_ABILITY* pAbility = pFist->GetAbility(0);
+    REQUIRE(pAbility != NULL);
+    const WORD fistEffectCount = pAbility->effectCount;
+    pFist->Release();
+    const CPoint charPos = pCharacter->m_pos;
+    const CPoint targetPos(charPos.x + 10 * CPathSearch::GRID_SQUARE_SIZEX, charPos.y);
+    pCharacter->ApplyProjectileEffects(pProjectile, pFist, 0, targetPos);
+    CHECK(fistEffectCount == 0);
+    CHECK(pProjectile->m_effectList.IsEmpty());
+
+    // A real arrow: its ability is the missile and its damage effects are
+    // target type 2, so they ride the projectile alive — the function stamps
+    // and hands them over, it must not delete them.
+    CItem* pArrow = new CItem(CResRef("00AROW03"), 0, 0, 0, 0, 0);
+    pArrow->Demand();
+    const ITEM_ABILITY* pArrowAbility = pArrow->GetAbility(0);
+    REQUIRE(pArrowAbility != NULL);
+    const WORD arrowEffectCount = pArrowAbility->effectCount;
+    pArrow->Release();
+    pCharacter->ApplyProjectileEffects(pProjectile, pArrow, 0, targetPos);
+    CHECK(pProjectile->m_effectList.GetCount() == arrowEffectCount);
+    {
+        POSITION pos = pProjectile->m_effectList.GetHeadPosition();
+        while (pos != NULL) {
+            CGameEffect* pEffect = pProjectile->m_effectList.GetNext(pos);
+            CHECK(pEffect->m_source == charPos);
+            CHECK(pEffect->m_sourceID == pCharacter->GetId());
+            CHECK(pEffect->m_target == targetPos);
+        }
+    }
+    CHECK(handler.m_messageList.IsEmpty());
+
+    pProjectile->ClearEffects();
+    delete pProjectile;
+    delete pFist;
+    delete pArrow;
     ClearMessages();
 }
 

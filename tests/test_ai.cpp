@@ -275,6 +275,18 @@ CGameEffect* MakeDoorEffect(WORD effectID)
 
 }
 
+TEST_CASE("ai: CAIAction(actionID, specificID) (0x75AAC0) sets the id and the first specific only", "[ai]")
+{
+    CAIAction action(CAIAction::WAIT, 6);
+    CHECK(action.m_actionID == CAIAction::WAIT);
+    CHECK(action.m_specificID == 6);
+    CHECK(action.m_specificID2 == 0);
+    CHECK(action.m_specificID3 == 0);
+    CHECK(action.m_internalFlags == 0);
+    CHECK(action.m_string1.IsEmpty());
+    CHECK(action.m_string2.IsEmpty());
+}
+
 TEST_CASE("ai: ExecuteAction answers NoAction, an unknown action and SetGlobal", "[ai][data]")
 {
     REQUIRE_ENGINE();
