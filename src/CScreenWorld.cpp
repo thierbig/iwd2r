@@ -760,9 +760,8 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             LONG nGroupLeader = (pGame->m_group.m_memberList.GetCount() != 0) // 0x68984A
                 ? pGame->m_group.GetGroupLeader()
                 : CGameObjectArray::INVALID_INDEX;
-            // NOTE: cAIObjectType1/2 and cAIAction2/3 are not read by the
-            // cheat keys ported below; the TODO cases in the switch still
-            // use them.
+            // NOTE: cAIObjectType1/2 and cAIAction2/3 are not read by any
+            // of the cheat keys ported below.
 
             switch (nKey) { // 0x689876
             case '1': // 0x689D78 ('6' and '7' share the jump-table target)
