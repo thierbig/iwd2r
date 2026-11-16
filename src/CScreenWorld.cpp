@@ -23,7 +23,7 @@
 #include "CUIControlTextDisplay.h"
 #include "CUIPanel.h"
 #include "CUtil.h"
-#include "CVidMode.h"
+#include "CVidInf.h"
 #include "ScreenLayout.h"
 
 // 0x85A1EC
@@ -794,7 +794,9 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 g_pBaldurChitin->GetActiveEngine()->GetManager()->InvalidateRect(NULL);
                 return;
             case '9': { // 0x689DBF
-                CVidMode* pVidMode = pGame->m_gameAreas[pGame->m_visibleArea]->GetInfinity()->pVidMode;
+                // 0x689DD9: the area's CInfinity video mode (+0x4E8); the
+                // DWORD it inverts at +0x170 is CVidInf::field_170.
+                CVidInf* pVidMode = static_cast<CVidInf*>(pGame->m_gameAreas[pGame->m_visibleArea]->GetInfinity()->pVidMode);
                 if (pVidMode != NULL) {
                     pVidMode->field_170 = ~pVidMode->field_170; // 0x689DE7
                 }

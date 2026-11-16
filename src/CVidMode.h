@@ -220,8 +220,6 @@ public:
     /* 00DC */ int field_DC;
     /* 00E0 */ int field_E0;
     /* 00E4 */ CRect m_rPointerStorage;
-    /* 00F4 */ unsigned char field_F4[0x7C];
-    /* 0170 */ DWORD field_170;
 };
 
 #endif /* CVIDMODE_H_ */
