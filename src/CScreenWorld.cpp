@@ -2063,11 +2063,36 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
                 }
                 break;
             default:
-                // TODO: Incomplete. 0x6893FD-0x689502: the keymap's spell
-                // keys (53 to 371) cast the entry's spell (0x8B4EB0) through
-                // the leader's CGameSprite 0x719180, not ported; the
-                // original first checks the action bar's button type 3 and
-                // ends the modal state.
+                // 0x6893FD: the keymap's spell keys (53 to 371) ready the
+                // entry's spell (the table at 0x8B4EB0, whose entries from
+                // 53 on are off_8B4F84) on the group leader, when the
+                // action bar is up (0x68BF90 is the inlined m_bActive read)
+                // and has a button of type 3.
+                if (m_cUIManager.GetPanel(1)->m_bActive) {
+                    if (pGame->GetButtonArray()->GetButtonId(3) != 0xFF) { // 0x689421
+                        if (pGame->GetObjectArray()->GetDeny(pGame->GetGroup()->GetGroupLeader(), // 0x689456
+                                CGameObjectArray::THREAD_ASYNCH,
+                                reinterpret_cast<CGameObject**>(&pSprite),
+                                INFINITE)
+                            == CGameObjectArray::SUCCESS) {
+                            pGame->SetState(0); // 0x68946B
+                            pGame->GetButtonArray()->SetSelectedButton(3); // 0x68947B
+                            pSprite->SetModalState(0, TRUE); // 0x689488
+                            pSprite->ReadySpell(CString(off_8B4F84[index - 53])); // 0x6894A5
+
+                            if (pGame->GetState() == 0) { // 0x6894AC
+                                pGame->GetButtonArray()->SetSelectedButton(100); // 0x6894C1
+                            }
+
+                            pGame->SetTempCursor(4); // 0x6894CA
+                            pGame->GetButtonArray()->UpdateState(); // 0x6894D8
+
+                            pGame->GetObjectArray()->ReleaseDeny(pGame->GetGroup()->GetGroupLeader(), // 0x6894FF
+                                CGameObjectArray::THREAD_ASYNCH,
+                                INFINITE);
+                        }
+                    }
+                }
                 break;
             }
             break;
