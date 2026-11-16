@@ -833,6 +833,34 @@ void CScreenWorld::OnKeyDown(SHORT nKeysFlags)
             case 'Y': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
             case 'Z': // TODO: 0x68B7F2 (allocates a CGameEffect via ClearItemEffect; cheat key, not ported).
                 return;
+            case VK_TAB: { // 0x68BB6B (the cheat re-check makes the tooltip branch unreachable here)
+                if (m_bCtrlKeyDown) {
+                    // The command line.
+                    if (!m_cUIManager.m_bHidden) {
+                        field_F37 = ~field_F37; // 0x68BB81
+                        if (field_F37 != 0) {
+                            StartCommand(); // 0x68BB97
+                            CUIControlEditLua* pEdit = static_cast<CUIControlEditLua*>(m_cUIManager.GetPanel(6)->GetControl(0)); // 0x68BB9E
+                            pEdit->field_8A6 = 0;
+                            pEdit->field_8A2 = CGameObjectArray::INVALID_INDEX;
+                        } else if (field_EA4 == 6) { // 0x68B234 (shared with the Ctrl+M cheat key)
+                            StopCommand();
+                        }
+                    }
+                } else { // 0x68BBC7
+                    CGameArea* pArea = pGame->GetVisibleArea();
+                    const CPoint& ptPointer = g_pChitin->m_ptPointer;
+                    if (pArea->m_iPicked != CGameObjectArray::INVALID_INDEX // 0x68BC08
+                        || ptPointer.x < pArea->GetInfinity()->rViewPort.left
+                        || ptPointer.x >= pArea->GetInfinity()->rViewPort.right
+                        || ptPointer.y < pArea->GetInfinity()->rViewPort.top
+                        || ptPointer.y >= pArea->GetInfinity()->rViewPort.bottom) {
+                        m_cUIManager.ForceToolTip(); // 0x68BC34
+                        pArea->m_nToolTip = pArea->m_pGame->m_cOptions.m_nTooltips;
+                    }
+                }
+                return;
+            }
             default: // 0x68B972
                 break;
             }
