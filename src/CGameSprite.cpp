@@ -14186,8 +14186,8 @@ void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bF
                         continue;
                     }
 
-                    // The original stores the resref at effect+0x90; the
-                    // tree's CGameEffect declares m_sourceRes at 0x8C.
+                    // effect+0x90 (0x723012): m_sourceRes sits at 0x8C in
+                    // CGameEffectBase, which follows CGameEffect's vptr.
                     (*it)->m_sourceRes = sFull;
                     if (GetObjectType() == CGameObject::TYPE_SPRITE) {
                         AddEffect(*it, CGameAIBase::EFFECT_LIST_TIMED, FALSE, TRUE);
