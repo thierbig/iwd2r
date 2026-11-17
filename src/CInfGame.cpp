@@ -1514,9 +1514,150 @@ LONG CInfGame::CachingRequirements(const CString& areaName)
 }
 
 // 0x5A0950
+// NOTE: The original returns TRUE/FALSE in eax (ret 4) — FALSE only when a
+// linked BIF entry is missing from the key table; the in-tree signature is
+// void and the caller (the caching progress bar) ignores the result.
 void CInfGame::CacheResFileWithResource(const CString& areaName)
 {
-    // TODO: Incomplete.
+    CAreaFile cAreaFile;
+
+    for (INT nIndex = 1; nIndex < 7; nIndex++) {
+        CResCache::stru_8FB90C[nIndex] = "";
+    }
+    CResCache::stru_8FB90C[0] = areaName;
+    CResCache::dword_8FB92C = 1;
+
+    cAreaFile.SetResRef(CResRef(areaName), TRUE, TRUE);
+
+    // NOTE: The original does not NULL-check the area data here (unlike
+    // CachingRequirements) — offset 8 is dereferenced immediately.
+    BYTE* pAreaData = cAreaFile.GetData();
+    CResFile* pWedBifFile = g_pChitin->cDimm.GetResFilePtr(
+        g_pChitin->cDimm.GetResID(CResRef(pAreaData + 8), 1003));
+    cAreaFile.ReleaseData();
+    if (pWedBifFile == NULL) {
+        // The original returns FALSE here.
+        return;
+    }
+
+    // Single player: only the area's own WED BIF is cached.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+        if (pWedBifFile->LoadCache() == TRUE) {
+            pWedBifFile->UnCache();
+        }
+        // The original returns TRUE here.
+        return;
+    }
+
+    // Multiplayer: cache the area's linkage row out of the caching table.
+    CString sBifName;
+    CString sXLabel;
+    CString sYLabel;
+    CPoint ptLocation;
+
+    // The original ignores GetFileName's return here.
+    pWedBifFile->GetFileName(sBifName);
+    if (m_ruleTables.m_tAreaLinkageCaching.Find(sBifName, ptLocation, TRUE) == FALSE
+        || m_ruleTables.m_tAreaLinkageCaching.Find(sBifName, sXLabel, sYLabel, TRUE) == FALSE) {
+        if (pWedBifFile->LoadCache() == TRUE) {
+            pWedBifFile->UnCache();
+        }
+        // The original returns TRUE here.
+        return;
+    }
+
+    CString sCell;
+    if (m_ruleTables.m_tAreaLinkageCaching.GetWidth() < 1
+        || m_ruleTables.m_tAreaLinkageCaching.GetHeight() <= ptLocation.y
+        || ptLocation.y < 0) {
+        sCell = m_ruleTables.m_tAreaLinkageCaching.GetDefault();
+    } else {
+        sCell = m_ruleTables.m_tAreaLinkageCaching.GetAt(CPoint(0, ptLocation.y));
+    }
+
+    INT nCount = atol(sCell);
+    if (nCount == 0) {
+        if (pWedBifFile->LoadCache() == TRUE) {
+            pWedBifFile->UnCache();
+        }
+        // The original returns TRUE here.
+        return;
+    }
+
+    DWORD dwFileID = g_pChitin->cDimm.GetResFileID(sYLabel);
+
+    // A negative count skips both passes AND the WED load — the original
+    // returns TRUE straight from here.
+    if (nCount < 0) {
+        return;
+    }
+
+    INT i = 0;
+    while (i <= nCount) {
+        CResFile* pBifFile = g_pChitin->cDimm.GetResFilePtr(dwFileID);
+        if (pBifFile == NULL) {
+            // Missing linked BIF: the original unwinds returning FALSE.
+            return;
+        }
+
+        // Pass 1 caches the BIFs the area does NOT fully require yet
+        // (requirement 0) — the polarity is flipped against pass 2 below.
+        if (pBifFile->GetCachingRequirement() == 0) {
+            if (pBifFile->LoadCache() == TRUE) {
+                pBifFile->UnCache();
+            }
+        }
+        i++;
+
+        if (m_ruleTables.m_tAreaLinkageCaching.GetWidth() <= i
+            || m_ruleTables.m_tAreaLinkageCaching.GetHeight() <= ptLocation.y
+            || i < 0
+            || ptLocation.y < 0) {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetDefault();
+        } else {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetAt(CPoint(i, ptLocation.y));
+        }
+
+        dwFileID = g_pChitin->cDimm.GetResFileID(sBifName);
+    }
+
+    dwFileID = g_pChitin->cDimm.GetResFileID(sYLabel);
+    INT j = 0;
+    while (j <= nCount) {
+        CResFile* pBifFile = g_pChitin->cDimm.GetResFilePtr(dwFileID);
+        if (pBifFile == NULL) {
+            // Missing linked BIF: the original unwinds returning FALSE.
+            return;
+        }
+
+        // The recorded name lags one iteration behind the file actually
+        // processed (the first append is pass 1's trailing cell name, not
+        // sYLabel) — an original quirk, reproduced as-is.
+        CResCache::stru_8FB90C[CResCache::dword_8FB92C] = sBifName;
+        CResCache::dword_8FB92C++;
+
+        // Pass 2 caches the BIFs the area DOES require (nonzero requirement).
+        if (pBifFile->GetCachingRequirement() != 0) {
+            if (pBifFile->LoadCache() == TRUE) {
+                pBifFile->UnCache();
+            }
+        }
+        j++;
+
+        if (m_ruleTables.m_tAreaLinkageCaching.GetWidth() <= j
+            || m_ruleTables.m_tAreaLinkageCaching.GetHeight() <= ptLocation.y
+            || j < 0
+            || ptLocation.y < 0) {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetDefault();
+        } else {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetAt(CPoint(j, ptLocation.y));
+        }
+
+        dwFileID = g_pChitin->cDimm.GetResFileID(sBifName);
+    }
+
+    // Both passes done: the WED BIF itself is NOT loaded on this path — the
+    // original returns TRUE without touching it.
 }
 
 // 0x5A0F50
