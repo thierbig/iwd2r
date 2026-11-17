@@ -1528,6 +1528,130 @@ TEST_CASE("sprite: RandomWalk and RandomTurn queue their step and their copy", "
     pCharacter->m_huntingRange = nSavedHuntingRange;
 }
 
+TEST_CASE("sprite: RandomWalkContinuous (200) walks without the frame and view gates", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    CGameArea* pArea = pCharacter->GetArea();
+    REQUIRE(pArea != NULL);
+    pArea->SortLists();
+
+    const int nSavedRenderPerSec = g_pChitin->m_nRenderPerSec;
+    const int nSavedAIPerSec = g_pChitin->m_nAIPerSec;
+    const CRect rSavedViewPort = pArea->m_cInfinity.rViewPort;
+    const int nSavedNewX = pArea->m_cInfinity.nNewX;
+    const int nSavedNewY = pArea->m_cInfinity.nNewY;
+    const WORD nSavedHuntingRange = pCharacter->m_huntingRange;
+    const CPoint ptSavedStart = pCharacter->m_posStart;
+    const DWORD dwSavedFlags = pCharacter->m_baseStats.m_flags;
+
+    auto clearQueue = [pCharacter]() {
+        while (!pCharacter->m_queuedActions.IsEmpty()) {
+            delete pCharacter->m_queuedActions.RemoveHead();
+        }
+    };
+
+    // The queued pair every completed walk leaves: a MoveToPoint in the area
+    // and the copy of the action itself behind it.
+    auto checkWalk = [pCharacter, pArea]() {
+        REQUIRE(pCharacter->m_queuedActions.GetCount() == 2);
+        CAIAction* pMove = pCharacter->m_queuedActions.GetHead();
+        CHECK(pMove->m_actionID == CAIAction::MOVETOPOINT);
+        CHECK(pMove->m_specificID == -2);
+        CHECK(pMove->m_specificID2 == -1);
+        CHECK((pMove->m_dest.x >= 0 && pMove->m_dest.x < pArea->m_cInfinity.nAreaX));
+        CHECK((pMove->m_dest.y >= 0 && pMove->m_dest.y < pArea->m_cInfinity.nAreaY));
+        CAIAction* pSelf = pCharacter->m_queuedActions.GetTail();
+        CHECK(pSelf->m_actionID == CAIAction::RANDOMWALKCONTINUOUS);
+        CHECK(pSelf->m_specificID == 0);
+        CHECK(pSelf->m_specificID2 == -1);
+        CHECK(pSelf->m_specificID3 == 0);
+        CHECK(pSelf->m_dest == CPoint(-1, -1));
+        CHECK(pSelf->m_internalFlags == 0);
+    };
+
+    CAIAction continuous;
+    continuous.m_actionID = CAIAction::RANDOMWALKCONTINUOUS;
+
+    // An interrupt answers ACTION_INTERRUPTABLE and queues nothing.
+    pCharacter->SetCurrAction(continuous);
+    pCharacter->m_interrupt = TRUE;
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
+    CHECK(pCharacter->m_queuedActions.IsEmpty());
+    pCharacter->m_interrupt = FALSE;
+
+    // Where RandomWalk only waited (frame rate 0), the continuous walk still
+    // moves: RandomWalkContinuous has no frame-rate gate.
+    g_pChitin->m_nRenderPerSec = 0;
+    pCharacter->SetCurrAction(continuous);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    checkWalk();
+
+    // Out of the view it also moves: no viewport gate either.
+    g_pChitin->m_nRenderPerSec = 15;
+    g_pChitin->m_nAIPerSec = 0;
+    pArea->m_cInfinity.nNewX = 0;
+    pArea->m_cInfinity.nNewY = 0;
+    pArea->m_cInfinity.rViewPort = CRect(pCharacter->m_pos.x + 1000,
+        pCharacter->m_pos.y + 1000,
+        pCharacter->m_pos.x + 1100,
+        pCharacter->m_pos.y + 1100);
+    pCharacter->SetCurrAction(continuous);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    checkWalk();
+
+    // A hunting range of 40 halves into a 40x40 box around the sprite (in
+    // leash of the start), so the point lands within 20 of the sprite.
+    pArea->m_cInfinity.rViewPort = CRect(0, 0, 2000, 2000);
+    pCharacter->m_huntingRange = 40;
+    pCharacter->m_posStart = pCharacter->m_pos;
+    pCharacter->SetCurrAction(continuous);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    checkWalk();
+    {
+        CAIAction* pMove = pCharacter->m_queuedActions.GetHead();
+        CHECK(std::abs(pMove->m_dest.x - pCharacter->m_pos.x) <= 20);
+        CHECK(std::abs(pMove->m_dest.y - pCharacter->m_pos.y) <= 20);
+    }
+
+    // The enemy-ally flag bit arms the hunt (GetNearest plus a share); a
+    // miss comes back a bad index and the walk carries on unbowed.
+    pCharacter->m_baseStats.m_flags |= 0x1000000;
+    pCharacter->SetCurrAction(continuous);
+    clearQueue();
+    srand(3);
+    CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_DONE);
+    checkWalk();
+    pCharacter->m_baseStats.m_flags = dwSavedFlags;
+
+    clearQueue();
+    g_pChitin->m_nRenderPerSec = nSavedRenderPerSec;
+    g_pChitin->m_nAIPerSec = nSavedAIPerSec;
+    pArea->m_cInfinity.rViewPort = rSavedViewPort;
+    pArea->m_cInfinity.nNewX = nSavedNewX;
+    pArea->m_cInfinity.nNewY = nSavedNewY;
+    pCharacter->m_huntingRange = nSavedHuntingRange;
+    pCharacter->m_posStart = ptSavedStart;
+}
+
 namespace {
 
 // Every object of a type on the area's three lists.
