@@ -1,6 +1,7 @@
 #include "CResFile.h"
 
 #include "CChitin.h"
+#include "CUtil.h"
 
 // NOTE: Inlined in `CDimm::CreateKeyTable`.
 CResFile::CResFile()
@@ -54,6 +55,65 @@ BOOL CResFile::AddCacheCount()
     return TRUE;
 }
 
+// 0x789A20
+DWORD CResFile::GetCachingRequirement()
+{
+    CString sResFileName;
+    CString sResolvedResFileName;
+    WORD nDrive = 0;
+    CFile cFile;
+
+    // The original first resolves the resource cache through a local pointer and
+    // asserts on it (ChDimm.cpp lines 0x1C9E / 0x1CA0); the cache-initialized
+    // check is the first DWORD of CResCache.
+    CResCache* pResCache = &(g_pChitin->cDimm.cResCache);
+    UTIL_ASSERT(pResCache != NULL);
+    UTIL_ASSERT(pResCache->m_bInitialized == TRUE);
+
+    // Already referenced by an open resource — never a caching candidate.
+    if (m_nRefCount > 0) {
+        return 0;
+    }
+
+    // TODO: 0x7E9BF7 not ported. (GetGameBaseFolder — CRT _lock/GetFullPathNameA
+    // machinery; the original fills a buffer it never reads and only bails out
+    // when the call itself fails.)
+    // NOTE: Dead stores omitted — the original also copies cResCache.m_sDirName
+    // and re-copies the KEY file-name entry into locals that are never read.
+
+    if (!g_pChitin->cDimm.GetResFileName(m_nIndex, sResFileName, nDrive, TRUE)) {
+        return 0;
+    }
+
+    // File already on the local hard disk (hd0) or in a configured data
+    // directory — nothing to cache. Only CD drives (2/4/8/16) proceed.
+    if ((nDrive & 1) != 0 || (nDrive & 0x200) != 0) {
+        return 0;
+    }
+
+    if (!g_pChitin->lAliases.ResolveFileName(sResFileName, sResolvedResFileName)) {
+        return 0;
+    }
+
+    if (!cFile.Open(sResolvedResFileName, CFile::OpenFlags::typeBinary | CFile::OpenFlags::shareDenyWrite, NULL)) {
+        return 0;
+    }
+
+    // Compressed BIFC V1.0 archives store the uncompressed size in the header;
+    // every other file is measured by its actual length.
+    BYTE header[12];
+    DWORD dwSize;
+    if (cFile.Read(header, 12) == 12
+        && _strnicmp(reinterpret_cast<const char*>(header), "BIFCV1.0", 8) == 0) {
+        dwSize = *reinterpret_cast<DWORD*>(header + 8);
+    } else {
+        dwSize = cFile.GetLength();
+    }
+
+    cFile.Close();
+    return dwSize;
+}
+
 // 0x78A080
 BOOL CResFile::CloseFile()
 {
@@ -84,6 +144,12 @@ BOOL CResFile::CloseFile()
     }
 
     return TRUE;
+}
+
+// TODO: 0x78A0F0 not ported.
+BOOL CResFile::GetFileName(CString& sResFileName)
+{
+    return FALSE;
 }
 
 // #guess

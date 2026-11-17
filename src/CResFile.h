@@ -10,6 +10,8 @@ public:
 
     BOOL AddCacheCount();
     BOOL CloseFile();
+    DWORD GetCachingRequirement();
+    BOOL GetFileName(CString& sResFileName);
     DWORD GetFileSize(RESID resID);
     BOOL OpenFile();
     UINT ReadResource(RESID resID, LPVOID lpBuf, UINT nCount, UINT nOffset);
