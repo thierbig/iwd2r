@@ -24539,10 +24539,11 @@ SHORT CGameSprite::RandomWalkContinuous()
         searchType.m_nGender = m_typeAI.m_nGender;
         bFilter = TRUE;
     }
-    // QUIRK: the alignment arm copies the field but does not arm the hunt,
-    // so the alignment flag alone never searches.
+    // The alignment arm skips the filter store but jumps straight into the
+    // hunt (0x749057 -> 0x749065), so it arms the hunt too.
     if (dwFlags & 0x40000000) {
         searchType.m_nAlignment = m_typeAI.m_nAlignment;
+        bFilter = TRUE;
     }
 
     // The hunt: bias the draw toward the nearest match, capped at half the
