@@ -253,10 +253,38 @@ BOOL CResFile::CloseFile()
     return TRUE;
 }
 
-// TODO: 0x78A0F0 not ported.
+// 0x78A0F0
 BOOL CResFile::GetFileName(CString& sResFileName)
 {
-    return FALSE;
+    CString sKeyName; // the KEY file-name entry
+    CString sName; // working copy
+
+    // NOTE: The original also constructs a third local CString that is never
+    // used (initialized and destructed, 0x78A10E / 0x78A218).
+    //
+    // KEY file-name entry — fails when the table is uninitialized or the
+    // index is out of range (unsigned compare, 0x78A13F).
+    if (g_pChitin->cDimm.m_cKeyTable.m_bInitialized == FALSE
+        || m_nIndex >= g_pChitin->cDimm.m_cKeyTable.m_nResFiles) {
+        return FALSE;
+    }
+
+    sKeyName = reinterpret_cast<char*>(g_pChitin->cDimm.m_cKeyTable.m_pResFileNameEntries)
+        + g_pChitin->cDimm.m_cKeyTable.m_pResFileNameEntries[m_nIndex].nFileNameOffset;
+    sName = sKeyName;
+
+    // Strip the path: keep only what follows the last backslash
+    // (0x78A172-0x78A1C5).
+    INT nFind = sName.Find('\\');
+    while (nFind != -1) {
+        sName = sName.Right(sName.GetLength() - nFind - 1);
+        nFind = sName.Find('\\');
+    }
+
+    // Strip the extension: everything but the last four characters (".bif").
+    sResFileName = sName.Left(sName.GetLength() - 4);
+
+    return TRUE;
 }
 
 // #guess
