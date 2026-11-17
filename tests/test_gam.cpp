@@ -13,6 +13,7 @@
 #include "CMemINI.h"
 #include "CMessage.h"
 #include "CMoveList.h"
+#include "CResFile.h"
 #include "CScreenCharacter.h"
 #include "CScreenCreateChar.h"
 #include "CScreenInventory.h"
@@ -563,6 +564,55 @@ TEST_CASE("gam: SaveGame's game file loads back and saves again byte for byte", 
     CHECK(pGame->m_pGameAreaMaster->m_resRef == "AR1000");
     CHECK(pGame->m_nCharacters == 1);
     CHECK(LoadedAreas(pGame) == 1);
+}
+
+// LoadArea asks CachingRequirements (0x5A04B0) for the area's caching budget
+// before it loads. The engine is single player here (no connection), so the
+// walk never enters the area-linkage table: it resolves the area's WED resref
+// (+8 in the ARE header, type 1003) and returns that BIF's own requirement.
+// The test install's KEY records AR1000's BIF as CD2-resident
+// (CD2/Data/AR1000.bif), so the probe is a caching candidate: the alias
+// resolves it locally and the BIFC V1.0 header reports its uncompressed size.
+TEST_CASE("gam: CachingRequirements sizes AR1000's CD2 BIFC at its uncompressed length", "[gam][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    REQUIRE(pGame != NULL);
+
+    // DWORD at CD2/Data/AR1000.bif + 8 (BIFCV1.0 uncompressed size).
+    CHECK(pGame->CachingRequirements(CString("ar1000")) == 9732494);
+
+    // An area name with no ARE resource has no data to read a WED resref
+    // from, and no BIF to cache either.
+    CHECK(pGame->CachingRequirements(CString("zzzzzz")) == 0);
+}
+
+// GetCachingRequirement (0x789A20) sizes one BIF as a caching candidate. A
+// BIF referenced by an open resource (m_nRefCount > 0) is never a candidate
+// — that arm returns before any file is touched — and a BIF the KEY resolves
+// to hd0 (the local hard disk) needs no caching either.
+TEST_CASE("gam: a referenced or hd0-local BIF has no caching requirement", "[gam][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    CResFile* pFile = g_pChitin->cDimm.GetResFilePtr(0);
+    REQUIRE(pFile != NULL);
+    CHECK(pFile->GetCachingRequirement() == 0);
+
+    CResFile resFile;
+    resFile.m_nRefCount = 1;
+    CHECK(resFile.GetCachingRequirement() == 0);
 }
 
 // Party Formation's Done saves and loads the game back (CScreenSinglePlayer::
