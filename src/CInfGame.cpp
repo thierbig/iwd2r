@@ -1633,6 +1633,11 @@ void CInfGame::CacheResFileWithResource(const CString& areaName)
         // The recorded name lags one iteration behind the file actually
         // processed (the first append is pass 1's trailing cell name, not
         // sYLabel) — an original quirk, reproduced as-is.
+        // NOTE: There is no bounds check (0x5A0D1A). AREALINK.2DA has six link
+        // columns, so a full row runs this pass seven times and writes index 7
+        // — one past stru_8FB90C[7] (in the exe that is the spare slot at
+        // 0x8FB928, just before the counter). The shipped table never exceeds
+        // one link.
         CResCache::stru_8FB90C[CResCache::dword_8FB92C] = sBifName;
         CResCache::dword_8FB92C++;
 
