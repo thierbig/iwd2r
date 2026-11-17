@@ -14138,7 +14138,7 @@ void CGameSprite::sub_71E750(CCreatureFileHeader& oldBaseStats, CDerivedStats& o
 void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bFeedBack)
 {
     const C2DArray* pAbilityTable
-        = g_pBaldurChitin->GetObjectGame()->GetRuleTables().GetClassAbilityTable((BYTE) nClassType,
+        = g_pBaldurChitin->GetObjectGame()->GetRuleTables().GetClassAbilityTable((BYTE)nClassType,
             GetSpecialization());
     if (pAbilityTable == NULL) {
         return;
@@ -14148,10 +14148,10 @@ void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bF
 
     // -1 grants every level row from 0.
     SHORT nStartRow = 0;
-    if ((SHORT) nLevelsGained != -1) {
-        nStartRow = (SHORT) (nLevel - nLevelsGained);
+    if ((SHORT)nLevelsGained != -1) {
+        nStartRow = (SHORT)(nLevel - nLevelsGained);
     }
-    SHORT nEndLevel = (SHORT) nLevel;
+    SHORT nEndLevel = (SHORT)nLevel;
 
     for (SHORT nRow = nStartRow; nRow < pAbilityTable->GetWidth() && nRow < nEndLevel; nRow++) {
         SHORT nLevelNumber = nRow + 1;
@@ -14241,7 +14241,7 @@ void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bF
         }
     }
 
-    if ((BYTE) nClassType == CAIOBJECTTYPE_C_MONK) {
+    if ((BYTE)nClassType == CAIOBJECTTYPE_C_MONK) {
         SetMonkAbilities();
     }
 
@@ -14278,7 +14278,7 @@ void CGameSprite::sub_71E760(CDerivedStats& DStats, int bFeedBack)
 
     // Drow (elf) and svirfneblin (gnome) subrace 1 gain 1% magic resistance
     // per level gained.
-    INT nDiff = (BYTE) m_derivedStats.m_nLevel - (BYTE) DStats.m_nLevel;
+    INT nDiff = (BYTE)m_derivedStats.m_nLevel - (BYTE)DStats.m_nLevel;
     for (INT i = 0; i < nDiff; i++) {
         if ((m_typeAI.m_nRace == CAIOBJECTTYPE_R_ELF || m_typeAI.m_nRace == CAIOBJECTTYPE_R_GNOME)
             && m_typeAI.m_nSubRace == 1) {

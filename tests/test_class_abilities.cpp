@@ -7,8 +7,8 @@
 #define NOMINMAX
 #include <catch2/catch_test_macros.hpp>
 
-#include "CGameSprite.h"
 #include "CDerivedStats.h"
+#include "CGameSprite.h"
 #include "engine_world.h"
 
 namespace {
