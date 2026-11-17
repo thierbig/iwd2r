@@ -615,6 +615,84 @@ TEST_CASE("gam: a referenced or hd0-local BIF has no caching requirement", "[gam
     CHECK(resFile.GetCachingRequirement() == 0);
 }
 
+// CResFile::LoadCache (0x789CE0) must never copy when the BIF is not a caching
+// candidate. A BIF referenced by an open resource (m_nRefCount > 0) bails out
+// before any file is touched, a BIF index outside the KEY table fails
+// GetResFileName, and the install's KEY marks BIF 0 (data\2DA.bif) hd0-only
+// (bDrives == 1) with the file present, so its drive gate fires. No test may
+// drive the copy path itself: it would write into the installed game's cache.
+TEST_CASE("gam: LoadCache refuses a referenced or unknown or hd0-local BIF", "[gam][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    CResFile resFile;
+    resFile.m_nRefCount = 1;
+    CHECK(resFile.LoadCache() == FALSE);
+
+    CResFile unknownFile;
+    unknownFile.m_nIndex = 0x7FFFFFFF;
+    CHECK(unknownFile.LoadCache() == FALSE);
+
+    // BIF 0 resolves to the local hard disk — the hd0 gate fires after
+    // GetResFileName succeeds, before any cache state is touched.
+    CString sResFileName;
+    WORD nDrive = 0;
+    REQUIRE(g_pChitin->cDimm.GetResFileName(0, sResFileName, nDrive, TRUE) == TRUE);
+    REQUIRE((nDrive & 1) != 0);
+    CResFile hd0File;
+    hd0File.m_nIndex = 0;
+    CHECK(hd0File.LoadCache() == FALSE);
+}
+
+// CacheResFileWithResource (0x5A0950) in single player caches only the area's
+// own WED BIF — and a WED BIF referenced by an open resource (m_nRefCount > 0)
+// is refused by LoadCache (0x789CE0) before any file is touched, so the call
+// just records the area name in CResCache's static list and returns. With the
+// WED BIF unreferenced the call would copy the CD-resident AR1000 BIF into
+// the install's cache — never driven from a test.
+TEST_CASE("gam: CacheResFileWithResource records the area and skips a referenced WED BIF", "[gam][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    // Resolve ar1000's WED BIF exactly as the port does: the WED resref at
+    // ARE +8, type 1003.
+    CAreaFile cAreaFile;
+    cAreaFile.SetResRef(CResRef(CString("ar1000")), TRUE, TRUE);
+    BYTE* pAreaData = cAreaFile.GetData();
+    REQUIRE(pAreaData != NULL);
+    CResRef wedResRef(pAreaData + 8);
+    cAreaFile.ReleaseData();
+    CResFile* pWedBifFile = g_pChitin->cDimm.GetResFilePtr(
+        g_pChitin->cDimm.GetResID(wedResRef, 1003));
+    REQUIRE(pWedBifFile != NULL);
+
+    // Keep the WED BIF referenced so LoadCache refuses it.
+    UINT nOldRefCount = pWedBifFile->m_nRefCount;
+    pWedBifFile->m_nRefCount = 1;
+
+    int nOldCount = CResCache::dword_8FB92C;
+    CString sOldName = CResCache::stru_8FB90C[0];
+
+    g_pBaldurChitin->GetObjectGame()->CacheResFileWithResource(CString("ar1000"));
+
+    CHECK(CResCache::stru_8FB90C[0] == "ar1000");
+    CHECK(CResCache::dword_8FB92C == 1);
+
+    pWedBifFile->m_nRefCount = nOldRefCount;
+    CResCache::stru_8FB90C[0] = sOldName;
+    CResCache::dword_8FB92C = nOldCount;
+}
+
 // Party Formation's Done saves and loads the game back (CScreenSinglePlayer::
 // OnMainDoneButtonClick, 0x6629E0); the world starts on the reloaded area.
 // SaveGame packs the area files into ICEWIND2.SAV (0x784A50), LoadGame
