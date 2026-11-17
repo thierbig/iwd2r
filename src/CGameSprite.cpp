@@ -14134,6 +14134,135 @@ void CGameSprite::sub_71E750(CCreatureFileHeader& oldBaseStats, CDerivedStats& o
 {
 }
 
+// 0x722D50
+void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bFeedBack)
+{
+    const C2DArray* pAbilityTable
+        = g_pBaldurChitin->GetObjectGame()->GetRuleTables().GetClassAbilityTable((BYTE) nClassType,
+            GetSpecialization());
+    if (pAbilityTable == NULL) {
+        return;
+    }
+
+    DWORD nLevel = GetActiveStats()->GetClassLevel(nClassType);
+
+    // -1 grants every level row from 0.
+    SHORT nStartRow = 0;
+    if ((SHORT) nLevelsGained != -1) {
+        nStartRow = (SHORT) (nLevel - nLevelsGained);
+    }
+    SHORT nEndLevel = (SHORT) nLevel;
+
+    for (SHORT nRow = nStartRow; nRow < pAbilityTable->GetWidth() && nRow < nEndLevel; nRow++) {
+        SHORT nLevelNumber = nRow + 1;
+
+        for (SHORT nColumn = 0; nColumn < pAbilityTable->GetHeight(); nColumn++) {
+            CString sFull = pAbilityTable->GetAt(CPoint(nRow, nColumn));
+            if (sFull == pAbilityTable->GetDefault()) {
+                continue;
+            }
+
+            CString sType = sFull.Left(3);
+            sFull = sFull.Right(sFull.GetLength() - 3);
+
+            if (sType == FA) {
+                // Feedback id 36. The original leaves the last two arguments
+                // as whatever eax holds; on this path that is always 0 (the
+                // strcmp that dispatched here returned 0).
+                FeedBack(36, 0, 0, 0, iwd2r_atol(sFull.GetBuffer(0)), 0, 0);
+            } else if (sType == GA) {
+                CResRef resAbility(sFull);
+                AddSpecialAbility(resAbility, bFeedBack);
+            } else if (sType == RA) {
+                CResRef resAbility(sFull);
+                RemoveSpecialAbility(resAbility);
+            } else if (sType == AP) {
+                std::list<CGameEffect*> effects = IcewindMisc::GetSpellResrefEffects(this,
+                    reinterpret_cast<const BYTE*>(sFull.GetBuffer(0)),
+                    1);
+                for (std::list<CGameEffect*>::iterator it = effects.begin(); it != effects.end();
+                     it++) {
+                    if (*it == NULL) {
+                        continue;
+                    }
+
+                    // The original stores the resref at effect+0x90; the
+                    // tree's CGameEffect declares m_sourceRes at 0x8C.
+                    (*it)->m_sourceRes = sFull;
+                    if (GetObjectType() == CGameObject::TYPE_SPRITE) {
+                        AddEffect(*it, CGameAIBase::EFFECT_LIST_TIMED, FALSE, TRUE);
+                    }
+                }
+            } else {
+                UTIL_ASSERT_MSG(FALSE, "Invalid ability type");
+            }
+        }
+
+        switch (nClassType) {
+        case CAIOBJECTTYPE_C_BARBARIAN:
+            if (nLevelNumber >= 0xb && (nLevelNumber - 0xb) % 3 == 0) {
+                m_baseStats.m_resistFireBase++;
+                m_baseStats.m_resistColdBase++;
+                m_baseStats.m_resistElectricityBase++;
+                m_baseStats.m_resistAcidBase++;
+                m_baseStats.m_resistSlashingBase++;
+                m_baseStats.m_resistCrushingBase++;
+                m_baseStats.m_resistPiercingBase++;
+                m_baseStats.m_resistMissileBase++;
+            }
+            break;
+        case CAIOBJECTTYPE_C_CLERIC:
+            if ((m_baseStats.m_specialization & 0xff8000) == SPECMASK_CLERIC_MASK
+                && nLevelNumber == 1) {
+                CCreatureFileHeader oldBaseStats = m_baseStats;
+                SetFeatValue(CGAMESPRITE_FEAT_BLIND_FIGHT, TRUE);
+                sub_71E240(oldBaseStats, m_derivedStats);
+            }
+            break;
+        case CAIOBJECTTYPE_C_MONK:
+            if (nLevelNumber == 2) {
+                CCreatureFileHeader oldBaseStats = m_baseStats;
+                SetFeatValue(CGAMESPRITE_FEAT_DEFLECT_ARROWS, TRUE);
+                sub_71E240(oldBaseStats, m_derivedStats);
+            } else if (nLevelNumber == 9) {
+                CCreatureFileHeader oldBaseStats = m_baseStats;
+                SetFeatValue(CGAMESPRITE_FEAT_IMPROVED_EVASION, TRUE);
+                sub_71E240(oldBaseStats, m_derivedStats);
+            } else if (nLevelNumber == 0xd) {
+                m_baseStats.m_resistMagicBase += 23;
+            } else if (nLevelNumber > 0xd) {
+                m_baseStats.m_resistMagicBase++;
+            }
+
+            if (nLevelNumber % 5 == 0) {
+                m_baseStats.field_3E++;
+            }
+            break;
+        }
+    }
+
+    if ((BYTE) nClassType == CAIOBJECTTYPE_C_MONK) {
+        SetMonkAbilities();
+    }
+
+    // The original calls GetAIType() here and discards the result.
+    GetAIType();
+
+    int nBaseAttackBonus = 0;
+    int nNumberOfAttacks = 0;
+    int nStep = 0;
+    g_pBaldurChitin->GetObjectGame()->GetRuleTables().sub_546B60(this,
+        nBaseAttackBonus,
+        nNumberOfAttacks,
+        nStep,
+        FALSE);
+    BYTE nAttacks = static_cast<BYTE>(nNumberOfAttacks);
+    if (nAttacks > 5) {
+        nAttacks = 5;
+    }
+    m_baseStats.m_numberOfAttacksBase = nAttacks;
+}
+
 // 0x71E760
 void CGameSprite::sub_71E760(CDerivedStats& DStats, int a2)
 {

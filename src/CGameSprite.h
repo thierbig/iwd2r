@@ -595,6 +595,7 @@ public:
     INT sub_723F60();
     void sub_71E240(CCreatureFileHeader& oldBaseStats, CDerivedStats& oldDStats);
     void sub_71E750(CCreatureFileHeader& oldBaseStats, CDerivedStats& oldDStats);
+    void ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bFeedBack);
     void sub_71E760(CDerivedStats& DStats, int a2);
     int sub_71F6E0();
     const CString& GetName();
