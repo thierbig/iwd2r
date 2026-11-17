@@ -23,6 +23,7 @@
 #include "CPathSearch.h"
 #include "CResCHR.h"
 #include "CResCache.h"
+#include "CResFile.h"
 #include "CResText.h"
 #include "CScreenChapter.h"
 #include "CScreenCharacter.h"
@@ -1434,7 +1435,82 @@ void CInfGame::sub_5A0160()  // re-lint: disable RE004 (address-named in this tr
 // 0x5A04B0
 LONG CInfGame::CachingRequirements(const CString& areaName)
 {
-    return 0;
+    LONG nTotalCachingRequirements = 0;
+
+    CAreaFile cAreaFile;
+    cAreaFile.SetResRef(CResRef(areaName), TRUE, TRUE);
+
+    BYTE* pAreaData = cAreaFile.GetData();
+    if (pAreaData == NULL) {
+        return 0;
+    }
+
+    // The WED resref sits at offset 8 of the area header (type 1003); its
+    // owning BIF is the area's primary caching candidate.
+    CResFile* pWedBifFile = g_pChitin->cDimm.GetResFilePtr(
+        g_pChitin->cDimm.GetResID(CResRef(pAreaData + 8), 1003));
+    cAreaFile.ReleaseData();
+    if (pWedBifFile == NULL) {
+        return 0;
+    }
+
+    // Single player: only the area's own WED BIF is ever a caching candidate.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+        return pWedBifFile->GetCachingRequirement();
+    }
+
+    // Multiplayer: sum the area's linkage row out of the caching table.
+    CString sBifName;
+    CString sXLabel;
+    CString sYLabel;
+    CPoint ptLocation;
+
+    // The original ignores GetFileName's return here.
+    pWedBifFile->GetFileName(sBifName);
+    if (m_ruleTables.m_tAreaLinkageCaching.Find(sBifName, ptLocation, TRUE) == FALSE
+        || m_ruleTables.m_tAreaLinkageCaching.Find(sBifName, sXLabel, sYLabel, TRUE) == FALSE) {
+        return pWedBifFile->GetCachingRequirement();
+    }
+
+    CString sCell;
+    if (m_ruleTables.m_tAreaLinkageCaching.GetWidth() < 1
+        || m_ruleTables.m_tAreaLinkageCaching.GetHeight() <= ptLocation.y
+        || ptLocation.y < 0) {
+        sCell = m_ruleTables.m_tAreaLinkageCaching.GetDefault();
+    } else {
+        sCell = m_ruleTables.m_tAreaLinkageCaching.GetAt(CPoint(0, ptLocation.y));
+    }
+
+    INT nCount = atol(sCell);
+    if (nCount == 0) {
+        return pWedBifFile->GetCachingRequirement();
+    }
+
+    DWORD dwFileID = g_pChitin->cDimm.GetResFileID(sYLabel);
+    INT i = 0;
+    while (i <= nCount) {
+        CResFile* pBifFile = g_pChitin->cDimm.GetResFilePtr(dwFileID);
+        if (pBifFile == NULL) {
+            // Missing linked BIF: the original unwinds with the partial sum.
+            return nTotalCachingRequirements;
+        }
+
+        nTotalCachingRequirements += pBifFile->GetCachingRequirement();
+        i++;
+
+        if (m_ruleTables.m_tAreaLinkageCaching.GetWidth() <= i
+            || m_ruleTables.m_tAreaLinkageCaching.GetHeight() <= ptLocation.y
+            || i < 0
+            || ptLocation.y < 0) {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetDefault();
+        } else {
+            sBifName = m_ruleTables.m_tAreaLinkageCaching.GetAt(CPoint(i, ptLocation.y));
+        }
+
+        dwFileID = g_pChitin->cDimm.GetResFileID(sBifName);
+    }
+
+    return nTotalCachingRequirements;
 }
 
 // 0x5A0950
