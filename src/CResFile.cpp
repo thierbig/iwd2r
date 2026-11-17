@@ -118,6 +118,109 @@ DWORD CResFile::GetCachingRequirement()
     return dwSize;
 }
 
+// 0x789CE0
+BOOL CResFile::LoadCache()
+{
+    CString sDirName; // copy of cResCache.m_sDirName
+    CString sResFileName;
+    CString sKeyName; // KEY file-name entry
+    CString sResolvedResFileName;
+    CString sCacheFileName; // WriteSetUp destination
+    WORD nDrive = 0;
+
+    // The original resolves the resource cache through a local pointer and
+    // asserts on it (ChDimm.cpp lines 0x1D39 / 0x1D3B).
+    CResCache* pResCache = &(g_pChitin->cDimm.cResCache);
+    UTIL_ASSERT(pResCache != NULL);
+    UTIL_ASSERT(pResCache->m_bInitialized == TRUE);
+
+    // Already referenced by an open resource — never a caching candidate.
+    if (m_nRefCount != 0) {
+        return FALSE;
+    }
+
+    // 0x7E9BF7 is the CRT `_getcwd` (mislabelled "GetGameBaseFolder"); the
+    // buffer is only ever restored via `_chdir` on the copy path below.
+    char szCurrentDirectory[MAX_PATH];
+    if (_getcwd(szCurrentDirectory, MAX_PATH) == NULL) {
+        return FALSE;
+    }
+
+    sDirName = pResCache->m_sDirName;
+
+    if (!g_pChitin->cDimm.GetResFileName(m_nIndex, sResFileName, nDrive, TRUE)) {
+        return FALSE;
+    }
+
+    // KEY file-name entry — skipped (not failed) when the table is
+    // uninitialized or the index is out of range.
+    if (g_pChitin->cDimm.m_cKeyTable.m_bInitialized != FALSE
+        && m_nIndex < g_pChitin->cDimm.m_cKeyTable.m_nResFiles) {
+        sKeyName = reinterpret_cast<char*>(g_pChitin->cDimm.m_cKeyTable.m_pResFileNameEntries)
+            + g_pChitin->cDimm.m_cKeyTable.m_pResFileNameEntries[m_nIndex].nFileNameOffset;
+    }
+
+    // File already on the local hard disk (hd0) — nothing to cache.
+    if ((nDrive & 1) != 0) {
+        return FALSE;
+    }
+
+    // Already in the cache directory — cheap path: no `_chdir` happens, the
+    // pending-cache flag is cleared and the file is only re-registered.
+    if ((nDrive & 0x200) != 0) {
+        if (!AddCacheCount()) {
+            return FALSE;
+        }
+
+        pResCache->AccessFileInCache(m_nIndex);
+
+        EnterCriticalSection(&(g_pChitin->field_35C));
+        pResCache->field_110 = 0;
+        LeaveCriticalSection(&(g_pChitin->field_35C));
+
+        return TRUE;
+    }
+
+    if (!g_pChitin->lAliases.ResolveFileName(sResFileName, sResolvedResFileName)) {
+        return FALSE;
+    }
+
+    if (!g_pChitin->cDimm.WriteSetUp(sDirName + sKeyName, sCacheFileName)) {
+        return FALSE;
+    }
+
+    // Hold off while a synchronous update or display refresh is in flight.
+    while (g_pChitin->m_bInSynchronousUpdate == 1 || g_pChitin->m_bDisplayStale == 1) {
+        SleepEx(5, FALSE);
+    }
+
+    if (!AddCacheCount()) {
+        return FALSE;
+    }
+
+    if (!pResCache->CopyFile(m_nIndex, sKeyName, sResolvedResFileName, sCacheFileName)) {
+        // Roll the cache count back and leave the pending-cache flag clear.
+        EnterCriticalSection(&(g_pChitin->field_35C));
+        if (m_nCacheCount > 1) {
+            m_nCacheCount -= 1;
+        } else {
+            m_nCacheCount = 0;
+        }
+        pResCache->field_110 = 0;
+        LeaveCriticalSection(&(g_pChitin->field_35C));
+
+        _chdir(szCurrentDirectory);
+        return FALSE;
+    }
+
+    EnterCriticalSection(&(g_pChitin->field_35C));
+    pResCache->field_110 = 0;
+    LeaveCriticalSection(&(g_pChitin->field_35C));
+
+    _chdir(szCurrentDirectory);
+    return TRUE;
+}
+
 // 0x78A080
 BOOL CResFile::CloseFile()
 {

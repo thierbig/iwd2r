@@ -13,6 +13,7 @@ public:
     DWORD GetCachingRequirement();
     BOOL GetFileName(CString& sResFileName);
     DWORD GetFileSize(RESID resID);
+    BOOL LoadCache();
     BOOL OpenFile();
     UINT ReadResource(RESID resID, LPVOID lpBuf, UINT nCount, UINT nOffset);
     void UnCache();
