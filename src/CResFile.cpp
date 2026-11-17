@@ -75,9 +75,13 @@ DWORD CResFile::GetCachingRequirement()
         return 0;
     }
 
-    // TODO: 0x7E9BF7 not ported. (GetGameBaseFolder — CRT _lock/GetFullPathNameA
-    // machinery; the original fills a buffer it never reads and only bails out
-    // when the call itself fails.)
+    // 0x789AD8: 0x7E9BF7 is the CRT `_getcwd` (lock 0xC, `_getdcwd(0, ...)`,
+    // unlock); the buffer is never read, only a failure bails out.
+    char szCurrentDirectory[MAX_PATH];
+    if (_getcwd(szCurrentDirectory, MAX_PATH) == NULL) {
+        return 0;
+    }
+
     // NOTE: Dead stores omitted — the original also copies cResCache.m_sDirName
     // and re-copies the KEY file-name entry into locals that are never read.
 
