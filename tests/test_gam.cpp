@@ -649,6 +649,55 @@ TEST_CASE("gam: LoadCache refuses a referenced or unknown or hd0-local BIF", "[g
     CHECK(hd0File.LoadCache() == FALSE);
 }
 
+// CResFile::GetFileName (0x78A0F0) reports a BIF's base name out of the KEY
+// file-name entries: the install's KEY records ar1000's WED BIF as entry 33,
+// "data\AR1000.bif", and the port strips the path (Find('\\') + Right loop)
+// and the four-character extension to yield "AR1000" — the name the callers
+// (CachingRequirements, CacheResFileWithResource) look up in AREALINK. An
+// index past the KEY table fails the unsigned range compare before the out
+// parameter is touched. The uninitialized-table arm is not driven here:
+// StartEngine initializes the shared key table and a test must not leave it
+// broken for the cases that follow.
+TEST_CASE("gam: GetFileName strips path and extension from the KEY entry", "[gam][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    // Resolve ar1000's WED BIF exactly as the callers do: the WED resref at
+    // ARE +8, type 1003.
+    CAreaFile cAreaFile;
+    cAreaFile.SetResRef(CResRef(CString("ar1000")), TRUE, TRUE);
+    BYTE* pAreaData = cAreaFile.GetData();
+    REQUIRE(pAreaData != NULL);
+    CResRef wedResRef(pAreaData + 8);
+    cAreaFile.ReleaseData();
+    CResFile* pWedBifFile = g_pChitin->cDimm.GetResFilePtr(
+        g_pChitin->cDimm.GetResID(wedResRef, 1003));
+    REQUIRE(pWedBifFile != NULL);
+
+    CString sBifName;
+    CHECK(pWedBifFile->GetFileName(sBifName) == TRUE);
+    CHECK(sBifName == "AR1000");
+
+    // A second entry with the same shape: BIF 0 is "data\2DA.bif".
+    CResFile* pTwoDaFile = g_pChitin->cDimm.GetResFilePtr(0);
+    REQUIRE(pTwoDaFile != NULL);
+    CString sTwoDaName;
+    CHECK(pTwoDaFile->GetFileName(sTwoDaName) == TRUE);
+    CHECK(sTwoDaName == "2DA");
+
+    // Out-of-range index: fails before the out parameter is assigned.
+    CResFile unknownFile;
+    unknownFile.m_nIndex = 0x7FFFFFFF;
+    CString sUntouched("sentinel");
+    CHECK(unknownFile.GetFileName(sUntouched) == FALSE);
+    CHECK(sUntouched == "sentinel");
+}
+
 // CacheResFileWithResource (0x5A0950) in single player caches only the area's
 // own WED BIF — and a WED BIF referenced by an open resource (m_nRefCount > 0)
 // is refused by LoadCache (0x789CE0) before any file is touched, so the call
