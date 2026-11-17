@@ -15355,9 +15355,8 @@ SHORT CGameSprite::ExecuteAction()
         returnValue = ChangeAnimation();
         goto done;
     case 200:
-        // RandomWalkContinuous
-        // TODO: 0x7290CB-0x7290DB not ported (0x748CA0).
-        returnValue = ACTION_ERROR;
+        // RandomWalkContinuous (0x7290CB-0x7290DB)
+        returnValue = RandomWalkContinuous();
         goto done;
     case 215:
         // Engine-internal action 215 (ACTION.IDS has no entry for 205-228 and
@@ -24462,6 +24461,212 @@ noTarget: {
     CAIAction wait(CAIAction::WAIT, CPoint(-1, -1), rand() % 40 + 1, -1);
     AddAction(wait);
 }
+    return ACTION_DONE;
+}
+
+// 0x748CA0
+// RandomWalkContinuous (200): a RandomWalk that never pauses. It requeues
+// itself like RandomWalk, but the frame-rate and viewport gates are gone, and
+// a hunt can bias the draw: when the base-stat flags select type-AI fields,
+// the nearest object matching the narrowed type pulls the point toward
+// itself, capped at half the walk box. Whatever the retries produce is queued
+// as a MoveToPoint; there is no Wait fallback - after 100 impassable draws or
+// 20 out-of-leash draws the last point is used as-is.
+// NOTE: the original asserts m_animation is set (".\Include\ObjAnimation.h",
+// 0x82D) before GetPersonalSpace; the tree's m_animation is embedded, so the
+// assert is dropped as in RandomWalk. Two dead default-constructed CAIAction
+// temporaries (0x748EF1, 0x7493FA) are compiler artifacts and omitted.
+SHORT CGameSprite::RandomWalkContinuous()
+{
+    // The final MoveToPoint; the original default-constructs it here and
+    // fills it in the tail as a member-wise copy of a 4-arg temporary.
+    CAIAction move;
+
+    // The search type the flags below narrow from ANYONE.
+    CAIObjectType searchType;
+    searchType.Set(CAIObjectType::ANYONE);
+
+    if (m_interrupt != 0) {
+        return ACTION_INTERRUPTABLE;
+    }
+
+    // The copy of the action itself, queued first (last after AddHead).
+    CAIAction action;
+    action.m_actionID = m_curAction.m_actionID;
+    action.m_specificID = 0;
+    action.m_specificID2 = -1;
+    action.m_specificID3 = 0;
+    action.m_dest = CPoint(-1, -1);
+    action.m_internalFlags = 0;
+
+    AddAction(action);
+
+    CRect rBounds(m_pArea->m_cInfinity.rViewPort);
+    int nWidth = rBounds.Width();
+    int nHeight = rBounds.Height();
+    if (m_huntingRange != 0 && static_cast<int>(m_huntingRange) * 2 < nWidth) {
+        nWidth = m_huntingRange;
+    }
+    if (m_huntingRange != 0 && static_cast<int>(m_huntingRange) * 2 < nHeight) {
+        nHeight = m_huntingRange;
+    }
+
+    // The base-stat flags pick which of the sprite's own type-AI fields
+    // narrow the search; any of the first six also arms the hunt below.
+    DWORD dwFlags = m_baseStats.m_flags;
+    BOOL bFilter = FALSE;
+    if (dwFlags & 0x1000000) {
+        searchType.m_nEnemyAlly = m_typeAI.m_nEnemyAlly;
+        bFilter = TRUE;
+    }
+    if (dwFlags & 0x2000000) {
+        searchType.m_nGeneral = m_typeAI.m_nGeneral;
+        bFilter = TRUE;
+    }
+    if (dwFlags & 0x4000000) {
+        searchType.m_nRace = m_typeAI.m_nRace;
+        bFilter = TRUE;
+    }
+    if (dwFlags & 0x8000000) {
+        searchType.m_nClass = m_typeAI.m_nClass;
+        bFilter = TRUE;
+    }
+    if (dwFlags & 0x10000000) {
+        searchType.m_nSpecific = m_typeAI.m_nSpecific;
+        bFilter = TRUE;
+    }
+    if (dwFlags & 0x20000000) {
+        searchType.m_nGender = m_typeAI.m_nGender;
+        bFilter = TRUE;
+    }
+    // QUIRK: the alignment arm copies the field but does not arm the hunt,
+    // so the alignment flag alone never searches.
+    if (dwFlags & 0x40000000) {
+        searchType.m_nAlignment = m_typeAI.m_nAlignment;
+    }
+
+    // The hunt: bias the draw toward the nearest match, capped at half the
+    // walk box.
+    int nPushX = 0;
+    int nPushY = 0;
+    if (bFilter) {
+        LONG nNearest = m_pArea->GetNearest(m_id,
+            searchType,
+            GetVisualRange(),
+            GetVisibleTerrainTable(),
+            TRUE,
+            GetCanSeeInvisible(),
+            FALSE,
+            0,
+            FALSE);
+
+        CGameObject* pObject = NULL;
+        BYTE rc;
+        do {
+            rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nNearest,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        // QUIRK: a share that came back empty is never released either.
+        if (rc == CGameObjectArray::SUCCESS && pObject != NULL) {
+            int nDx = pObject->m_pos.x - m_pos.x;
+            int nDy = pObject->m_pos.y - m_pos.y;
+            int nAbsX = nDx < 0 ? -nDx : nDx;
+            int nAbsY = nDy < 0 ? -nDy : nDy;
+            nPushX = nAbsX < (nWidth >> 1) ? nAbsX : (nWidth >> 1);
+            nPushY = nAbsY < (nHeight >> 1) ? nAbsY : (nHeight >> 1);
+            if (nDx < 0) {
+                nPushX = -nPushX;
+            }
+            if (nDy < 0) {
+                nPushY = -nPushY;
+            }
+
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nNearest,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+    }
+
+    int nHalfWidth = nWidth >> 1;
+    int nHalfHeight = nHeight >> 1;
+    int nDx = 0;
+    int nDy = 0;
+    int nDistanceSq = 0;
+    BYTE nTries = 0;
+
+    for (;;) {
+        BYTE nCostTries = 0;
+        BYTE nCost;
+        do {
+            nDx = (nWidth != 0 ? rand() % nWidth : 0) - nHalfWidth;
+            nDy = (nHeight != 0 ? rand() % nHeight : 0) - nHalfHeight;
+            nDistanceSq = nDy * nDy + nDx * nDx;
+
+            int nBaseX;
+            int nBaseY;
+            if (m_huntingRange != 0) {
+                int nFromStartX = m_pos.x - m_posStart.x;
+                int nFromStartY = m_pos.y - m_posStart.y;
+                if (nFromStartX * nFromStartX + nFromStartY * nFromStartY < m_huntingRange) {
+                    nBaseX = m_pos.x;
+                    nBaseY = m_pos.y;
+                } else {
+                    nBaseX = m_posStart.x;
+                    nBaseY = m_posStart.y;
+                }
+            } else {
+                nBaseX = m_pos.x;
+                nBaseY = m_pos.y;
+            }
+
+            nDx += nBaseX;
+            nDy += nBaseY;
+            // The hunt bias; RandomWalk has no equivalent.
+            nDx += nPushX;
+            nDy += nPushY;
+            if (nDx < 0) {
+                nDx = 0;
+            }
+            if (nDy < 0) {
+                nDy = 0;
+            }
+            if (nDx >= m_pArea->m_cInfinity.nAreaX) {
+                nDx = m_pArea->m_cInfinity.nAreaX - 1;
+            }
+            if (nDy >= m_pArea->m_cInfinity.nAreaY) {
+                nDy = m_pArea->m_cInfinity.nAreaY - 1;
+            }
+
+            CPoint pt(nDx / CPathSearch::GRID_SQUARE_SIZEX,
+                nDy / CPathSearch::GRID_SQUARE_SIZEY);
+            SHORT nTableIndex;
+            nCost = m_pArea->m_search.GetCost(pt,
+                m_terrainTable,
+                m_animation.GetPersonalSpace(),
+                nTableIndex,
+                TRUE);
+            nCostTries++;
+        } while (nCost == CPathSearch::COST_IMPASSABLE && nCostTries < 100);
+
+        if (m_posStart.x == -1 && m_posStart.y == -1) {
+            nDistanceSq = -1;
+        }
+        nTries++;
+
+        // Unlike RandomWalk there is no Wait fallback: the leash retry ends
+        // by using the out-of-leash point as-is.
+        if (m_huntingRange == 0
+            || nDistanceSq <= static_cast<int>(m_huntingRange) * m_huntingRange
+            || nTries >= 20) {
+            break;
+        }
+    }
+
+    move = CAIAction(CAIAction::MOVETOPOINT, CPoint(nDx, nDy), -2, -1);
+    AddAction(move);
     return ACTION_DONE;
 }
 

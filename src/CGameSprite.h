@@ -574,6 +574,7 @@ public:
     SHORT UseContainer();
     SHORT RemoveTraps(CGameAIBase* pTarget);
     SHORT RandomWalk();
+    SHORT RandomWalkContinuous();
     SHORT PickLock(CGameObject* pTarget);
     void sub_71D0B0();
     void sub_72FBF0();
