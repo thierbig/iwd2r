@@ -871,7 +871,8 @@ TEST_CASE("sprite: RunAwayFromNoLeaveArea (250) runs for the action's duration a
     // Too close and the counter at its 15th call: the point opposite the
     // target (twice this position minus the target's) is this position
     // when both stand together, so the move starts; the empty weapon slot
-    // then ends the action done.
+    // then skips the swing and the value saved at entry comes back
+    // (0x760EAF -> 0x76144A), interruptable for 250.
     CItem* pSavedItem = pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon];
     pHedron->m_equipment.m_items[pHedron->m_equipment.m_selectedWeapon] = NULL;
     pArea->GetInfinity()->nAreaX = nAreaX;
@@ -880,7 +881,7 @@ TEST_CASE("sprite: RunAwayFromNoLeaveArea (250) runs for the action's duration a
     pCharacter->m_pos = ptHedron;
     pHedron->field_5614 = 14;
     pHedron->SetCurrAction(CAIAction(250, character, 100, 0, 0));
-    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_DONE);
+    CHECK(pHedron->RunAwayFromNoLeaveArea(pCharacter) == CGameAIBase::ACTION_INTERRUPTABLE);
     CHECK(pHedron->field_5614 == 15);
     CHECK(pHedron->m_curDest.x == ptHedron.x);
     CHECK(pHedron->m_curDest.y == ptHedron.y);

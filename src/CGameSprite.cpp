@@ -31836,7 +31836,8 @@ SHORT CGameSprite::RunAwayFromNoLeaveArea(CGameSprite* pTarget)
                 }
             }
 
-            returnValue = ACTION_DONE;
+            // The cornered tail returns the value saved at entry (0x76144A
+            // reloads it), not ACTION_DONE.
         }
     }
 
