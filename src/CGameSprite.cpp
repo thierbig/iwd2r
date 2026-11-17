@@ -14264,9 +14264,27 @@ void CGameSprite::ApplyClassAbilities(INT nClassType, INT nLevelsGained, BOOL bF
 }
 
 // 0x71E760
-void CGameSprite::sub_71E760(CDerivedStats& DStats, int a2)
+void CGameSprite::sub_71E760(CDerivedStats& DStats, int bFeedBack)
 {
-    // TODO: Incomplete.
+    // The original unrolls one arm per class type 1..0xB; every arm tests the
+    // new level first and passes the level delta as nLevelsGained.
+    for (INT nClassType = 1; nClassType <= 0xb; nClassType++) {
+        if (m_derivedStats.GetClassLevel(nClassType) != 0) {
+            ApplyClassAbilities(nClassType,
+                m_derivedStats.GetClassLevel(nClassType) - DStats.GetClassLevel(nClassType),
+                bFeedBack);
+        }
+    }
+
+    // Drow (elf) and svirfneblin (gnome) subrace 1 gain 1% magic resistance
+    // per level gained.
+    INT nDiff = (BYTE) m_derivedStats.m_nLevel - (BYTE) DStats.m_nLevel;
+    for (INT i = 0; i < nDiff; i++) {
+        if ((m_typeAI.m_nRace == CAIOBJECTTYPE_R_ELF || m_typeAI.m_nRace == CAIOBJECTTYPE_R_GNOME)
+            && m_typeAI.m_nSubRace == 1) {
+            m_baseStats.m_resistMagicBase++;
+        }
+    }
 }
 
 // 0x71F6E0
