@@ -6685,3 +6685,44 @@ TEST_CASE("sprite: sub_756770 traps on coincident points like the exe's idiv (0x
     CHECK(WTERMSIG(status) == SIGFPE);
 }
 #endif
+
+// CGameSprite::sub_723830 (0x723830): store the base number of attacks from
+// CRuleTables::sub_546B60 in m_baseStats, at most 5. The rule tables are the
+// game's own (the BAAT 2DAs); the class levels are set here, so the expected
+// counts are the warrior progression those tables hold.
+TEST_CASE("sprite: sub_723830 stores the rule tables' base attack count (0x723830)", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter != NULL);
+
+    // A single-class fighter, so only the warrior table counts.
+    pCharacter->m_typeAI.m_nClassMask = CLASSMASK_FIGHTER;
+
+    const struct {
+        BYTE level;
+        BYTE attacks;
+    } kCases[] = {
+        { 1, 1 }, // base attack +1: (1 - 1) / 5 + 1
+        { 6, 2 }, // +6: (6 - 1) / 5 + 1
+        { 20, 4 }, // +20: (20 - 1) / 5 + 1
+        { 30, 4 }, // +30 gives 6, which sub_546B60 caps at 4
+    };
+    for (const auto& c : kCases) {
+        INFO("fighter level " << static_cast<int>(c.level));
+        pCharacter->m_derivedStats.m_fighterLevel = c.level;
+        pCharacter->m_baseStats.m_numberOfAttacksBase = 0xAA;
+        pCharacter->sub_723830();
+        CHECK(pCharacter->m_baseStats.m_numberOfAttacksBase == c.attacks);
+    }
+}

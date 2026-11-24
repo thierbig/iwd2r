@@ -13622,6 +13622,31 @@ void CGameSprite::SetMonkAbilities()
     }
 }
 
+// 0x723830
+void CGameSprite::sub_723830()
+{
+    // The original calls GetAIType() here (0x723838) and discards the
+    // result.
+    GetAIType();
+
+    int nBaseAttackBonus = 0;
+    int nNumberOfAttacks = 0;
+    int nStep = 0;
+    g_pBaldurChitin->GetObjectGame()->GetRuleTables().sub_546B60(this,
+        nBaseAttackBonus,
+        nNumberOfAttacks,
+        nStep,
+        FALSE);
+
+    // The original compares the low byte against 5 and stores the byte, so
+    // the clamp is on the byte, not on the int.
+    BYTE nAttacks = static_cast<BYTE>(nNumberOfAttacks);
+    if (nAttacks > 5) {
+        nAttacks = 5;
+    }
+    m_baseStats.m_numberOfAttacksBase = nAttacks;
+}
+
 // 0x7238A0
 LONG CGameSprite::GetLevel()
 {

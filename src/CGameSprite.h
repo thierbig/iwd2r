@@ -587,6 +587,7 @@ public:
     void sub_722820();
     BOOL HaveUnexportableItems();
     void SetMonkAbilities();
+    void sub_723830();
     LONG GetLevel();
     void sub_723BF0(BOOLEAN a1, BOOLEAN a2);
     INT GetAC();
