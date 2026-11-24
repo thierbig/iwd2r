@@ -769,6 +769,136 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a sessi
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREALUA 88/114 cancel handler: the client records the host's reply
+// code in its waiting slot. It takes the buffer and a dwSize it ignores (the
+// original's 2-argument `ret 8` form), and neither guard needs game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xCD };
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // A closed session is refused before the payload is read.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // Only a client waits for the cancel; the host's own request never
+    // reaches this handler.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // The client stores the payload byte after the 3-byte header and marks
+    // the reply returned.
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaLuaReplyValue == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/114 cancel handler: the LEAVEAREALUA cancel's twin,
+// with its own waiting slot. Two-argument `ret 8` form, no game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xAB };
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaNameReplyValue == 0xAB);
+
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREALUA 88/65 announce handler: the host tells a client to make one
+// sprite leave an area. The two entry guards need no game state; after them
+// the handler decodes the announce and calls CInfGame::LeaveAreaLUA, which
+// needs a booted game (its own paths are covered by the permit-reply case
+// below and by tests/test_ui_misc.cpp's travel scenario).
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREALUA 88, announce 65, zeroed body}; the announce
+    // subtype has no in-tree constant (the survey's X/A row publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 2 + 1 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Only a client acts on the announce.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/65 announce handler: the host tells a client's copy of
+// a party member to run a party-required trigger's transition. The guard
+// needs no game state; after it the handler decodes the announce and calls
+// CInfGame::sub_5C4AD0, which on the client side waits for the host's
+// signals (tests/test_ui_misc.cpp's travel scenario and 5C4AD0.md cover it).
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREANAME 120, announce 65, zeroed body}; the
+    // announce subtype has no in-tree constant (the survey's x/A row
+    // publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREANAME;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.

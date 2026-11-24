@@ -7095,6 +7095,87 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteM
     return TRUE;
 }
 
+// 0x437D20
+BOOLEAN CBaldurMessage::OnLeaveAreaLuaCancel(BYTE* pByteMessage, DWORD dwSize)
+{
+    // NOTE: The original takes the 2-argument form `ret 8` (the buffer and a
+    // dwSize it ignores), not the sibling handlers' (nMsgFrom, buffer,
+    // dwSize).
+    (void)dwSize;
+
+    // The cancel is the other side of the permit handshake: only a client
+    // waits for it, and only with a session established.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The reply code is the first payload byte (after the 3-byte header).
+    m_nLeaveAreaLuaReplyValue = pByteMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    m_bLeaveAreaLuaReplyReturned = TRUE;
+    return TRUE;
+}
+
+// 0x437FD0
+BOOLEAN CBaldurMessage::OnLeaveAreaLuaAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The announce is the host's message to the other machines: only a
+    // connected client acts on it.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The announcer's name is fetched and discarded (the announce needs no
+    // reply).
+    CString sPlayerName;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The announce after the 3-byte header (there is no dwSize check in the
+    // original, the two lengths are trusted):
+    //   {DWORD remotePlayerID; DWORD remoteObjectID;
+    //    LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[]; BYTE areaNameLen; char areaName[]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nCharacterId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID, nRemoteObjectID, nCharacterId) == FALSE) {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    LONG nX = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    LONG nY = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    SHORT nDirection = *reinterpret_cast<SHORT*>(pByteMessage + nOffset);
+    nOffset += sizeof(SHORT);
+
+    BYTE nParchmentLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sParchment(reinterpret_cast<char*>(pByteMessage + nOffset), nParchmentLength);
+    nOffset += nParchmentLength;
+
+    BYTE nAreaNameLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sAreaName(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaNameLength);
+    nOffset += nAreaNameLength;
+
+    // The transition itself: the same LeaveAreaLUA the permit-reply handler
+    // calls with the same argument order.
+    g_pBaldurChitin->GetObjectGame()->LeaveAreaLUA(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
+
+    return TRUE;
+}
+
 // 0x438560
 BOOLEAN CBaldurMessage::OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
@@ -7308,6 +7389,81 @@ BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByte
         sizeof(BOOLEAN));
 
     DestroyBuffer(pReply);
+
+    return TRUE;
+}
+
+// 0x438F40
+BOOLEAN CBaldurMessage::OnLeaveAreaNameCancel(BYTE* pByteMessage, DWORD dwSize)
+{
+    // NOTE: The LEAVEAREANAME twin of 0x437D20, with the same two-argument
+    // form (`ret 8`: the buffer and a dwSize it ignores).
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    m_nLeaveAreaNameReplyValue = pByteMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    m_bLeaveAreaNameReplyReturned = TRUE;
+    return TRUE;
+}
+
+// 0x439250
+BOOLEAN CBaldurMessage::OnLeaveAreaNameAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The host's announce to the other machines: only a connected client
+    // acts on it.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The announcer's name is fetched and discarded (the announce expects no
+    // reply).
+    CString sPlayerName;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The announce after the 3-byte header (there is no dwSize check in the
+    // original, the length is trusted):
+    //   {DWORD remotePlayerID; DWORD remoteObjectID;      ; the character
+    //    DWORD remoteTriggerPlayerID; DWORD remoteTriggerObjectID;
+    //    BYTE areaNameLen; char areaName[]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nCharacterId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID, nRemoteObjectID, nCharacterId) == FALSE) {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    DWORD nRemoteTriggerPlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteTriggerObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nTriggerId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemoteTriggerPlayerID, nRemoteTriggerObjectID, nTriggerId) == FALSE) {
+        nTriggerId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE nAreaNameLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sAreaName(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaNameLength);
+
+    // The party transition: the same CInfGame::sub_5C4AD0 the party-required
+    // region path calls, with the trigger id resolved from the second pair.
+    g_pBaldurChitin->GetObjectGame()->sub_5C4AD0(nCharacterId, nTriggerId, sAreaName); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 
     return TRUE;
 }
