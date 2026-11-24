@@ -1925,3 +1925,114 @@ TEST_CASE("msg: CMessageSetLastAttacker round-trips its attacker type", "[networ
     missingTarget.MarshalMessage(&pPacked, &packedSize);
     CHECK(packedSize == 0);
 }
+
+// CMessageSetLastObject::MarshalMessage (0x507640) /
+// UnmarshalMessage (0x5079B0): the same template plus the WORD m_type, but
+// the original writes the fixed block as
+// {eight selectors; WORD type; BYTE avClass; DWORD classMask; instance pair;
+//  five special-case bytes} (0x507855-0x507875) while it reads
+// {nine selectors (avClass ninth); DWORD classMask; WORD type; pair; special}
+// (0x507a9c-0x507acd). The wire therefore does not round-trip those three
+// fields: this test pins the exe's behaviour instead of pretending otherwise.
+TEST_CASE("msg: CMessageSetLastObject marshals and unmarshals the exe's asymmetric wire", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+    const LONG nInstance = game.AddObject(9, 0x00010003);
+    game.MapRemote(9, 0x00010003, nInstance);
+
+    CAIObjectType lastObject;
+    lastObject.m_sName = "LAST";
+    lastObject.m_nEnemyAlly = 2;
+    lastObject.m_nGeneral = 1;
+    lastObject.m_nRace = 3;
+    lastObject.m_nSubRace = 4;
+    lastObject.m_nClass = 5;
+    lastObject.m_nSpecific = 6;
+    lastObject.m_nGender = 1;
+    lastObject.m_nAlignment = 2;
+    lastObject.m_nAvClass = 0x2A;
+    lastObject.m_nClassMask = 0xAABBCCDD;
+    lastObject.m_nInstance = nInstance;
+    const BYTE specialCase[5] = { 11, 12, 13, 14, 15 };
+    lastObject.SetSpecialCase(specialCase);
+
+    CMessageSetLastObject message(lastObject, 0x1234, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::SEND);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_OBJECT);
+
+    BYTE packed[0x4000];
+    memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+
+    CHECK(packedSize == 8 + 2 + 4 + 0x1C);
+    CHECK(packed[packedSize] == 0xCD);
+    // Fixed block starts after {pair; nameLength; name}: the WORD m_type
+    // comes before m_nAvClass and m_nClassMask.
+    const DWORD fixedStart = 10 + 4;
+    const WORD type = 0x1234;
+    CHECK(memcmp(packed + fixedStart + 8, &type, sizeof(type)) == 0);
+    CHECK(packed[fixedStart + 10] == 0x2A);
+    CHECK(packed[fixedStart + 11] == 0xDD);
+
+    BYTE packet[0x4000 + CNetwork::SPEC_MSG_HEADER_LENGTH];
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_OBJECT;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessageSetLastObject received(CAIObjectType(), 0, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+
+    // Bytes that agree: the eight selectors, the instance pair and the
+    // special case.
+    CHECK(received.m_lAttacker.m_sName == "LAST");
+    CHECK(received.m_lAttacker.m_nEnemyAlly == 2);
+    CHECK(received.m_lAttacker.m_nGeneral == 1);
+    CHECK(received.m_lAttacker.m_nRace == 3);
+    CHECK(received.m_lAttacker.m_nSubRace == 4);
+    CHECK(received.m_lAttacker.m_nClass == 5);
+    CHECK(received.m_lAttacker.m_nSpecific == 6);
+    CHECK(received.m_lAttacker.m_nGender == 1);
+    CHECK(received.m_lAttacker.m_nAlignment == 2);
+    CHECK(received.m_lAttacker.m_nInstance == nInstance);
+    for (int index = 0; index < 5; index++) {
+        CHECK(received.m_lAttacker.m_SpecialCase[index] == specialCase[index]);
+    }
+
+    // Bytes that do not: avClass reads the type's low byte, classMask reads
+    // {typeHigh, avClass, maskLow, maskHigh} and m_type reads the mask's top
+    // two bytes.
+    CHECK(received.m_lAttacker.m_nAvClass == 0x34);
+    CHECK(static_cast<DWORD>(received.m_lAttacker.m_nClassMask) == 0xCCDD2A12u);
+    CHECK(received.m_type == 0xAABB);
+
+    // The (0, INVALID_INDEX) instance fallback still decodes as INVALID_INDEX.
+    lastObject.m_nInstance = CGameObjectArray::INVALID_INDEX;
+    CMessageSetLastObject fallbackMessage(lastObject, 0x1234, 0, nTarget);
+    memset(packed, 0xCD, sizeof(packed));
+    pPacked = packed;
+    packedSize = 0;
+    fallbackMessage.MarshalMessage(&pPacked, &packedSize);
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+    CMessageSetLastObject fallbackReceived(CAIObjectType(), 0, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(fallbackReceived.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(fallbackReceived.m_lAttacker.m_nInstance == CGameObjectArray::INVALID_INDEX);
+
+    // An unknown instance pair is refused and leaves INVALID_INDEX behind.
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+    const PLAYER_ID bogusPlayer = 7;
+    const LONG bogusObject = 0x00099999;
+    const DWORD instanceOffset = 10 + 4 + 8 + 2 + 1 + 4;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + instanceOffset, &bogusPlayer, sizeof(bogusPlayer));
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + instanceOffset + 4, &bogusObject, sizeof(bogusObject));
+    CMessageSetLastObject refusedInstance(CAIObjectType(), 0, 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(refusedInstance.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == FALSE);
+    CHECK(refusedInstance.m_lAttacker.m_nInstance == CGameObjectArray::INVALID_INDEX);
+}
