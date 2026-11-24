@@ -19142,7 +19142,7 @@ BYTE CMessageSpriteUpdate::GetMsgSubType()
 void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
     // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
-    // __LINE__: 23421
+    // __LINE__: 22948
     UTIL_ASSERT(pData != NULL && dwSize != NULL);
 
     CGameSprite* pSprite;
@@ -19272,9 +19272,9 @@ void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
         }
 
         // The name travels with any other group so the receiver can place
-        // the sprite. The original never updates the shadow's copy (only
-        // Initialize clears it and ~CGameSprite frees it), so a sprite in an
-        // area sends the area group even when nothing else changed.
+        // the sprite; it is also stored in the shadow when sent (below), so
+        // an unchanged sprite whose shadow carries the same name writes
+        // nothing at all.
         if (strcmp(last.m_sAreaString, m_sAreaString) != 0 || field_108 != 0) {
             field_108 |= 0x400;
         }
@@ -19372,8 +19372,8 @@ void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
     nSize += 1;
 
     // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
-    // __LINE__: 23712
-    UTIL_ASSERT(nSize < STATICBUFFERSIZE);
+    // __LINE__: 23304
+    UTIL_ASSERT(nSize <= STATICBUFFERSIZE);
     *dwSize = nSize;
 
     DWORD cnt = 0;
@@ -19394,8 +19394,9 @@ void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
         memcpy(*pData + cnt, static_cast<const char*>(m_sAreaString), nAreaLength);
         cnt += nAreaLength;
 
-        // NOTE: The original reassigns m_sAreaString here from the temporary
-        // it copied out of; the string is unchanged.
+        // 0x50CC94: the shadow keeps the name the update just sent, so the
+        // comparison against it only fails again after an area change.
+        last.m_sAreaString = m_sAreaString;
     }
 
     if ((field_108 & 0x100) != 0) {
@@ -19536,7 +19537,7 @@ void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
             memcpy(last.field_76, field_76, sizeof(LONG) * field_74);
         }
 
-        delete field_76;
+        delete[] static_cast<LONG*>(field_76);
         field_76 = NULL;
     }
 
