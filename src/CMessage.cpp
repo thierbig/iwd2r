@@ -513,6 +513,9 @@ const BYTE CBaldurMessage::MSG_TYPE_DELETEAREA = 107;
 // 0x84CF73
 const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_POLL = 115;
 
+// 0x84CF74
+const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_VOTE = 114;
+
 // 0x84CF75
 const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_RESULT = 100;
 
@@ -7890,6 +7893,51 @@ BOOLEAN CBaldurMessage::OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DW
 }
 
 // FIXME: `sAreaString` should be reference.
+// 0x43B1A0
+BOOLEAN CBaldurMessage::SendDeleteAreaVote(CString sArea, BOOLEAN bVote)
+{
+    char nVote = bVote == TRUE ? 'y' : 'n';
+
+    // Only a client votes: the host receives the votes (0x43B380), it never
+    // sends one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    CString sHostName;
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    DWORD nAreaLength = sArea.GetLength();
+    DWORD dwSize = sizeof(BYTE) + nAreaLength + sizeof(BYTE);
+
+    BYTE* pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+    pByteMessage[cnt++] = static_cast<BYTE>(nAreaLength);
+    memcpy(pByteMessage + cnt, sArea.GetBuffer(nAreaLength), nAreaLength);
+    cnt += nAreaLength;
+    pByteMessage[cnt++] = static_cast<BYTE>(nVote);
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_DELETEAREA,
+        MSG_SUBTYPE_DELETEAREA_VOTE,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
 //
 // 0x43AE40
 BOOLEAN CBaldurMessage::StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend)

@@ -182,6 +182,7 @@ public:
 
     static const BYTE MSG_TYPE_DELETEAREA;
     static const BYTE MSG_SUBTYPE_DELETEAREA_POLL;
+    static const BYTE MSG_SUBTYPE_DELETEAREA_VOTE;
     static const BYTE MSG_SUBTYPE_DELETEAREA_RESULT;
 
     static const BYTE MSG_TYPE_KICK_PLAYER;
@@ -422,6 +423,7 @@ public:
     BOOLEAN OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void SetDeleteAreaString(CString sAreaString);
     CString GetDeleteAreaString();
+    BOOLEAN SendDeleteAreaVote(CString sArea, BOOLEAN bVote);
     BOOLEAN StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend);
     BOOLEAN ResolveDeleteAreaPoll(CString sAreaString, BOOLEAN bResult);
     BOOLEAN CanResolveDeleteAreaPoll();

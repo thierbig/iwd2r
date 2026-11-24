@@ -771,6 +771,33 @@ TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[m
     network.m_bIsHost = FALSE;
 }
 
+// DELETEAREA k/r (114) vote sender: a client answers the host's poll with
+// 'y' or 'n' for the area it was asked about. Both guards and the empty
+// host-name arm need no game state.
+TEST_CASE("CBaldurMessage::SendDeleteAreaVote needs a connected client and a host name", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
+
+    // The host never sends a vote.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
+
+    // A connected client with no host in the session has nobody to answer.
+    network.m_bIsHost = FALSE;
+    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // AREAMAPNOTE A/n (110) handler: the client's note to the host. It decodes
 // the area, the grid position, the note text and its flags and runs
 // CGameAreaNotes::Add for the named area. The guard needs no game state; the
