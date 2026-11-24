@@ -40,6 +40,7 @@
 #include <atomic>
 #include <chrono>
 #include <climits>
+#include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -50,6 +51,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 // The sprite's own actions (CGameSprite::ExecuteAction 0x728F80) on the
 // engine in this process: a party member in AR1000 walks to a point
@@ -6624,3 +6630,58 @@ TEST_CASE("sprite: UseItem handles potions and wands through action 34", "[ai][d
     pCharacter->m_equipment.m_items[nDoorSlot] = NULL;
     ClearMessages();
 }
+
+// CGameSprite::sub_756770 (0x756770): the offset from the sprite towards a
+// target, 15 units long. The body reads only CGameObject::m_pos and writes
+// the point it is handed, so a zeroed object of the class's size stands in
+// for the sprite: no engine state is read.
+TEST_CASE("sprite: sub_756770 points 15 units towards the target in every quadrant (0x756770)", "[ai]")
+{
+    std::unique_ptr<unsigned char[]> storage(new unsigned char[sizeof(CGameSprite)]());
+    CGameSprite* pSprite = reinterpret_cast<CGameSprite*>(storage.get());
+    auto towards = [&](LONG x, LONG y, const CPoint& target) {
+        pSprite->m_pos = CPoint(x, y);
+        CPoint pt;
+        pSprite->sub_756770(pt, target);
+        return pt;
+    };
+
+    // Exact integer lengths, one case per quadrant plus the axes.
+    CHECK(towards(100, 100, CPoint(115, 100)) == CPoint(15, 0));
+    CHECK(towards(100, 100, CPoint(97, 104)) == CPoint(-9, 12));
+    CHECK(towards(100, 100, CPoint(97, 96)) == CPoint(-9, -12));
+    CHECK(towards(100, 100, CPoint(103, 96)) == CPoint(9, -12));
+    CHECK(towards(100, 100, CPoint(100, 85)) == CPoint(0, -15));
+
+    // sqrt(58) truncates to 7, where rounding would give 8: (45/7, 105/7).
+    CHECK(towards(100, 100, CPoint(103, 107)) == CPoint(6, 15));
+    // The integer division truncates towards zero.
+    CHECK(towards(100, 100, CPoint(97, 93)) == CPoint(-6, -15));
+}
+
+#ifndef _WIN32
+// CGameSprite::sub_756770 divides by the computed length with an integer
+// idiv (0x7567cc/0x7567dc); two coincident points make that length zero and
+// the exe raises #DE. The only caller (CGameEffectSparkle::ApplyEffect,
+// 0x4B17D2) skips the call then, so this pins the helper's own behaviour in
+// a child process: the suite sees SIGFPE instead of dying of it.
+TEST_CASE("sprite: sub_756770 traps on coincident points like the exe's idiv (0x756770)", "[ai]")
+{
+    std::unique_ptr<unsigned char[]> storage(new unsigned char[sizeof(CGameSprite)]());
+    CGameSprite* pSprite = reinterpret_cast<CGameSprite*>(storage.get());
+    pSprite->m_pos = CPoint(100, 100);
+    CPoint pt;
+    const CPoint target(100, 100);
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        pSprite->sub_756770(pt, target);
+        _exit(0);
+    }
+    int status = 0;
+    REQUIRE(waitpid(pid, &status, 0) == pid);
+    CHECK(WIFSIGNALED(status));
+    CHECK(WTERMSIG(status) == SIGFPE);
+}
+#endif

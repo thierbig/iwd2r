@@ -28940,6 +28940,20 @@ void CGameSprite::ApplyCastingEffectPost(CSpell* pSpell, const SPELL_ABILITY* pA
     g_pBaldurChitin->GetMessageHandler()->AddMessage(pSoundMessage, FALSE);
 }
 
+// 0x756770
+void CGameSprite::sub_756770(CPoint& pt, const CPoint& target)
+{
+    LONG dx = target.x - m_pos.x;
+    LONG dy = target.y - m_pos.y;
+    // The exe takes CUtil_Hypotenuse (sqrt) straight into __ftol, which
+    // truncates; there is no +0.5 rounding here.
+    LONG nLength = static_cast<LONG>(sqrt(static_cast<double>(dx * dx + dy * dy)));
+    pt.x = dx;
+    pt.y = dy;
+    pt.x = pt.x * 15 / nLength;
+    pt.y = pt.y * 15 / nLength;
+}
+
 // 0x7567F0
 BOOL CGameSprite::sub_7567F0(CSpell* pSpell, const CPoint& ptTarget, BYTE nClass, DWORD nSpecialization)
 {

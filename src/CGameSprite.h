@@ -662,6 +662,7 @@ public:
     void sub_761AB0(CGameSprite* target);
     void sub_755A70(CSpell* pSpell, const SPELL_ABILITY* pAbility, const CPoint& ptTarget);
     void ApplyCastingEffectPost(CSpell* pSpell, const SPELL_ABILITY* pAbility);
+    void sub_756770(CPoint& pt, const CPoint& target);
     BOOL sub_7567F0(CSpell* pSpell, const CPoint& ptTarget, BYTE nClass, DWORD nSpecialization);
     SHORT Recoil();
     SHORT PlayDead();
