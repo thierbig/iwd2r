@@ -1882,7 +1882,9 @@ TEST_CASE("msg: CMessageSetLastAttacker round-trips its attacker type", "[networ
     CHECK(packed[14] == 2);
     CHECK(packed[22] == 3); // the ninth selector is m_nAvClass
 
-    BYTE packet[0x4000 + CNetwork::SPEC_MSG_HEADER_LENGTH];
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so the bound is
+    // its value (3) as a literal: a class static is not a constant expression.
+    BYTE packet[0x4000 + 3];
     packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
     packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
     packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_ATTACKER;
@@ -1980,7 +1982,9 @@ TEST_CASE("msg: CMessageSetLastObject marshals and unmarshals the exe's asymmetr
     CHECK(packed[fixedStart + 10] == 0x2A);
     CHECK(packed[fixedStart + 11] == 0xDD);
 
-    BYTE packet[0x4000 + CNetwork::SPEC_MSG_HEADER_LENGTH];
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so the bound is
+    // its value (3) as a literal: a class static is not a constant expression.
+    BYTE packet[0x4000 + 3];
     packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
     packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
     packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_OBJECT;
