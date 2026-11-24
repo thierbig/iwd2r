@@ -137,6 +137,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_TOGGLE_INTERFACE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_107;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_112;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_MARKUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_PICKED_DIALOG_RESPONSE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_TYPE;
@@ -236,6 +237,11 @@ public:
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_DEMAND_REPLY;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_70;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_102;
+
+    static const BYTE MSG_TYPE_PLAYERCHAR_112;
+    static const BYTE MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST;
+    static const BYTE MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_STATUS;
+    static const BYTE MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REPLY;
 
     static const BYTE MSG_TYPE_PAUSING;
     static const BYTE MSG_SUBTYPE_PAUSING_PERMIT_REQUEST;
@@ -347,6 +353,11 @@ public:
     BOOLEAN OnObjectDelete(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
+    BOOLEAN CharacterPartyOrderRequest();
+    BOOLEAN OnCharacterPartyOrderRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN SendCharacterPartyOrderStatus();
+    BOOLEAN OnCharacterPartyOrderStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnCharacterPartyOrderReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN SendChatMessage(CString& sChatMessage);
     BOOLEAN OnChatMessage(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     void SetSignalDefaultSecondsToTimeout();
@@ -980,6 +991,26 @@ public:
     /* 0015 */ BOOLEAN m_bPositioned;
 };
 
+// The subtype-112 positional-sound broadcast (vtable 0x848B5C), built by
+// CGameAIBase::PlaySound for the other players: the sound, the channel and
+// the position. Its original C++ name is unrecovered, so the tree names it
+// by subtype like CMessage95/CMessage120.
+class CMessage112 : public CMessage {
+public:
+    CMessage112(CResRef cResSound, LONG x, LONG y, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_cResSound;
+    /* 0014 */ BYTE m_nChannel;
+    /* 0016 */ LONG m_x;
+    /* 001A */ LONG m_y;
+};
+
 class CMessageRemoveReplies : public CMessage {
 public:
     CMessageRemoveReplies(LONG entryIndex, LONG marker, COLORREF nameColor, const CString& name, LONG caller, LONG target);
@@ -1193,6 +1224,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ SHORT m_nPath;
@@ -1275,6 +1307,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAITrigger m_trigger;
@@ -1595,6 +1629,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CResRef m_screen;
