@@ -6247,6 +6247,63 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaCancel(BYTE* pByteMessage, DWORD dwSize)
     return TRUE;
 }
 
+// 0x437FD0
+BOOLEAN CBaldurMessage::OnLeaveAreaLuaAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The announce is the host's message to the other machines: only a
+    // connected client acts on it.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The announcer's name is fetched and discarded (the announce needs no
+    // reply).
+    CString sPlayerName;
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+
+    // The announce after the 3-byte header (there is no dwSize check in the
+    // original, the two lengths are trusted):
+    //   {DWORD remotePlayerID; DWORD remoteObjectID;
+    //    LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[]; BYTE areaNameLen; char areaName[]}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    DWORD nRemotePlayerID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    DWORD nRemoteObjectID = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+
+    LONG nCharacterId = 0;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID, nRemoteObjectID, nCharacterId) == FALSE) {
+        nCharacterId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    LONG nX = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    LONG nY = *reinterpret_cast<LONG*>(pByteMessage + nOffset);
+    nOffset += sizeof(LONG);
+    SHORT nDirection = *reinterpret_cast<SHORT*>(pByteMessage + nOffset);
+    nOffset += sizeof(SHORT);
+
+    BYTE nParchmentLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sParchment(reinterpret_cast<char*>(pByteMessage + nOffset), nParchmentLength);
+    nOffset += nParchmentLength;
+
+    BYTE nAreaNameLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sAreaName(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaNameLength);
+    nOffset += nAreaNameLength;
+
+    // The transition itself: the same LeaveAreaLUA the permit-reply handler
+    // calls with the same argument order.
+    g_pBaldurChitin->GetObjectGame()->LeaveAreaLUA(nCharacterId, nX, nY, nDirection, sAreaName, sParchment);
+
+    return TRUE;
+}
+
 // 0x438560
 BOOLEAN CBaldurMessage::OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {

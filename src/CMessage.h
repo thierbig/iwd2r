@@ -385,6 +385,7 @@ public:
     void TimeChangeToServer(ULONG deltaTime);
     BOOLEAN OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN OnLeaveAreaLuaCancel(BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnLeaveAreaLuaAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BYTE sub_438710(LONG nCharacterId, LONG nTriggerId, CString sAreaName);
     BOOLEAN OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);

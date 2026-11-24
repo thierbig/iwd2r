@@ -833,6 +833,38 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaNameCancel records the reply only on a con
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREALUA 88/65 announce handler: the host tells a client to make one
+// sprite leave an area. The two entry guards need no game state; after them
+// the handler decodes the announce and calls CInfGame::LeaveAreaLUA, which
+// needs a booted game (its own paths are covered by the permit-reply case
+// below and by tests/test_ui_misc.cpp's travel scenario).
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREALUA 88, announce 65, zeroed body}; the announce
+    // subtype has no in-tree constant (the survey's X/A row publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 2 + 1 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Only a client acts on the announce.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.
