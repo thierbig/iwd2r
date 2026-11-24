@@ -414,6 +414,7 @@ public:
     BOOLEAN OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendAreaMapNoteToServer(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
     BOOLEAN AnnounceAreaMapNote(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
+    BOOLEAN OnSendAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendBiographyToServer(BYTE nFixedPartyId, CString szBio);
     BOOLEAN OnSendBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN AnnounceBiography(BYTE nFixedPartyId, CString szBio);

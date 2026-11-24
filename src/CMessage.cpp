@@ -7470,9 +7470,10 @@ BOOLEAN CBaldurMessage::OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMe
 }
 
 // The area-map-note message pair: the client sends the note to the host, the
-// host announces it to everyone, and the receivers run the same `Add` the
-// local UI does (0x43A470/0x43A7C0, not ported yet - they call the Add stub at
-// 0x47B330). Payload, after the fixed message header: a BYTE-length area
+// host announces it to everyone, and the two receivers (0x43A470/0x43A7C0)
+// run the same CGameAreaNotes::Add the local UI does (0x47B330, fully ported
+// in src/CGameAreaNotes.cpp). Payload, after the fixed message header: a
+// BYTE-length area
 // resref, its bytes, the note's start X and Y as WORDs, a DWORD-length note
 // text, its bytes, the note's DWORD flags and its STRREF. DeleteANote sends an
 // empty text with flags 0 and STRREF -1, which `sub_47B150` reads as "remove".
@@ -7621,6 +7622,55 @@ BOOLEAN CBaldurMessage::AnnounceAreaMapNote(CString sArea, WORD nStartX, WORD nS
         dwSize);
 
     DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
+// 0x43A470
+BOOLEAN CBaldurMessage::OnSendAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host receives the client's note; only an established session
+    // routes one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    // The sender's body, after the 3-byte header (the original trusts the
+    // two lengths):
+    //   {BYTE areaLen; char area[]; WORD startX; WORD startY;
+    //    DWORD noteLen; char note[]; DWORD dwFlags; STRREF strRef}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    WORD nStartX = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+    WORD nStartY = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+
+    DWORD nNoteLength = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    CString sNote(reinterpret_cast<char*>(pByteMessage + nOffset), nNoteLength);
+    nOffset += nNoteLength;
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+
+    // NOTE: The original reads the flags and passes the text reference as -1:
+    // the trailing STRREF both senders put on the wire is not read, and the
+    // note is re-resolved locally from its text (CGameAreaNotes::Add adds the
+    // TLK override itself). Kept, as the binary has it.
+    g_pBaldurChitin->GetObjectGame()->GetArea(sArea)->GetAreaNotes()->Add(sArea,
+        nStartX,
+        nStartY,
+        sNote,
+        dwFlags,
+        -1);
 
     return TRUE;
 }

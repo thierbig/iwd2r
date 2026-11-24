@@ -1,8 +1,8 @@
 # Subsystem map
 
-Generated from commit `cefdd691e` by `tools/gen_map.py`. Do not edit; CI runs `python3 -I tools/gen_map.py --check`.
+Generated from commit `2f29134e` by `tools/gen_map.py`. Do not edit; CI runs `python3 -I tools/gen_map.py --check`.
 
-Totals: 570 files, 414188 lines, 32 `TODO: Incomplete`, 11716 address comments.
+Totals: 570 files, 414239 lines, 32 `TODO: Incomplete`, 11716 address comments.
 
 | Family | Files | Lines | `TODO: Incomplete` | Address comments | Platform headers included |
 |---|---:|---:|---:|---:|---|
@@ -13,9 +13,9 @@ Totals: 570 files, 414188 lines, 32 `TODO: Incomplete`, 11716 address comments.
 | Video | 34 | 32549 | 4 | 1196 | ddraw_shim.h, gl_compat.h |
 | Resources | 65 | 11128 | 1 | 342 | dsound_shim.h |
 | Sound | 20 | 7829 | 0 | 266 | dsound_shim.h, win32_api.h |
-| Messaging | 10 | 35141 | 0 | 1427 | — |
+| Messaging | 10 | 35192 | 0 | 1427 | — |
 | Engine core | 10 | 7837 | 1 | 427 | data_dir.h, ddraw_shim.h, fs.h, present.h, replay.h, test_knobs.h, text_layer.h, window.h |
 | Other | 122 | 55788 | 10 | 1908 | compose.h, replay.h, state_dump.h, text_fonts.h, text_layer.h, window.h |
 | compat | 33 | 3874 | 0 | 0 | win32_api.h |
 | platform | 77 | 15288 | 0 | 2 | affinity.h, clock.h, compose.h, crash.h, data_dir.h, ddraw_shim.h, dsound_shim.h, fs.h, gl_compat.h, gpu_probe.h, handles.h, imm_stub.h, input_settings.h, png.h, present.h, present_backend.h, replay.h, replay_clock.h, replay_probe.h, script.h, script_core.h, state_dump.h, text_atlas.h, text_fonts.h, text_layer.h, text_overlay.h, win32_api.h, window.h |
-| **Total** | 570 | 414188 | 32 | 11716 | |
+| **Total** | 570 | 414239 | 32 | 11716 | |
