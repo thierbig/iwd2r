@@ -1040,7 +1040,7 @@ void CScreenWorldMap::OnAreaMouseClick(DWORD nArea, const CPoint& ptMousePos)
             return;
         }
 
-        MoveToArea(cResArea, sEntryPoint, nEdge, bRandomEncounter, nTravelTime);
+        MoveToArea(sEntryPoint, cResArea, nEdge, bRandomEncounter, nTravelTime);
 
         StopWorldMap(nSrcArea != nArea);
     } else {
@@ -1272,7 +1272,7 @@ static void MoveSpriteToArea(CGameArea* pArea,
 }
 
 // 0x69D0F0
-void CScreenWorldMap::MoveToArea(const CResRef& cResArea, CString sEntryPoint, DWORD nEdge, BOOL bRandomEncounter, DWORD nTravelTime)
+void CScreenWorldMap::MoveToArea(CString sEntryPoint, const CResRef& cResArea, DWORD nEdge, BOOL bRandomEncounter, DWORD nTravelTime)
 {
     // NOTE: The multiplayer parts (telling the clients 0x69D18A-0x69D1F2,
     // waiting for them 0x69D2CB-0x69D416 and 0x69EADF-0x69F4F6, the

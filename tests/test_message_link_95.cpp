@@ -455,3 +455,38 @@ TEST_CASE("msg: CMessage95::Run guards, object types, registry call and deny rel
         CHECK(DenyCount(pGame, id2) == 0);
     }
 }
+
+// CMessage120::Run (0x514F00): the message is only applied on the session
+// host, where it stores its player-ready flag in the player's slot through
+// CMultiplayerSettings::sub_518660 (0x518660); elsewhere it is a no-op. The
+// address is not 0x514CB0, which is CMessage103::Run.
+TEST_CASE("message 120: Run stores the player-ready flag on the host only", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+    CMultiplayerSettings* pSettings = pGame->GetMultiplayerSettings();
+
+    const PLAYER_ID idPlayer = 0x1234;
+    g_pChitin->cNetwork.m_pPlayerID[0] = idPlayer;
+
+    CMessage120 ready(idPlayer, TRUE, 0, 0);
+    CMessage120 notReady(idPlayer, FALSE, 0, 0);
+
+    CHECK(ready.GetCommType() == CMessage::BROADCAST_FORCED);
+    CHECK(ready.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(ready.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_120);
+
+    // Not the host: Run leaves the settings alone.
+    g_pChitin->cNetwork.m_bIsHost = FALSE;
+    REQUIRE(pSettings->field_B2[0] == FALSE);
+    ready.Run();
+    CHECK(pSettings->field_B2[0] == FALSE);
+
+    // The host applies the ctor's flag in the player's slot.
+    g_pChitin->cNetwork.m_bIsHost = TRUE;
+    ready.Run();
+    CHECK(pSettings->field_B2[0] == TRUE);
+    notReady.Run();
+    CHECK(pSettings->field_B2[0] == FALSE);
+}

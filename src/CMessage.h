@@ -120,6 +120,8 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_RELEASE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_51;
     static const BYTE MSG_SUBTYPE_CMESSAGE_89;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_83;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_84;
     static const BYTE MSG_SUBTYPE_CMESSAGE_90;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FLOAT_TEXT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_92;
@@ -182,6 +184,7 @@ public:
 
     static const BYTE MSG_TYPE_DELETEAREA;
     static const BYTE MSG_SUBTYPE_DELETEAREA_POLL;
+    static const BYTE MSG_SUBTYPE_DELETEAREA_VOTE;
     static const BYTE MSG_SUBTYPE_DELETEAREA_RESULT;
 
     static const BYTE MSG_TYPE_KICK_PLAYER;
@@ -217,6 +220,8 @@ public:
     static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS;
     static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST;
 
     static const BYTE MSG_TYPE_MOVIE;
     static const BYTE MSG_SUBTYPE_MOVIE_REQUEST;
@@ -300,6 +305,8 @@ public:
     BOOLEAN OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
+    BOOLEAN OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnResourceRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);
     BOOL SendFullSettingsToClients(const CString& sPlayerName);
     BOOL OnSettingsFullSet(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
@@ -423,12 +430,18 @@ public:
     BOOLEAN OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendAreaMapNoteToServer(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
     BOOLEAN AnnounceAreaMapNote(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
+    BOOLEAN OnSendAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnAnnounceAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendBiographyToServer(BYTE nFixedPartyId, CString szBio);
     BOOLEAN OnSendBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN AnnounceBiography(BYTE nFixedPartyId, CString szBio);
     BOOLEAN OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void SetDeleteAreaString(CString sAreaString);
     CString GetDeleteAreaString();
+    BOOLEAN SendDeleteAreaVote(CString sArea, BOOLEAN bVote);
+    BOOLEAN OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN DeleteArea(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend);
     BOOLEAN ResolveDeleteAreaPoll(CString sAreaString, BOOLEAN bResult);
     BOOLEAN CanResolveDeleteAreaPoll();
@@ -461,6 +474,8 @@ public:
     BOOLEAN OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMapWorldTravelAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMapWorldTravelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnRestRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnRestAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
@@ -1683,6 +1698,11 @@ public:
 // Run 0x513180) is ported under CMessage96, the other face of the same exe
 // class; the overrides stay undeclared here so the ctor can define the
 // vtable without undefined entries.
+//
+// NOTE: not the class issue #121's rows 115-117 point at. Those addresses
+// (vtable 0x84D37C) are CMessage95's, the dominate link message above; this
+// class's own pair is ported here and is live from CGameEffectDeath's
+// dismissed-summon path.
 class CMessageRemoveSummonLink : public CMessage {
 public:
     CMessageRemoveSummonLink(LONG summonedId, LONG caller, LONG target);
@@ -1715,6 +1735,14 @@ public:
 // (Icewind586B70::sub_586F20) and changes no object itself. The original
 // C++ class name is unrecovered; the tree names it by its verified subtype
 // 95 (getter 0x4F6BB0), like CMessage89/CMessage96/CMessage97.
+//
+// NOTE: issue #121's survey files this class's three virtuals under the name
+// `CMessageRemoveSummonLink` (rows 115-117, vtable 0x84D37C): 0x512AC0
+// Marshal, 0x512C80 Unmarshal and 0x512D50 Run are exactly the overrides
+// below, already ported here. They are not a second, unported class: the
+// real CMessageRemoveSummonLink is the vtable-0x84C38C class below, whose
+// network face (0x512FE0/0x513100) is ported and whose dispatch face is
+// CMessage96. So G11 needs no port and no drop note.
 class CMessage95 : public CMessage {
 public:
     // NOTE: Out-of-line ctor 0x4F6B80; the effect's copy at 0x56485D is the
@@ -1754,6 +1782,36 @@ public:
 // sprite's deny is taken. Marshal and Unmarshal (0x512830/0x512950,
 // 0x512FE0/0x513100) are the network path and are omitted (single player
 // only, docs/adr/0002-single-player-only.md).
+// A message a client is sent for subtype 83: it carries the target's remote
+// pair and a ref (vtable 0x84CFFC); Run only denies and releases the target.
+class CMessage83 : public CMessage {
+public:
+    CMessage83(const CResRef& resRef, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_resRef;
+};
+
+// The subtype-84 twin of CMessage83 (vtable 0x84D30C); the original folds both
+// Run bodies into 0x511950.
+class CMessage84 : public CMessage {
+public:
+    CMessage84(const CResRef& resRef, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_resRef;
+};
+
 class CMessage89 : public CMessage {
 public:
     CMessage89(LONG spriteId, LONG caller, LONG target);

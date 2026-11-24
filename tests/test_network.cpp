@@ -2553,3 +2553,255 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     G15Session(FALSE, FALSE);
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
+
+// -----------------------------------------------------------------------------
+// #121 G12b: CMessage83 / CMessage84 (subtypes 83/84). The payload is the
+// target's remote pair, a one-byte resref length and the resref bytes; Run
+// only denies and releases the target.
+
+namespace {
+
+void Check83_84Wire(BYTE* pPacked, DWORD dwSize, PLAYER_ID nExpectedPlayer, LONG nExpectedObject)
+{
+    CHECK(dwSize == 9 + 6);
+    PLAYER_ID player;
+    LONG object;
+    std::memcpy(&player, pPacked, sizeof(player));
+    std::memcpy(&object, pPacked + sizeof(player), sizeof(object));
+    CHECK(player == nExpectedPlayer);
+    CHECK(object == nExpectedObject);
+    CHECK(pPacked[8] == 6);
+    CHECK(std::memcmp(pPacked + 9, "AR1000", 6) == 0);
+}
+
+} // namespace
+
+TEST_CASE("msg: CMessage83 round-trips its target pair and resref", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CResRef resRef("AR1000");
+    CMessage83 message(resRef, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::BROADCAST_OTHERS);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_83);
+
+    BYTE packed[0x40];
+    std::memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+    CHECK(pPacked == packed);
+    CHECK(packed[packedSize] == 0xCD);
+    Check83_84Wire(packed, packedSize, 7, 0x00010002);
+
+    BYTE packet[0x40];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_83;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessage83 received(CResRef(""), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CHECK(received.m_resRef == "AR1000");
+
+    // An unknown pair decodes as INVALID_INDEX.
+    const LONG bogusObject = 0x00099999;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID), &bogusObject, sizeof(bogusObject));
+    CMessage83 refused(CResRef(""), 0, nTarget);
+    CHECK(refused.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(refused.m_targetId == CGameObjectArray::INVALID_INDEX);
+
+    // Run denies and releases the target.
+    message.Run();
+}
+
+TEST_CASE("msg: CMessage84 round-trips its target pair and resref", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CResRef resRef("AR1000");
+    CMessage84 message(resRef, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::BROADCAST_OTHERS);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_84);
+
+    BYTE packed[0x40];
+    std::memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+    CHECK(pPacked == packed);
+    CHECK(packed[packedSize] == 0xCD);
+    Check83_84Wire(packed, packedSize, 7, 0x00010002);
+
+    BYTE packet[0x40];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_84;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessage84 received(CResRef(""), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CHECK(received.m_resRef == "AR1000");
+
+    const LONG bogusObject = 0x00099999;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID), &bogusObject, sizeof(bogusObject));
+    CMessage84 refused(CResRef(""), 0, nTarget);
+    CHECK(refused.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(refused.m_targetId == CGameObjectArray::INVALID_INDEX);
+
+    message.Run();
+}
+
+// CBaldurMessage::OnResourceSuggest (0x42ABA0): the client's receive of the
+// server's resource suggestion. The payload after the 3-byte spec header is
+// {UINT type; DWORD flags; char resref[]}; the sender side is
+// ResourceSuggestLoad (0x42AA10). Only type 1010 loads an area, and that needs
+// the real install, so the fixture pins the connected-session guard and the
+// accepted-and-dropped arm for another type.
+TEST_CASE("msg: OnResourceSuggest takes only a connected session's suggestion", "[network][msg]")
+{
+    ChitinScope chitin;
+    // RosterSession is a generic connected TCP/IP session here; the name comes
+    // from the roster tests that introduced it.
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + sizeof(UINT) + sizeof(DWORD) + 8];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST;
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const UINT nType = 1013; // CGameFile: accepted and dropped
+    std::memcpy(packet + cnt, &nType, sizeof(nType));
+    cnt += sizeof(nType);
+    const DWORD dwFlags = 0x101; // travel image 1, progress-bar bit set
+    std::memcpy(packet + cnt, &dwFlags, sizeof(dwFlags));
+    cnt += sizeof(dwFlags);
+    std::memcpy(packet + cnt, "AR1001", 6);
+    cnt += 6;
+
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == TRUE);
+
+    // A closed session is the guard's FALSE arm.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == FALSE);
+}
+
+// CBaldurMessage::OnResourceRequest (0x42ADF0): the host's receive of a
+// client's resource hand-off. The payload after the 3-byte spec header is
+// {BYTE nLength; char sResRef[nLength]; UINT nType; DWORD nSize; BYTE
+// data[nSize]}; the two written types (world map 1015, store 1014) need a real
+// CRes object from the install, so the fixture pins the host guard and the
+// accepted-and-dropped arm for another type. The subtype is 0x43 (67) of the
+// dispatcher's MSG_TYPE_RESOURCE (82) arm; the original has no labelled
+// constant for it (the dispatcher uses its jump table), so the literal is
+// spelled with this comment.
+TEST_CASE("msg: OnResourceRequest takes only a hosting session's hand-off", "[network][msg]")
+{
+    ChitinScope chitin;
+    RosterSession session(TRUE);
+
+    CBaldurMessage message;
+
+    // {BYTE nLength; char sResRef[]; UINT nType; DWORD nSize; BYTE data[]}
+    // after the 3-byte spec header.
+    const BYTE nLength = 8;
+    const UINT nType = 1013; // CGameFile: accepted and dropped
+    const char* szData = "PROBE";
+    const DWORD nSize = 5;
+
+    BYTE packet[3 + sizeof(BYTE) + nLength + sizeof(UINT) + sizeof(DWORD) + 5];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    packet[2] = 67; // the subtype-0x43 (resource request) arm
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    packet[cnt] = nLength;
+    cnt += sizeof(BYTE);
+    std::memcpy(packet + cnt, "00GBGA01", nLength);
+    cnt += nLength;
+    std::memcpy(packet + cnt, &nType, sizeof(nType));
+    cnt += sizeof(nType);
+    std::memcpy(packet + cnt, &nSize, sizeof(nSize));
+    cnt += sizeof(nSize);
+    std::memcpy(packet + cnt, szData, nSize);
+    cnt += nSize;
+
+    CHECK(message.OnResourceRequest(0, packet, cnt) == TRUE);
+
+    // Only the host takes a hand-off.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.OnResourceRequest(0, packet, cnt) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    // A closed session is the guard's other FALSE arm.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnResourceRequest(0, packet, cnt) == FALSE);
+}
+
+// -----------------------------------------------------------------------------
+// #121 G15 follow-up: the two mapworld travel handlers (0x4358B0 announce on
+// the host, 0x435E00 request on a client). Both parse the same payload and
+// call CScreenWorldMap::MoveToArea, so only the guards are driven here; the
+// passing path needs a live world map and area.
+
+TEST_CASE("msg: the mapworld travel handlers refuse a closed session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    G15Session(FALSE, FALSE);
+
+    CBaldurMessage message;
+
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE);
+    CHECK(message.OnMapWorldTravelAnnounce(0, pData, 64) == FALSE);
+
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST);
+    CHECK(message.OnMapWorldTravelRequest(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+TEST_CASE("msg: the mapworld travel handlers refuse the wrong role", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CBaldurMessage message;
+
+    // The announce is handled by the host only.
+    G15Session(TRUE, FALSE);
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE);
+    CHECK(message.OnMapWorldTravelAnnounce(0, pData, 64) == FALSE);
+
+    // The request is handled by a client only.
+    G15Session(TRUE, TRUE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST);
+    CHECK(message.OnMapWorldTravelRequest(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
