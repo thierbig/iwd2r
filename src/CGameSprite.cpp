@@ -11092,7 +11092,7 @@ SHORT CGameSprite::JoinParty()
         }
 
         if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
-            // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+            g_pBaldurChitin->GetBaldurMessage()->CharacterPartyOrderRequest();
         }
 
         return ACTION_DONE;
@@ -11154,7 +11154,7 @@ SHORT CGameSprite::JoinParty()
     }
 
     if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
-        // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+        g_pBaldurChitin->GetBaldurMessage()->CharacterPartyOrderRequest();
     }
 
     // A host assigns the new party member to the local player's slot.
@@ -25301,7 +25301,7 @@ void CGameSprite::sub_751BD0()
         : static_cast<BYTE>(m_pArea->m_nCharacters + 1);
 
     if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
-        // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+        g_pBaldurChitin->GetBaldurMessage()->CharacterPartyOrderRequest();
     }
 
     m_cGameStats.RecordJoinParty();
@@ -25434,7 +25434,7 @@ SHORT CGameSprite::LeaveParty()
         }
 
         if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
-            // TODO: 0x432050 not ported (CBaldurMessage::CharacterPartyOrderRequest).
+            g_pBaldurChitin->GetBaldurMessage()->CharacterPartyOrderRequest();
         }
 
         if (g_pChitin->cNetwork.m_bIsHost == TRUE && nPortraitNumber != -1) {

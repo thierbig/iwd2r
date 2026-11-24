@@ -112,6 +112,8 @@ public:
         m_pGame->m_cRemoteObjectArray.m_pArray[index] = entry;
     }
 
+    CInfGame* Game() const { return m_pGame; }
+
 private:
     CBaldurChitin* m_savedBaldur;
     std::unique_ptr<unsigned char[]> m_baldur;
@@ -2041,4 +2043,237 @@ TEST_CASE("msg: CMessageSetLastObject marshals and unmarshals the exe's asymmetr
     CMessageSetLastObject refusedInstance(CAIObjectType(), 0, 0, CGameObjectArray::INVALID_INDEX);
     CHECK(refusedInstance.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == FALSE);
     CHECK(refusedInstance.m_lAttacker.m_nInstance == CGameObjectArray::INVALID_INDEX);
+}
+
+// -----------------------------------------------------------------------------
+// #121 G14: the party-roster messages (wire type 112, subtypes 82/65/80).
+
+namespace {
+
+constexpr DWORD ROSTER_PAIR = sizeof(PLAYER_ID) + sizeof(LONG);
+constexpr DWORD ROSTER_PAYLOAD = 6 * ROSTER_PAIR + sizeof(BYTE);
+
+// A connected session with a named host at player location 0; sends land in
+// CNetwork::STATIC_MESSAGE_BUFFER because the provider is not the null one.
+class RosterSession {
+public:
+    explicit RosterSession(BOOLEAN bHost)
+        : m_network(g_pChitin->cNetwork)
+    {
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+        m_network.m_bConnectionEstablished = TRUE;
+        m_network.m_bIsHost = bHost;
+        m_network.m_idLocalPlayer = 1;
+        m_network.m_nHostPlayer = 0;
+        m_network.m_psPlayerName[0] = "host";
+        m_network.m_pPlayerID[0] = 2;
+        m_network.m_pbPlayerVisible[0] = TRUE;
+        std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    }
+
+    ~RosterSession()
+    {
+        m_network.m_bConnectionEstablished = FALSE;
+        m_network.m_bIsHost = FALSE;
+        m_network.m_nHostPlayer = -1;
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    }
+
+    RosterSession(const RosterSession&) = delete;
+    RosterSession& operator=(const RosterSession&) = delete;
+
+    CNetwork& Network() { return m_network; }
+
+private:
+    CNetwork& m_network;
+};
+
+// The received roster: six {PLAYER_ID; LONG} pairs, the bench count and the
+// bench pairs. Every pair is the (0, INVALID_INDEX) miss.
+DWORD BuildRosterPacket(BYTE* packet, BYTE nSubType)
+{
+    std::memset(packet, 0xCD, CNetwork::SPEC_MSG_HEADER_LENGTH + ROSTER_PAYLOAD);
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_PLAYERCHAR_112;
+    packet[2] = nSubType;
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    for (int nSlot = 0; nSlot < 6; nSlot++) {
+        const PLAYER_ID nPlayer = 0;
+        const LONG nObject = CGameObjectArray::INVALID_INDEX;
+        std::memcpy(packet + cnt, &nPlayer, sizeof(nPlayer));
+        cnt += sizeof(nPlayer);
+        std::memcpy(packet + cnt, &nObject, sizeof(nObject));
+        cnt += sizeof(nObject);
+    }
+    packet[cnt++] = 0;
+    return cnt;
+}
+
+void CheckRosterPair(const BYTE* at, PLAYER_ID nPlayer, LONG nObject)
+{
+    PLAYER_ID player;
+    LONG object;
+    std::memcpy(&player, at, sizeof(player));
+    std::memcpy(&object, at + sizeof(player), sizeof(object));
+    CHECK(player == nPlayer);
+    CHECK(object == nObject);
+}
+
+} // namespace
+
+TEST_CASE("msg: CharacterPartyOrderRequest sends the roster to the host", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.CharacterPartyOrderRequest() == TRUE);
+
+    const BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_PLAYERCHAR_112);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST);
+    for (int nSlot = 0; nSlot < 6; nSlot++) {
+        CheckRosterPair(pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + nSlot * ROSTER_PAIR, 0, CGameObjectArray::INVALID_INDEX);
+    }
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH + 6 * ROSTER_PAIR] == 0);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH + ROSTER_PAYLOAD] == 0xCD);
+
+    // A closed session is refused, and so is one without a host name.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.CharacterPartyOrderRequest() == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    session.Network().m_nHostPlayer = -1;
+    CHECK(message.CharacterPartyOrderRequest() == FALSE);
+    session.Network().m_nHostPlayer = 0;
+}
+
+TEST_CASE("msg: SendCharacterPartyOrderStatus refuses a non-host session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+
+    // A client never broadcasts the roster; a closed session is refused before
+    // the roster is built. (The host's wire needs a real game for
+    // SendFullSettingsToClients, so it is not driven from this fixture; the
+    // envelope itself is pinned by the receive tests below.)
+    CHECK(message.SendCharacterPartyOrderStatus() == FALSE);
+
+    session.Network().m_bIsHost = TRUE;
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.SendCharacterPartyOrderStatus() == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+}
+
+TEST_CASE("msg: OnCharacterPartyOrderRequest applies the roster on the host", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(TRUE);
+
+    // Slot 0 holds an id the object array does not own while the packet's
+    // desired slot 0 is the (0, INVALID_INDEX) miss: ApplyPartyRoster's
+    // reconcile loop fails its GetDeny and returns before the host-status
+    // answer (which would need a real game's multiplayer settings).
+    game.Game()->m_characters[0] = 0x00020002;
+    for (int nSlot = 1; nSlot < 6; nSlot++) {
+        game.Game()->m_characters[nSlot] = CGameObjectArray::INVALID_INDEX;
+    }
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + ROSTER_PAYLOAD];
+    const DWORD dwSize = BuildRosterPacket(packet, CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST);
+
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.OnCharacterPartyOrderRequest(0, packet, dwSize) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == 0xCD);
+
+    // Only the host takes a request.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.OnCharacterPartyOrderRequest(0, packet, dwSize) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnCharacterPartyOrderRequest(0, packet, dwSize) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+}
+
+TEST_CASE("msg: OnCharacterPartyOrderStatus applies the host roster on a client", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+    for (int nSlot = 0; nSlot < 6; nSlot++) {
+        game.Game()->m_characters[nSlot] = CGameObjectArray::INVALID_INDEX;
+    }
+
+    // Keep the world-screen branch out of reach: a dummy active engine is not
+    // m_pEngineWorld, so the handler only applies the roster.
+    g_pChitin->pActiveEngine = reinterpret_cast<CBaldurEngine*>(1);
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + ROSTER_PAYLOAD];
+    const DWORD dwSize = BuildRosterPacket(packet, CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_STATUS);
+
+    CHECK(message.OnCharacterPartyOrderStatus(0, packet, dwSize) == TRUE);
+
+    // Only a client takes the host's status.
+    session.Network().m_bIsHost = TRUE;
+    CHECK(message.OnCharacterPartyOrderStatus(0, packet, dwSize) == FALSE);
+    session.Network().m_bIsHost = FALSE;
+
+    // The message must come from the host.
+    CHECK(message.OnCharacterPartyOrderStatus(1, packet, dwSize) == FALSE);
+
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnCharacterPartyOrderStatus(0, packet, dwSize) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    g_pChitin->pActiveEngine = NULL;
+}
+
+TEST_CASE("msg: OnCharacterPartyOrderReply accepts the host's answer", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+    g_pChitin->pActiveEngine = reinterpret_cast<CBaldurEngine*>(1);
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + sizeof(BYTE)];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_PLAYERCHAR_112;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REPLY;
+    packet[CNetwork::SPEC_MSG_HEADER_LENGTH] = FALSE;
+
+    CHECK(message.OnCharacterPartyOrderReply(0, packet, sizeof(packet)) == TRUE);
+
+    session.Network().m_bIsHost = TRUE;
+    CHECK(message.OnCharacterPartyOrderReply(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bIsHost = FALSE;
+
+    CHECK(message.OnCharacterPartyOrderReply(1, packet, sizeof(packet)) == FALSE);
+
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnCharacterPartyOrderReply(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    g_pChitin->pActiveEngine = NULL;
 }
