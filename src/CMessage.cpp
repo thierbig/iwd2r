@@ -45,425 +45,6 @@
 #include "Icewind586B70.h"
 #include "compat/marshal_ptr.h"
 
-// NOTE: Might be static in `CMessage`.
-//
-// 0x434D80
-BOOLEAN CBaldurMessage::OnChapterRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    BYTE nChapter = pData[3];
-    BYTE nResRefLength = pData[4];
-    BYTE resRef[8] = {};
-    // The original copies the wire length into a 9-byte stack buffer
-    // without checking it; bounded to the resref's 8 bytes here (P4-10).
-    memcpy(resRef, pData + 5, nResRefLength < sizeof(resRef) ? nResRefLength : sizeof(resRef));
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-
-    // The pending-chapter switch only fires when the chapter cannot start at
-    // once (a loaded/cut-scene save, a permitted dialog or a hard pause).
-    BOOL bCanStart = TRUE;
-    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
-        bCanStart = FALSE;
-    }
-    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
-        bCanStart = FALSE;
-    }
-    if (g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
-        bCanStart = FALSE;
-    }
-
-    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter)) {
-        if (!bCanStart || g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
-            g_pBaldurChitin->m_pEngineWorld->SetPendingChapterChange(nChapter, resRef);
-        }
-    }
-
-    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter) && bCanStart
-        && g_pBaldurChitin->m_pEngineWorld->m_bHardPaused != TRUE) {
-        g_pBaldurChitin->m_pEngineChapter->StartChapterMultiplayerHost(nChapter, resRef);
-    }
-
-    return TRUE;
-}
-
-// 0x435040
-BOOLEAN CBaldurMessage::OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    BYTE nChapter = pData[3];
-    BYTE nResRefLength = pData[4];
-    BYTE resRefBytes[8] = {};
-    // The original copies the wire length into a 9-byte stack buffer
-    // without checking it; bounded to the resref's 8 bytes here (P4-10).
-    memcpy(resRefBytes, pData + 5, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    pGame->SetCurrentChapter(nChapter);
-
-    g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineChapter);
-
-    CResRef resRef(resRefBytes);
-    g_pBaldurChitin->m_pEngineChapter->StartChapter(resRef);
-
-    return TRUE;
-}
-
-// 0x435470
-BOOLEAN CBaldurMessage::OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)pData;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    if (g_pChitin->pActiveEngine == g_pBaldurChitin->m_pEngineWorldMap) {
-        SendMapWorldAnnounceStatus(FALSE, 0, 0);
-        g_pBaldurChitin->m_pEngineWorldMap->StopWorldMap(FALSE);
-        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
-    }
-
-    return TRUE;
-}
-
-// 0x4355F0
-BOOLEAN CBaldurMessage::OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    BOOLEAN bStart = pData[3];
-    LONG nFacing = *reinterpret_cast<LONG*>(pData + 4);
-    DWORD nLeavingEdge = *reinterpret_cast<DWORD*>(pData + 8);
-
-    CScreenWorldMap* pWorldMap = g_pBaldurChitin->m_pEngineWorldMap;
-
-    if (g_pChitin->pActiveEngine != pWorldMap) {
-        if (bStart == TRUE) {
-            pWorldMap->StartWorldMap(1,
-                nLeavingEdge,
-                nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
-            g_pChitin->pActiveEngine->SelectEngine(pWorldMap);
-        }
-        return TRUE;
-    }
-
-    if (bStart == FALSE) {
-        pWorldMap->StopWorldMap(FALSE);
-        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
-    } else {
-        pWorldMap->StopWorldMap(FALSE);
-        pWorldMap->StartWorldMap(1,
-            nLeavingEdge,
-            nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
-    }
-
-    return TRUE;
-}
-
-// 0x4361D0
-BOOLEAN CBaldurMessage::OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()) {
-        return FALSE;
-    }
-
-    BYTE nResRefLength = pData[3];
-    BYTE resRefBytes[8] = {};
-    // The original copies the wire length into a 9-byte stack buffer
-    // without checking it; bounded to the resref's 8 bytes here (P4-10).
-    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    CResRef resRef(resRefBytes);
-    CString sAreaName;
-    resRef.CopyToString(sAreaName);
-
-    CWorldMap* pWorldMap = pGame->GetWorldMap(sAreaName);
-    pWorldMap->EnableArea(pWorldMap->sub_55A3A0(), resRef, TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
-
-    return TRUE;
-}
-
-// 0x436440
-BOOLEAN CBaldurMessage::OnRestRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    INT nHP = *reinterpret_cast<INT*>(pData + 3);
-    BOOLEAN bRenting = pData[7];
-    BOOLEAN bMovie = pData[8];
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
-
-    BOOL bCanStart = TRUE;
-    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
-        bCanStart = FALSE;
-    }
-    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
-        bCanStart = FALSE;
-    }
-
-    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
-        pWorld->StartRestMultiplayerHost(nHP, bRenting, bMovie);
-    } else {
-        pWorld->SetPendingRest(nHP, bRenting, bMovie);
-    }
-
-    return TRUE;
-}
-
-// 0x436610
-BOOLEAN CBaldurMessage::OnRestAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    INT nHP = *reinterpret_cast<INT*>(pData + 3);
-    BOOLEAN bRenting = pData[7];
-
-    m_bInOnRestAnnounce = TRUE;
-    CInfGame::m_bHealPartyOnRest = pData[8];
-    g_pBaldurChitin->GetObjectGame()->RestParty(nHP, bRenting);
-    m_bInOnRestAnnounce = FALSE;
-    CInfGame::m_bHealPartyOnRest = FALSE;
-
-    return TRUE;
-}
-
-// 0x436860
-BOOLEAN CBaldurMessage::OnMovieRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    BYTE nResRefLength = pData[3];
-    BYTE resRefBytes[8] = {};
-    // The original copies the wire length into a 9-byte stack buffer
-    // without checking it; bounded to the resref's 8 bytes here (P4-10).
-    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
-
-    CResRef resRef(resRefBytes);
-    CString sMovie;
-    resRef.CopyToString(sMovie);
-
-    // The dawn/dusk movies are driven by the game clock, not by a request.
-    if (sMovie == CInfinity::DAWN_MOVIE || sMovie == CInfinity::DUSK_MOVIE) {
-        return TRUE;
-    }
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
-
-    BOOL bCanStart = TRUE;
-    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
-        bCanStart = FALSE;
-    }
-    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
-        bCanStart = FALSE;
-    }
-
-    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
-        pWorld->StartMovieMultiplayerHost(resRefBytes);
-    } else {
-        pWorld->SetPendingMovie(resRefBytes);
-    }
-
-    return TRUE;
-}
-
-// 0x436B60
-BOOLEAN CBaldurMessage::OnMovieAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    BYTE nResRefLength = pData[3];
-    BYTE resRefBytes[8] = {};
-    // The original copies the wire length into a 9-byte stack buffer
-    // without checking it; bounded to the resref's 8 bytes here (P4-10).
-    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
-
-    CResRef resRef(resRefBytes);
-    g_pBaldurChitin->m_pEngineWorld->ReadyMovie(resRef, TRUE);
-
-    return TRUE;
-}
-
-// 0x436D40
-BOOLEAN CBaldurMessage::OnReformPartyRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)pData;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    if (!pGame->m_multiplayerSettings.GetPermission(nMsgFrom, CGamePermission::LEADER)) {
-        return FALSE;
-    }
-
-    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
-
-    BOOL bCanStart = TRUE;
-    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
-        bCanStart = FALSE;
-    }
-    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
-        bCanStart = FALSE;
-    }
-
-    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
-        pWorld->StartReformPartyMultiplayerHost();
-    } else {
-        pWorld->SetPendingReformParty();
-    }
-
-    return TRUE;
-}
-
-// 0x436EF0
-BOOLEAN CBaldurMessage::OnReformPartyAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)pData;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
-    if (g_pChitin->pActiveEngine != pWorld) {
-        g_pChitin->pActiveEngine->SelectEngine(pWorld);
-    }
-
-    pWorld->m_bPausedBeforePickParty = pWorld->m_bPaused;
-    pWorld->TimerSynchronousUpdate();
-
-    return TRUE;
-}
-
-// 0x437050
-BOOLEAN CBaldurMessage::OnWeatherBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    WORD wWeatherFlags = *reinterpret_cast<WORD*>(pData + 3);
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    g_pBaldurChitin->m_pEngineWorld->m_weather.SetCurrentWeather(
-        pGame->m_pGameAreaMaster,
-        wWeatherFlags);
-
-    return TRUE;
-}
-
-// 0x4371B0
-BOOLEAN CBaldurMessage::OnTimeSynchBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
-        return FALSE;
-    }
-
-    ULONG nGameTime = *reinterpret_cast<ULONG*>(pData + 3);
-    BOOLEAN bForceSynch = pData[7];
-
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
-    CTimerWorld* pWorldTime = pGame->GetWorldTimer();
-    ULONG nOldGameTime = pWorldTime->m_gameTime;
-
-    if (bForceSynch == TRUE || nOldGameTime < nGameTime - 5 || nGameTime + 5 < nOldGameTime) {
-        pWorldTime->m_gameTime = nGameTime;
-        pWorldTime->CheckForTriggerEventPast();
-    }
-
-    if (bForceSynch == TRUE) {
-        g_pBaldurChitin->m_pEngineWorld->m_deltaTime = nGameTime - nOldGameTime;
-    }
-
-    return TRUE;
-}
-
-// 0x437390
-BOOLEAN CBaldurMessage::OnTimeChangeToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
-{
-    (void)nMsgFrom;
-    (void)dwSize;
-
-    if (!g_pChitin->cNetwork.GetSessionOpen()
-        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
-        return FALSE;
-    }
-
-    g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->AdvanceCurrentTime(
-        *reinterpret_cast<ULONG*>(pData + 3));
-
-    return TRUE;
-}
-
 // 0x8ABE0C
 static const DWORD STATICBUFFERSIZE = 0x4000;
 
@@ -6496,6 +6077,55 @@ BOOLEAN CBaldurMessage::OnPauseAnnounceStatus(INT nMsgFrom, BYTE* pMessage, DWOR
     return TRUE;
 }
 
+// NOTE: Might be static in `CMessage`.
+//
+// 0x434D80
+BOOLEAN CBaldurMessage::OnChapterRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    BYTE nChapter = pData[3];
+    BYTE nResRefLength = pData[4];
+    BYTE resRef[8] = {};
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRef, pData + 5, nResRefLength < sizeof(resRef) ? nResRefLength : sizeof(resRef));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The pending-chapter switch only fires when the chapter cannot start at
+    // once (a loaded/cut-scene save, a permitted dialog or a hard pause).
+    BOOL bCanStart = TRUE;
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bCanStart = FALSE;
+    }
+    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
+        bCanStart = FALSE;
+    }
+    if (g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
+        bCanStart = FALSE;
+    }
+
+    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter)) {
+        if (!bCanStart || g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
+            g_pBaldurChitin->m_pEngineWorld->SetPendingChapterChange(nChapter, resRef);
+        }
+    }
+
+    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter) && bCanStart
+        && g_pBaldurChitin->m_pEngineWorld->m_bHardPaused != TRUE) {
+        g_pBaldurChitin->m_pEngineChapter->StartChapterMultiplayerHost(nChapter, resRef);
+    }
+
+    return TRUE;
+}
+
 // 0x434EB0
 BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
 {
@@ -6537,6 +6167,35 @@ BOOLEAN CBaldurMessage::ChapterAnnounceStatus(BYTE nChapter, CResRef cResRef)
         nLength + sizeof(BYTE) + sizeof(BYTE));
 
     DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
+// 0x435040
+BOOLEAN CBaldurMessage::OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    BYTE nChapter = pData[3];
+    BYTE nResRefLength = pData[4];
+    BYTE resRefBytes[8] = {};
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 5, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->SetCurrentChapter(nChapter);
+
+    g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineChapter);
+
+    CResRef resRef(resRefBytes);
+    g_pBaldurChitin->m_pEngineChapter->StartChapter(resRef);
 
     return TRUE;
 }
@@ -6648,6 +6307,27 @@ BOOLEAN CBaldurMessage::SendMapWorldCancelRequestToServer()
     return TRUE;
 }
 
+// 0x435470
+BOOLEAN CBaldurMessage::OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)pData;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    if (g_pChitin->pActiveEngine == g_pBaldurChitin->m_pEngineWorldMap) {
+        SendMapWorldAnnounceStatus(FALSE, 0, 0);
+        g_pBaldurChitin->m_pEngineWorldMap->StopWorldMap(FALSE);
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    return TRUE;
+}
+
 // 0x4354E0
 BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID idController, LONG nLeavingEdge)
 {
@@ -6694,6 +6374,46 @@ BOOLEAN CBaldurMessage::SendMapWorldAnnounceStatus(BOOLEAN bActive, PLAYER_ID id
 
 // FIXME: `sAreaResRef` should be reference.
 //
+// 0x4355F0
+BOOLEAN CBaldurMessage::OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    BOOLEAN bStart = pData[3];
+    LONG nFacing = *reinterpret_cast<LONG*>(pData + 4);
+    DWORD nLeavingEdge = *reinterpret_cast<DWORD*>(pData + 8);
+
+    CScreenWorldMap* pWorldMap = g_pBaldurChitin->m_pEngineWorldMap;
+
+    if (g_pChitin->pActiveEngine != pWorldMap) {
+        if (bStart == TRUE) {
+            pWorldMap->StartWorldMap(1,
+                nLeavingEdge,
+                nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
+            g_pChitin->pActiveEngine->SelectEngine(pWorldMap);
+        }
+        return TRUE;
+    }
+
+    if (bStart == FALSE) {
+        pWorldMap->StopWorldMap(FALSE);
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    } else {
+        pWorldMap->StopWorldMap(FALSE);
+        pWorldMap->StartWorldMap(1,
+            nLeavingEdge,
+            nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
+    }
+
+    return TRUE;
+}
+
 // 0x436050
 BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 {
@@ -6734,6 +6454,91 @@ BOOLEAN CBaldurMessage::SendMapWorldRevealArea(CString sAreaResRef)
 
 // FIXME: `cResMovie` should be reference.
 //
+// 0x4361D0
+BOOLEAN CBaldurMessage::OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    BYTE nResRefLength = pData[3];
+    BYTE resRefBytes[8] = {};
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CResRef resRef(resRefBytes);
+    CString sAreaName;
+    resRef.CopyToString(sAreaName);
+
+    CWorldMap* pWorldMap = pGame->GetWorldMap(sAreaName);
+    pWorldMap->EnableArea(pWorldMap->sub_55A3A0(), resRef, TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
+
+    return TRUE;
+}
+
+// 0x436440
+BOOLEAN CBaldurMessage::OnRestRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    INT nHP = *reinterpret_cast<INT*>(pData + 3);
+    BOOLEAN bRenting = pData[7];
+    BOOLEAN bMovie = pData[8];
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+
+    BOOL bCanStart = TRUE;
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bCanStart = FALSE;
+    }
+    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
+        bCanStart = FALSE;
+    }
+
+    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
+        pWorld->StartRestMultiplayerHost(nHP, bRenting, bMovie);
+    } else {
+        pWorld->SetPendingRest(nHP, bRenting, bMovie);
+    }
+
+    return TRUE;
+}
+
+// 0x436610
+BOOLEAN CBaldurMessage::OnRestAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    INT nHP = *reinterpret_cast<INT*>(pData + 3);
+    BOOLEAN bRenting = pData[7];
+
+    m_bInOnRestAnnounce = TRUE;
+    CInfGame::m_bHealPartyOnRest = pData[8];
+    g_pBaldurChitin->GetObjectGame()->RestParty(nHP, bRenting);
+    m_bInOnRestAnnounce = FALSE;
+    CInfGame::m_bHealPartyOnRest = FALSE;
+
+    return TRUE;
+}
+
 // 0x436690
 BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 {
@@ -6787,6 +6592,52 @@ BOOLEAN CBaldurMessage::SendMovieRequestToServer(CResRef cResMovie)
 
 // FIXME: `cResMovie` should be reference.
 //
+// 0x436860
+BOOLEAN CBaldurMessage::OnMovieRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    BYTE nResRefLength = pData[3];
+    BYTE resRefBytes[8] = {};
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
+
+    CResRef resRef(resRefBytes);
+    CString sMovie;
+    resRef.CopyToString(sMovie);
+
+    // The dawn/dusk movies are driven by the game clock, not by a request.
+    if (sMovie == CInfinity::DAWN_MOVIE || sMovie == CInfinity::DUSK_MOVIE) {
+        return TRUE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+
+    BOOL bCanStart = TRUE;
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bCanStart = FALSE;
+    }
+    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
+        bCanStart = FALSE;
+    }
+
+    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
+        pWorld->StartMovieMultiplayerHost(resRefBytes);
+    } else {
+        pWorld->SetPendingMovie(resRefBytes);
+    }
+
+    return TRUE;
+}
+
 // 0x4369E0
 BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
 {
@@ -6830,6 +6681,64 @@ BOOLEAN CBaldurMessage::MovieAnnounceStatus(CResRef cResMovie)
     return TRUE;
 }
 
+// 0x436B60
+BOOLEAN CBaldurMessage::OnMovieAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    BYTE nResRefLength = pData[3];
+    BYTE resRefBytes[8] = {};
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
+
+    CResRef resRef(resRefBytes);
+    g_pBaldurChitin->m_pEngineWorld->ReadyMovie(resRef, TRUE);
+
+    return TRUE;
+}
+
+// 0x436D40
+BOOLEAN CBaldurMessage::OnReformPartyRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)pData;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    if (!pGame->m_multiplayerSettings.GetPermission(nMsgFrom, CGamePermission::LEADER)) {
+        return FALSE;
+    }
+
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+
+    BOOL bCanStart = TRUE;
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bCanStart = FALSE;
+    }
+    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
+        bCanStart = FALSE;
+    }
+
+    if (pWorld->m_bHardPaused != TRUE && bCanStart) {
+        pWorld->StartReformPartyMultiplayerHost();
+    } else {
+        pWorld->SetPendingReformParty();
+    }
+
+    return TRUE;
+}
+
 // 0x436DF0
 BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
 {
@@ -6857,6 +6766,29 @@ BOOLEAN CBaldurMessage::SendReformPartyAnnounceStatus()
         dwSize);
 
     DestroyBuffer(pMessage);
+
+    return TRUE;
+}
+
+// 0x436EF0
+BOOLEAN CBaldurMessage::OnReformPartyAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)pData;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    CScreenWorld* pWorld = g_pBaldurChitin->m_pEngineWorld;
+    if (g_pChitin->pActiveEngine != pWorld) {
+        g_pChitin->pActiveEngine->SelectEngine(pWorld);
+    }
+
+    pWorld->m_bPausedBeforePickParty = pWorld->m_bPaused;
+    pWorld->TimerSynchronousUpdate();
 
     return TRUE;
 }
@@ -6897,6 +6829,27 @@ BOOLEAN CBaldurMessage::WeatherBroadcast(WORD wWeatherFlags)
     return TRUE;
 }
 
+// 0x437050
+BOOLEAN CBaldurMessage::OnWeatherBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    WORD wWeatherFlags = *reinterpret_cast<WORD*>(pData + 3);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    g_pBaldurChitin->m_pEngineWorld->m_weather.SetCurrentWeather(
+        pGame->m_pGameAreaMaster,
+        wWeatherFlags);
+
+    return TRUE;
+}
+
 // 0x4370B0
 void CBaldurMessage::TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime)
 {
@@ -6933,6 +6886,36 @@ void CBaldurMessage::TimeSynchBroadcast(ULONG nGameTime, BOOLEAN bCompressTime)
     DestroyBuffer(pByteMessage);
 }
 
+// 0x4371B0
+BOOLEAN CBaldurMessage::OnTimeSynchBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    ULONG nGameTime = *reinterpret_cast<ULONG*>(pData + 3);
+    BOOLEAN bForceSynch = pData[7];
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CTimerWorld* pWorldTime = pGame->GetWorldTimer();
+    ULONG nOldGameTime = pWorldTime->m_gameTime;
+
+    if (bForceSynch == TRUE || nOldGameTime < nGameTime - 5 || nGameTime + 5 < nOldGameTime) {
+        pWorldTime->m_gameTime = nGameTime;
+        pWorldTime->CheckForTriggerEventPast();
+    }
+
+    if (bForceSynch == TRUE) {
+        g_pBaldurChitin->m_pEngineWorld->m_deltaTime = nGameTime - nOldGameTime;
+    }
+
+    return TRUE;
+}
+
 // 0x437240
 void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
 {
@@ -6965,6 +6948,23 @@ void CBaldurMessage::TimeChangeToServer(DWORD deltaTime)
         sizeof(DWORD));
 
     DestroyBuffer(pByteMessage);
+}
+
+// 0x437390
+BOOLEAN CBaldurMessage::OnTimeChangeToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->AdvanceCurrentTime(
+        *reinterpret_cast<ULONG*>(pData + 3));
+
+    return TRUE;
 }
 
 // 0x437950
