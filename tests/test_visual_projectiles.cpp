@@ -3991,6 +3991,14 @@ TEST_CASE("visual projectiles: Turn Undead turns the undead that fit the rolls",
     WORLD_OR_SKIP(world);
     CGameArea* pArea = world.pArea;
     CGameSprite* pTurner = world.pCharacter;
+    // The mirrored roll maths reads the turner's charisma, luck and turn undead
+    // level (the cleric level plus the paladin level past two); pin them so a
+    // first CHR that is a cleric or paladin cannot lift the best turn roll
+    // above the goblin levels this case encodes (the comment below assumes 3).
+    pTurner->m_derivedStats.m_nCHR = 10;
+    pTurner->m_derivedStats.m_nLuck = 0;
+    pTurner->m_derivedStats.SetClassLevel(CAIOBJECTTYPE_C_CLERIC, 0);
+    pTurner->m_derivedStats.SetClassLevel(CAIOBJECTTYPE_C_PALADIN, 0);
     std::vector<CGameSprite*> goblins = AddGoblins(pArea, CPoint(pTurner->GetPos().x + 80, pTurner->GetPos().y + 30), 6);
     REQUIRE(goblins.size() == 6);
     // Goblin 0 fits every roll at level 0; 1 fits while the rolls reach 1;
