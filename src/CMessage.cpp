@@ -6464,6 +6464,26 @@ BOOLEAN CBaldurMessage::OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByte
     return TRUE;
 }
 
+// 0x438F40
+BOOLEAN CBaldurMessage::OnLeaveAreaNameCancel(BYTE* pByteMessage, DWORD dwSize)
+{
+    // NOTE: The LEAVEAREANAME twin of 0x437D20, with the same two-argument
+    // form (`ret 8`: the buffer and a dwSize it ignores).
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    m_nLeaveAreaNameReplyValue = pByteMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    m_bLeaveAreaNameReplyReturned = TRUE;
+    return TRUE;
+}
+
 // 0x4381A0
 void CBaldurMessage::CleanLeaveAreaLuaRequest()
 {

@@ -804,6 +804,35 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaCancel records the reply only on a conn
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREANAME 120/114 cancel handler: the LEAVEAREALUA cancel's twin,
+// with its own waiting slot. Two-argument `ret 8` form, no game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xAB };
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaNameReplyValue == 0xAB);
+
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.
