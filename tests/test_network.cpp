@@ -865,6 +865,38 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaAnnounce refuses without a session or o
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREANAME 120/65 announce handler: the host tells a client's copy of
+// a party member to run a party-required trigger's transition. The guard
+// needs no game state; after it the handler decodes the announce and calls
+// CInfGame::sub_5C4AD0, which on the client side waits for the host's
+// signals (tests/test_ui_misc.cpp's travel scenario and 5C4AD0.md cover it).
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREANAME 120, announce 65, zeroed body}; the
+    // announce subtype has no in-tree constant (the survey's x/A row
+    // publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREANAME;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.

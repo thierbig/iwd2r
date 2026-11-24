@@ -390,6 +390,7 @@ public:
     BYTE sub_438710(LONG nCharacterId, LONG nTriggerId, CString sAreaName);
     BOOLEAN OnLeaveAreaNameRequestToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN OnLeaveAreaNameCancel(BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnLeaveAreaNameAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void CleanLeaveAreaLuaRequest();
     void CleanLeaveAreaNameRequest();
     BOOLEAN SendJournalEntryToServer(STRREF strText, INT nChapter, LONG nTime);
