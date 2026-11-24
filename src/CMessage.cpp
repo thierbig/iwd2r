@@ -239,6 +239,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_PATH = 49;
 // 0x84CF09
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_SEQUENCE = 50;
 
+// 0x84CF0A
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_51 = 51;
+
 // 0x84CF0B
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_TRIGGER = 52;
 
@@ -14657,6 +14660,351 @@ void CMessageSetSequence::Run()
 }
 
 // -----------------------------------------------------------------------------
+
+// 0x4F6170
+CMessage51::CMessage51(LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    // NOTE: The exe leaves m_ptTarget uninitialized; every path that reads it
+    // sets it first (UnmarshalMessage writes both arms, Run only follows a
+    // successful unmarshal). The port's CPoint default constructor zeroes it.
+    m_pSearchRequest = NULL;
+    m_frontList = CSearchRequest::LIST_FRONT;
+}
+
+// The vtable 0x84D2B8 getters: 0x453510 (identical-code fold of every
+// GetCommType returning BROADCAST), 0x40A0E0 (MSG_TYPE_CMESSAGE) and
+// 0x4F61A0 (subtype 51). 0x4F61A0 is not a function start in the exports
+// (a 13-byte folded `mov al, byte [0x84CF0A]; ret`), so it carries no address
+// marker, as the tree's other folded getters whose addresses the export
+// omits.
+SHORT CMessage51::GetCommType()
+{
+    return BROADCAST;
+}
+
+BYTE CMessage51::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+BYTE CMessage51::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_51;
+}
+
+// 0x509100
+void CMessage51::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID player = pObject->m_remotePlayerID;
+    LONG remoteId = pObject->m_remoteObjectID;
+
+    CSearchRequest* pRequest = m_pSearchRequest;
+    CString sArea;
+    BYTE nAreaLength = 0;
+    if (pRequest != NULL) {
+        pObject->m_pArea->m_resRef.CopyToString(sArea);
+        nAreaLength = static_cast<BYTE>(sArea.GetLength());
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    if (pRequest == NULL) {
+        *dwSize = 0x12;
+    } else {
+        // NOTE: The exe computes 0x54 + len + 8 * (party + targets + points)
+        // here (0x509228) but writes one byte more: its area name starts after
+        // the two bytes at 0x12/0x13, so the bytes run to 0x55. Its closing
+        // UTIL_ASSERT (0x5096E1) would therefore fire. Nothing in IWD2
+        // constructs this class for sending (0x4EE020 is its only
+        // construction site), so that arm is dead in the game; ours reports
+        // the count it writes, so the closing assert holds and the codec can
+        // be tested. The bytes are the exe's.
+        *dwSize = nAreaLength + 0x55
+            + 8 * (pRequest->m_nPartyIds + pRequest->m_nTargetIds + pRequest->m_nTargetPoints);
+    }
+
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    (*pData)[cnt++] = m_frontList;
+    (*pData)[cnt++] = pRequest != NULL ? 1 : 0;
+
+    if (pRequest == NULL) {
+        memcpy(*pData + cnt, &m_ptTarget.x, sizeof(m_ptTarget.x));
+        cnt += sizeof(m_ptTarget.x);
+        memcpy(*pData + cnt, &m_ptTarget.y, sizeof(m_ptTarget.y));
+        cnt += sizeof(m_ptTarget.y);
+    } else {
+        (*pData)[cnt++] = pRequest->m_sourceSide;
+        (*pData)[cnt++] = pRequest->m_nPartyIds;
+        (*pData)[cnt++] = pRequest->m_nTargetIds;
+        (*pData)[cnt++] = pRequest->m_nTargetPoints;
+        memcpy(*pData + cnt, &pRequest->m_removeSelf, sizeof(pRequest->m_removeSelf));
+        cnt += sizeof(pRequest->m_removeSelf);
+        (*pData)[cnt++] = pRequest->m_frontList;
+        (*pData)[cnt++] = nAreaLength;
+        memcpy(*pData + cnt, sArea.GetBuffer(sArea.GetLength()), nAreaLength);
+        cnt += nAreaLength;
+        memcpy(*pData + cnt, pRequest->m_terrainTable, sizeof(pRequest->m_terrainTable));
+        cnt += sizeof(pRequest->m_terrainTable);
+        memcpy(*pData + cnt, &pRequest->m_pathSmooth, sizeof(pRequest->m_pathSmooth));
+        cnt += sizeof(pRequest->m_pathSmooth);
+        memcpy(*pData + cnt, &pRequest->m_collisionSearch, sizeof(pRequest->m_collisionSearch));
+        cnt += sizeof(pRequest->m_collisionSearch);
+        (*pData)[cnt++] = pRequest->m_collisionDelay;
+        memcpy(*pData + cnt, &pRequest->m_exclusiveTargetPoints, sizeof(pRequest->m_exclusiveTargetPoints));
+        cnt += sizeof(pRequest->m_exclusiveTargetPoints);
+
+        // One object id as the pair the wire carries: its remote player and
+        // remote object ids, or (0, 0xFFFFFFFF) for an unknown id.
+        auto writePair = [&](LONG id, LONG releaseId) {
+            PLAYER_ID pairPlayer = 0;
+            LONG pairObject = 0xFFFFFFFF;
+            CGameObject* pPairObject;
+            BYTE pairRc;
+            do {
+                pairRc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(id,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pPairObject,
+                    INFINITE);
+            } while (pairRc == CGameObjectArray::SHARED || pairRc == CGameObjectArray::DENIED);
+            if (pairRc == CGameObjectArray::SUCCESS) {
+                pairPlayer = pPairObject->m_remotePlayerID;
+                pairObject = pPairObject->m_remoteObjectID;
+                g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(releaseId,
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            }
+            memcpy(*pData + cnt, &pairPlayer, sizeof(pairPlayer));
+            cnt += sizeof(pairPlayer);
+            memcpy(*pData + cnt, &pairObject, sizeof(pairObject));
+            cnt += sizeof(pairObject);
+        };
+
+        // NOTE: The exe shares the request's source id but releases the
+        // message's m_sourceId here (0x5093A8 shares request+0x2C, 0x509405
+        // releases this+8); kept verbatim, so the request's share leaks and
+        // the message's id, never shared, is what the array is asked to
+        // release -- a defect of the dead Marshal arm.
+        writePair(pRequest->m_sourceId, m_sourceId);
+
+        memcpy(*pData + cnt, &pRequest->m_sourcePt.x, sizeof(pRequest->m_sourcePt.x));
+        cnt += sizeof(pRequest->m_sourcePt.x);
+        memcpy(*pData + cnt, &pRequest->m_sourcePt.y, sizeof(pRequest->m_sourcePt.y));
+        cnt += sizeof(pRequest->m_sourcePt.y);
+
+        for (BYTE index = 0; index < pRequest->m_nPartyIds; index++) {
+            writePair(pRequest->m_partyIds[index], pRequest->m_partyIds[index]);
+        }
+
+        for (BYTE index = 0; index < pRequest->m_nTargetIds; index++) {
+            writePair(pRequest->m_targetIds[index], pRequest->m_targetIds[index]);
+        }
+
+        for (BYTE index = 0; index < pRequest->m_nTargetPoints; index++) {
+            memcpy(*pData + cnt, &pRequest->m_targetPoints[index].x, sizeof(LONG));
+            cnt += sizeof(LONG);
+            memcpy(*pData + cnt, &pRequest->m_targetPoints[index].y, sizeof(LONG));
+            cnt += sizeof(LONG);
+        }
+
+        memcpy(*pData + cnt, &pRequest->m_minNodes, sizeof(LONG));
+        cnt += sizeof(LONG);
+        memcpy(*pData + cnt, &pRequest->m_maxNodes, sizeof(LONG));
+        cnt += sizeof(LONG);
+        memcpy(*pData + cnt, &pRequest->m_minNodesBack, sizeof(LONG));
+        cnt += sizeof(LONG);
+        memcpy(*pData + cnt, &pRequest->m_maxNodesBack, sizeof(LONG));
+        cnt += sizeof(LONG);
+        memcpy(*pData + cnt, &pRequest->m_bBump, sizeof(pRequest->m_bBump));
+        cnt += sizeof(pRequest->m_bBump);
+    }
+
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x509730
+BOOL CMessage51::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    PLAYER_ID player;
+    LONG remoteId;
+    memcpy(&player, pData + CNetwork::SPEC_MSG_HEADER_LENGTH, sizeof(player));
+    memcpy(&remoteId, pData + CNetwork::SPEC_MSG_HEADER_LENGTH + 4, sizeof(remoteId));
+    m_frontList = pData[0xB];
+    BOOLEAN bSearchRequest = pData[0xC];
+
+    LONG local;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) != TRUE) {
+        return FALSE;
+    }
+    m_targetId = local;
+
+    if (!bSearchRequest) {
+        memcpy(&m_ptTarget.x, pData + 0xD, sizeof(m_ptTarget.x));
+        memcpy(&m_ptTarget.y, pData + 0x11, sizeof(m_ptTarget.y));
+        return TRUE;
+    }
+
+    CSearchRequest* pRequest = new CSearchRequest();
+    m_pSearchRequest = pRequest;
+    pRequest->m_sourceSide = pData[0xD];
+    pRequest->m_nPartyIds = pData[0xE];
+    pRequest->m_nTargetIds = pData[0xF];
+    pRequest->m_nTargetPoints = pData[0x10];
+    memcpy(&pRequest->m_removeSelf, pData + 0x11, sizeof(pRequest->m_removeSelf));
+    pRequest->m_frontList = pData[0x15];
+
+    BYTE nAreaLength = pData[0x16];
+    CHAR szArea[9] = { 0 };
+    // NOTE: The original copies nAreaLength bytes into this 9-byte stack
+    // buffer and overflows for a name longer than 8 (0x5098C1); bounded here
+    // (P4-10). The offsets below still use the wire byte, as the exe does.
+    memcpy(szArea, pData + 0x17, nAreaLength > 8 ? 8 : nAreaLength);
+    CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(CString(szArea));
+
+    // NOTE: The original adds the member offset even to a NULL area pointer
+    // (0x5098B6); the same value without the null-pointer arithmetic.
+    pRequest->m_searchBitmap = pArea != NULL
+        ? &pArea->m_search
+        : reinterpret_cast<CSearchBitmap*>(0x76C);
+
+    memcpy(pRequest->m_terrainTable, pData + nAreaLength + 0x17, sizeof(pRequest->m_terrainTable));
+    memcpy(&pRequest->m_pathSmooth, pData + nAreaLength + 0x27, sizeof(pRequest->m_pathSmooth));
+    memcpy(&pRequest->m_collisionSearch, pData + nAreaLength + 0x2B, sizeof(pRequest->m_collisionSearch));
+    pRequest->m_collisionDelay = pData[nAreaLength + 0x2F];
+    memcpy(&pRequest->m_exclusiveTargetPoints, pData + nAreaLength + 0x30, sizeof(pRequest->m_exclusiveTargetPoints));
+
+    PLAYER_ID sourcePlayer;
+    LONG sourceRemoteId;
+    memcpy(&sourcePlayer, pData + nAreaLength + 0x34, sizeof(sourcePlayer));
+    memcpy(&sourceRemoteId, pData + nAreaLength + 0x38, sizeof(sourceRemoteId));
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(sourcePlayer, sourceRemoteId, local) == TRUE) {
+        pRequest->m_sourceId = local;
+    } else {
+        pRequest->m_sourceId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    memcpy(&pRequest->m_sourcePt, pData + nAreaLength + 0x3C, sizeof(pRequest->m_sourcePt));
+
+    DWORD cnt = nAreaLength + 0x44;
+
+    if (pRequest->m_nPartyIds != 0) {
+        pRequest->m_partyIds = new LONG[pRequest->m_nPartyIds];
+        BYTE nCount = pRequest->m_nPartyIds;
+        for (BYTE index = 0; index < nCount; index++) {
+            PLAYER_ID listPlayer;
+            LONG listRemoteId;
+            memcpy(&listPlayer, pData + cnt, sizeof(listPlayer));
+            memcpy(&listRemoteId, pData + cnt + 4, sizeof(listRemoteId));
+            if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(listPlayer, listRemoteId, local) == TRUE) {
+                pRequest->m_partyIds[index] = local;
+            } else {
+                // NOTE: The exe drops the count on a miss but keeps walking to
+                // the initial bound, leaving that slot of the new LONG[] as it
+                // was; kept.
+                pRequest->m_nPartyIds--;
+            }
+            cnt += 8;
+        }
+    }
+
+    if (pRequest->m_nTargetIds != 0) {
+        pRequest->m_targetIds = new LONG[pRequest->m_nTargetIds];
+        BYTE nCount = pRequest->m_nTargetIds;
+        for (BYTE index = 0; index < nCount; index++) {
+            PLAYER_ID listPlayer;
+            LONG listRemoteId;
+            memcpy(&listPlayer, pData + cnt, sizeof(listPlayer));
+            memcpy(&listRemoteId, pData + cnt + 4, sizeof(listRemoteId));
+            if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(listPlayer, listRemoteId, local) == TRUE) {
+                pRequest->m_targetIds[index] = local;
+            } else {
+                pRequest->m_nTargetIds--;
+            }
+            cnt += 8;
+        }
+    }
+
+    if (pRequest->m_nTargetPoints != 0) {
+        pRequest->m_targetPoints = new POINT[pRequest->m_nTargetPoints];
+        for (BYTE index = 0; index < pRequest->m_nTargetPoints; index++) {
+            memcpy(&pRequest->m_targetPoints[index], pData + cnt, sizeof(POINT));
+            cnt += sizeof(POINT);
+        }
+    }
+
+    memcpy(&pRequest->m_minNodes, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+    memcpy(&pRequest->m_maxNodes, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+    memcpy(&pRequest->m_minNodesBack, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+    memcpy(&pRequest->m_maxNodesBack, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+    memcpy(&pRequest->m_bBump, pData + cnt, sizeof(pRequest->m_bBump));
+    cnt += sizeof(pRequest->m_bBump);
+
+    // NOTE: The original has no trailing cnt == dwSize guard here.
+    return TRUE;
+}
+
+// 0x509B80
+void CMessage51::Run()
+{
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return;
+    }
+
+    if (pSprite->GetObjectType() == CGameObject::TYPE_SPRITE) {
+        if (m_pSearchRequest == NULL) {
+            // The virtual SetTarget(const CPoint&, BOOL) at vtable +0xB8.
+            pSprite->SetTarget(m_ptTarget, FALSE);
+        } else {
+            // The search request's ownership passes to the sprite.
+            pSprite->SetTarget(m_pSearchRequest, FALSE, m_frontList);
+        }
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+}
 
 // 0x4F61B0
 CMessageSetTrigger::CMessageSetTrigger(const CAITrigger& trigger, LONG caller, LONG target)

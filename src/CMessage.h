@@ -26,6 +26,7 @@ class CGameContainer;
 class CGameDoor;
 class CGameEffect;
 class CGameSprite;
+class CSearchRequest;
 
 class CBaldurMessage {
 public:
@@ -117,6 +118,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_STOP_ESCAPE_AREA;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_TIME_STOP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_RELEASE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_51;
     static const BYTE MSG_SUBTYPE_CMESSAGE_89;
     static const BYTE MSG_SUBTYPE_CMESSAGE_90;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FLOAT_TEXT;
@@ -1211,6 +1213,27 @@ public:
     /* 0014 */ LONG m_nValue;
     /* 0018 */ BOOLEAN m_bIncrement;
     /* 001A */ DWORD m_dwFlags;
+};
+
+// The subtype-51 message (vtable 0x84D2B8): a move order for the target
+// sprite, either to a point (m_ptTarget) or as a search request
+// (m_pSearchRequest). Receive-only in IWD2 -- the message dispatcher
+// 0x4EE020 is its only construction site -- and named by its subtype like
+// the tree's other unnamed message classes; BG2 calls the class
+// CMessageSetTarget.
+class CMessage51 : public CMessage {
+public:
+    CMessage51(LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CPoint m_ptTarget;
+    /* 0014 */ CSearchRequest* m_pSearchRequest;
+    /* 0018 */ BYTE m_frontList;
 };
 
 class CMessageSetTrigger : public CMessage {
