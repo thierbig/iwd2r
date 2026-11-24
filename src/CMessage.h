@@ -137,6 +137,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_GROUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_TOGGLE_INTERFACE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_107;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_112;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_MARKUP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_PICKED_DIALOG_RESPONSE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_AREA_TYPE;
@@ -971,6 +972,26 @@ public:
     /* 000C */ CResRef m_cResSound;
     /* 0014 */ BYTE m_nChannel;
     /* 0015 */ BOOLEAN m_bPositioned;
+};
+
+// The subtype-112 positional-sound broadcast (vtable 0x848B5C), built by
+// CGameAIBase::PlaySound for the other players: the sound, the channel and
+// the position. Its original C++ name is unrecovered, so the tree names it
+// by subtype like CMessage95/CMessage120.
+class CMessage112 : public CMessage {
+public:
+    CMessage112(CResRef cResSound, LONG x, LONG y, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_cResSound;
+    /* 0014 */ BYTE m_nChannel;
+    /* 0016 */ LONG m_x;
+    /* 001A */ LONG m_y;
 };
 
 class CMessageRemoveReplies : public CMessage {
