@@ -332,6 +332,7 @@ public:
     BOOLEAN DemandCharacterSlotReply(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo);
     BOOLEAN OnDemandCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOL ObjectAdd(LONG localObjectID, BYTE nObjectType, BYTE* pObjectData, DWORD dwObjectDataSize);
+    BOOLEAN OnObjectAdd(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL ObjectControlSuggestion(PLAYER_ID playerToSuggestID, LONG localObjectID);
     BOOL ObjectControlRequest(LONG localObjectID);
     BOOL ObjectControl();

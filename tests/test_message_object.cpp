@@ -605,3 +605,125 @@ TEST_CASE("object control: OnObjectDelete drops the host-deleted local copy", "[
     CHECK(game.Game()->GetObjectArray()->GetDeny(nObject, CGameObjectArray::THREAD_ASYNCH, &pDenied, INFINITE) != CGameObjectArray::SUCCESS);
     CHECK(message.m_bInOnObjectDelete == FALSE);
 }
+
+namespace {
+
+// {header[3]; PLAYER_ID remotePlayer; LONG remoteObject; BYTE objectType;
+//  DWORD objectDataSize; objectData[]}
+DWORD BuildObjectAddPacket(BYTE* packet, PLAYER_ID remotePlayerID, LONG remoteObjectID, BYTE nObjectType,
+    const BYTE* pObjectData, DWORD dwObjectDataSize)
+{
+    std::memset(packet, 0xCD, HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD) + dwObjectDataSize);
+    WritePair(packet + HEADER_LENGTH, remotePlayerID, remoteObjectID);
+    DWORD cnt = HEADER_LENGTH + PAIR_SIZE;
+    packet[cnt++] = nObjectType;
+    std::memcpy(packet + cnt, &dwObjectDataSize, sizeof(dwObjectDataSize));
+    cnt += sizeof(dwObjectDataSize);
+    if (dwObjectDataSize != 0) {
+        std::memcpy(packet + cnt, pObjectData, dwObjectDataSize);
+        cnt += dwObjectDataSize;
+    }
+    return cnt;
+}
+
+} // namespace
+
+TEST_CASE("object add: OnObjectAdd refuses a closed session and its own message", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CBaldurMessage message;
+
+    BYTE data[4] = { 0, 0, 0, 0 };
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD) + sizeof(data)];
+    const DWORD dwSize = BuildObjectAddPacket(packet, 7, 8, CGameObject::TYPE_CONTAINER, data, sizeof(data));
+
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnObjectAdd(0, packet, dwSize) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    // The local player's own OBJECT/65 is not applied.
+    session.Network().m_nLocalPlayer = 1;
+    CHECK(message.OnObjectAdd(1, packet, dwSize) == FALSE);
+    CHECK(message.m_bInOnObjectAdd == FALSE);
+}
+
+TEST_CASE("object add: OnObjectAdd accepts an unknown pair with an empty block", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CBaldurMessage message;
+
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD)];
+    const DWORD dwSize = BuildObjectAddPacket(packet, 7, 8, CGameObject::TYPE_CONTAINER, NULL, 0);
+
+    CHECK(message.OnObjectAdd(0, packet, dwSize) == TRUE);
+    CHECK(message.m_bInOnObjectAdd == FALSE);
+}
+
+TEST_CASE("object add: OnObjectAdd ignores a pair it already maps", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CGameObject* pObject = new CGameObject();
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 7, 8, nObject);
+
+    CBaldurMessage message;
+
+    BYTE data[4] = { 0, 0, 0, 0 };
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD) + sizeof(data)];
+    const DWORD dwSize = BuildObjectAddPacket(packet, 7, 8, CGameObject::TYPE_CONTAINER, data, sizeof(data));
+
+    CHECK(message.OnObjectAdd(0, packet, dwSize) == FALSE);
+    CHECK(message.m_bInOnObjectAdd == FALSE);
+}
+
+TEST_CASE("object add: OnObjectAdd refuses an unknown object type", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CBaldurMessage message;
+
+    BYTE data[4] = { 0, 0, 0, 0 };
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD) + sizeof(data)];
+    const DWORD dwSize = BuildObjectAddPacket(packet, 7, 8, CGameObject::TYPE_TEXT, data, sizeof(data));
+
+    CHECK(message.OnObjectAdd(0, packet, dwSize) == FALSE);
+    CHECK(message.m_bInOnObjectAdd == FALSE);
+}
+
+TEST_CASE("object add: OnObjectAdd leaves the guard set when a container's area is unknown", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CBaldurMessage message;
+
+    // {BYTE areaNameLength; char areaName[]; WORD polygonCount; WORD itemCount}
+    // The zeroed game has no areas, so GetArea misses before the container is
+    // built. The exe returns past the m_bInOnObjectAdd clear here
+    // (0x430150 -> 0x430700), so the guard stays set.
+    BYTE data[1 + 6 + sizeof(WORD) + sizeof(WORD)] = {};
+    data[0] = 6;
+    std::memcpy(data + 1, "AR1000", 6);
+    const WORD nPolygonCount = 0;
+    std::memcpy(data + 7, &nPolygonCount, sizeof(nPolygonCount));
+    const WORD nItems = 0;
+    std::memcpy(data + 9, &nItems, sizeof(nItems));
+
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE + sizeof(BYTE) + sizeof(DWORD) + sizeof(data)];
+    const DWORD dwSize = BuildObjectAddPacket(packet, 7, 8, CGameObject::TYPE_CONTAINER, data, sizeof(data));
+
+    CHECK(message.OnObjectAdd(0, packet, dwSize) == FALSE);
+    CHECK(message.m_bInOnObjectAdd == TRUE);
+}

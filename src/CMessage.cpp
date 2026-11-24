@@ -3,6 +3,7 @@
 #include "CAIScript.h"
 #include "CAIUtil.h"
 #include "CBaldurChitin.h"
+#include "CCreatureFile.h"
 #include "CGameAIBase.h"
 #include "CGameAnimationType.h"
 #include "CGameArea.h"
@@ -3603,6 +3604,177 @@ BOOL CBaldurMessage::ObjectAdd(LONG localObjectID, BYTE nObjectType, BYTE* pObje
         dwSize);
 
     DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
+// 0x42FFD0
+BOOLEAN CBaldurMessage::OnObjectAdd(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // Our own OBJECT/65 is never applied locally.
+    if (nMsgFrom == static_cast<INT>(static_cast<BYTE>(g_pChitin->cNetwork.m_nLocalPlayer))) {
+        return FALSE;
+    }
+
+    m_bInOnObjectAdd = TRUE;
+
+    // {PLAYER_ID remotePlayerID; LONG remoteObjectID; BYTE objectType;
+    //  DWORD objectDataSize; objectData[]} after the 3-byte spec header.
+    PLAYER_ID nRemotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH);
+    LONG nRemoteObjectID = *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID));
+    LONG nObject;
+
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(nRemotePlayerID,
+            nRemoteObjectID,
+            nObject)
+        == TRUE) {
+        m_bInOnObjectAdd = FALSE;
+        return FALSE;
+    }
+
+    BYTE nObjectType = pData[CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID) + sizeof(LONG)];
+    DWORD dwObjectDataSize = *reinterpret_cast<DWORD*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(BYTE));
+
+    if (dwObjectDataSize == 0) {
+        m_bInOnObjectAdd = FALSE;
+        return TRUE;
+    }
+
+    BYTE* pObjectData = CreateBuffer(dwObjectDataSize);
+    memcpy(pObjectData,
+        pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(BYTE) + sizeof(DWORD),
+        dwObjectDataSize);
+
+    CGameObject* pObject = NULL;
+
+    if (nObjectType == CGameObject::TYPE_CONTAINER) {
+        // The block is CGameContainer::MarshalMessage's output:
+        // {BYTE areaNameLength; char areaName[]; WORD polygonCount;
+        //  WORD itemCount; CAreaFileContainer; CAreaPoint points[];
+        //  CCreatureFileItem items[]}
+        BYTE nAreaNameLength = pObjectData[0];
+        CString sAreaName(reinterpret_cast<const char*>(pObjectData + 1), nAreaNameLength);
+
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sAreaName);
+        if (pArea != NULL) {
+            WORD nPolygonCount = *reinterpret_cast<WORD*>(pObjectData + 1 + nAreaNameLength);
+            WORD nItems = *reinterpret_cast<WORD*>(pObjectData + 3 + nAreaNameLength);
+
+            pObject = new CGameContainer(pArea,
+                reinterpret_cast<CAreaFileContainer*>(pObjectData + 5 + nAreaNameLength),
+                reinterpret_cast<CAreaPoint*>(pObjectData + 5 + nAreaNameLength + sizeof(CAreaFileContainer)),
+                nPolygonCount,
+                reinterpret_cast<CCreatureFileItem*>(pObjectData + 5 + nAreaNameLength + sizeof(CAreaFileContainer) + sizeof(CAreaPoint) * nPolygonCount),
+                nItems);
+        } else {
+            // NOTE: The exe jumps straight to its return here (0x430150 ->
+            // 0x430700), past the m_bInOnObjectAdd clear at 0x4306FD, so the
+            // guard stays set after a container with an unknown area.
+            DestroyBuffer(pObjectData);
+            return FALSE;
+        }
+    } else if (nObjectType == CGameObject::TYPE_SPRITE) {
+        // The block is CGameSprite::MarshalMessage's output:
+        // {BYTE spriteResRefLength; char spriteResRef[]; BYTE areaResRefLength;
+        //  char areaResRef[]; LONG posX; LONG posY; BYTE enemyAlly}
+        BYTE nSpriteResRefLength = pObjectData[0];
+        BYTE nAreaResRefLength = pObjectData[1 + nSpriteResRefLength];
+        CString sSpriteResRef(reinterpret_cast<const char*>(pObjectData + 1), nSpriteResRefLength);
+        CString sAreaResRef(reinterpret_cast<const char*>(pObjectData + 2 + nSpriteResRefLength), nAreaResRefLength);
+        LONG nPosX = *reinterpret_cast<LONG*>(pObjectData + 2 + nSpriteResRefLength + nAreaResRefLength);
+        LONG nPosY = *reinterpret_cast<LONG*>(pObjectData + 6 + nSpriteResRefLength + nAreaResRefLength);
+        BYTE nEnemyAlly = pObjectData[10 + nSpriteResRefLength + nAreaResRefLength];
+
+        CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sAreaResRef);
+
+        CResRef resRef(sSpriteResRef);
+        CCreatureFile creatureFile;
+        creatureFile.SetResRef(resRef, TRUE, TRUE);
+
+        CGameSprite* pSprite = new CGameSprite(creatureFile.GetData(),
+            static_cast<LONG>(creatureFile.GetDataSize()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            0x7FFFFFFF,
+            CPoint(-1, -1),
+            0);
+
+        creatureFile.ReleaseData();
+
+        pSprite->SetResRef(resRef);
+
+        // __FILE__: .\Include\ObjAnimation.h
+        // __LINE__: 2093 (0x82D)
+        UTIL_ASSERT_MSG(pSprite->m_animation.m_animation != NULL, "m_animation != NULL");
+
+        BYTE nPersonalSpace = pSprite->m_animation.m_animation->GetPersonalSpace();
+
+        CPoint ptOpen = pArea->m_search.GetNearestOpenSquare(
+            CPoint(nPosX / CPathSearch::GRID_SQUARE_SIZEX, nPosY / CPathSearch::GRID_SQUARE_SIZEY),
+            pSprite->GetTerrainTable(),
+            nPersonalSpace,
+            -1);
+
+        // The enemy/ally byte replaces the one the CRE carried in all three
+        // AI types (0x430506-0x4305C4).
+        CAIObjectType typeAI;
+        typeAI.Set(pSprite->GetAIType());
+        CAIObjectType liveTypeAI;
+        liveTypeAI.Set(pSprite->m_liveTypeAI);
+        CAIObjectType startTypeAI;
+        startTypeAI.Set(pSprite->m_liveTypeAI);
+
+        startTypeAI.m_nEnemyAlly = nEnemyAlly;
+        pSprite->m_startTypeAI.Set(startTypeAI);
+
+        typeAI.m_nEnemyAlly = nEnemyAlly;
+        pSprite->SetAIType(typeAI, FALSE, FALSE);
+
+        liveTypeAI.m_nEnemyAlly = nEnemyAlly;
+        pSprite->m_liveTypeAI.Set(liveTypeAI);
+
+        if (nEnemyAlly <= CAIObjectType::EA_CONTROLCUTOFF) {
+            if (nEnemyAlly == CAIObjectType::EA_FAMILIAR) {
+                g_pBaldurChitin->GetObjectGame()->AddCharacterToFamiliars(pSprite->m_id);
+                pSprite->MakeGlobal();
+            } else {
+                g_pBaldurChitin->GetObjectGame()->AddCharacterToAllies(pSprite->m_id);
+            }
+        }
+
+        pSprite->AddToArea(pArea,
+            CPoint(ptOpen.x * CPathSearch::GRID_SQUARE_SIZEX, ptOpen.y * CPathSearch::GRID_SQUARE_SIZEY),
+            0,
+            CGameObject::LIST_FRONT);
+
+        pObject = pSprite;
+    } else {
+        m_bInOnObjectAdd = FALSE;
+        DestroyBuffer(pObjectData);
+        return FALSE;
+    }
+
+    // The object becomes the remote player's copy: map the pair to it and
+    // stamp its wire ids.
+    g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->InitiateControl(nRemotePlayerID,
+        nRemoteObjectID,
+        pObject->m_id);
+
+    pObject->m_remoteObjectID = nRemoteObjectID;
+    pObject->m_remotePlayerID = nRemotePlayerID;
+
+    DestroyBuffer(pObjectData);
+
+    m_bInOnObjectAdd = FALSE;
 
     return TRUE;
 }
