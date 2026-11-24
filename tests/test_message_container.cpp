@@ -408,3 +408,170 @@ TEST_CASE("msg: CMessageContainerAddItem::UnmarshalMessage rejects an unknown re
     CHECK(message.m_slotNum == 3);
     CHECK(message.m_item.cResRef == CResRef("00AMUL01"));
 }
+
+// The container-list message's body: 0xC header plus, for every non-null
+// slot, the SHORT slot index, the length-prefixed resref and the item's
+// usage counts, wear and flags. The marshal writes the total slot count and
+// the number of present items, so a sparse container round-trips its holes.
+namespace {
+constexpr DWORD CONTAINER_ITEMS_BASE = 0xC;
+constexpr DWORD ITEM_ENTRY_BASE = 0xF; // index + length byte + counts/wear/flags
+} // namespace
+
+TEST_CASE("msg: CMessageContainerItems::MarshalMessage writes the item list", "[msg][network][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = MakeTarget(cre, pGame);
+
+    CItem itemA(CResRef("00AMUL01"), 0, 0, 0, 0, 0);
+    CItem itemB(CResRef("00CWSWDB"), 1, 2, 3, 5, 0x40);
+    CItem** ppItems = new CItem*[3];
+    ppItems[0] = &itemA;
+    ppItems[1] = NULL;
+    ppItems[2] = &itemB;
+
+    // The class constructor with a null container leaves the list empty; the
+    // member is set directly so no CGameContainer is needed.
+    CMessageContainerItems message(NULL, 10, pSprite->GetId());
+    message.m_nItems = 3;
+    message.m_pItems = ppItems;
+
+    BYTE packet[HEADER_LENGTH + 0x60];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    message.MarshalMessage(&pPacket, &dwSize);
+
+    REQUIRE(dwSize == CONTAINER_ITEMS_BASE + 2 * (ITEM_ENTRY_BASE + 8));
+    PLAYER_ID player = 0;
+    LONG remoteObject = 0;
+    SHORT nItems = 0;
+    SHORT nPresent = 0;
+    std::memcpy(&player, packet + HEADER_LENGTH, sizeof(player));
+    std::memcpy(&remoteObject, packet + HEADER_LENGTH + 4, sizeof(remoteObject));
+    std::memcpy(&nItems, packet + HEADER_LENGTH + 8, sizeof(nItems));
+    std::memcpy(&nPresent, packet + HEADER_LENGTH + 0xA, sizeof(nPresent));
+    CHECK(player == 7);
+    CHECK(remoteObject == 0x1001);
+    CHECK(nItems == 3);
+    CHECK(nPresent == 2);
+
+    const DWORD first = HEADER_LENGTH + CONTAINER_ITEMS_BASE;
+    SHORT index = -1;
+    std::memcpy(&index, packet + first, sizeof(index));
+    CHECK(index == 0);
+    CHECK(packet[first + 2] == 8);
+    CHECK(std::memcmp(packet + first + 3, "00AMUL01", 8) == 0);
+    const DWORD second = first + ITEM_ENTRY_BASE + 8;
+    std::memcpy(&index, packet + second, sizeof(index));
+    CHECK(index == 2);
+    CHECK(packet[second + 2] == 8);
+    CHECK(std::memcmp(packet + second + 3, "00CWSWDB", 8) == 0);
+
+    message.m_nItems = 0;
+    message.m_pItems = NULL;
+    delete[] ppItems;
+}
+
+TEST_CASE("msg: CMessageContainerItems codec round-trips a sparse container", "[msg][network][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = MakeTarget(cre, pGame);
+
+    CItem itemA(CResRef("00AMUL01"), 0, 0, 0, 0, 0);
+    CItem itemB(CResRef("00CWSWDB"), 1, 2, 3, 5, 0x40);
+    CItem** ppItems = new CItem*[3];
+    ppItems[0] = &itemA;
+    ppItems[1] = NULL;
+    ppItems[2] = &itemB;
+
+    CMessageContainerItems sent(NULL, 10, pSprite->GetId());
+    sent.m_nItems = 3;
+    sent.m_pItems = ppItems;
+
+    BYTE packet[HEADER_LENGTH + 0x60];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPacket, &dwSize);
+
+    CMessageContainerItems received(NULL, 0, 0);
+    REQUIRE(received.UnmarshalMessage(packet, HEADER_LENGTH + dwSize) == TRUE);
+    CHECK(received.GetTarget() == pSprite->GetId());
+    REQUIRE(received.m_nItems == 3);
+    REQUIRE(received.m_pItems != NULL);
+    REQUIRE(received.m_pItems[0] != NULL);
+    CHECK(received.m_pItems[1] == NULL);
+    REQUIRE(received.m_pItems[2] != NULL);
+    CHECK(received.m_pItems[0]->cResRef == CResRef("00AMUL01"));
+    CHECK(received.m_pItems[0]->m_useCount1 == itemA.GetUsageCount(0));
+    CHECK(received.m_pItems[0]->m_wear == itemA.m_wear);
+    CHECK(received.m_pItems[0]->m_flags == itemA.m_flags);
+    CHECK(received.m_pItems[2]->cResRef == CResRef("00CWSWDB"));
+    CHECK(received.m_pItems[2]->m_useCount1 == itemB.GetUsageCount(0));
+    CHECK(received.m_pItems[2]->m_useCount2 == itemB.GetUsageCount(1));
+    CHECK(received.m_pItems[2]->m_useCount3 == itemB.GetUsageCount(2));
+    CHECK(received.m_pItems[2]->m_wear == itemB.m_wear);
+    CHECK(received.m_pItems[2]->m_flags == itemB.m_flags);
+
+    for (SHORT index = 0; index < received.m_nItems; index++) {
+        delete received.m_pItems[index];
+    }
+    delete[] received.m_pItems;
+    received.m_nItems = 0;
+    received.m_pItems = NULL;
+
+    sent.m_nItems = 0;
+    sent.m_pItems = NULL;
+    delete[] ppItems;
+}
+
+TEST_CASE("msg: CMessageContainerItems::UnmarshalMessage keeps an unresolved target as INVALID", "[msg][network][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+
+    // Wire: unknown remote pair, no slots and no present items.
+    BYTE packet[HEADER_LENGTH + CONTAINER_ITEMS_BASE];
+    std::memset(packet, 0, sizeof(packet));
+    PLAYER_ID player = 9;
+    LONG remoteObject = 0x1999;
+    std::memcpy(packet + HEADER_LENGTH, &player, sizeof(player));
+    std::memcpy(packet + HEADER_LENGTH + 4, &remoteObject, sizeof(remoteObject));
+
+    CMessageContainerItems message(NULL, 0, 44);
+    CHECK(message.UnmarshalMessage(packet, sizeof(packet)) == TRUE);
+    CHECK(message.GetTarget() == static_cast<LONG>(CGameObjectArray::INVALID_INDEX));
+    CHECK(message.m_nItems == 0);
+
+    delete[] message.m_pItems;
+    message.m_nItems = 0;
+    message.m_pItems = NULL;
+}

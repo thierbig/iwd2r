@@ -10372,6 +10372,150 @@ BYTE CMessageContainerItems::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CONTAINER_ITEMS;
 }
 
+// 0x4FB500
+void CMessageContainerItems::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    CResRef res;
+    CString name;
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID player = pObject->m_remotePlayerID;
+    LONG remoteId = pObject->m_remoteObjectID;
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = 0xC;
+    SHORT nPresent = 0;
+    for (SHORT index = 0; index < m_nItems; index++) {
+        CItem* pItem = m_pItems[index];
+        if (pItem != NULL) {
+            *dwSize += 2;
+            nPresent++;
+            res = pItem->cResRef;
+            res.CopyToString(name);
+            *dwSize += (name.GetLength() & 0xff) + 0xD;
+        }
+    }
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    memcpy(*pData + cnt, &m_nItems, sizeof(m_nItems));
+    cnt += sizeof(m_nItems);
+    memcpy(*pData + cnt, &nPresent, sizeof(nPresent));
+    cnt += sizeof(nPresent);
+
+    for (SHORT index = 0; index < m_nItems; index++) {
+        CItem* pItem = m_pItems[index];
+        if (pItem == NULL) {
+            continue;
+        }
+
+        memcpy(*pData + cnt, &index, sizeof(index));
+        cnt += sizeof(index);
+        res = pItem->cResRef;
+        res.CopyToString(name);
+        BYTE length = static_cast<BYTE>(name.GetLength());
+        (*pData)[cnt++] = length;
+        memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), length);
+        cnt += length;
+
+        for (INT ability = 0; ability < 3; ability++) {
+            WORD uses = pItem->GetUsageCount(ability);
+            memcpy(*pData + cnt, &uses, sizeof(uses));
+            cnt += sizeof(uses);
+        }
+
+        memcpy(*pData + cnt, &pItem->m_wear, sizeof(pItem->m_wear));
+        cnt += sizeof(pItem->m_wear);
+        memcpy(*pData + cnt, &pItem->m_flags, sizeof(pItem->m_flags));
+        cnt += sizeof(pItem->m_flags);
+    }
+
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x4FB800
+BOOL CMessageContainerItems::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: Unlike the sibling pair, a miss here is not fatal: the target
+    // becomes INVALID_INDEX and the rest of the message is decoded (the
+    // original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    memcpy(&m_nItems, pData + cnt, sizeof(m_nItems));
+    cnt += sizeof(m_nItems);
+    SHORT nPresent;
+    memcpy(&nPresent, pData + cnt, sizeof(nPresent));
+    cnt += sizeof(nPresent);
+
+    m_pItems = new CItem*[m_nItems];
+    UTIL_ASSERT(m_pItems != NULL);
+    for (SHORT index = 0; index < m_nItems; index++) {
+        m_pItems[index] = NULL;
+    }
+
+    for (SHORT n = 0; n < nPresent; n++) {
+        SHORT index;
+        memcpy(&index, pData + cnt, sizeof(index));
+        cnt += sizeof(index);
+        BYTE length = pData[cnt++];
+        CHAR szName[9] = { 0 };
+        // NOTE: The original copies the wire byte (up to 255) into a 9-byte
+        // stack buffer and overflows for a name longer than 8; bounded here
+        // (P4-10).
+        memcpy(szName, pData + cnt, length > 8 ? 8 : length);
+        cnt += length;
+
+        WORD uses[3];
+        memcpy(uses, pData + cnt, sizeof(uses));
+        cnt += sizeof(uses);
+        WORD wear;
+        memcpy(&wear, pData + cnt, sizeof(wear));
+        cnt += sizeof(wear);
+        DWORD flags;
+        memcpy(&flags, pData + cnt, sizeof(flags));
+        cnt += sizeof(flags);
+
+        m_pItems[index] = new CItem(CResRef(reinterpret_cast<BYTE*>(szName)), uses[0], uses[1], uses[2], wear, flags);
+    }
+
+    UTIL_ASSERT(cnt == dwSize);
+    return TRUE;
+}
+
 // 0x4FBA30
 void CMessageContainerItems::Run()
 {
