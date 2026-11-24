@@ -2756,3 +2756,52 @@ TEST_CASE("msg: OnResourceRequest takes only a hosting session's hand-off", "[ne
     session.Network().m_bConnectionEstablished = FALSE;
     CHECK(message.OnResourceRequest(0, packet, cnt) == FALSE);
 }
+
+// -----------------------------------------------------------------------------
+// #121 G15 follow-up: the two mapworld travel handlers (0x4358B0 announce on
+// the host, 0x435E00 request on a client). Both parse the same payload and
+// call CScreenWorldMap::MoveToArea, so only the guards are driven here; the
+// passing path needs a live world map and area.
+
+TEST_CASE("msg: the mapworld travel handlers refuse a closed session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    G15Session(FALSE, FALSE);
+
+    CBaldurMessage message;
+
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE);
+    CHECK(message.OnMapWorldTravelAnnounce(0, pData, 64) == FALSE);
+
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST);
+    CHECK(message.OnMapWorldTravelRequest(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+TEST_CASE("msg: the mapworld travel handlers refuse the wrong role", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CBaldurMessage message;
+
+    // The announce is handled by the host only.
+    G15Session(TRUE, FALSE);
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE);
+    CHECK(message.OnMapWorldTravelAnnounce(0, pData, 64) == FALSE);
+
+    // The request is handled by a client only.
+    G15Session(TRUE, TRUE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST);
+    CHECK(message.OnMapWorldTravelRequest(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}

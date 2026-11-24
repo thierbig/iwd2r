@@ -220,6 +220,8 @@ public:
     static const BYTE MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST;
     static const BYTE MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS;
     static const BYTE MSG_SUBTYPE_MAPWORLD_REVEAL_AREA;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE;
+    static const BYTE MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST;
 
     static const BYTE MSG_TYPE_MOVIE;
     static const BYTE MSG_SUBTYPE_MOVIE_REQUEST;
@@ -472,6 +474,8 @@ public:
     BOOLEAN OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMapWorldTravelAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMapWorldTravelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnRestRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnRestAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
