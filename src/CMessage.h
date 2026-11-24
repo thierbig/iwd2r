@@ -121,6 +121,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_51;
     static const BYTE MSG_SUBTYPE_CMESSAGE_89;
     static const BYTE MSG_SUBTYPE_CMESSAGE_83;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_84;
     static const BYTE MSG_SUBTYPE_CMESSAGE_90;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FLOAT_TEXT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_92;
@@ -1732,6 +1733,21 @@ public:
 class CMessage83 : public CMessage {
 public:
     CMessage83(const CResRef& resRef, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_resRef;
+};
+
+// The subtype-84 twin of CMessage83 (vtable 0x84D30C); the original folds both
+// Run bodies into 0x511950.
+class CMessage84 : public CMessage {
+public:
+    CMessage84(const CResRef& resRef, LONG caller, LONG target);
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
