@@ -1826,3 +1826,103 @@ TEST_CASE("msg: CMessageAddAction marshal/unmarshal failure paths", "[network][m
     CHECK(objectResult.UnmarshalMessage(objectMiss, CNetwork::SPEC_MSG_HEADER_LENGTH + payloadSize) == FALSE);
     CHECK(objectResult.m_targetId == nTarget);
 }
+
+// CMessageSetLastAttacker::MarshalMessage (0x507050) /
+// UnmarshalMessage (0x5073C0): the target's remote ids, then the attacker's
+// CAIObjectType as {SHORT nameLength; name[]; nine selector bytes; DWORD
+// class mask; instance pair; five special-case bytes}. The target and the
+// instance are objects of the game's array, so the payload is the pair of
+// each. The fixed tail is 9 + 4 + 8 + 5 = 26 (0x1A) bytes.
+TEST_CASE("msg: CMessageSetLastAttacker round-trips its attacker type", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+    const LONG nInstance = game.AddObject(9, 0x00010003);
+    game.MapRemote(9, 0x00010003, nInstance);
+
+    CAIObjectType attacker;
+    attacker.m_sName = "LAST";
+    attacker.m_nEnemyAlly = 2;
+    attacker.m_nGeneral = 1;
+    attacker.m_nRace = 3;
+    attacker.m_nSubRace = 4;
+    attacker.m_nClass = 5;
+    attacker.m_nSpecific = 6;
+    attacker.m_nGender = 1;
+    attacker.m_nAlignment = 2;
+    attacker.m_nAvClass = 3;
+    attacker.m_nClassMask = 0x11223344;
+    attacker.m_nInstance = nInstance;
+    const BYTE specialCase[5] = { 11, 12, 13, 14, 15 };
+    attacker.SetSpecialCase(specialCase);
+
+    CMessageSetLastAttacker message(attacker, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::BROADCAST);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_ATTACKER);
+
+    BYTE packed[0x4000];
+    memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+
+    CHECK(pPacked == packed);
+    CHECK(packedSize == 8 + 2 + 4 + 0x1A);
+    CHECK(packed[packedSize] == 0xCD);
+    const PLAYER_ID targetPlayer = 7;
+    CHECK(memcmp(packed, &targetPlayer, sizeof(targetPlayer)) == 0);
+    const LONG targetRemote = 0x00010002;
+    CHECK(memcmp(packed + 4, &targetRemote, sizeof(targetRemote)) == 0);
+    const SHORT nameLength = 4;
+    CHECK(memcmp(packed + 8, &nameLength, sizeof(nameLength)) == 0);
+    CHECK(memcmp(packed + 10, "LAST", 4) == 0);
+    CHECK(packed[14] == 2);
+    CHECK(packed[22] == 3); // the ninth selector is m_nAvClass
+
+    BYTE packet[0x4000 + CNetwork::SPEC_MSG_HEADER_LENGTH];
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_ATTACKER;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessageSetLastAttacker received(CAIObjectType(), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CheckObjectTypeEqual(attacker, received.m_lAttacker);
+
+    // The (0, INVALID_INDEX) instance fallback decodes as INVALID_INDEX.
+    attacker.m_nInstance = CGameObjectArray::INVALID_INDEX;
+    CMessageSetLastAttacker fallbackMessage(attacker, 0, nTarget);
+    memset(packed, 0xCD, sizeof(packed));
+    pPacked = packed;
+    packedSize = 0;
+    fallbackMessage.MarshalMessage(&pPacked, &packedSize);
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+    CMessageSetLastAttacker fallbackReceived(CAIObjectType(), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(fallbackReceived.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(fallbackReceived.m_lAttacker.m_nInstance == CGameObjectArray::INVALID_INDEX);
+
+    // An unknown target pair is refused.
+    packet[CNetwork::SPEC_MSG_HEADER_LENGTH + 4] = 0x99;
+    CMessageSetLastAttacker refusedTarget(CAIObjectType(), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(refusedTarget.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == FALSE);
+
+    // An unmapped instance pair is refused (no fallback store).
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+    const PLAYER_ID bogusPlayer = 7;
+    const LONG bogusObject = 0x00099999;
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + 10 + nameLength + 9 + 4, &bogusPlayer, sizeof(bogusPlayer));
+    memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + 10 + nameLength + 9 + 4 + 4, &bogusObject, sizeof(bogusObject));
+    CMessageSetLastAttacker refusedInstance(CAIObjectType(), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(refusedInstance.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == FALSE);
+
+    // A missing target makes the marshal produce nothing.
+    CMessageSetLastAttacker missingTarget(attacker, 0, CGameObjectArray::INVALID_INDEX);
+    packedSize = 123;
+    missingTarget.MarshalMessage(&pPacked, &packedSize);
+    CHECK(packedSize == 0);
+}
+

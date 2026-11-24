@@ -14143,6 +14143,180 @@ BYTE CMessageSetLastAttacker::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_LAST_ATTACKER;
 }
 
+// 0x507050
+void CMessageSetLastAttacker::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 18202
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pTarget;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pTarget,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID remotePlayerID = pTarget->m_remotePlayerID;
+    LONG remoteObjectID = pTarget->m_remoteObjectID;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = sizeof(PLAYER_ID) + sizeof(LONG);
+    *dwSize += static_cast<DWORD>(m_lAttacker.GetName().GetLength()) + sizeof(SHORT);
+    *dwSize += 9 * sizeof(BYTE) + sizeof(DWORD) + sizeof(PLAYER_ID) + sizeof(LONG) + 5 * sizeof(BYTE);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 18231
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+    cnt += sizeof(PLAYER_ID);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+    cnt += sizeof(LONG);
+
+    CString sName;
+    sName = m_lAttacker.GetName();
+
+    SHORT nameLength = static_cast<SHORT>(sName.GetLength());
+    *reinterpret_cast<SHORT*>(*pData + cnt) = nameLength;
+    cnt += sizeof(SHORT);
+
+    memcpy(*pData + cnt, sName.GetBuffer(nameLength), nameLength);
+    cnt += nameLength;
+
+    (*pData)[cnt++] = m_lAttacker.m_nEnemyAlly;
+    (*pData)[cnt++] = m_lAttacker.m_nGeneral;
+    (*pData)[cnt++] = m_lAttacker.m_nRace;
+    (*pData)[cnt++] = m_lAttacker.m_nSubRace;
+    (*pData)[cnt++] = m_lAttacker.m_nClass;
+    (*pData)[cnt++] = m_lAttacker.m_nSpecific;
+    (*pData)[cnt++] = m_lAttacker.m_nGender;
+    (*pData)[cnt++] = m_lAttacker.m_nAlignment;
+    (*pData)[cnt++] = m_lAttacker.m_nAvClass;
+
+    *reinterpret_cast<DWORD*>(*pData + cnt) = m_lAttacker.m_nClassMask;
+    cnt += sizeof(DWORD);
+
+    CGameObject* pInstance;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_lAttacker.m_nInstance,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pInstance,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = pInstance->m_remotePlayerID;
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = pInstance->m_remoteObjectID;
+        cnt += sizeof(LONG);
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_lAttacker.m_nInstance,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    } else {
+        *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = 0;
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = CGameObjectArray::INVALID_INDEX;
+        cnt += sizeof(LONG);
+    }
+
+    for (int nSpecialCase = 0; nSpecialCase < 5; nSpecialCase++) {
+        // __FILE__: .\Include\CAIObjectType.h
+        // __LINE__: 652
+        UTIL_ASSERT_MSG(nSpecialCase < 5, "You suck.");
+        (*pData)[cnt++] = m_lAttacker.m_SpecialCase[nSpecialCase];
+    }
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 18334
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x5073C0
+BOOL CMessageSetLastAttacker::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 18368
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID, remoteObjectID, localObjectID) != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+
+    SHORT nameLength = *reinterpret_cast<SHORT*>(pData + cnt);
+    cnt += sizeof(SHORT);
+
+    CString sName(reinterpret_cast<const char*>(pData + cnt), nameLength);
+    cnt += nameLength;
+
+    m_lAttacker.m_sName = sName;
+
+    m_lAttacker.m_nEnemyAlly = pData[cnt++];
+    m_lAttacker.m_nGeneral = pData[cnt++];
+    m_lAttacker.m_nRace = pData[cnt++];
+    m_lAttacker.m_nSubRace = pData[cnt++];
+    m_lAttacker.m_nClass = pData[cnt++];
+    m_lAttacker.m_nSpecific = pData[cnt++];
+    m_lAttacker.m_nGender = pData[cnt++];
+    m_lAttacker.m_nAlignment = pData[cnt++];
+    m_lAttacker.m_nAvClass = pData[cnt++];
+
+    m_lAttacker.m_nClassMask = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    PLAYER_ID instancePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+    cnt += sizeof(PLAYER_ID);
+
+    LONG instanceObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+    cnt += sizeof(LONG);
+
+    LONG instance;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(instancePlayerID, instanceObjectID, instance) == TRUE) {
+        m_lAttacker.m_nInstance = instance;
+    } else if (instancePlayerID == 0 && instanceObjectID == CGameObjectArray::INVALID_INDEX) {
+        m_lAttacker.m_nInstance = CGameObjectArray::INVALID_INDEX;
+    } else {
+        return FALSE;
+    }
+
+    m_lAttacker.SetSpecialCase(pData + cnt);
+    cnt += 5 * sizeof(BYTE);
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 18473
+    UTIL_ASSERT(cnt == dwSize);
+
+    return TRUE;
+}
+
 // 0x5075A0
 void CMessageSetLastAttacker::Run()
 {
