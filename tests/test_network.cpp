@@ -771,6 +771,43 @@ TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[m
     network.m_bIsHost = FALSE;
 }
 
+// DELETEAREA k/d (100) result handler: the host's verdict on a polled area.
+// A client with an established session either deletes the named area from the
+// world screen or marks it undeletable; a miss on GetArea is a no-op, as in
+// the original.
+TEST_CASE("CBaldurMessage::DeleteArea refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    MessageGameScope game;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, DELETEAREA 107, result 100, BYTE 6 "AR1000", BYTE 1}
+    BYTE packet[3 + 1 + 6 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_RESULT;
+    packet[3] = 6;
+    memcpy(packet + 4, "AR1000", 6);
+    packet[10] = 1;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == FALSE);
+
+    // A client whose game has no such area answers TRUE after the no-op.
+    network.m_bIsHost = FALSE;
+    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == TRUE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // DELETEAREA k/r (114) vote receiver: the host tallies each client's answer
 // into the poll's per-player slots. Only a vote for the area being polled
 // counts, and only from a player the poll recorded as a voter.

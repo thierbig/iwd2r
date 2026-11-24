@@ -7930,6 +7930,42 @@ BOOLEAN CBaldurMessage::OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD
     return TRUE;
 }
 
+// 0x43B680
+BOOLEAN CBaldurMessage::DeleteArea(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's result reaches the clients; only a connected client acts on
+    // it.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The result after the 3-byte header: {BYTE areaLen; char area[];
+    // BYTE bDelete}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+    BYTE bDelete = pByteMessage[nOffset];
+
+    CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sArea);
+    if (pArea != NULL) {
+        if (bDelete == 1) {
+            g_pBaldurChitin->m_pEngineWorld->DeleteArea(pArea);
+        } else {
+            // Not deleted: leave the area marked so the client will not try
+            // to enter it again.
+            pArea->field_AE6 = 1;
+        }
+    }
+
+    return TRUE;
+}
+
 // 0x43B380
 BOOLEAN CBaldurMessage::OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {
