@@ -459,7 +459,7 @@ TEST_CASE("worldmap: MoveToArea takes the party into the area and passes the tra
     party[1]->field_722A = before;
     const LONG nCap = CScreenWorldMap::FATIGUE_TIME_CAP;
 
-    g_pBaldurChitin->m_pEngineWorldMap->MoveToArea(cResDest, CString(""), 0, FALSE, nTravelTime);
+    g_pBaldurChitin->m_pEngineWorldMap->MoveToArea(CString(""), cResDest, 0, FALSE, nTravelTime);
     g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
 
     CGameArea* pNewArea = party[0]->GetArea();

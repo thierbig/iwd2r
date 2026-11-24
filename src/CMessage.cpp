@@ -6617,7 +6617,7 @@ BOOLEAN CBaldurMessage::OnMapWorldTravelAnnounce(INT nMsgFrom, BYTE* pData, DWOR
     pGame->m_gameSave.m_cResCurrentWorldArea = cResArea;
     pGame->m_gameSave.m_nCurrentWorldLink = nCurrentWorldLink;
 
-    pWorldMap->MoveToArea(cResArea, sEntryPoint, nEdge, bRandomEncounter, nTravelTime);
+    pWorldMap->MoveToArea(sEntryPoint, cResArea, nEdge, bRandomEncounter, nTravelTime);
     pWorldMap->StopWorldMap(FALSE);
     g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
 
@@ -6678,7 +6678,7 @@ BOOLEAN CBaldurMessage::OnMapWorldTravelRequest(INT nMsgFrom, BYTE* pData, DWORD
     pGame->m_gameSave.m_cResCurrentWorldArea = cResArea;
     pGame->m_gameSave.m_nCurrentWorldLink = nCurrentWorldLink;
 
-    pWorldMap->MoveToArea(cResArea, sEntryPoint, nEdge, bRandomEncounter, nTravelTime);
+    pWorldMap->MoveToArea(sEntryPoint, cResArea, nEdge, bRandomEncounter, nTravelTime);
     pWorldMap->StopWorldMap(FALSE);
     g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
 

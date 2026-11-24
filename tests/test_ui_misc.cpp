@@ -2926,7 +2926,7 @@ TEST_CASE("travel: a host session's MoveToArea places the party in the fixed ord
     // floor is open around it, where AR1001's north edge band is walled and
     // the nearest-open search lands far from the point.
     const CResRef cResDest("AR1005");
-    g_pBaldurChitin->m_pEngineWorldMap->MoveToArea(cResDest, CString("FR1000"), 8, FALSE, 0);
+    g_pBaldurChitin->m_pEngineWorldMap->MoveToArea(CString("FR1000"), cResDest, 8, FALSE, 0);
     g_pBaldurChitin->GetMessageHandler()->AsynchronousUpdate();
 
     CGameArea* pHouse = pSprite->GetArea();
