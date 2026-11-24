@@ -26,6 +26,7 @@ class CGameContainer;
 class CGameDoor;
 class CGameEffect;
 class CGameSprite;
+class CSearchRequest;
 
 class CBaldurMessage {
 public:
@@ -117,6 +118,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_STOP_ESCAPE_AREA;
     static const BYTE MSG_SUBTYPE_CMESSAGE_SET_TIME_STOP;
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_RELEASE;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_51;
     static const BYTE MSG_SUBTYPE_CMESSAGE_89;
     static const BYTE MSG_SUBTYPE_CMESSAGE_90;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FLOAT_TEXT;
@@ -224,6 +226,8 @@ public:
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL;
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_REQUEST;
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST;
+    static const BYTE MSG_SUBTYPE_OBJECT_DELETE;
+    static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_STATUS;
 
     static const BYTE MSG_TYPE_PLAYERCHAR;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND;
@@ -330,9 +334,17 @@ public:
     BOOLEAN DemandCharacterSlotReply(CString& sSendTo, SHORT nCharacterSlot, BOOLEAN bSendCharInfo);
     BOOLEAN OnDemandCharacterSlotReply(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOL ObjectAdd(LONG localObjectID, BYTE nObjectType, BYTE* pObjectData, DWORD dwObjectDataSize);
+    BOOLEAN OnObjectAdd(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL ObjectControlSuggestion(PLAYER_ID playerToSuggestID, LONG localObjectID);
     BOOL ObjectControlRequest(LONG localObjectID);
     BOOL ObjectControl();
+    BOOLEAN OnObjectControlSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnObjectControlRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOL SendObjectDelete(LONG nObject);
+    BOOLEAN OnObjectControlStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOL SendObjectControlStatus(LONG nObject);
+    BOOLEAN OnObjectDelete(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN SendChatMessage(CString& sChatMessage);
@@ -421,6 +433,9 @@ public:
     BOOLEAN OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN DemandSettingsNightmareMode(BOOLEAN wait);
     BOOL OnDemandSettingsNightmareMode(INT nMsgFrom);
+    BOOLEAN OnDemandCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN SendCharacterUpdate(const CString& sPlayerName, LONG nObject);
+    BOOLEAN OnCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMovieEndCredits(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOL DisplayText(const CString& sName, const CString& sText, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);
     BOOL DisplayTextRef(STRREF name, STRREF text, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);
@@ -691,6 +706,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CItem m_item;
@@ -705,6 +722,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ SHORT m_nItems;
@@ -853,6 +872,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIObjectType m_cAIProprietor;
@@ -1213,6 +1234,27 @@ public:
     /* 001A */ DWORD m_dwFlags;
 };
 
+// The subtype-51 message (vtable 0x84D2B8): a move order for the target
+// sprite, either to a point (m_ptTarget) or as a search request
+// (m_pSearchRequest). Receive-only in IWD2 -- the message dispatcher
+// 0x4EE020 is its only construction site -- and named by its subtype like
+// the tree's other unnamed message classes; BG2 calls the class
+// CMessageSetTarget.
+class CMessage51 : public CMessage {
+public:
+    CMessage51(LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CPoint m_ptTarget;
+    /* 0014 */ CSearchRequest* m_pSearchRequest;
+    /* 0018 */ BYTE m_frontList;
+};
+
 class CMessageSetTrigger : public CMessage {
 public:
     CMessageSetTrigger(const CAITrigger& trigger, LONG caller, LONG target);
@@ -1270,6 +1312,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL sub_50D660(CString sAreaString);
     void Run() override;
 
     /* 000C */ LONG* m_pPath;
@@ -2168,6 +2211,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ DWORD m_nPartyGold;

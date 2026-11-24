@@ -26,6 +26,7 @@
 #include "CScreenCreateChar.h"
 #include "CScreenWorld.h"
 #include "CSearchBitmap.h"
+#include "CSpell.h"
 #include "CStore.h"
 #include "CUIControlTextDisplay.h"
 #include "CUtil.h"
@@ -40,6 +41,7 @@
 #include <atomic>
 #include <chrono>
 #include <climits>
+#include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -50,6 +52,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 // The sprite's own actions (CGameSprite::ExecuteAction 0x728F80) on the
 // engine in this process: a party member in AR1000 walks to a point
@@ -3940,10 +3947,46 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     REQUIRE(StartEngine(error));
     INFO(error);
     FramePump pump;
-    std::vector<BYTE> cre = FinishedCharacter();
-    if (cre.empty()) {
+
+    // The Characters folder ships the game's pregenerated party in name
+    // order, and the alphabetically first one is a dwarf. The CRELIGHT
+    // LIGHTMOD row gives the dwarf 0 (only HALF_ELF, ELF, DOG and WOLF get
+    // 50 in the shipped table; a missing race falls back to the 2DA default,
+    // 100), so the dark/bright contrast this test needs cannot be built from
+    // that character. Pin the fixture to the first pregenerated character
+    // whose race the rule table scales instead of depending on which .CHR
+    // the install happens to sort first.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.empty()) {
         SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
     }
+    std::vector<BYTE> cre;
+    INT nLightMod = 0;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        CString sProbeRace = CGameSprite::GetRaceString(pProbe->GetAIType().m_nRace);
+        nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sProbeRace));
+        delete pProbe;
+        if (nLightMod > 0) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no pregenerated character whose race has a positive CRELIGHT LIGHTMOD");
+    }
+    INFO("pinned a character whose race has LIGHTMOD " << nLightMod);
+
     CGameSprite* pCharacter = NewGameInStartArea(cre);
     CGameArea* pArea = pCharacter->GetArea();
     REQUIRE(pArea != NULL);
@@ -3951,7 +3994,6 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     pArea->m_visibility.SetAreaExplored();
     ClearMessages();
 
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     pGame->m_worldTime.m_gameTime = 1000;
 
     // The hide feedback reaches the world screen's dialog display (it is
@@ -4044,7 +4086,7 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     // The racial LIGHTMOD row of CRELIGHT scales the light level against
     // the skill average.
     CString sRace = CGameSprite::GetRaceString(pCharacter->GetAIType().m_nRace);
-    INT nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
+    nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
     INFO("LIGHTMOD for " << std::string(static_cast<LPCSTR>(sRace)) << " is " << nLightMod);
     REQUIRE(nLightMod > 0);
 
@@ -6638,4 +6680,183 @@ TEST_CASE("sprite: UseItem handles potions and wands through action 34", "[ai][d
     delete pDoorPotion;
     pCharacter->m_equipment.m_items[nDoorSlot] = NULL;
     ClearMessages();
+}
+
+// CGameSprite::sub_756770 (0x756770): the offset from the sprite towards a
+// target, 15 units long. The body reads only CGameObject::m_pos and writes
+// the point it is handed, so a zeroed object of the class's size stands in
+// for the sprite: no engine state is read.
+TEST_CASE("sprite: sub_756770 points 15 units towards the target in every quadrant (0x756770)", "[ai]")
+{
+    std::unique_ptr<unsigned char[]> storage(new unsigned char[sizeof(CGameSprite)]());
+    CGameSprite* pSprite = reinterpret_cast<CGameSprite*>(storage.get());
+    auto towards = [&](LONG x, LONG y, const CPoint& target) {
+        pSprite->m_pos = CPoint(x, y);
+        CPoint pt;
+        pSprite->sub_756770(pt, target);
+        return pt;
+    };
+
+    // Exact integer lengths, one case per quadrant plus the axes.
+    CHECK(towards(100, 100, CPoint(115, 100)) == CPoint(15, 0));
+    CHECK(towards(100, 100, CPoint(97, 104)) == CPoint(-9, 12));
+    CHECK(towards(100, 100, CPoint(97, 96)) == CPoint(-9, -12));
+    CHECK(towards(100, 100, CPoint(103, 96)) == CPoint(9, -12));
+    CHECK(towards(100, 100, CPoint(100, 85)) == CPoint(0, -15));
+
+    // sqrt(58) truncates to 7, where rounding would give 8: (45/7, 105/7).
+    CHECK(towards(100, 100, CPoint(103, 107)) == CPoint(6, 15));
+    // The integer division truncates towards zero.
+    CHECK(towards(100, 100, CPoint(97, 93)) == CPoint(-6, -15));
+}
+
+#ifndef _WIN32
+// CGameSprite::sub_756770 divides by the computed length with an integer
+// idiv (0x7567cc/0x7567dc); two coincident points make that length zero and
+// the exe raises #DE. The only caller (CGameEffectSparkle::ApplyEffect,
+// 0x4B17D2) skips the call then, so this pins the helper's own behaviour in
+// a child process: the suite sees SIGFPE instead of dying of it.
+TEST_CASE("sprite: sub_756770 traps on coincident points like the exe's idiv (0x756770)", "[ai]")
+{
+    std::unique_ptr<unsigned char[]> storage(new unsigned char[sizeof(CGameSprite)]());
+    CGameSprite* pSprite = reinterpret_cast<CGameSprite*>(storage.get());
+    pSprite->m_pos = CPoint(100, 100);
+    CPoint pt;
+    const CPoint target(100, 100);
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        pSprite->sub_756770(pt, target);
+        _exit(0);
+    }
+    int status = 0;
+    REQUIRE(waitpid(pid, &status, 0) == pid);
+    CHECK(WIFSIGNALED(status));
+    CHECK(WTERMSIG(status) == SIGFPE);
+}
+#endif
+
+// CGameSprite::sub_723830 (0x723830): store the base number of attacks from
+// CRuleTables::sub_546B60 in m_baseStats, at most 5. The rule tables are the
+// game's own (the BAAT 2DAs); the class levels are set here, so the expected
+// counts are the warrior progression those tables hold.
+TEST_CASE("sprite: sub_723830 stores the rule tables' base attack count (0x723830)", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter != NULL);
+
+    // A single-class fighter, so only the warrior table counts.
+    pCharacter->m_typeAI.m_nClassMask = CLASSMASK_FIGHTER;
+
+    const struct {
+        BYTE level;
+        BYTE attacks;
+    } kCases[] = {
+        { 1, 1 }, // base attack +1: (1 - 1) / 5 + 1
+        { 6, 2 }, // +6: (6 - 1) / 5 + 1
+        { 20, 4 }, // +20: (20 - 1) / 5 + 1
+        { 30, 4 }, // +30 gives 6, which sub_546B60 caps at 4
+    };
+    for (const auto& c : kCases) {
+        INFO("fighter level " << static_cast<int>(c.level));
+        pCharacter->m_derivedStats.m_fighterLevel = c.level;
+        pCharacter->m_baseStats.m_numberOfAttacksBase = 0xAA;
+        pCharacter->sub_723830();
+        CHECK(pCharacter->m_baseStats.m_numberOfAttacksBase == c.attacks);
+    }
+}
+
+// CGameSprite::ReadySpell(CString) (0x719180): the keymap spell-key entry.
+// Readying SPWI114 (a level-1 wizard spell of the keymap table, in
+// src/CInfGame.cpp's off_8B4F84) from its resref fills the use button with
+// the resref and the selected ability's target type, drives the game state
+// and the action bar from it, and queues the SPELL action the caster
+// performs.
+TEST_CASE("sprite: ReadySpell(resref) readies a keymap spell and queues its cast (0x719180)", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter != NULL);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The ability the body's scan reaches at the sprite's caster level: the
+    // last one whose minimum caster level the sprite meets.
+    CSpell spell(CResRef("SPWI114"));
+    spell.Demand();
+    REQUIRE(spell.GetAbilityCount() > 0);
+    SHORT nCasterLevel = pCharacter->GetCasterLevel(&spell, 0, 0);
+    if (nCasterLevel <= 1) {
+        nCasterLevel = 1;
+    }
+    SPELL_ABILITY* pAbility = NULL;
+    for (INT nAbility = 0; nAbility < spell.GetAbilityCount(); nAbility++) {
+        if (spell.GetAbility(nAbility)->minCasterLevel > nCasterLevel) {
+            break;
+        }
+        pAbility = spell.GetAbility(nAbility);
+    }
+    REQUIRE(pAbility != NULL);
+    const BYTE nActionType = pAbility->actionType;
+    spell.Release();
+    INFO("SPWI114 actionType " << static_cast<int>(nActionType)
+                               << ", caster level " << nCasterLevel);
+    // The case-5 arm is the one that queues the cast; the fixture's spell is
+    // a self-cast whose first ability selects it.
+    REQUIRE(nActionType == 5);
+
+    // A ready state and a non-zero selected button before the call, so the
+    // arm's stores are visible.
+    pCharacter->ClearActions(FALSE);
+    pCharacter->m_interrupt = FALSE;
+    pCharacter->m_userCommandPause = 0;
+    pCharacter->m_triggerId = 0;
+    pGame->SetState(3);
+    pGame->GetButtonArray()->m_nSelectedButton = 0;
+
+    pCharacter->ReadySpell(CString("SPWI114"));
+
+    // The use button keeps the resref and the selected ability's target type
+    // (the exe dereferences the ability before its NULL check).
+    CHECK(pCharacter->m_currentUseButton.m_abilityId.m_res == CResRef("SPWI114"));
+    CHECK(pCharacter->m_currentUseButton.m_abilityId.m_targetType == nActionType);
+    // ReadyCursor and the case-5 arm leave the cast cursor ready.
+    CHECK(pGame->GetState() == 0);
+    CHECK(pGame->GetButtonArray()->m_nSelectedButton == 100);
+
+    // The case-5 arm queues exactly the SPELL action the caster performs.
+    const CAbilityId& abilityId = pCharacter->m_currentUseButton.m_abilityId;
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 1);
+    const CAIAction* pAction = pCharacter->m_queuedActions.GetHead();
+    REQUIRE(pAction != NULL);
+    CHECK(pAction->m_actionID == CAIAction::SPELL);
+    CHECK(pAction->m_acteeID.m_nInstance == pCharacter->m_typeAI.m_nInstance);
+    CHECK(pAction->m_string1 == "SPWI114");
+    CHECK(pAction->m_specificID == 0);
+    CHECK(pAction->m_specificID2 == (abilityId.m_nClass | (abilityId.field_1E << 8)));
+    CHECK(pAction->m_specificID3 == abilityId.field_1D);
+    CHECK(pCharacter->m_userCommandPause == 75);
+    CHECK(pCharacter->m_triggerId == CGameObjectArray::INVALID_INDEX);
+    CHECK(pCharacter->m_interrupt == TRUE);
 }

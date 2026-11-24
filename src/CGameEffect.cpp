@@ -8090,10 +8090,12 @@ BOOL CGameEffectSparkle::ApplyEffect(CGameSprite* pSprite)
     CPoint ptPos = pSprite->GetPos();
     if ((m_source.x != -1 || m_source.y != -1)
         && (pSprite->GetPos().x != m_source.x || pSprite->GetPos().y != m_source.y)) {
-        // TODO: Incomplete. The original moves the position towards
-        // m_source by CGameSprite 0x756770 (not in src/: the vector from the
-        // sprite to m_source scaled to a length of 15, no rand); until then
-        // the sparkles start at the sprite's position.
+        // The original moves the position 15 units towards m_source:
+        // CGameSprite 0x756770 returns that offset from the sprite's
+        // position.
+        CPoint ptOffset;
+        pSprite->sub_756770(ptOffset, m_source);
+        ptPos.Offset(ptOffset);
     } else {
         ptPos.y++;
     }
