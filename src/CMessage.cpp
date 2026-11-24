@@ -654,6 +654,18 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_70 = 70;
 // 0x84CFA5
 const BYTE CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_102 = 102;
 
+// 0x84CFA6
+const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR_112 = 112;
+
+// 0x84CFA7
+const BYTE CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST = 82;
+
+// 0x84CFA8
+const BYTE CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_STATUS = 65;
+
+// 0x84CFA9
+const BYTE CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REPLY = 80;
+
 // 0x84CFAA
 const BYTE CBaldurMessage::MSG_TYPE_PAUSING = 81;
 
@@ -4524,6 +4536,270 @@ BOOLEAN CBaldurMessage::SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pIte
         dwSize);
 
     DestroyBuffer(pMessage);
+
+    return TRUE;
+}
+
+// 0x432050
+BOOLEAN CBaldurMessage::CharacterPartyOrderRequest()
+{
+    CString sHostName;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The host answers a roster change with the status broadcast instead of
+    // asking itself; the exe builds the roster arrays first and then takes
+    // this branch, which only leaks them (0x4321DC).
+    if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return SendCharacterPartyOrderStatus();
+    }
+
+    if (g_pChitin->cNetwork.m_nHostPlayer == -1) {
+        sHostName = "";
+    } else {
+        sHostName = g_pChitin->cNetwork.m_psPlayerName[g_pChitin->cNetwork.m_nHostPlayer];
+    }
+
+    if (strcmp(sHostName, "") == 0) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    LONG desired[CINFGAME_MAXCHARACTERS];
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        desired[nSlot] = pGame->GetCharacterSlot(nSlot);
+    }
+
+    SHORT nOverflowCount = static_cast<SHORT>(pGame->m_characterOverflow.GetSize());
+    LONG* pOverflowIds = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowIds = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            pOverflowIds[nIndex] = static_cast<LONG>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow.GetAt(nIndex)));
+        }
+    }
+
+    // The six slots and the bench are sent as {PLAYER_ID; LONG} remote pairs;
+    // a slot with no object (or a failed share) is the (0, INVALID) pair.
+    PLAYER_ID desiredPlayers[CINFGAME_MAXCHARACTERS];
+    LONG desiredObjects[CINFGAME_MAXCHARACTERS];
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        CGameObject* pObject;
+
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetShare(desired[nSlot],
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            desiredPlayers[nSlot] = pObject->m_remotePlayerID;
+            desiredObjects[nSlot] = pObject->m_remoteObjectID;
+
+            pGame->GetObjectArray()->ReleaseShare(desired[nSlot],
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        } else {
+            desiredPlayers[nSlot] = 0;
+            desiredObjects[nSlot] = CGameObjectArray::INVALID_INDEX;
+        }
+    }
+
+    PLAYER_ID* pOverflowPlayers = NULL;
+    LONG* pOverflowObjects = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowPlayers = new PLAYER_ID[nOverflowCount];
+        pOverflowObjects = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            CGameObject* pObject;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(pOverflowIds[nIndex],
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pOverflowPlayers[nIndex] = pObject->m_remotePlayerID;
+                pOverflowObjects[nIndex] = pObject->m_remoteObjectID;
+
+                pGame->GetObjectArray()->ReleaseShare(pOverflowIds[nIndex],
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            } else {
+                pOverflowPlayers[nIndex] = 0;
+                pOverflowObjects[nIndex] = CGameObjectArray::INVALID_INDEX;
+            }
+        }
+    }
+
+    DWORD dwSize = 6 * (sizeof(PLAYER_ID) + sizeof(LONG)) + sizeof(BYTE)
+        + nOverflowCount * (sizeof(PLAYER_ID) + sizeof(LONG));
+    BYTE* pMessage = CreateBuffer(dwSize);
+    DWORD cnt = 0;
+
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        *reinterpret_cast<PLAYER_ID*>(pMessage + cnt) = desiredPlayers[nSlot];
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(pMessage + cnt) = desiredObjects[nSlot];
+        cnt += sizeof(LONG);
+    }
+
+    pMessage[cnt++] = static_cast<BYTE>(nOverflowCount);
+
+    for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+        *reinterpret_cast<PLAYER_ID*>(pMessage + cnt) = pOverflowPlayers[nIndex];
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(pMessage + cnt) = pOverflowObjects[nIndex];
+        cnt += sizeof(LONG);
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR_112,
+        MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    if (nOverflowCount != 0) {
+        delete[] pOverflowIds;
+        delete[] pOverflowPlayers;
+        delete[] pOverflowObjects;
+    }
+
+    return TRUE;
+}
+
+// 0x432610
+BOOLEAN CBaldurMessage::SendCharacterPartyOrderStatus()
+{
+    if (g_pChitin->cNetwork.GetSessionHosting() != TRUE
+        || !g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    SendFullSettingsToClients(CString(""));
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    LONG desired[CINFGAME_MAXCHARACTERS];
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        desired[nSlot] = pGame->GetCharacterSlot(nSlot);
+    }
+
+    SHORT nOverflowCount = static_cast<SHORT>(pGame->m_characterOverflow.GetSize());
+    LONG* pOverflowIds = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowIds = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            pOverflowIds[nIndex] = static_cast<LONG>(reinterpret_cast<INT_PTR>(pGame->m_characterOverflow.GetAt(nIndex)));
+        }
+    }
+
+    PLAYER_ID desiredPlayers[CINFGAME_MAXCHARACTERS];
+    LONG desiredObjects[CINFGAME_MAXCHARACTERS];
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        CGameObject* pObject;
+
+        BYTE rc;
+        do {
+            rc = pGame->GetObjectArray()->GetShare(desired[nSlot],
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc == CGameObjectArray::SUCCESS) {
+            desiredPlayers[nSlot] = pObject->m_remotePlayerID;
+            desiredObjects[nSlot] = pObject->m_remoteObjectID;
+
+            pGame->GetObjectArray()->ReleaseShare(desired[nSlot],
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        } else {
+            desiredPlayers[nSlot] = 0;
+            desiredObjects[nSlot] = CGameObjectArray::INVALID_INDEX;
+        }
+    }
+
+    PLAYER_ID* pOverflowPlayers = NULL;
+    LONG* pOverflowObjects = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowPlayers = new PLAYER_ID[nOverflowCount];
+        pOverflowObjects = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            CGameObject* pObject;
+
+            BYTE rc;
+            do {
+                rc = pGame->GetObjectArray()->GetShare(pOverflowIds[nIndex],
+                    CGameObjectArray::THREAD_ASYNCH,
+                    &pObject,
+                    INFINITE);
+            } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+            if (rc == CGameObjectArray::SUCCESS) {
+                pOverflowPlayers[nIndex] = pObject->m_remotePlayerID;
+                pOverflowObjects[nIndex] = pObject->m_remoteObjectID;
+
+                pGame->GetObjectArray()->ReleaseShare(pOverflowIds[nIndex],
+                    CGameObjectArray::THREAD_ASYNCH,
+                    INFINITE);
+            } else {
+                pOverflowPlayers[nIndex] = 0;
+                pOverflowObjects[nIndex] = CGameObjectArray::INVALID_INDEX;
+            }
+        }
+    }
+
+    DWORD dwSize = 6 * (sizeof(PLAYER_ID) + sizeof(LONG)) + sizeof(BYTE)
+        + nOverflowCount * (sizeof(PLAYER_ID) + sizeof(LONG));
+    BYTE* pMessage = CreateBuffer(dwSize);
+    DWORD cnt = 0;
+
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        *reinterpret_cast<PLAYER_ID*>(pMessage + cnt) = desiredPlayers[nSlot];
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(pMessage + cnt) = desiredObjects[nSlot];
+        cnt += sizeof(LONG);
+    }
+
+    pMessage[cnt++] = static_cast<BYTE>(nOverflowCount);
+
+    for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+        *reinterpret_cast<PLAYER_ID*>(pMessage + cnt) = pOverflowPlayers[nIndex];
+        cnt += sizeof(PLAYER_ID);
+
+        *reinterpret_cast<LONG*>(pMessage + cnt) = pOverflowObjects[nIndex];
+        cnt += sizeof(LONG);
+    }
+
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+        CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR_112,
+        MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_STATUS,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    if (nOverflowCount != 0) {
+        delete[] pOverflowIds;
+        delete[] pOverflowPlayers;
+        delete[] pOverflowObjects;
+    }
 
     return TRUE;
 }

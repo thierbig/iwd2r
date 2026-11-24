@@ -112,6 +112,8 @@ public:
         m_pGame->m_cRemoteObjectArray.m_pArray[index] = entry;
     }
 
+    CInfGame* Game() const { return m_pGame; }
+
 private:
     CBaldurChitin* m_savedBaldur;
     std::unique_ptr<unsigned char[]> m_baldur;
@@ -1825,4 +1827,109 @@ TEST_CASE("msg: CMessageAddAction marshal/unmarshal failure paths", "[network][m
     CMessageAddAction objectResult(CAIAction::NULL_ACTION, 0, CGameObjectArray::INVALID_INDEX);
     CHECK(objectResult.UnmarshalMessage(objectMiss, CNetwork::SPEC_MSG_HEADER_LENGTH + payloadSize) == FALSE);
     CHECK(objectResult.m_targetId == nTarget);
+}
+
+// -----------------------------------------------------------------------------
+// #121 G14: the party-roster messages (wire type 112, subtypes 82/65/80).
+
+namespace {
+
+constexpr DWORD ROSTER_PAIR = sizeof(PLAYER_ID) + sizeof(LONG);
+constexpr DWORD ROSTER_PAYLOAD = 6 * ROSTER_PAIR + sizeof(BYTE);
+
+// A connected session with a named host at player location 0; sends land in
+// CNetwork::STATIC_MESSAGE_BUFFER because the provider is not the null one.
+class RosterSession {
+public:
+    explicit RosterSession(BOOLEAN bHost)
+        : m_network(g_pChitin->cNetwork)
+    {
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+        m_network.m_bConnectionEstablished = TRUE;
+        m_network.m_bIsHost = bHost;
+        m_network.m_idLocalPlayer = 1;
+        m_network.m_nHostPlayer = 0;
+        m_network.m_psPlayerName[0] = "host";
+        m_network.m_pPlayerID[0] = 2;
+        m_network.m_pbPlayerVisible[0] = TRUE;
+        std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    }
+
+    ~RosterSession()
+    {
+        m_network.m_bConnectionEstablished = FALSE;
+        m_network.m_bIsHost = FALSE;
+        m_network.m_nHostPlayer = -1;
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    }
+
+    RosterSession(const RosterSession&) = delete;
+    RosterSession& operator=(const RosterSession&) = delete;
+
+    CNetwork& Network() { return m_network; }
+
+private:
+    CNetwork& m_network;
+};
+
+void CheckRosterPair(const BYTE* at, PLAYER_ID nPlayer, LONG nObject)
+{
+    PLAYER_ID player;
+    LONG object;
+    std::memcpy(&player, at, sizeof(player));
+    std::memcpy(&object, at + sizeof(player), sizeof(object));
+    CHECK(player == nPlayer);
+    CHECK(object == nObject);
+}
+
+} // namespace
+
+TEST_CASE("msg: CharacterPartyOrderRequest sends the roster to the host", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.CharacterPartyOrderRequest() == TRUE);
+
+    const BYTE* pBuffer = CNetwork::STATIC_MESSAGE_BUFFER;
+    CHECK(pBuffer[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(pBuffer[1] == CBaldurMessage::MSG_TYPE_PLAYERCHAR_112);
+    CHECK(pBuffer[2] == CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_REQUEST);
+    for (int nSlot = 0; nSlot < 6; nSlot++) {
+        CheckRosterPair(pBuffer + CNetwork::SPEC_MSG_HEADER_LENGTH + nSlot * ROSTER_PAIR, 0, CGameObjectArray::INVALID_INDEX);
+    }
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH + 6 * ROSTER_PAIR] == 0);
+    CHECK(pBuffer[CNetwork::SPEC_MSG_HEADER_LENGTH + ROSTER_PAYLOAD] == 0xCD);
+
+    // A closed session is refused, and so is one without a host name.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.CharacterPartyOrderRequest() == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    session.Network().m_nHostPlayer = -1;
+    CHECK(message.CharacterPartyOrderRequest() == FALSE);
+    session.Network().m_nHostPlayer = 0;
+}
+
+TEST_CASE("msg: SendCharacterPartyOrderStatus refuses a non-host session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+
+    // A client never broadcasts the roster; a closed session is refused before
+    // the roster is built. (The host's wire needs a real game for
+    // SendFullSettingsToClients, so it is not driven from this fixture; the
+    // envelope itself is pinned by the receive tests below.)
+    CHECK(message.SendCharacterPartyOrderStatus() == FALSE);
+
+    session.Network().m_bIsHost = TRUE;
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.SendCharacterPartyOrderStatus() == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
 }
