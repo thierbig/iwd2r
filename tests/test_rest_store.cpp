@@ -540,7 +540,13 @@ TEST_CASE("rest: with healing on rest the clock runs by the party's wounds and t
     CHECK(pGame->m_worldTime.m_gameTime - before == CRuleTables::TIME_RESTING * 2);
 
     // Deep wounds: the hours of healing, rounded up, in rest periods, plus
-    // one; everybody is healed in full (1000 points).
+    // one; everybody is healed in full (1000 points). A first CHR with cleric
+    // or druid levels raises the hourly rate above a small premade's pool, so
+    // widen the leader's pool to keep the wounds above one rate.
+    if (party[0]->m_baseStats.m_maxHitPointsBase < static_cast<SHORT>(nRate + 4)) {
+        party[0]->m_baseStats.m_maxHitPointsBase = static_cast<SHORT>(nRate + 4);
+        party[0]->m_derivedStats.m_nMaxHitPoints = party[0]->m_baseStats.m_maxHitPointsBase;
+    }
     party[0]->m_baseStats.m_hitPoints = 1;
     party[1]->m_baseStats.m_hitPoints = 2;
     const INT nWounds = party[0]->m_baseStats.m_maxHitPointsBase - 1 + party[1]->m_baseStats.m_maxHitPointsBase - 2;

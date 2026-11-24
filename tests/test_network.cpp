@@ -928,7 +928,9 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer grants the permit and p
     engine_world::FramePump pump;
 
     std::vector<BYTE> cre = engine_world::FinishedCharacter();
-    REQUIRE(!cre.empty());
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
     engine_world::NewGameInStartArea(cre);
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
 

@@ -412,6 +412,9 @@ TEST_CASE("character screen: the main panel enables Level Up with the experience
     REQUIRE(pCharacter != NULL);
     CGameSprite* pSprite = PartySprite();
     REQUIRE(pSprite != NULL);
+    if (pSprite->m_derivedStats.GetClassLevel(CAIOBJECTTYPE_C_FIGHTER) != 1 || pSprite->m_derivedStats.m_nLevel != 1) {
+        SKIP("[iwd2r-skip] the first CHR is not a level 1 fighter");
+    }
 
     CUIControlButton* pLevelUp = static_cast<CUIControlButton*>(pCharacter->GetManager()->GetPanel(2)->GetControl(37));
     REQUIRE(pLevelUp != NULL);
