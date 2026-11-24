@@ -7930,6 +7930,42 @@ BOOLEAN CBaldurMessage::OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD
     return TRUE;
 }
 
+// 0x43B380
+BOOLEAN CBaldurMessage::OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The vote arrives at the host, which is running the poll.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost != TRUE) {
+        return FALSE;
+    }
+
+    // A client's vote after the 3-byte header: {BYTE areaLen; char area[];
+    // BYTE vote}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+    BYTE nVote = pByteMessage[nOffset];
+
+    // Only a vote for the area being polled counts, and only in the poll's
+    // matching voter slot. The tally itself is DeleteAreaBallotResult's.
+    if (m_bDeleteAreaPolling == TRUE) {
+        if (strcmp(GetDeleteAreaString(), sArea) == 0) {
+            PLAYER_ID nPlayerID = g_pChitin->cNetwork.GetPlayerID(nMsgFrom);
+            for (INT nPlayer = 0; nPlayer < 6; nPlayer++) {
+                if (m_pnDeleteAreaVoters[nPlayer] == nPlayerID) {
+                    m_pnDeleteAreaVotes[nPlayer] = nVote;
+                }
+            }
+        }
+    }
+
+    return TRUE;
+}
+
 // 0x43B1A0
 BOOLEAN CBaldurMessage::SendDeleteAreaVote(CString sArea, BOOLEAN bVote)
 {

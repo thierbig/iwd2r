@@ -425,6 +425,7 @@ public:
     CString GetDeleteAreaString();
     BOOLEAN SendDeleteAreaVote(CString sArea, BOOLEAN bVote);
     BOOLEAN OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend);
     BOOLEAN ResolveDeleteAreaPoll(CString sAreaString, BOOLEAN bResult);
     BOOLEAN CanResolveDeleteAreaPoll();

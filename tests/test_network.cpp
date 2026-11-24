@@ -771,6 +771,60 @@ TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[m
     network.m_bIsHost = FALSE;
 }
 
+// DELETEAREA k/r (114) vote receiver: the host tallies each client's answer
+// into the poll's per-player slots. Only a vote for the area being polled
+// counts, and only from a player the poll recorded as a voter.
+TEST_CASE("CBaldurMessage::OnDeleteAreaResult stores a vote in the poll's voter slot", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // GetPlayerID maps a player location only when the slot is visible.
+    network.m_pPlayerID[1] = 77;
+    network.m_pbPlayerVisible[1] = TRUE;
+
+    // {header 0xFF, DELETEAREA 107, vote 114, BYTE 6 "AR1000", BYTE 'y'}
+    BYTE packet[3 + 1 + 6 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_VOTE;
+    packet[3] = 6;
+    memcpy(packet + 4, "AR1000", 6);
+    packet[10] = 'y';
+
+    // A closed session and a client are refused before the decode.
+    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == FALSE);
+
+    // The host records the vote only for the polled area and a known voter.
+    network.m_bIsHost = TRUE;
+    message.m_bDeleteAreaPolling = TRUE;
+    message.SetDeleteAreaString(CString("AR1000"));
+    message.m_pnDeleteAreaVoters[1] = 77;
+    message.m_pnDeleteAreaVotes[1] = CBaldurMessage::DELETEAREA_EMPTY_VOTE;
+
+    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_pnDeleteAreaVotes[1] == 'y');
+
+    // A vote for another area leaves the slot alone.
+    message.m_pnDeleteAreaVotes[1] = CBaldurMessage::DELETEAREA_EMPTY_VOTE;
+    message.SetDeleteAreaString(CString("AR2000"));
+    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_pnDeleteAreaVotes[1] == CBaldurMessage::DELETEAREA_EMPTY_VOTE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    message.m_bDeleteAreaPolling = FALSE;
+    message.SetDeleteAreaString(CString(""));
+    message.m_pnDeleteAreaVoters[1] = 0;
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // DELETEAREA k/s (115) poll handler: the host asks each client whether one of
 // its areas may be deleted. A client votes yes when the area exists, holds no
 // creatures and is not the master area, and answers through
