@@ -6223,6 +6223,30 @@ BOOLEAN CBaldurMessage::OnLeaveAreaLuaRequestToServer(INT nMsgFrom, BYTE* pByteM
     return TRUE;
 }
 
+// 0x437D20
+BOOLEAN CBaldurMessage::OnLeaveAreaLuaCancel(BYTE* pByteMessage, DWORD dwSize)
+{
+    // NOTE: The original takes the 2-argument form `ret 8` (the buffer and a
+    // dwSize it ignores), not the sibling handlers' (nMsgFrom, buffer,
+    // dwSize).
+    (void)dwSize;
+
+    // The cancel is the other side of the permit handshake: only a client
+    // waits for it, and only with a session established.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The reply code is the first payload byte (after the 3-byte header).
+    m_nLeaveAreaLuaReplyValue = pByteMessage[CNetwork::SPEC_MSG_HEADER_LENGTH];
+    m_bLeaveAreaLuaReplyReturned = TRUE;
+    return TRUE;
+}
+
 // 0x438560
 BOOLEAN CBaldurMessage::OnLeaveAreaLuaPanicToServer(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
 {

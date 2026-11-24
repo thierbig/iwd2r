@@ -767,6 +767,43 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a sessi
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREALUA 88/114 cancel handler: the client records the host's reply
+// code in its waiting slot. It takes the buffer and a dwSize it ignores (the
+// original's 2-argument `ret 8` form), and neither guard needs game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xCD };
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // A closed session is refused before the payload is read.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // Only a client waits for the cancel; the host's own request never
+    // reaches this handler.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // The client stores the payload byte after the 3-byte header and marks
+    // the reply returned.
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaLuaReplyValue == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.
