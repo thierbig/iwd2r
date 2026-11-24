@@ -365,3 +365,51 @@ TEST_CASE("sprite update: Run applies the field groups field_108 marks present",
     CHECK(pSprite->m_moraleFailure == TRUE);
     CHECK(PortraitIcons(pSprite) == std::vector<LONG> { 101, 102 });
 }
+
+// CMessageSpriteUpdate::sub_50D660 (0x50D660): the receive-side area gate.
+// Run 0x50D6F0 captures the sprite's area as m_sAreaString, "NO_AREA" when it
+// is in none, and both callers (multiplayer-only, so the body is dormant in
+// the engine today) ask whether an update applies in the area a party
+// transition enters. The sentinel is a case-sensitive strcmp; the area name
+// itself is compared case-insensitively (CompareStrings 0x7E8182, lstrcmpi).
+TEST_CASE("sprite update: sub_50D660 matches NO_AREA or the area name", "[msg]")
+{
+    CMessageSpriteUpdate message(NULL, 0, 0);
+
+    SECTION("NO_AREA matches any area, the empty name included")
+    {
+        message.m_sAreaString = "NO_AREA";
+        CHECK(message.sub_50D660(CString("AR1000")) == TRUE);
+        CHECK(message.sub_50D660(CString("")) == TRUE);
+        CHECK(message.sub_50D660(CString("no_area")) == TRUE);
+    }
+
+    SECTION("a real area matches its own name, in any case")
+    {
+        message.m_sAreaString = "AR1000";
+        CHECK(message.sub_50D660(CString("AR1000")) == TRUE);
+        CHECK(message.sub_50D660(CString("ar1000")) == TRUE);
+    }
+
+    SECTION("a different area, and the empty name, do not match")
+    {
+        message.m_sAreaString = "AR1000";
+        CHECK(message.sub_50D660(CString("AR2000")) == FALSE);
+        CHECK(message.sub_50D660(CString("")) == FALSE);
+    }
+
+    SECTION("an empty captured area matches only the empty name")
+    {
+        CHECK(message.sub_50D660(CString("")) == TRUE);
+        CHECK(message.sub_50D660(CString("AR1000")) == FALSE);
+    }
+
+    SECTION("the sentinel is compared case-sensitively")
+    {
+        // Not the sentinel, so the body falls through to the name compare:
+        // "NO_AREA" as the argument still matches, case-insensitively.
+        message.m_sAreaString = "no_area";
+        CHECK(message.sub_50D660(CString("NO_AREA")) == TRUE);
+        CHECK(message.sub_50D660(CString("AR1000")) == FALSE);
+    }
+}

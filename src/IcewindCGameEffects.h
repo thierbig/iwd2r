@@ -214,6 +214,11 @@ public:
 
     void sub_49DB60(int a1);
 
+    // vtable 0x84F0A8: the share loop is slot 10 (+0x28) and
+    // SpawnFromResRef below is slot 11 (+0x2C); this declaration order keeps
+    // the class's two new virtuals on the exe's slots.
+    virtual void ResolveSourceSprite();
+
     virtual CGameSprite* SpawnFromResRef(const CString& resRef, const CPoint* pTarget);
 
     void AddSummonVisualHit(CGameSprite* pSpawned, int mode);

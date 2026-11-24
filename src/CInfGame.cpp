@@ -15074,9 +15074,7 @@ BOOL CInfGame::SwapItemPersonal(SHORT nPortrait, SHORT nSlotNum, CItem*& pItem, 
         g_pBaldurChitin->GetMessageHandler()->AddMessage(pMessage, FALSE);
     }
 
-    // TODO: The original calls CGameSprite 0x723830 here (it sets
-    // m_baseStats byte 0x49 from CRuleTables::sub_546B60, at most 5), which
-    // is not in CGameSprite.cpp yet.
+    pSprite->sub_723830();
 
     g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nCharacterId,
         CGameObjectArray::THREAD_ASYNCH,
