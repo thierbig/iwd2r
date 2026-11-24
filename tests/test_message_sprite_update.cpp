@@ -19,6 +19,7 @@
 #include <climits>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -411,5 +412,189 @@ TEST_CASE("sprite update: sub_50D660 matches NO_AREA or the area name", "[msg]")
         message.m_sAreaString = "no_area";
         CHECK(message.sub_50D660(CString("NO_AREA")) == TRUE);
         CHECK(message.sub_50D660(CString("AR1000")) == FALSE);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CMessageSpriteEquipment (subtype 55): its wire record and its apply side.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr DWORD kSpecHeader = 3;
+
+// kNumSlots is a runtime-defined static const BYTE.
+constexpr SHORT kNumSlots = 51;
+
+// The items a message or a sprite equipment carries, slot by slot.
+struct EquipmentSnapshot {
+    BOOL present[kNumSlots] = {};
+    CString resRef[kNumSlots];
+    WORD useCount1[kNumSlots] = {};
+    WORD useCount2[kNumSlots] = {};
+    WORD useCount3[kNumSlots] = {};
+    WORD wear[kNumSlots] = {};
+    DWORD flags[kNumSlots] = {};
+};
+
+EquipmentSnapshot SnapshotEquipment(CGameSpriteEquipment* pEquipment)
+{
+    EquipmentSnapshot snapshot;
+    for (SHORT nSlot = 0; nSlot < kNumSlots; nSlot++) {
+        CItem* pItem = pEquipment->m_items[nSlot];
+        if (pItem == NULL) {
+            continue;
+        }
+        snapshot.present[nSlot] = TRUE;
+        snapshot.resRef[nSlot] = pItem->GetResRef().GetResRefStr();
+        snapshot.useCount1[nSlot] = pItem->m_useCount1;
+        snapshot.useCount2[nSlot] = pItem->m_useCount2;
+        snapshot.useCount3[nSlot] = pItem->m_useCount3;
+        snapshot.wear[nSlot] = pItem->m_wear;
+        snapshot.flags[nSlot] = pItem->m_flags;
+    }
+    return snapshot;
+}
+
+void RequireSameEquipment(const EquipmentSnapshot& expected, CGameSpriteEquipment* pEquipment)
+{
+    for (SHORT nSlot = 0; nSlot < kNumSlots; nSlot++) {
+        INFO("slot " << nSlot);
+        CItem* pItem = pEquipment->m_items[nSlot];
+        CHECK((pItem != NULL) == (expected.present[nSlot] != FALSE));
+        if (pItem == NULL || !expected.present[nSlot]) {
+            continue;
+        }
+        CHECK(pItem->GetResRef() == expected.resRef[nSlot]);
+        CHECK(pItem->m_useCount1 == expected.useCount1[nSlot]);
+        CHECK(pItem->m_useCount2 == expected.useCount2[nSlot]);
+        CHECK(pItem->m_useCount3 == expected.useCount3[nSlot]);
+        CHECK(pItem->m_wear == expected.wear[nSlot]);
+        CHECK(pItem->m_flags == expected.flags[nSlot]);
+    }
+}
+
+} // namespace
+
+// CMessageSpriteEquipment::MarshalMessage (0x50B680): the 14-byte record
+// (target's remote id pair, item count, selected weapon and ability, weapon
+// set) then one block per equipped slot: slot, resref length and bytes, the
+// three usage counts, wear and file flags. UnmarshalMessage (0x50B9A0)
+// reverses it and resolves the target through the remote object array.
+TEST_CASE("sprite equipment: MarshalMessage and UnmarshalMessage round-trip the record", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    pGame->UpdateCharacterSlots();
+    pGame->SetupCharacters(FALSE);
+    REQUIRE(pSprite->GetArea() != NULL);
+
+    // The record carries the target's remote id pair, which the receive side
+    // resolves back through the remote object array.
+    pSprite->m_remotePlayerID = 0x1234;
+    pSprite->m_remoteObjectID = 0x5678;
+    REQUIRE(pGame->GetRemoteObjectArray()->Add(0x1234, 0x5678, pSprite->GetId(), FALSE) == TRUE);
+
+    CMessageSpriteEquipment sent(pSprite, 0, pSprite->GetId());
+    const EquipmentSnapshot expected = SnapshotEquipment(&sent.m_equipment);
+
+    BYTE packet[kSpecHeader + 0x800];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPayload = packet + kSpecHeader;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPayload, &dwSize);
+
+    // The payload is written after the header and the size is payload-only.
+    REQUIRE(dwSize > 0xE);
+    CHECK(packet[0] == 0xCD);
+    CHECK(packet[1] == 0xCD);
+    CHECK(packet[2] == 0xCD);
+
+    CMessageSpriteEquipment received(NULL, 0, 0);
+    REQUIRE(received.UnmarshalMessage(packet, dwSize + kSpecHeader) == TRUE);
+
+    CHECK(received.m_targetId == pSprite->GetId());
+    CHECK(received.m_equipment.m_selectedWeapon == sent.m_equipment.m_selectedWeapon);
+    CHECK(received.m_equipment.m_selectedWeaponAbility == sent.m_equipment.m_selectedWeaponAbility);
+    CHECK(received.m_nWeaponSet == sent.m_nWeaponSet);
+    RequireSameEquipment(expected, &received.m_equipment);
+
+    // UnmarshalMessage created the items; the transfer side would consume
+    // them, so free them here.
+    for (SHORT nSlot = 0; nSlot < kNumSlots; nSlot++) {
+        delete received.m_equipment.m_items[nSlot];
+        received.m_equipment.m_items[nSlot] = NULL;
+    }
+}
+
+// CMessageSpriteEquipment::Run (0x50BBC0): take the target sprite, keep the
+// launcher the current weapon needs, then hand every message slot over to
+// the sprite: replace a different item (unequipping the old one when it is
+// the selected weapon or the launcher, and disposing of it), equip the
+// equipment slots and select the ability of a replaced selected weapon.
+TEST_CASE("sprite equipment: Run equips the message's items on the target", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    pGame->UpdateCharacterSlots();
+    pGame->SetupCharacters(FALSE);
+    REQUIRE(pSprite->GetArea() != NULL);
+    CGameSpriteEquipment* pEquipment = pSprite->GetEquipment();
+
+    // A created character's quick weapon buttons are filled in by character
+    // generation; this fixture makes the sprite from the CRE alone, so seed
+    // the buttons the tail's sub_726810/GetQuickWeapon rebuild reads for the
+    // empty weapon sets (itemNum 10 = the fist).
+    for (INT nButton = 0; nButton < 8; nButton++) {
+        pSprite->m_quickWeapons[nButton].m_abilityId.m_itemNum = 10;
+    }
+
+    // The premade's first weapon set holds 00AX1H01 and its second
+    // 00BWLX01, so these two differ and take the replace path.
+    CMessageSpriteEquipment message(NULL, 0, pSprite->GetId());
+    message.m_nWeaponSet = 0;
+    message.m_equipment.m_selectedWeapon = CGameSpriteEquipment::SLOT_FIST;
+    message.m_equipment.m_selectedWeaponAbility = 0;
+    message.m_equipment.m_items[CGameSpriteEquipment::SLOT_WEAPON] = new CItem(CResRef("00SWDL01"), 0, 0, 0, 0, 0);
+    message.m_equipment.m_items[CGameSpriteEquipment::SLOT_WEAPON + 2] = new CItem(CResRef("00AX1H01"), 0, 0, 0, 0, 0);
+
+    message.Run();
+
+    // The message's items moved into the equipment and its slots emptied.
+    CItem* pWeapon = pEquipment->m_items[CGameSpriteEquipment::SLOT_WEAPON];
+    REQUIRE(pWeapon != NULL);
+    CHECK(pWeapon->GetResRef() == "00SWDL01");
+
+    CItem* pSecondWeapon = pEquipment->m_items[CGameSpriteEquipment::SLOT_WEAPON + 2];
+    REQUIRE(pSecondWeapon != NULL);
+    CHECK(pSecondWeapon->GetResRef() == "00AX1H01");
+
+    for (SHORT nSlot = 0; nSlot < kNumSlots; nSlot++) {
+        INFO("slot " << nSlot);
+        CHECK(message.m_equipment.m_items[nSlot] == NULL);
     }
 }
