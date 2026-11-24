@@ -545,6 +545,7 @@ TEST_CASE("rest: with healing on rest the clock runs by the party's wounds and t
     // widen the leader's pool to keep the wounds above one rate.
     if (party[0]->m_baseStats.m_maxHitPointsBase < static_cast<SHORT>(nRate + 4)) {
         party[0]->m_baseStats.m_maxHitPointsBase = static_cast<SHORT>(nRate + 4);
+        party[0]->m_derivedStats.m_nMaxHitPoints = party[0]->m_baseStats.m_maxHitPointsBase;
     }
     party[0]->m_baseStats.m_hitPoints = 1;
     party[1]->m_baseStats.m_hitPoints = 2;
