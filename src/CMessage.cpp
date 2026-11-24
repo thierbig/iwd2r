@@ -4753,7 +4753,7 @@ BOOLEAN CBaldurMessage::SendCharacterPartyOrderStatus()
         return FALSE;
     }
 
-    SendFullSettingsToClients(CString(""));
+    SendFullSettingsToClients(CString("")); // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
 
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
 
@@ -4850,7 +4850,7 @@ BOOLEAN CBaldurMessage::SendCharacterPartyOrderStatus()
         cnt += sizeof(LONG);
     }
 
-    g_pChitin->cNetwork.SendSpecificMessage(CString(""),
+    g_pChitin->cNetwork.SendSpecificMessage(CString(""), // re-lint: disable RE002 (char-based CString in this tree; no _T in the tree)
         CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
         MSG_TYPE_PLAYERCHAR_112,
         MSG_SUBTYPE_PLAYERCHAR_PARTYORDER_STATUS,
