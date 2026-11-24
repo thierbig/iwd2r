@@ -3948,6 +3948,55 @@ BOOL CBaldurMessage::SendObjectDelete(LONG nObject)
     return SendObjectControlStatus(nObject);
 }
 
+// 0x431020
+BOOLEAN CBaldurMessage::OnObjectControlStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // The payload is the object's own remote pair after the 3-byte header.
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    PLAYER_ID nRemotePlayerID = pObject->m_remotePlayerID;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // The status concerns the sender's own object; anything else is ignored.
+    if (nRemotePlayerID == g_pChitin->cNetwork.GetPlayerID(nMsgFrom)) {
+        SendObjectControlStatus(nObject);
+    }
+
+    return TRUE;
+}
+
 // 0x431140
 BOOL CBaldurMessage::SendObjectControlStatus(LONG nObject)
 {
@@ -4038,6 +4087,72 @@ BOOL CBaldurMessage::SendObjectControlStatus(LONG nObject)
             CGameObjectArray::THREAD_ASYNCH,
             INFINITE);
     }
+
+    return TRUE;
+}
+
+// 0x4313E0
+BOOLEAN CBaldurMessage::OnObjectDelete(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // Only the host's deletion reaches a client.
+    PLAYER_ID nHostID = g_pChitin->cNetwork.m_nHostPlayer == -1
+        ? 0
+        : g_pChitin->cNetwork.m_pPlayerID[g_pChitin->cNetwork.m_nHostPlayer];
+
+    if (g_pChitin->cNetwork.GetPlayerID(nMsgFrom) != nHostID) {
+        return FALSE;
+    }
+
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    m_bInOnObjectDelete = TRUE;
+
+    if (pObject->m_pArea == NULL) {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->Delete(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            NULL,
+            INFINITE);
+        if (rc == CGameObjectArray::SUCCESS && pObject != NULL) {
+            delete pObject;
+        }
+    } else {
+        pObject->RemoveFromArea();
+    }
+
+    m_bInOnObjectDelete = FALSE;
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
 
     return TRUE;
 }

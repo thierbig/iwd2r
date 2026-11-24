@@ -339,7 +339,9 @@ public:
     BOOLEAN OnObjectControlRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL SendObjectDelete(LONG nObject);
+    BOOLEAN OnObjectControlStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL SendObjectControlStatus(LONG nObject);
+    BOOLEAN OnObjectDelete(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN SendChatMessage(CString& sChatMessage);

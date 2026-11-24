@@ -514,3 +514,94 @@ TEST_CASE("object control: CGameObjectArray::Delete announces a session object f
     CHECK(game.Game()->GetObjectArray()->Delete(nSecond, CGameObjectArray::THREAD_ASYNCH, NULL, INFINITE) == CGameObjectArray::SUCCESS);
     CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == 0xCD);
 }
+
+TEST_CASE("object control: OnObjectControlStatus answers the sender's own object", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(TRUE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 2;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 2, 4, nObject);
+
+    CBaldurMessage message;
+
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(packet + HEADER_LENGTH, 2, 4);
+
+    // A client ignores it.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.OnObjectControlStatus(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    // An unknown pair is refused.
+    BYTE unknown[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(unknown + HEADER_LENGTH, 9, 9);
+    CHECK(message.OnObjectControlStatus(0, unknown, sizeof(unknown)) == FALSE);
+
+    // The sender's own object: the host broadcasts OBJECT/68 and drops the
+    // remote copy.
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.OnObjectControlStatus(0, packet, sizeof(packet)) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_DELETE);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 2);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 4);
+    CGameObject* pDenied = NULL;
+    CHECK(game.Game()->GetObjectArray()->GetDeny(nObject, CGameObjectArray::THREAD_ASYNCH, &pDenied, INFINITE) != CGameObjectArray::SUCCESS);
+
+    // Somebody else's object is accepted but not answered.
+    CGameObject* pOther = new CGameObject();
+    pOther->m_remotePlayerID = 3;
+    pOther->m_remoteObjectID = 5;
+    const SHORT arrayIndex = 2;
+    game.Game()->GetObjectArray()->m_pArray[arrayIndex].m_objectId = 2;
+    game.Game()->GetObjectArray()->m_pArray[arrayIndex].m_objectPtr = pOther;
+    game.Game()->GetObjectArray()->m_nMaxArrayIndex = arrayIndex;
+    game.Game()->GetObjectArray()->m_nNextObjectId = 3;
+    AddRemote(game.Game(), 3, 5, 0x00020002);
+    BYTE other[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(other + HEADER_LENGTH, 3, 5);
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.OnObjectControlStatus(0, other, sizeof(other)) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == 0xCD);
+}
+
+TEST_CASE("object control: OnObjectDelete drops the host-deleted local copy", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 3;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 3, 4, nObject);
+
+    CBaldurMessage message;
+
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(packet + HEADER_LENGTH, 3, 4);
+
+    // The host machine ignores its own broadcast.
+    session.Network().m_bIsHost = TRUE;
+    CHECK(message.OnObjectDelete(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bIsHost = FALSE;
+
+    // A non-host sender is refused.
+    CHECK(message.OnObjectDelete(1, packet, sizeof(packet)) == FALSE);
+
+    // An unknown pair is refused.
+    BYTE unknown[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(unknown + HEADER_LENGTH, 9, 9);
+    CHECK(message.OnObjectDelete(0, unknown, sizeof(unknown)) == FALSE);
+
+    CHECK(message.OnObjectDelete(0, packet, sizeof(packet)) == TRUE);
+    CGameObject* pDenied = NULL;
+    CHECK(game.Game()->GetObjectArray()->GetDeny(nObject, CGameObjectArray::THREAD_ASYNCH, &pDenied, INFINITE) != CGameObjectArray::SUCCESS);
+    CHECK(message.m_bInOnObjectDelete == FALSE);
+}
