@@ -2554,7 +2554,6 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
-
 // -----------------------------------------------------------------------------
 // #121 G12b: CMessage83 / CMessage84 (subtypes 83/84). The payload is the
 // target's remote pair, a one-byte resref length and the resref bytes; Run
