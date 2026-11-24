@@ -1194,6 +1194,64 @@ BOOLEAN CBaldurMessage::OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSiz
     return TRUE;
 }
 
+// 0x42ADF0
+// The host's resource hand-off: a client sends one resource's records and the
+// host writes them into the game's temp directory through the matching CRes
+// type. The payload after the 3-byte spec header is {BYTE nLength; char
+// sResRef[nLength]; UINT nType; DWORD nSize; BYTE data[nSize]}. Only the world
+// map (1015) and store (1014) records are written; every other type is accepted
+// and dropped. 0x43E190, the out-of-line CResHelper<CResStore,1014>::SetResRef
+// (survey row 57), is the same template method the world-map arm uses
+// (src/CRes.h), so the store arm calls SetResRef like the world-map arm.
+BOOLEAN CBaldurMessage::OnResourceRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's receive: session open and hosting.
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nLength = pData[cnt];
+    cnt += sizeof(BYTE);
+
+    CString sResName(reinterpret_cast<char*>(pData + cnt), nLength);
+    cnt += nLength;
+
+    UINT nType = *reinterpret_cast<UINT*>(pData + cnt);
+    cnt += sizeof(UINT);
+
+    DWORD nSize = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    BYTE* pBuffer = CreateBuffer(nSize);
+    if (pBuffer == NULL) {
+        return FALSE;
+    }
+
+    memcpy(pBuffer, pData + cnt, nSize);
+
+    if (nType == 1015) { // CResWorldMap
+        CResHelper<CResWorldMap, 1015> res;
+        CResRef cResRef(sResName);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(g_pBaldurChitin->GetObjectGame()->m_sTempDir, pBuffer, nSize);
+    } else if (nType == 1014) { // CResStore
+        CResHelper<CResStore, 1014> res;
+        CResRef cResRef(sResName);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(g_pBaldurChitin->GetObjectGame()->m_sTempDir, pBuffer, nSize);
+    }
+
+    DestroyBuffer(pBuffer);
+
+    return TRUE;
+}
+
 // 0x42B1F0
 BOOL CBaldurMessage::OnSettingsFullDemanded(INT nMsgFrom)
 {
