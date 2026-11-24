@@ -2413,6 +2413,17 @@ TEST_CASE("gam: CheckReputation drops a paladin below reputation 70 to fighter",
     pGame->SetupCharacters(FALSE);
     const CRuleTables& ruleTables = pGame->GetRuleTables();
 
+    // The premade's own class levels and level-adjusting subrace (aasimar,
+    // drow, gray dwarf, deep gnome) would leak into GetEffectiveCharacterLevel
+    // and the tail's Reload; pin them to nothing so the scenario below is the
+    // only source of levels.
+    pSprite->m_typeAI.m_nSubRace = 0;
+    pSprite->m_baseStats.m_characterLevel = 0;
+    for (INT nClass = 1; nClass <= CAIOBJECT_CLASS_MAX; nClass++) {
+        pSprite->m_baseStats.m_classLevels[nClass - 1] = 0;
+        pSprite->m_derivedStats.SetClassLevel(nClass, 0);
+    }
+
     // A consistent level-7 paladin: the base header says paladin 7/fighter 0,
     // the derived stats match, reputation 60, the 0x800 bit armed.
     pSprite->m_baseStats.m_characterLevel = 7;
