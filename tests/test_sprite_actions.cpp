@@ -608,6 +608,13 @@ TEST_CASE("sprite: ProtectPoint queues its return path and swings at a nearby en
     pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, guard,
         8 * CPathSearch::GRID_SQUARE_SIZEX, -1));
     pCharacter->m_attackFrame = -2;
+    // Swing draws the round's speed from rand() (UtilRandInt(6, -luck)), and
+    // CChitin::CChitin seeds rand() from the clock (srand(time(NULL)) at
+    // src/CChitin.cpp:994), so on part of the draws the round starts on an
+    // ACTION_NORMAL frame (the audit's wizard-first failure: its dagger
+    // gives m_speedFactor 0 for small draws). Pin the draw: this seed keeps
+    // the start frame INTERRUPTABLE for every CHR class in the matrix.
+    srand(0x1000);
     CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
     CHECK(pCharacter->m_attackFrame == 0);
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PROTECTPOINT);
