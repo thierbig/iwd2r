@@ -2553,4 +2553,3 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     G15Session(FALSE, FALSE);
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
-
