@@ -771,6 +771,45 @@ TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[m
     network.m_bIsHost = FALSE;
 }
 
+// DELETEAREA k/s (115) poll handler: the host asks each client whether one of
+// its areas may be deleted. A client votes yes when the area exists, holds no
+// creatures and is not the master area, and answers through
+// SendDeleteAreaVote. The guards and the miss arm take a zeroed game.
+TEST_CASE("CBaldurMessage::OnDeleteAreaPoll votes on the named area", "[msg][network]")
+{
+    ChitinScope scope;
+    MessageGameScope game;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, DELETEAREA 107, poll 115, BYTE 6 "AR1000"}
+    BYTE packet[3 + 1 + 6] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_POLL;
+    packet[3] = 6;
+    memcpy(packet + 4, "AR1000", 6);
+
+    // A closed session and the host itself are refused before the decode.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == FALSE);
+
+    // A client whose game has no such area votes no (through the sender,
+    // which finds no host in this fake session) and the handler still
+    // answers TRUE, as the original does.
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == TRUE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // DELETEAREA k/r (114) vote sender: a client answers the host's poll with
 // 'y' or 'n' for the area it was asked about. Both guards and the empty
 // host-name arm need no game state.

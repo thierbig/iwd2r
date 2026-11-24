@@ -7893,6 +7893,43 @@ BOOLEAN CBaldurMessage::OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DW
 }
 
 // FIXME: `sAreaString` should be reference.
+// 0x43B080
+BOOLEAN CBaldurMessage::OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's poll reaches the clients; only a connected client votes.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The poll after the 3-byte header: {BYTE areaLen; char area[]}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The client votes yes when the area exists, holds no creatures and is
+    // not the game's master area; an existing vote marker is cleared.
+    BOOLEAN bVote = FALSE;
+    CGameArea* pArea = pGame->GetArea(sArea);
+    if (pArea != NULL
+        && pArea->m_nCharacters == 0
+        && pArea != pGame->m_pGameAreaMaster) {
+        pArea->field_AE6 = 0;
+        bVote = TRUE;
+    }
+
+    SendDeleteAreaVote(sArea, bVote);
+
+    return TRUE;
+}
+
 // 0x43B1A0
 BOOLEAN CBaldurMessage::SendDeleteAreaVote(CString sArea, BOOLEAN bVote)
 {
