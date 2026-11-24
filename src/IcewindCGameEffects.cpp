@@ -890,6 +890,36 @@ void IcewindCGameEffectSummon::sub_49DB60(int a1)
     field_190 = a1;
 }
 
+// 0x560140
+void IcewindCGameEffectSummon::ResolveSourceSprite()
+{
+    BYTE rc;
+
+    // The exe passes the member itself as the out slot, so every
+    // SHARED/DENIED retry rewrites field_18C in place.
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_sourceID,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&field_18C),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    // BAD_INDEX returns silently: the share was never taken.
+    if (rc == CGameObjectArray::BAD_INDEX) {
+        return;
+    }
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\IcewindCGameEffects.cpp
+        // __LINE__: 2076
+        UTIL_ASSERT(FALSE);
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_sourceID,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+}
+
 // 0x55F930
 void IcewindCGameEffectSummon::PlayGroupVFX(int vfxId)
 {
