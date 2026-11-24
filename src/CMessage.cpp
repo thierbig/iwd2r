@@ -7415,7 +7415,7 @@ void CBaldurMessage::HandleBlockingMessages()
         nMsgFrom,
         dwSize);
     if (pData != NULL) {
-        OnDemandSettingsNightmareMode(nMsgFrom);
+        OnDemandCharacterUpdate(nMsgFrom, pData, dwSize);
         delete pData;
     }
 
@@ -7849,6 +7849,128 @@ BOOL CBaldurMessage::OnDemandSettingsNightmareMode(INT nMsgFrom)
 
     g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
     SendSettingsNightmareMode(sPlayerName);
+
+    return TRUE;
+}
+
+// 0x43DC40
+BOOLEAN CBaldurMessage::OnDemandCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    CString sPlayerName;
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The payload is the object's wire ids {PLAYER_ID; LONG} after the
+    // 3-byte message header (0x85E670); the object is found through the
+    // remote-object array.
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<DWORD*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+    SendCharacterUpdate(sPlayerName, nObject);
+
+    return TRUE;
+}
+
+// 0x43DD20
+BOOLEAN CBaldurMessage::SendCharacterUpdate(const CString& sPlayerName, LONG nObject)
+{
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    // The wire payload is {the sprite's PLAYER_ID; its remote LONG} followed
+    // by the timed effect list marshalled at version 1 (the base-part form
+    // the save game writes, 0x4C0A30).
+    BYTE* pEffects = NULL;
+    DWORD dwEffectsSize = pSprite->m_timedEffectList.Marshal(&pEffects, 1, FALSE);
+    DWORD dwSize = sizeof(DWORD) + sizeof(LONG) + dwEffectsSize;
+    BYTE* pMessage = CreateBuffer(dwSize);
+    *reinterpret_cast<DWORD*>(pMessage) = pSprite->m_remotePlayerID;
+    *reinterpret_cast<LONG*>(pMessage + sizeof(DWORD)) = pSprite->m_remoteObjectID;
+    if (dwEffectsSize != 0) {
+        memcpy(pMessage + sizeof(DWORD) + sizeof(LONG), pEffects, dwEffectsSize);
+    }
+    delete[] reinterpret_cast<CGameEffectBase*>(pEffects);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_102,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
+}
+
+// 0x43DE50
+BOOLEAN CBaldurMessage::OnCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+
+    CGameSprite* pSprite;
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The same {PLAYER_ID; LONG} pair as the send side; the effect list
+    // follows it (0xB = the 3-byte header + the pair).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<DWORD*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    pSprite->m_timedEffectList.Unmarshal(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD) + sizeof(LONG),
+        dwSize - CNetwork::SPEC_MSG_HEADER_LENGTH - sizeof(DWORD) - sizeof(LONG),
+        pSprite,
+        1);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
 
     return TRUE;
 }
@@ -15587,6 +15709,41 @@ BYTE CMessageSpriteUpdate::GetMsgType()
 BYTE CMessageSpriteUpdate::GetMsgSubType()
 {
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_UPDATE;
+}
+
+// Whether this sprite update applies in `sAreaString` -- the area a party
+// transition is entering at every call site. TRUE when the message carries
+// no area ("NO_AREA", what Run 0x50D6F0 stores for a sprite in none) or when
+// its captured area (m_sAreaString, at +0x1C) is `sAreaString`, compared
+// case-insensitively (CompareStrings 0x7E8182 is lstrcmpi; the sentinel test
+// is the case-sensitive strcmp 0x7E7A54). The argument is a by-value CString:
+// the callee destroys its own copy (SEH entry 0x818E58; the CString
+// destructor 0x7FCC1A is called at 0x50D6AE and 0x50D6D3) and returns
+// with `ret 4`.
+//
+// The exports leave the function unnamed; the callers are its identity.
+// Every call site passes the CMessageSpriteUpdate it just built in ecx
+// (ctor 0x50C260) and the body reads no other member. All six call sites
+// -- three in CInfGame::sub_5C4AD0, three in
+// CScreenWorldMap::MoveToArea -- are in the multiplayer-only blocks both
+// functions leave unported (docs/adr/0002-single-player-only.md), so the
+// body is dormant in single player; the unit test in
+// tests/test_message_sprite_update.cpp covers it directly.
+//
+// 0x50D660
+BOOL CMessageSpriteUpdate::sub_50D660(CString sAreaString)
+{
+    // The sentinel is a plain strcmp, so "no_area" is not it and is treated
+    // as an ordinary area name below.
+    if (strcmp(m_sAreaString, "NO_AREA") == 0) {
+        return TRUE;
+    }
+
+    if (_stricmp(sAreaString, m_sAreaString) == 0) {
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 // 0x50D6F0
