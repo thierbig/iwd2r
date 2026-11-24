@@ -338,6 +338,8 @@ public:
     BOOLEAN OnObjectControlSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnObjectControlRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOL SendObjectDelete(LONG nObject);
+    BOOL SendObjectControlStatus(LONG nObject);
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN SendChatMessage(CString& sChatMessage);

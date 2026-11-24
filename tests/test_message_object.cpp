@@ -370,3 +370,147 @@ TEST_CASE("object control: OnObjectControl unmarshals the host's broadcast", "[m
     CHECK(pRemote->Find(9, 10, nLocal) == TRUE);
     CHECK(nLocal == nObject);
 }
+
+namespace {
+
+DWORD ReadPairPlayer(const BYTE* at)
+{
+    DWORD value;
+    std::memcpy(&value, at, sizeof(value));
+    return value;
+}
+
+LONG ReadPairObject(const BYTE* at)
+{
+    LONG value;
+    std::memcpy(&value, at + sizeof(DWORD), sizeof(value));
+    return value;
+}
+
+} // namespace
+
+TEST_CASE("object control: SendObjectDelete tells the host about the client's own object", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 1;
+    pObject->m_remoteObjectID = 6;
+    const LONG nObject = PutObject(game.Game(), pObject);
+
+    CBaldurMessage message;
+
+    // No host name: there is nobody to tell.
+    session.Network().m_nHostPlayer = -1;
+    CHECK(message.SendObjectDelete(nObject) == FALSE);
+    session.Network().m_nHostPlayer = 0;
+
+    // Somebody else's object is not announced by us.
+    pObject->m_remotePlayerID = 5;
+    CHECK(message.SendObjectDelete(nObject) == FALSE);
+    pObject->m_remotePlayerID = 1;
+
+    // The notice is refused from inside a deletion.
+    message.m_bInOnObjectDelete = TRUE;
+    CHECK(message.SendObjectDelete(nObject) == FALSE);
+    message.m_bInOnObjectDelete = FALSE;
+
+    // A client tells the host as OBJECT/100 and keeps its copy.
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendObjectDelete(nObject) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_STATUS);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 1);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 6);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[HEADER_LENGTH + PAIR_SIZE] == 0xCD);
+
+    CGameObject* pShared = NULL;
+    CHECK(game.Game()->GetObjectArray()->GetShare(nObject, CGameObjectArray::THREAD_ASYNCH, &pShared, INFINITE) == CGameObjectArray::SUCCESS);
+    game.Game()->GetObjectArray()->ReleaseShare(nObject, CGameObjectArray::THREAD_ASYNCH, INFINITE);
+
+    // On the host the deletion is broadcast directly as OBJECT/68.
+    session.Network().m_bIsHost = TRUE;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendObjectDelete(nObject) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_DELETE);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 1);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 6);
+}
+
+TEST_CASE("object control: SendObjectControlStatus broadcasts the deletion and drops the remote copy", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(TRUE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 2;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+
+    CBaldurMessage message;
+
+    // Only the host broadcasts.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.SendObjectControlStatus(nObject) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    // A game that is being destroyed does not.
+    game.Game()->m_bInDestroyGame = TRUE;
+    CHECK(message.SendObjectControlStatus(nObject) == FALSE);
+    game.Game()->m_bInDestroyGame = FALSE;
+
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(message.SendObjectControlStatus(nObject) == TRUE);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[0] == CNetwork::SPEC_MSG_FLAG_ENABLED);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_DELETE);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 2);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 4);
+
+    // The remote-owned copy is gone: another player's object cannot be
+    // shared any more and every deny is released.
+    CGameObject* pDenied = NULL;
+    CHECK(game.Game()->GetObjectArray()->GetDeny(nObject, CGameObjectArray::THREAD_ASYNCH, &pDenied, INFINITE) != CGameObjectArray::SUCCESS);
+}
+
+TEST_CASE("object control: CGameObjectArray::Delete announces a session object first", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 1;
+    pObject->m_remoteObjectID = 6;
+    const LONG nObject = PutObject(game.Game(), pObject);
+
+    // The owner's deletion goes out through SendObjectDelete as OBJECT/100
+    // before the entry is dropped.
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(game.Game()->GetObjectArray()->Delete(nObject, CGameObjectArray::THREAD_ASYNCH, NULL, INFINITE) == CGameObjectArray::SUCCESS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == CBaldurMessage::MSG_TYPE_OBJECT);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[2] == CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_STATUS);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 1);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 6);
+
+    // A closed session sends nothing.
+    CGameObject* pSecond = new CGameObject();
+    pSecond->m_remotePlayerID = 1;
+    pSecond->m_remoteObjectID = 7;
+    const SHORT arrayIndex = 2;
+    game.Game()->GetObjectArray()->m_pArray[arrayIndex].m_objectId = 2;
+    game.Game()->GetObjectArray()->m_pArray[arrayIndex].m_objectPtr = pSecond;
+    game.Game()->GetObjectArray()->m_nMaxArrayIndex = arrayIndex;
+    game.Game()->GetObjectArray()->m_nNextObjectId = 3;
+    const LONG nSecond = 0x00020002;
+
+    session.Network().m_bConnectionEstablished = FALSE;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    CHECK(game.Game()->GetObjectArray()->Delete(nSecond, CGameObjectArray::THREAD_ASYNCH, NULL, INFINITE) == CGameObjectArray::SUCCESS);
+    CHECK(CNetwork::STATIC_MESSAGE_BUFFER[1] == 0xCD);
+}

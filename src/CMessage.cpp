@@ -3865,6 +3865,183 @@ BOOLEAN CBaldurMessage::OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
+// 0x430DC0
+BOOL CBaldurMessage::SendObjectDelete(LONG nObject)
+{
+    CString sHostName;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || m_bInOnObjectDelete == TRUE) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (pGame->m_bInDestroyGame == TRUE) {
+        return FALSE;
+    }
+
+    // The host's name is the destination of the client's notice; an empty
+    // name means there is nobody to tell.
+    if (g_pChitin->cNetwork.m_nHostPlayer == -1) {
+        sHostName = "";
+    } else {
+        sHostName = g_pChitin->cNetwork.m_psPlayerName[g_pChitin->cNetwork.m_nHostPlayer];
+    }
+
+    if (strcmp(sHostName, "") == 0) {
+        return FALSE;
+    }
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetShare(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    LONG nRemoteObjectID = pObject->m_remoteObjectID;
+    PLAYER_ID nRemotePlayerID = pObject->m_remotePlayerID;
+
+    pGame->GetObjectArray()->ReleaseShare(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    // Only the object's owner announces its deletion here.
+    if (nRemotePlayerID != g_pChitin->cNetwork.m_idLocalPlayer) {
+        return FALSE;
+    }
+
+    BYTE* pMessage = CreateBuffer(sizeof(PLAYER_ID) + sizeof(LONG));
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<PLAYER_ID*>(pMessage) = nRemotePlayerID;
+    *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID)) = nRemoteObjectID;
+
+    // A client's own object goes to the host as OBJECT/100 first; the host,
+    // and a text object's owner, broadcasts the deletion directly.
+    if (g_pChitin->cNetwork.GetSessionHosting() != TRUE
+        && pObject->GetObjectType() != CGameObject::TYPE_TEXT) {
+        g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+            CNetwork::SEND_GUARANTEED,
+            MSG_TYPE_OBJECT,
+            MSG_SUBTYPE_OBJECT_CONTROL_STATUS,
+            pMessage,
+            sizeof(PLAYER_ID) + sizeof(LONG));
+
+        DestroyBuffer(pMessage);
+
+        return TRUE;
+    }
+
+    DestroyBuffer(pMessage);
+
+    return SendObjectControlStatus(nObject);
+}
+
+// 0x431140
+BOOL CBaldurMessage::SendObjectControlStatus(LONG nObject)
+{
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    if (pGame->m_bInDestroyGame == TRUE) {
+        return FALSE;
+    }
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = pGame->GetObjectArray()->GetShare(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    PLAYER_ID nRemotePlayerID = pObject->m_remotePlayerID;
+    LONG nRemoteObjectID = pObject->m_remoteObjectID;
+
+    pGame->GetObjectArray()->ReleaseShare(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    BYTE* pMessage = CreateBuffer(sizeof(PLAYER_ID) + sizeof(LONG));
+    if (pMessage == NULL) {
+        return FALSE;
+    }
+
+    *reinterpret_cast<PLAYER_ID*>(pMessage) = nRemotePlayerID;
+    *reinterpret_cast<LONG*>(pMessage + sizeof(PLAYER_ID)) = nRemoteObjectID;
+
+    // Text objects are area-local; everything else is broadcast.
+    if (pObject->GetObjectType() != CGameObject::TYPE_TEXT) {
+        CString sPlayerName;
+        g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+            CNetwork::SEND_ALL_PLAYERS | CNetwork::SEND_GUARANTEED,
+            MSG_TYPE_OBJECT,
+            MSG_SUBTYPE_OBJECT_DELETE,
+            pMessage,
+            sizeof(PLAYER_ID) + sizeof(LONG));
+    }
+
+    DestroyBuffer(pMessage);
+
+    // Drop our own copy when another player owns the object. The
+    // OnObjectDelete guard keeps the inner Delete from announcing it again.
+    if (nRemotePlayerID != g_pChitin->cNetwork.m_idLocalPlayer) {
+        do {
+            rc = pGame->GetObjectArray()->GetDeny(nObject,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pObject,
+                INFINITE);
+        } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+        if (rc != CGameObjectArray::SUCCESS) {
+            return FALSE;
+        }
+
+        m_bInOnObjectDelete = TRUE;
+
+        if (pObject->m_pArea == NULL) {
+            rc = pGame->GetObjectArray()->Delete(nObject,
+                CGameObjectArray::THREAD_ASYNCH,
+                NULL,
+                INFINITE);
+            if (rc == CGameObjectArray::SUCCESS && pObject != NULL) {
+                delete pObject;
+            }
+        } else {
+            pObject->RemoveFromArea();
+        }
+
+        m_bInOnObjectDelete = FALSE;
+
+        pGame->GetObjectArray()->ReleaseDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    return TRUE;
+}
+
 // 0x4319C0
 BOOLEAN CBaldurMessage::OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize)
 {
