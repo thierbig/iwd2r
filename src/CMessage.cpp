@@ -23416,9 +23416,73 @@ BYTE CMessageEnterDialogMode::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ENTER_DIALOG_MODE;
 }
 
+// 0x4FE3D0
+void CMessageEnterDialogMode::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID player = pObject->m_remotePlayerID;
+    LONG remoteId = pObject->m_remoteObjectID;
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = 0xC;
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    memcpy(*pData + cnt, &m_nPartyGold, sizeof(m_nPartyGold));
+    cnt += sizeof(m_nPartyGold);
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x4FE500
+BOOL CMessageEnterDialogMode::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: A miss is not fatal: the target becomes INVALID_INDEX and the
+    // message is still decoded (the original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    memcpy(&m_nPartyGold, pData + cnt, sizeof(m_nPartyGold));
+    cnt += sizeof(m_nPartyGold);
+    UTIL_ASSERT(dwSize == cnt);
+    return TRUE;
+}
+
 // NOTE: Run (0x4FE5B0) is the other players' side of StartDialog; the
 // message is BROADCAST_FORCED_OTHERS, so single player never runs it.
-
 // 0x4FE5B0
 void CMessageEnterDialogMode::Run()
 {
