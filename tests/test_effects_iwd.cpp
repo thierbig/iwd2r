@@ -31,6 +31,7 @@
 #include <bitset>
 #include <chrono>
 #include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -374,6 +375,61 @@ void RemoveTimed(CGameSprite* pSprite, const CResRef& sourceRes)
         SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder"); \
     }
 
+}
+
+namespace {
+
+// The exe's IcewindCGameEffectSummon vtable 0x84F0A8 has twelve slots:
+//   +0x00 0x55F6D0 dtor            +0x04 0x55F620 Copy
+//   +0x08 0x55F710 ApplyEffect     +0x0C 0x4A3030 ResolveEffect
+//   +0x10 0x799E60 OnAddSpecific   +0x14 0x799E60 OnLoad
+//   +0x18 0x4A42F0 CheckSave       +0x1C 0x49FC40 UsesDice
+//   +0x20 0x4A4BB0 DisplayString   +0x24 0x4A51D0 OnRemove
+//   +0x28 0x560140 ResolveSourceSprite  +0x2C 0x55FAD0 SpawnFromResRef
+// The class adds its two virtuals after the ten CGameEffect slots in
+// declaration order, so +0x28 must stay the share loop and +0x2C
+// SpawnFromResRef: the bug this pins is a future virtual declared after
+// SpawnFromResRef (or one of the two dropped), either of which moves a slot
+// and fails below.
+//
+// The offsets above are the exe's (MSVC) slot numbers: one 4-byte slot per
+// virtual with a single destructor entry, the same numbering as the
+// /* 0000 */ comments in the headers. The tests build with gcc/clang, whose
+// Itanium C++ ABI lays the vtable out as [D1, D0, the other virtuals...]
+// with pointer-sized entries, and a pointer to a virtual member function
+// stores 1 + its byte offset into that table. MsvcSlot maps the ABI offset
+// back to the exe's numbering for the assertions below.
+#if !defined(_MSC_VER)
+template <typename MemberFunction>
+std::ptrdiff_t VtableSlot(MemberFunction fn)
+{
+    static_assert(sizeof(MemberFunction) == 2 * sizeof(std::ptrdiff_t),
+        "unexpected pointer-to-member-function representation");
+    std::ptrdiff_t representation[2];
+    std::memcpy(representation, &fn, sizeof(fn));
+    return representation[0] - 1;
+}
+
+std::ptrdiff_t MsvcSlot(std::ptrdiff_t abiOffset)
+{
+    return 4 * (abiOffset / static_cast<std::ptrdiff_t>(sizeof(void*)) - 1);
+}
+#endif
+
+} // namespace
+
+TEST_CASE("effects-iwd: the summon class adds its share loop at vtable slot 10, before SpawnFromResRef", "[effects][vtable]")
+{
+#if defined(_MSC_VER)
+    SKIP("[iwd2r-skip] the MSVC pointer-to-member representation carries no vtable offset");
+#else
+    REQUIRE(MsvcSlot(VtableSlot(&CGameEffect::Copy)) == 0x04);
+    REQUIRE(MsvcSlot(VtableSlot(&CGameEffect::DisplayString)) == 0x20);
+    REQUIRE(MsvcSlot(VtableSlot(&CGameEffect::OnRemove)) == 0x24);
+    REQUIRE(MsvcSlot(VtableSlot(&IcewindCGameEffectSummon::Copy)) == 0x04);
+    REQUIRE(MsvcSlot(VtableSlot(&IcewindCGameEffectSummon::ResolveSourceSprite)) == 0x28);
+    REQUIRE(MsvcSlot(VtableSlot(&IcewindCGameEffectSummon::SpawnFromResRef)) == 0x2C);
+#endif
 }
 
 TEST_CASE("effects-iwd: immunity to effect (261) adds the opcode to the natural immunities", "[effects][data]")

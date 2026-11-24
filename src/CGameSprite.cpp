@@ -13622,6 +13622,31 @@ void CGameSprite::SetMonkAbilities()
     }
 }
 
+// 0x723830
+void CGameSprite::sub_723830()
+{
+    // The original calls GetAIType() here (0x723838) and discards the
+    // result.
+    GetAIType();
+
+    int nBaseAttackBonus = 0;
+    int nNumberOfAttacks = 0;
+    int nStep = 0;
+    g_pBaldurChitin->GetObjectGame()->GetRuleTables().sub_546B60(this,
+        nBaseAttackBonus,
+        nNumberOfAttacks,
+        nStep,
+        FALSE);
+
+    // The original compares the low byte against 5 and stores the byte, so
+    // the clamp is on the byte, not on the int.
+    BYTE nAttacks = static_cast<BYTE>(nNumberOfAttacks);
+    if (nAttacks > 5) {
+        nAttacks = 5;
+    }
+    m_baseStats.m_numberOfAttacksBase = nAttacks;
+}
+
 // 0x7238A0
 LONG CGameSprite::GetLevel()
 {
@@ -28938,6 +28963,20 @@ void CGameSprite::ApplyCastingEffectPost(CSpell* pSpell, const SPELL_ABILITY* pA
     CMessagePlaySoundRef* pSoundMessage = new CMessagePlaySoundRef(CResRef(sSound), m_id, m_id);
     pSoundMessage->m_nChannel = 4;
     g_pBaldurChitin->GetMessageHandler()->AddMessage(pSoundMessage, FALSE);
+}
+
+// 0x756770
+void CGameSprite::sub_756770(CPoint& pt, const CPoint& target)
+{
+    LONG dx = target.x - m_pos.x;
+    LONG dy = target.y - m_pos.y;
+    // The exe takes CUtil_Hypotenuse (sqrt) straight into __ftol, which
+    // truncates; there is no +0.5 rounding here.
+    LONG nLength = static_cast<LONG>(sqrt(static_cast<double>(dx * dx + dy * dy)));
+    pt.x = dx;
+    pt.y = dy;
+    pt.x = pt.x * 15 / nLength;
+    pt.y = pt.y * 15 / nLength;
 }
 
 // 0x7567F0
