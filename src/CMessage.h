@@ -120,6 +120,7 @@ public:
     static const BYTE MSG_SUBTYPE_CMESSAGE_STORE_RELEASE;
     static const BYTE MSG_SUBTYPE_CMESSAGE_51;
     static const BYTE MSG_SUBTYPE_CMESSAGE_89;
+    static const BYTE MSG_SUBTYPE_CMESSAGE_83;
     static const BYTE MSG_SUBTYPE_CMESSAGE_90;
     static const BYTE MSG_SUBTYPE_CMESSAGE_FLOAT_TEXT;
     static const BYTE MSG_SUBTYPE_CMESSAGE_92;
@@ -1726,6 +1727,21 @@ public:
 // sprite's deny is taken. Marshal and Unmarshal (0x512830/0x512950,
 // 0x512FE0/0x513100) are the network path and are omitted (single player
 // only, docs/adr/0002-single-player-only.md).
+// A message a client is sent for subtype 83: it carries the target's remote
+// pair and a ref (vtable 0x84CFFC); Run only denies and releases the target.
+class CMessage83 : public CMessage {
+public:
+    CMessage83(const CResRef& resRef, LONG caller, LONG target);
+    SHORT GetCommType() override;
+    BYTE GetMsgType() override;
+    BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
+
+    /* 000C */ CResRef m_resRef;
+};
+
 class CMessage89 : public CMessage {
 public:
     CMessage89(LONG spriteId, LONG caller, LONG target);
