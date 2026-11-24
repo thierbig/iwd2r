@@ -938,6 +938,9 @@ const BYTE CBaldurMessage::MSG_TYPE_DELETEAREA = 107;
 // 0x84CF73
 const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_POLL = 115;
 
+// 0x84CF74
+const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_VOTE = 114;
+
 // 0x84CF75
 const BYTE CBaldurMessage::MSG_SUBTYPE_DELETEAREA_RESULT = 100;
 
@@ -8057,13 +8060,64 @@ BOOLEAN CBaldurMessage::OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMe
 }
 
 // The area-map-note message pair: the client sends the note to the host, the
-// host announces it to everyone, and the receivers run the same `Add` the
-// local UI does (0x43A470/0x43A7C0, not ported yet - they call the Add stub at
-// 0x47B330). Payload, after the fixed message header: a BYTE-length area
+// host announces it to everyone, and the two receivers (0x43A470/0x43A7C0)
+// run the same CGameAreaNotes::Add the local UI does (0x47B330, fully ported
+// in src/CGameAreaNotes.cpp). Payload, after the fixed message header: a
+// BYTE-length area
 // resref, its bytes, the note's start X and Y as WORDs, a DWORD-length note
 // text, its bytes, the note's DWORD flags and its STRREF. DeleteANote sends an
 // empty text with flags 0 and STRREF -1, which `sub_47B150` reads as "remove".
 //
+// 0x43A7C0
+BOOLEAN CBaldurMessage::OnAnnounceAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's announce reaches the other machines; only an established
+    // session routes one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    // The same body the sender's handler decodes, after the 3-byte header:
+    //   {BYTE areaLen; char area[]; WORD startX; WORD startY;
+    //    DWORD noteLen; char note[]; DWORD dwFlags; STRREF strRef}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    WORD nStartX = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+    WORD nStartY = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+
+    DWORD nNoteLength = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    CString sNote(reinterpret_cast<char*>(pByteMessage + nOffset), nNoteLength);
+    nOffset += nNoteLength;
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+
+    // The announce flag keeps Add from sending the note back to the host (the
+    // client branch of CGameAreaNotes::Add checks it), so the receiving
+    // machine applies the note locally. The trailing STRREF is unread, as in
+    // 0x43A470 (-1 lets Add resolve the text itself).
+    m_bInOnAreaMapNoteAnnounce = TRUE;
+    g_pBaldurChitin->GetObjectGame()->GetArea(sArea)->GetAreaNotes()->Add(sArea,
+        nStartX,
+        nStartY,
+        sNote,
+        dwFlags,
+        -1);
+    m_bInOnAreaMapNoteAnnounce = FALSE;
+
+    return TRUE;
+}
+
 // 0x43A210
 BOOLEAN CBaldurMessage::SendAreaMapNoteToServer(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef)
 {
@@ -8208,6 +8262,55 @@ BOOLEAN CBaldurMessage::AnnounceAreaMapNote(CString sArea, WORD nStartX, WORD nS
         dwSize);
 
     DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
+// 0x43A470
+BOOLEAN CBaldurMessage::OnSendAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host receives the client's note; only an established session
+    // routes one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    // The sender's body, after the 3-byte header (the original trusts the
+    // two lengths):
+    //   {BYTE areaLen; char area[]; WORD startX; WORD startY;
+    //    DWORD noteLen; char note[]; DWORD dwFlags; STRREF strRef}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    WORD nStartX = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+    WORD nStartY = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+
+    DWORD nNoteLength = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    CString sNote(reinterpret_cast<char*>(pByteMessage + nOffset), nNoteLength);
+    nOffset += nNoteLength;
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+
+    // NOTE: The original reads the flags and passes the text reference as -1:
+    // the trailing STRREF both senders put on the wire is not read, and the
+    // note is re-resolved locally from its text (CGameAreaNotes::Add adds the
+    // TLK override itself). Kept, as the binary has it.
+    g_pBaldurChitin->GetObjectGame()->GetArea(sArea)->GetAreaNotes()->Add(sArea,
+        nStartX,
+        nStartY,
+        sNote,
+        dwFlags,
+        -1);
 
     return TRUE;
 }
@@ -8377,6 +8480,160 @@ BOOLEAN CBaldurMessage::OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DW
 }
 
 // FIXME: `sAreaString` should be reference.
+// 0x43B080
+BOOLEAN CBaldurMessage::OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's poll reaches the clients; only a connected client votes.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The poll after the 3-byte header: {BYTE areaLen; char area[]}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The client votes yes when the area exists, holds no creatures and is
+    // not the game's master area; an existing vote marker is cleared.
+    BOOLEAN bVote = FALSE;
+    CGameArea* pArea = pGame->GetArea(sArea);
+    if (pArea != NULL
+        && pArea->m_nCharacters == 0
+        && pArea != pGame->m_pGameAreaMaster) {
+        pArea->field_AE6 = 0;
+        bVote = TRUE;
+    }
+
+    SendDeleteAreaVote(sArea, bVote);
+
+    return TRUE;
+}
+
+// 0x43B680
+BOOLEAN CBaldurMessage::DeleteArea(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's result reaches the clients; only a connected client acts on
+    // it.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    // The result after the 3-byte header: {BYTE areaLen; char area[];
+    // BYTE bDelete}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+    BYTE bDelete = pByteMessage[nOffset];
+
+    CGameArea* pArea = g_pBaldurChitin->GetObjectGame()->GetArea(sArea);
+    if (pArea != NULL) {
+        if (bDelete == 1) {
+            g_pBaldurChitin->m_pEngineWorld->DeleteArea(pArea);
+        } else {
+            // Not deleted: leave the area marked so the client will not try
+            // to enter it again.
+            pArea->field_AE6 = 1;
+        }
+    }
+
+    return TRUE;
+}
+
+// 0x43B380
+BOOLEAN CBaldurMessage::OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // The vote arrives at the host, which is running the poll.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost != TRUE) {
+        return FALSE;
+    }
+
+    // A client's vote after the 3-byte header: {BYTE areaLen; char area[];
+    // BYTE vote}.
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+    BYTE nVote = pByteMessage[nOffset];
+
+    // Only a vote for the area being polled counts, and only in the poll's
+    // matching voter slot. The tally itself is DeleteAreaBallotResult's.
+    if (m_bDeleteAreaPolling == TRUE) {
+        if (strcmp(GetDeleteAreaString(), sArea) == 0) {
+            PLAYER_ID nPlayerID = g_pChitin->cNetwork.GetPlayerID(nMsgFrom);
+            for (INT nPlayer = 0; nPlayer < 6; nPlayer++) {
+                if (m_pnDeleteAreaVoters[nPlayer] == nPlayerID) {
+                    m_pnDeleteAreaVotes[nPlayer] = nVote;
+                }
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+// 0x43B1A0
+BOOLEAN CBaldurMessage::SendDeleteAreaVote(CString sArea, BOOLEAN bVote)
+{
+    char nVote = bVote == TRUE ? 'y' : 'n';
+
+    // Only a client votes: the host receives the votes (0x43B380), it never
+    // sends one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished
+        || g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        return FALSE;
+    }
+
+    CString sHostName;
+    g_pChitin->cNetwork.GetHostPlayerName(sHostName);
+
+    if (sHostName == "") {
+        return FALSE;
+    }
+
+    DWORD nAreaLength = sArea.GetLength();
+    DWORD dwSize = sizeof(BYTE) + nAreaLength + sizeof(BYTE);
+
+    BYTE* pByteMessage = CreateBuffer(dwSize);
+    if (pByteMessage == NULL) {
+        return FALSE;
+    }
+
+    DWORD cnt = 0;
+    pByteMessage[cnt++] = static_cast<BYTE>(nAreaLength);
+    memcpy(pByteMessage + cnt, sArea.GetBuffer(nAreaLength), nAreaLength);
+    cnt += nAreaLength;
+    pByteMessage[cnt++] = static_cast<BYTE>(nVote);
+
+    g_pChitin->cNetwork.SendSpecificMessage(sHostName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_DELETEAREA,
+        MSG_SUBTYPE_DELETEAREA_VOTE,
+        pByteMessage,
+        dwSize);
+
+    DestroyBuffer(pByteMessage);
+
+    return TRUE;
+}
+
 //
 // 0x43AE40
 BOOLEAN CBaldurMessage::StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend)

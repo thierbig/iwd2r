@@ -184,6 +184,7 @@ public:
 
     static const BYTE MSG_TYPE_DELETEAREA;
     static const BYTE MSG_SUBTYPE_DELETEAREA_POLL;
+    static const BYTE MSG_SUBTYPE_DELETEAREA_VOTE;
     static const BYTE MSG_SUBTYPE_DELETEAREA_RESULT;
 
     static const BYTE MSG_TYPE_KICK_PLAYER;
@@ -425,12 +426,18 @@ public:
     BOOLEAN OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendAreaMapNoteToServer(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
     BOOLEAN AnnounceAreaMapNote(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef);
+    BOOLEAN OnSendAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnAnnounceAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN SendBiographyToServer(BYTE nFixedPartyId, CString szBio);
     BOOLEAN OnSendBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN AnnounceBiography(BYTE nFixedPartyId, CString szBio);
     BOOLEAN OnAnnounceBiography(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void SetDeleteAreaString(CString sAreaString);
     CString GetDeleteAreaString();
+    BOOLEAN SendDeleteAreaVote(CString sArea, BOOLEAN bVote);
+    BOOLEAN OnDeleteAreaPoll(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN OnDeleteAreaResult(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
+    BOOLEAN DeleteArea(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN StartDeleteAreaPoll(CString sAreaString, BOOLEAN bResend);
     BOOLEAN ResolveDeleteAreaPoll(CString sAreaString, BOOLEAN bResult);
     BOOLEAN CanResolveDeleteAreaPoll();
