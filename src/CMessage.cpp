@@ -15809,6 +15809,41 @@ BYTE CMessageSpriteUpdate::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_UPDATE;
 }
 
+// Whether this sprite update applies in `sAreaString` -- the area a party
+// transition is entering at every call site. TRUE when the message carries
+// no area ("NO_AREA", what Run 0x50D6F0 stores for a sprite in none) or when
+// its captured area (m_sAreaString, at +0x1C) is `sAreaString`, compared
+// case-insensitively (CompareStrings 0x7E8182 is lstrcmpi; the sentinel test
+// is the case-sensitive strcmp 0x7E7A54). The argument is a by-value CString:
+// the callee destroys its own copy (SEH entry 0x818E58; the CString
+// destructor 0x7FCC1A is called at 0x50D6AE and 0x50D6D3) and returns
+// with `ret 4`.
+//
+// The exports leave the function unnamed; the callers are its identity.
+// Every call site passes the CMessageSpriteUpdate it just built in ecx
+// (ctor 0x50C260) and the body reads no other member. All six call sites
+// -- three in CInfGame::sub_5C4AD0, three in
+// CScreenWorldMap::MoveToArea -- are in the multiplayer-only blocks both
+// functions leave unported (docs/adr/0002-single-player-only.md), so the
+// body is dormant in single player; the unit test in
+// tests/test_message_sprite_update.cpp covers it directly.
+//
+// 0x50D660
+BOOL CMessageSpriteUpdate::sub_50D660(CString sAreaString)
+{
+    // The sentinel is a plain strcmp, so "no_area" is not it and is treated
+    // as an ordinary area name below.
+    if (strcmp(m_sAreaString, "NO_AREA") == 0) {
+        return TRUE;
+    }
+
+    if (_stricmp(sAreaString, m_sAreaString) == 0) {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 // 0x50D6F0
 void CMessageSpriteUpdate::Run()
 {
