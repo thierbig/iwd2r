@@ -783,6 +783,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CString m_name;
@@ -912,6 +913,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIAction m_action;
@@ -1064,6 +1067,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ LONG m_wait;
@@ -1142,6 +1147,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIObjectType m_lAttacker;
@@ -1154,6 +1161,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CAIObjectType m_lAttacker;
@@ -1509,6 +1518,8 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     void Run() override;
 
     /* 000C */ CResRef m_cResRefDialog;

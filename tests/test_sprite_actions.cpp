@@ -615,6 +615,13 @@ TEST_CASE("sprite: ProtectPoint queues its return path and swings at a nearby en
     pCharacter->SetCurrAction(CAIAction(CAIAction::PROTECTPOINT, guard,
         8 * CPathSearch::GRID_SQUARE_SIZEX, -1));
     pCharacter->m_attackFrame = -2;
+    // Swing draws the round's speed from rand() (UtilRandInt(6, -luck)), and
+    // CChitin::CChitin seeds rand() from the clock (srand(time(NULL)) at
+    // src/CChitin.cpp:994), so on part of the draws the round starts on an
+    // ACTION_NORMAL frame (the audit's wizard-first failure: its dagger
+    // gives m_speedFactor 0 for small draws). Pin the draw: this seed keeps
+    // the start frame INTERRUPTABLE for every CHR class in the matrix.
+    srand(0x1000);
     CHECK(pCharacter->ExecuteAction() == CGameAIBase::ACTION_INTERRUPTABLE);
     CHECK(pCharacter->m_attackFrame == 0);
     CHECK(pCharacter->m_curAction.m_actionID == CAIAction::PROTECTPOINT);
@@ -3599,42 +3606,47 @@ TEST_CASE("sprite: action 224 gives the droppable equipped items to the party", 
     INFO(error);
     FramePump pump;
 
-    // The first pregenerated character with a droppable (file flag 0x4)
-    // equipped item somewhere but the fist's slot.
-    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
-    std::vector<BYTE> cre;
-    for (std::vector<BYTE>& candidate : candidates) {
-        CGameSprite* pProbe = new CGameSprite(candidate.data(),
-            static_cast<LONG>(candidate.size()),
-            0,
-            0,
-            static_cast<DWORD>(-1),
-            0,
-            0,
-            INT_MAX,
-            CPoint(-1, -1),
-            0);
-        BOOL bHas = FALSE;
-        for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT && !bHas; nSlot++) {
-            if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
-                continue;
-            }
-            CItem* pItem = pProbe->GetEquipment()->m_items[nSlot];
-            if (pItem != NULL) {
-                bHas = (pItem->GetFlagsFile() & 0x4) != 0;
-            }
-        }
-        delete pProbe;
-        if (bHas) {
-            cre = candidate;
-            break;
-        }
-    }
+    // The first CHR, whatever its class: its inventory is replaced below.
+    // The premade's layout cannot be trusted for this walk - the audit's
+    // paladin wears its droppable shield in slot 44 right after the sword in
+    // 43, and the hand-out walk's shared slot counter steps once more after
+    // a handout, so it never reaches that shield.
+    std::vector<BYTE> cre = FinishedCharacter();
     if (cre.empty()) {
-        SKIP("[iwd2r-skip] no CHR V2.2 character with a droppable equipped item");
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
     }
     CGameSprite* pCharacter = NewGameInStartArea(cre);
     CGameSpriteEquipment* pEquipment = pCharacter->GetEquipment();
+
+    // Deterministic equipment: droppable (ITM file flag 0x4) items in the
+    // armor, ammo and weapon slots, which are not adjacent to each other, so
+    // the walk reaches every one; an undroppable shield in the off-hand slot
+    // 44 the paladin audit tripped over; the fist's own item untouched.
+    for (SHORT nSlot = 0; nSlot < CGameSpriteEquipment::NUM_SLOT; nSlot++) {
+        if (nSlot == CGameSpriteEquipment::SLOT_FIST) {
+            continue;
+        }
+        if (pEquipment->m_items[nSlot] != NULL) {
+            delete pEquipment->m_items[nSlot];
+            pEquipment->m_items[nSlot] = NULL;
+        }
+    }
+    auto equip = [&](SHORT nSlot, const char* sResRef) {
+        CItem* pItem = new CItem(CResRef(sResRef), 0, 0, 0, 0, 0);
+        pEquipment->m_items[nSlot] = pItem;
+        pItem->Equip(pCharacter, nSlot, FALSE);
+        REQUIRE((pItem->GetFlagsFile() & 0x4) != 0);
+    };
+    equip(CGameSpriteEquipment::SLOT_ARMOR, "00LEAT01");
+    equip(CGameSpriteEquipment::SLOT_AMMO, "00BOLT01");
+    equip(CGameSpriteEquipment::SLOT_WEAPON, "00AX1H01");
+    const SHORT nOffHand = CGameSpriteEquipment::SLOT_WEAPON + 1;
+    CItem* pUndroppable = new CItem(CResRef("00CISHLB"), 0, 0, 0, 0, 0);
+    pEquipment->m_items[nOffHand] = pUndroppable;
+    pUndroppable->Equip(pCharacter, nOffHand, FALSE);
+    REQUIRE((pUndroppable->GetFlagsFile() & 0x4) == 0);
+    pEquipment->m_selectedWeapon = CGameSpriteEquipment::SLOT_WEAPON;
+    pEquipment->m_selectedWeaponAbility = 0;
 
     // The droppable slots and their resrefs.
     std::vector<SHORT> slots;
@@ -3690,7 +3702,10 @@ TEST_CASE("sprite: action 224 gives the droppable equipped items to the party", 
         CHECK(bFound);
     }
 
-    // The fist's slot is never touched (a weapon there stays).
+    // The undroppable off-hand item the walk skips stays equipped, and the
+    // fist's slot is never touched (its item stays).
+    CHECK(pEquipment->m_items[nOffHand] == pUndroppable);
+    CHECK(pEquipment->m_items[CGameSpriteEquipment::SLOT_FIST] != NULL);
     ClearMessages();
 }
 
