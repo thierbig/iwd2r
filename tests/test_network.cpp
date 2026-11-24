@@ -745,215 +745,6 @@ TEST_CASE("CBaldurMessage::OnResourceDemanded answers only the host and echoes a
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
-// AREAMAPNOTE A/a (97) handler: the host's announce to the other machines.
-// Same body as the send handler, with the m_bInOnAreaMapNoteAnnounce flag set
-// around CGameAreaNotes::Add so the receiving machine applies the note
-// locally instead of sending it on. The guard needs no game state.
-TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[msg][network]")
-{
-    ChitinScope scope;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    // {header 0xFF, AREAMAPNOTE 65, announce 97, zeroed body}
-    BYTE packet[3 + 1 + 8 + 2 + 2 + 4 + 4 + 4] = { 0 };
-    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
-    packet[1] = CBaldurMessage::MSG_TYPE_AREAMAPNOTE;
-    packet[2] = CBaldurMessage::MSG_SUBTYPE_AREAMAPNOTE_ANNOUNCE;
-
-    CHECK(network.m_bConnectionEstablished == FALSE);
-    CHECK(message.OnAnnounceAreaMapNote(0, packet, sizeof(packet)) == FALSE);
-    CHECK(message.m_bInOnAreaMapNoteAnnounce == FALSE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
-// DELETEAREA k/d (100) result handler: the host's verdict on a polled area.
-// A client with an established session either deletes the named area from the
-// world screen or marks it undeletable; a miss on GetArea is a no-op, as in
-// the original.
-TEST_CASE("CBaldurMessage::DeleteArea refuses without a session or on the host", "[msg][network]")
-{
-    ChitinScope scope;
-    MessageGameScope game;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    // {header 0xFF, DELETEAREA 107, result 100, BYTE 6 "AR1000", BYTE 1}
-    BYTE packet[3 + 1 + 6 + 1] = { 0 };
-    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
-    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
-    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_RESULT;
-    packet[3] = 6;
-    memcpy(packet + 4, "AR1000", 6);
-    packet[10] = 1;
-
-    CHECK(network.m_bConnectionEstablished == FALSE);
-    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == FALSE);
-
-    network.m_bConnectionEstablished = TRUE;
-    network.m_bIsHost = TRUE;
-    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == FALSE);
-
-    // A client whose game has no such area answers TRUE after the no-op.
-    network.m_bIsHost = FALSE;
-    CHECK(message.DeleteArea(0, packet, sizeof(packet)) == TRUE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
-// DELETEAREA k/r (114) vote receiver: the host tallies each client's answer
-// into the poll's per-player slots. Only a vote for the area being polled
-// counts, and only from a player the poll recorded as a voter.
-TEST_CASE("CBaldurMessage::OnDeleteAreaResult stores a vote in the poll's voter slot", "[msg][network]")
-{
-    ChitinScope scope;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    // GetPlayerID maps a player location only when the slot is visible.
-    network.m_pPlayerID[1] = 77;
-    network.m_pbPlayerVisible[1] = TRUE;
-
-    // {header 0xFF, DELETEAREA 107, vote 114, BYTE 6 "AR1000", BYTE 'y'}
-    BYTE packet[3 + 1 + 6 + 1] = { 0 };
-    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
-    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
-    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_VOTE;
-    packet[3] = 6;
-    memcpy(packet + 4, "AR1000", 6);
-    packet[10] = 'y';
-
-    // A closed session and a client are refused before the decode.
-    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == FALSE);
-
-    network.m_bConnectionEstablished = TRUE;
-    network.m_bIsHost = FALSE;
-    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == FALSE);
-
-    // The host records the vote only for the polled area and a known voter.
-    network.m_bIsHost = TRUE;
-    message.m_bDeleteAreaPolling = TRUE;
-    message.SetDeleteAreaString(CString("AR1000"));
-    message.m_pnDeleteAreaVoters[1] = 77;
-    message.m_pnDeleteAreaVotes[1] = CBaldurMessage::DELETEAREA_EMPTY_VOTE;
-
-    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == TRUE);
-    CHECK(message.m_pnDeleteAreaVotes[1] == 'y');
-
-    // A vote for another area leaves the slot alone.
-    message.m_pnDeleteAreaVotes[1] = CBaldurMessage::DELETEAREA_EMPTY_VOTE;
-    message.SetDeleteAreaString(CString("AR2000"));
-    CHECK(message.OnDeleteAreaResult(1, packet, sizeof(packet)) == TRUE);
-    CHECK(message.m_pnDeleteAreaVotes[1] == CBaldurMessage::DELETEAREA_EMPTY_VOTE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    message.m_bDeleteAreaPolling = FALSE;
-    message.SetDeleteAreaString(CString(""));
-    message.m_pnDeleteAreaVoters[1] = 0;
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
-// DELETEAREA k/s (115) poll handler: the host asks each client whether one of
-// its areas may be deleted. A client votes yes when the area exists, holds no
-// creatures and is not the master area, and answers through
-// SendDeleteAreaVote. The guards and the miss arm take a zeroed game.
-TEST_CASE("CBaldurMessage::OnDeleteAreaPoll votes on the named area", "[msg][network]")
-{
-    ChitinScope scope;
-    MessageGameScope game;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    // {header 0xFF, DELETEAREA 107, poll 115, BYTE 6 "AR1000"}
-    BYTE packet[3 + 1 + 6] = { 0 };
-    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
-    packet[1] = CBaldurMessage::MSG_TYPE_DELETEAREA;
-    packet[2] = CBaldurMessage::MSG_SUBTYPE_DELETEAREA_POLL;
-    packet[3] = 6;
-    memcpy(packet + 4, "AR1000", 6);
-
-    // A closed session and the host itself are refused before the decode.
-    CHECK(network.m_bConnectionEstablished == FALSE);
-    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == FALSE);
-
-    network.m_bConnectionEstablished = TRUE;
-    network.m_bIsHost = TRUE;
-    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == FALSE);
-
-    // A client whose game has no such area votes no (through the sender,
-    // which finds no host in this fake session) and the handler still
-    // answers TRUE, as the original does.
-    network.m_bIsHost = FALSE;
-    CHECK(message.OnDeleteAreaPoll(0, packet, sizeof(packet)) == TRUE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
-// DELETEAREA k/r (114) vote sender: a client answers the host's poll with
-// 'y' or 'n' for the area it was asked about. Both guards and the empty
-// host-name arm need no game state.
-TEST_CASE("CBaldurMessage::SendDeleteAreaVote needs a connected client and a host name", "[msg][network]")
-{
-    ChitinScope scope;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    CHECK(network.m_bConnectionEstablished == FALSE);
-    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
-
-    // The host never sends a vote.
-    network.m_bConnectionEstablished = TRUE;
-    network.m_bIsHost = TRUE;
-    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
-
-    // A connected client with no host in the session has nobody to answer.
-    network.m_bIsHost = FALSE;
-    CHECK(message.SendDeleteAreaVote(CString("AR1000"), TRUE) == FALSE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
-// AREAMAPNOTE A/n (110) handler: the client's note to the host. It decodes
-// the area, the grid position, the note text and its flags and runs
-// CGameAreaNotes::Add for the named area. The guard needs no game state; the
-// post-guard body needs the area loaded (Add dereferences GetArea's result,
-// as the original does).
-TEST_CASE("CBaldurMessage::OnSendAreaMapNote refuses without a session", "[msg][network]")
-{
-    ChitinScope scope;
-    CNetwork& network = g_pChitin->cNetwork;
-    CBaldurMessage message;
-
-    // {header 0xFF, AREAMAPNOTE 65, send 110, zeroed body}
-    BYTE packet[3 + 1 + 8 + 2 + 2 + 4 + 4 + 4] = { 0 };
-    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
-    packet[1] = CBaldurMessage::MSG_TYPE_AREAMAPNOTE;
-    packet[2] = CBaldurMessage::MSG_SUBTYPE_AREAMAPNOTE_SEND;
-
-    CHECK(network.m_bConnectionEstablished == FALSE);
-    CHECK(message.OnSendAreaMapNote(0, packet, sizeof(packet)) == FALSE);
-
-    // Leave the embedded CNetwork closed before the ChitinScope restores
-    // g_pChitin (its destructor would otherwise call OnCloseSession).
-    network.m_bConnectionEstablished = FALSE;
-    network.m_bIsHost = FALSE;
-}
-
 // LEAVEAREALUA 88/82 permit handler. The two entry guards need no game state.
 TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a session or a host", "[msg][network]")
 {
@@ -971,6 +762,136 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a sessi
     network.m_bConnectionEstablished = TRUE;
     network.m_bIsHost = FALSE;
     CHECK(message.OnLeaveAreaLuaRequestToServer(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREALUA 88/114 cancel handler: the client records the host's reply
+// code in its waiting slot. It takes the buffer and a dwSize it ignores (the
+// original's 2-argument `ret 8` form), and neither guard needs game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xCD };
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // A closed session is refused before the payload is read.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // Only a client waits for the cancel; the host's own request never
+    // reaches this handler.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // The client stores the payload byte after the 3-byte header and marks
+    // the reply returned.
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaLuaReplyValue == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/114 cancel handler: the LEAVEAREALUA cancel's twin,
+// with its own waiting slot. Two-argument `ret 8` form, no game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xAB };
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaNameReplyValue == 0xAB);
+
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREALUA 88/65 announce handler: the host tells a client to make one
+// sprite leave an area. The two entry guards need no game state; after them
+// the handler decodes the announce and calls CInfGame::LeaveAreaLUA, which
+// needs a booted game (its own paths are covered by the permit-reply case
+// below and by tests/test_ui_misc.cpp's travel scenario).
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREALUA 88, announce 65, zeroed body}; the announce
+    // subtype has no in-tree constant (the survey's X/A row publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 2 + 1 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Only a client acts on the announce.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/65 announce handler: the host tells a client's copy of
+// a party member to run a party-required trigger's transition. The guard
+// needs no game state; after it the handler decodes the announce and calls
+// CInfGame::sub_5C4AD0, which on the client side waits for the host's
+// signals (tests/test_ui_misc.cpp's travel scenario and 5C4AD0.md cover it).
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREANAME 120, announce 65, zeroed body}; the
+    // announce subtype has no in-tree constant (the survey's x/A row
+    // publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREANAME;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
 
     // Leave the embedded CNetwork closed before the ChitinScope restores
     // g_pChitin (its destructor would otherwise call OnCloseSession).
@@ -2486,3 +2407,150 @@ TEST_CASE("msg: OnCharacterPartyOrderReply accepts the host's answer", "[network
 
     g_pChitin->pActiveEngine = NULL;
 }
+
+// -----------------------------------------------------------------------------
+// #121 G15: the chapter/mapworld/movie/rest/reform/weather/time handlers.
+//
+// These are thin multiplayer-only shells around engine calls that need a live
+// screen/area, so the fixture pins the guards (the payload layouts are checked
+// by the evidence notes and the dispatcher arms). No handler is called with
+// passing guards on the zeroed engine.
+
+namespace {
+
+BYTE* G15Packet(BYTE nType, BYTE nSubType)
+{
+    static BYTE packet[64];
+    std::memset(packet, 0, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = nType;
+    packet[2] = nSubType;
+    return packet;
+}
+
+void G15Session(BOOLEAN bConnected, BOOLEAN bHost)
+{
+    CNetwork& network = g_pChitin->cNetwork;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = bConnected;
+    network.m_bIsHost = bHost;
+    network.m_idLocalPlayer = 1;
+    network.m_nHostPlayer = 0;
+    network.m_psPlayerName[0] = "host";
+    network.m_pPlayerID[0] = 2;
+    network.m_pbPlayerVisible[0] = TRUE;
+}
+
+} // namespace
+
+TEST_CASE("msg: the G15 handlers refuse a closed session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    G15Session(FALSE, FALSE);
+
+    CBaldurMessage message;
+
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA);
+    CHECK(message.OnMapWorldRevealArea(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CBaldurMessage message;
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+
+    // Client-only handlers on a host machine.
+    G15Session(TRUE, TRUE);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
+
+    // Host-only handlers on a client machine.
+    G15Session(TRUE, FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
