@@ -423,6 +423,9 @@ public:
     BOOLEAN OnSettingsNightmareMode(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN DemandSettingsNightmareMode(BOOLEAN wait);
     BOOL OnDemandSettingsNightmareMode(INT nMsgFrom);
+    BOOLEAN OnDemandCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN SendCharacterUpdate(const CString& sPlayerName, LONG nObject);
+    BOOLEAN OnCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMovieEndCredits(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOL DisplayText(const CString& sName, const CString& sText, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);
     BOOL DisplayTextRef(STRREF name, STRREF text, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);

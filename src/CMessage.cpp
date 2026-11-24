@@ -7418,7 +7418,7 @@ void CBaldurMessage::HandleBlockingMessages()
         nMsgFrom,
         dwSize);
     if (pData != NULL) {
-        OnDemandSettingsNightmareMode(nMsgFrom);
+        OnDemandCharacterUpdate(nMsgFrom, pData, dwSize);
         delete pData;
     }
 
@@ -7852,6 +7852,128 @@ BOOL CBaldurMessage::OnDemandSettingsNightmareMode(INT nMsgFrom)
 
     g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
     SendSettingsNightmareMode(sPlayerName);
+
+    return TRUE;
+}
+
+// 0x43DC40
+BOOLEAN CBaldurMessage::OnDemandCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    CString sPlayerName;
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The payload is the object's wire ids {PLAYER_ID; LONG} after the
+    // 3-byte message header (0x85E670); the object is found through the
+    // remote-object array.
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<DWORD*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    g_pChitin->cNetwork.GetPlayerName(nMsgFrom, sPlayerName);
+    SendCharacterUpdate(sPlayerName, nObject);
+
+    return TRUE;
+}
+
+// 0x43DD20
+BOOLEAN CBaldurMessage::SendCharacterUpdate(const CString& sPlayerName, LONG nObject)
+{
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    // The wire payload is {the sprite's PLAYER_ID; its remote LONG} followed
+    // by the timed effect list marshalled at version 1 (the base-part form
+    // the save game writes, 0x4C0A30).
+    BYTE* pEffects = NULL;
+    DWORD dwEffectsSize = pSprite->m_timedEffectList.Marshal(&pEffects, 1, FALSE);
+    DWORD dwSize = sizeof(DWORD) + sizeof(LONG) + dwEffectsSize;
+    BYTE* pMessage = CreateBuffer(dwSize);
+    *reinterpret_cast<DWORD*>(pMessage) = pSprite->m_remotePlayerID;
+    *reinterpret_cast<LONG*>(pMessage + sizeof(DWORD)) = pSprite->m_remoteObjectID;
+    if (dwEffectsSize != 0) {
+        memcpy(pMessage + sizeof(DWORD) + sizeof(LONG), pEffects, dwEffectsSize);
+    }
+    delete[] reinterpret_cast<CGameEffectBase*>(pEffects);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    g_pChitin->cNetwork.SendSpecificMessage(sPlayerName,
+        CNetwork::SEND_GUARANTEED,
+        MSG_TYPE_PLAYERCHAR,
+        MSG_SUBTYPE_PLAYERCHAR_102,
+        pMessage,
+        dwSize);
+
+    DestroyBuffer(pMessage);
+
+    return TRUE;
+}
+
+// 0x43DE50
+BOOLEAN CBaldurMessage::OnCharacterUpdate(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+
+    CGameSprite* pSprite;
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    // The same {PLAYER_ID; LONG} pair as the send side; the effect list
+    // follows it (0xB = the 3-byte header + the pair).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<DWORD*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetDeny(nObject,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        return FALSE;
+    }
+
+    pSprite->m_timedEffectList.Unmarshal(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(DWORD) + sizeof(LONG),
+        dwSize - CNetwork::SPEC_MSG_HEADER_LENGTH - sizeof(DWORD) - sizeof(LONG),
+        pSprite,
+        1);
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseDeny(nObject,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
 
     return TRUE;
 }
