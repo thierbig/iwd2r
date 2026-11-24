@@ -1925,4 +1925,3 @@ TEST_CASE("msg: CMessageSetLastAttacker round-trips its attacker type", "[networ
     missingTarget.MarshalMessage(&pPacked, &packedSize);
     CHECK(packedSize == 0);
 }
-
