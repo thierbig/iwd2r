@@ -7478,6 +7478,56 @@ BOOLEAN CBaldurMessage::OnAnnounceJournalEntryChange(INT nMsgFrom, BYTE* pByteMe
 // text, its bytes, the note's DWORD flags and its STRREF. DeleteANote sends an
 // empty text with flags 0 and STRREF -1, which `sub_47B150` reads as "remove".
 //
+// 0x43A7C0
+BOOLEAN CBaldurMessage::OnAnnounceAreaMapNote(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's announce reaches the other machines; only an established
+    // session routes one.
+    if (!g_pChitin->cNetwork.m_bConnectionEstablished) {
+        return FALSE;
+    }
+
+    // The same body the sender's handler decodes, after the 3-byte header:
+    //   {BYTE areaLen; char area[]; WORD startX; WORD startY;
+    //    DWORD noteLen; char note[]; DWORD dwFlags; STRREF strRef}
+    DWORD nOffset = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nAreaLength = pByteMessage[nOffset];
+    nOffset += sizeof(BYTE);
+    CString sArea(reinterpret_cast<char*>(pByteMessage + nOffset), nAreaLength);
+    nOffset += nAreaLength;
+
+    WORD nStartX = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+    WORD nStartY = *reinterpret_cast<WORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(WORD);
+
+    DWORD nNoteLength = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+    nOffset += sizeof(DWORD);
+    CString sNote(reinterpret_cast<char*>(pByteMessage + nOffset), nNoteLength);
+    nOffset += nNoteLength;
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pByteMessage + nOffset);
+
+    // The announce flag keeps Add from sending the note back to the host (the
+    // client branch of CGameAreaNotes::Add checks it), so the receiving
+    // machine applies the note locally. The trailing STRREF is unread, as in
+    // 0x43A470 (-1 lets Add resolve the text itself).
+    m_bInOnAreaMapNoteAnnounce = TRUE;
+    g_pBaldurChitin->GetObjectGame()->GetArea(sArea)->GetAreaNotes()->Add(sArea,
+        nStartX,
+        nStartY,
+        sNote,
+        dwFlags,
+        -1);
+    m_bInOnAreaMapNoteAnnounce = FALSE;
+
+    return TRUE;
+}
+
 // 0x43A210
 BOOLEAN CBaldurMessage::SendAreaMapNoteToServer(CString sArea, WORD nStartX, WORD nStartY, CString sNote, DWORD dwFlags, STRREF strRef)
 {

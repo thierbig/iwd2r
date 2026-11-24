@@ -745,6 +745,32 @@ TEST_CASE("CBaldurMessage::OnResourceDemanded answers only the host and echoes a
     network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
+// AREAMAPNOTE A/a (97) handler: the host's announce to the other machines.
+// Same body as the send handler, with the m_bInOnAreaMapNoteAnnounce flag set
+// around CGameAreaNotes::Add so the receiving machine applies the note
+// locally instead of sending it on. The guard needs no game state.
+TEST_CASE("CBaldurMessage::OnAnnounceAreaMapNote refuses without a session", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, AREAMAPNOTE 65, announce 97, zeroed body}
+    BYTE packet[3 + 1 + 8 + 2 + 2 + 4 + 4 + 4] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_AREAMAPNOTE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_AREAMAPNOTE_ANNOUNCE;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnAnnounceAreaMapNote(0, packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bInOnAreaMapNoteAnnounce == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // AREAMAPNOTE A/n (110) handler: the client's note to the host. It decodes
 // the area, the grid position, the note text and its flags and runs
 // CGameAreaNotes::Add for the named area. The guard needs no game state; the
