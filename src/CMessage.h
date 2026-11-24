@@ -1353,6 +1353,9 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    void MarshalMessage(BYTE** pData, DWORD* dwSize) override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
+    void Run() override;
 
     /* 000C */ CGameSpriteEquipment m_equipment;
     /* 00E0 */ BYTE m_nWeaponSet;
@@ -1378,6 +1381,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     BOOL sub_50D660(CString sAreaString);
     void Run() override;
 
