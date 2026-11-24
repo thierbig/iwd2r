@@ -1697,6 +1697,11 @@ public:
 // Run 0x513180) is ported under CMessage96, the other face of the same exe
 // class; the overrides stay undeclared here so the ctor can define the
 // vtable without undefined entries.
+//
+// NOTE: not the class issue #121's rows 115-117 point at. Those addresses
+// (vtable 0x84D37C) are CMessage95's, the dominate link message above; this
+// class's own pair is ported here and is live from CGameEffectDeath's
+// dismissed-summon path.
 class CMessageRemoveSummonLink : public CMessage {
 public:
     CMessageRemoveSummonLink(LONG summonedId, LONG caller, LONG target);
@@ -1729,6 +1734,14 @@ public:
 // (Icewind586B70::sub_586F20) and changes no object itself. The original
 // C++ class name is unrecovered; the tree names it by its verified subtype
 // 95 (getter 0x4F6BB0), like CMessage89/CMessage96/CMessage97.
+//
+// NOTE: issue #121's survey files this class's three virtuals under the name
+// `CMessageRemoveSummonLink` (rows 115-117, vtable 0x84D37C): 0x512AC0
+// Marshal, 0x512C80 Unmarshal and 0x512D50 Run are exactly the overrides
+// below, already ported here. They are not a second, unported class: the
+// real CMessageRemoveSummonLink is the vtable-0x84C38C class below, whose
+// network face (0x512FE0/0x513100) is ported and whose dispatch face is
+// CMessage96. So G11 needs no port and no drop note.
 class CMessage95 : public CMessage {
 public:
     // NOTE: Out-of-line ctor 0x4F6B80; the effect's copy at 0x56485D is the

@@ -27192,7 +27192,7 @@ BOOL CMessage120::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
-// 0x514CB0
+// 0x514F00
 void CMessage120::Run()
 {
     if (g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
