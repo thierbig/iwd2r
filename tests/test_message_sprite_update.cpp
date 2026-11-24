@@ -756,3 +756,261 @@ TEST_CASE("sprite update: UnmarshalMessage decodes the field groups it marks pre
     packet[kSpecHeader + 1] = 0xAA;
     CHECK(unknown.UnmarshalMessage(packet, cnt) == FALSE);
 }
+
+// ---------------------------------------------------------------------------
+// CMessageSpriteUpdate::MarshalMessage (0x50C550): the differential encoder
+// of the subtype 57 wire record against the sprite's CGameSpriteLastUpdate
+// shadow, decoded by the already-ported UnmarshalMessage (0x50D290).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr DWORD kPacketSize = 0x4000;
+
+// CGameRemoteObjectArray::Add leaves an empty bucket null (its else branch
+// stores NULL), so the entry is inserted into the array's public bucket.
+void AddRemoteEntry(CInfGame* pGame, PLAYER_ID remotePlayerID, LONG remoteObjectID, LONG localObjectID)
+{
+    const SHORT arrayIndex = static_cast<SHORT>((remoteObjectID >> 16) & 0x7FFF);
+    CGameRemoteObjectListEntry* pEntry = new CGameRemoteObjectListEntry();
+    pEntry->remotePlayerID = remotePlayerID;
+    pEntry->remoteObjectID = remoteObjectID;
+    pEntry->localObjectID = localObjectID;
+    pEntry->pNext = pGame->m_cRemoteObjectArray.m_pArray[arrayIndex];
+    pGame->m_cRemoteObjectArray.m_pArray[arrayIndex] = pEntry;
+}
+
+} // namespace
+
+// The encoder takes the target's remote id pair from its object share and
+// writes the 12-byte record (remote ids, the field-group mask) plus the
+// differing groups in the decode order. A shadow marked for a full update
+// sends every group and clears the flag.
+TEST_CASE("sprite update: MarshalMessage round-trips a full update through UnmarshalMessage", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    pGame->UpdateCharacterSlots();
+    pGame->SetupCharacters(FALSE);
+    REQUIRE(pSprite->GetArea() != NULL);
+
+    pSprite->m_remotePlayerID = 0x1234;
+    pSprite->m_remoteObjectID = 0x5678;
+    AddRemoteEntry(pGame, 0x1234, 0x5678, pSprite->GetId());
+
+    CMessageSpriteUpdate sent(pSprite, 0, pSprite->GetId());
+    pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired = TRUE;
+
+    BYTE packet[kSpecHeader + kPacketSize];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPayload = packet + kSpecHeader;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPayload, &dwSize);
+
+    CHECK(packet[0] == 0xCD);
+    CHECK(static_cast<DWORD>(sent.field_108) == 0xFFFFFFFF);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired == FALSE);
+    REQUIRE(dwSize > 0xC);
+
+    CMessageSpriteUpdate received(NULL, 0, 0);
+    REQUIRE(received.UnmarshalMessage(packet, dwSize + kSpecHeader) == TRUE);
+
+    CHECK(received.m_targetId == pSprite->GetId());
+    CHECK(static_cast<DWORD>(received.field_108) == 0xFFFFFFFF);
+    CHECK(received.m_sAreaString == sent.m_sAreaString);
+    CHECK(received.m_nSequence == sent.m_nSequence);
+    CHECK(received.m_ptPosition == sent.m_ptPosition);
+    CHECK(received.m_nFacing == sent.m_nFacing);
+    CHECK(received.m_dwState == sent.m_dwState);
+    CHECK(received.m_spellStates == sent.m_spellStates);
+    CHECK(std::memcmp(received.m_baseSkills, sent.m_baseSkills, sizeof(sent.m_baseSkills)) == 0);
+    CHECK(std::memcmp(received.m_skills, sent.m_skills, sizeof(sent.m_skills)) == 0);
+    CHECK(received.field_106 == sent.field_106);
+    CHECK(received.m_nFadeSpeed == sent.m_nFadeSpeed);
+    CHECK(received.m_nTranslucent == sent.m_nTranslucent);
+    CHECK(received.m_visualEffects == sent.m_visualEffects);
+    CHECK(received.m_nHitPoints == sent.m_nHitPoints);
+    CHECK(received.m_nMaxHitPoints == sent.m_nMaxHitPoints);
+    CHECK(received.field_60 == sent.field_60);
+    CHECK(received.field_64 == sent.field_64);
+    CHECK(received.field_66 == sent.field_66);
+    CHECK(received.field_68 == sent.field_68);
+    CHECK(received.field_6A == sent.field_6A);
+    CHECK(received.m_nACCrushingMod == sent.m_nACCrushingMod);
+    CHECK(received.m_nACMissileMod == sent.m_nACMissileMod);
+    CHECK(received.m_nACPiercingMod == sent.m_nACPiercingMod);
+    CHECK(received.m_nACSlashingMod == sent.m_nACSlashingMod);
+    CHECK(received.m_nEnemyAlly == sent.m_nEnemyAlly);
+    CHECK(received.m_nEnemyAllyLive == sent.m_nEnemyAllyLive);
+    CHECK(received.m_nEnemyAllyStart == sent.m_nEnemyAllyStart);
+    CHECK(received.m_bMoralFailure == sent.m_bMoralFailure);
+    CHECK(received.m_bLevelUp == sent.m_bLevelUp);
+    CHECK(received.m_nHPCONBonusTotalOld == sent.m_nHPCONBonusTotalOld);
+    CHECK(received.field_74 == sent.field_74);
+    CHECK(received.m_nPath == sent.m_nPath);
+    CHECK(received.m_currPath == sent.m_currPath);
+    CHECK(received.m_ptDest == sent.m_ptDest);
+    CHECK(received.m_nMoveScale == sent.m_nMoveScale);
+    CHECK(received.field_85 == sent.field_85);
+    CHECK((received.m_pPath == NULL || received.m_nPath == 0
+        || std::memcmp(received.m_pPath, sent.m_pPath, sizeof(LONG) * sent.m_nPath) == 0));
+
+    // The encoder updated every shadow group it sent, the area name included.
+    CHECK(pSprite->m_cLastSpriteUpdate.m_nHitPoints == sent.m_nHitPoints);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_sAreaString == sent.m_sAreaString);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_nSequence == sent.m_nSequence);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_ptPosition == sent.m_ptPosition);
+
+    // The shadow now carries the area name the full update sent, so a second
+    // marshal of the unchanged message writes nothing at all.
+    pPayload = packet + kSpecHeader;
+    dwSize = 0x10;
+    sent.MarshalMessage(&pPayload, &dwSize);
+    CHECK(dwSize == 0);
+    CHECK(sent.field_108 == 0);
+
+    // An area move clears the shadow (Initialize), so the same unchanged
+    // message then sends the area context group alone; it stores the name
+    // again and the next marshal is empty.
+    pSprite->m_cLastSpriteUpdate.m_sAreaString = "";
+    pPayload = packet + kSpecHeader;
+    dwSize = 0;
+    sent.MarshalMessage(&pPayload, &dwSize);
+
+    const DWORD nAreaLength = static_cast<DWORD>(sent.m_sAreaString.GetLength());
+    CHECK(nAreaLength > 0);
+    CHECK(static_cast<DWORD>(sent.field_108) == 0x400);
+    CHECK(dwSize == nAreaLength + 0xE);
+
+    // Sentinels for the groups the area-only packet must not touch (the
+    // constructor with a NULL sprite leaves them alone).
+    CMessageSpriteUpdate areaOnly(NULL, 0, 0);
+    areaOnly.m_nSequence = 5;
+    areaOnly.m_ptPosition = CPoint(11, 12);
+    areaOnly.m_nHitPoints = 13;
+    REQUIRE(areaOnly.UnmarshalMessage(packet, dwSize + kSpecHeader) == TRUE);
+    CHECK(static_cast<DWORD>(areaOnly.field_108) == 0x400);
+    CHECK(areaOnly.m_sAreaString == sent.m_sAreaString);
+    CHECK(areaOnly.m_nSequence == 5);
+    CHECK(areaOnly.m_ptPosition.x == 11);
+    CHECK(areaOnly.m_ptPosition.y == 12);
+    CHECK(areaOnly.m_nHitPoints == 13);
+
+    pPayload = packet + kSpecHeader;
+    dwSize = 0x10;
+    sent.MarshalMessage(&pPayload, &dwSize);
+    CHECK(dwSize == 0);
+}
+
+// One changed group sends that group plus the area context, and nothing else.
+TEST_CASE("sprite update: MarshalMessage sends only the changed field group and the area", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    pGame->UpdateCharacterSlots();
+    pGame->SetupCharacters(FALSE);
+    REQUIRE(pSprite->GetArea() != NULL);
+
+    pSprite->m_remotePlayerID = 0x1234;
+    pSprite->m_remoteObjectID = 0x5678;
+    AddRemoteEntry(pGame, 0x1234, 0x5678, pSprite->GetId());
+
+    // A full update establishes the shadow, then a decode of its payload is
+    // a message whose fields all match the shadow.
+    CMessageSpriteUpdate sent(pSprite, 0, pSprite->GetId());
+    pSprite->m_cLastSpriteUpdate.m_bFullUpdateRequired = TRUE;
+
+    BYTE packet[kSpecHeader + kPacketSize];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPayload = packet + kSpecHeader;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPayload, &dwSize);
+    REQUIRE(dwSize > 0xC);
+    const DWORD fullSize = dwSize;
+    BYTE fullPacket[kSpecHeader + kPacketSize];
+    std::memcpy(fullPacket, packet, kSpecHeader + fullSize);
+
+    CMessageSpriteUpdate changed(NULL, 0, 0);
+    REQUIRE(changed.UnmarshalMessage(packet, dwSize + kSpecHeader) == TRUE);
+
+    // The full update already stored the shadow's area name, so the area
+    // group is the context that travels with the single changed group.
+    changed.m_nHitPoints = static_cast<SHORT>(changed.m_nHitPoints + 1);
+    pPayload = packet + kSpecHeader;
+    dwSize = 0;
+    changed.MarshalMessage(&pPayload, &dwSize);
+
+    const DWORD nAreaLength = static_cast<DWORD>(changed.m_sAreaString.GetLength());
+    CHECK(static_cast<DWORD>(changed.field_108) == (0x400 | 8));
+    CHECK(dwSize == nAreaLength + 0xD + 4 + 1);
+    CHECK(pSprite->m_cLastSpriteUpdate.m_nHitPoints == changed.m_nHitPoints);
+
+    // Decode the one-group packet over a message that a full decode already
+    // filled, so every group the packet does not mark keeps its old value.
+    CMessageSpriteUpdate received(NULL, 0, 0);
+    REQUIRE(received.UnmarshalMessage(fullPacket, fullSize + kSpecHeader) == TRUE);
+    const SHORT nSequenceBefore = received.m_nSequence;
+    const DWORD dwStateBefore = received.m_dwState;
+    const INT nField60Before = received.field_60;
+    const SHORT nPathBefore = received.m_nPath;
+    const CPoint ptPositionBefore = received.m_ptPosition;
+
+    REQUIRE(received.UnmarshalMessage(packet, dwSize + kSpecHeader) == TRUE);
+    CHECK(static_cast<DWORD>(received.field_108) == (0x400 | 8));
+    CHECK(received.m_nHitPoints == changed.m_nHitPoints);
+    CHECK(received.m_sAreaString == changed.m_sAreaString);
+    CHECK(received.m_nSequence == nSequenceBefore);
+    CHECK(received.m_dwState == dwStateBefore);
+    CHECK(received.field_60 == nField60Before);
+    CHECK(received.m_nPath == nPathBefore);
+    CHECK(received.m_ptPosition == ptPositionBefore);
+}
+
+// An unknown target has no object share: the encoder reports a zero payload
+// and writes nothing.
+TEST_CASE("sprite update: MarshalMessage zeroes the size for an unknown target", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+
+    CMessageSpriteUpdate message(NULL, 0, CGameObjectArray::INVALID_INDEX);
+
+    BYTE packet[kSpecHeader + 0x20];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPayload = packet + kSpecHeader;
+    DWORD dwSize = 0x10;
+    message.MarshalMessage(&pPayload, &dwSize);
+
+    CHECK(dwSize == 0);
+    for (BYTE nByte : packet) {
+        CHECK(nByte == 0xCD);
+    }
+}

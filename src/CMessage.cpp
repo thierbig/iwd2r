@@ -19675,6 +19675,442 @@ BYTE CMessageSpriteUpdate::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_UPDATE;
 }
 
+// 0x50C550
+void CMessageSpriteUpdate::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 22948
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    CGameSprite* pSprite;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            reinterpret_cast<CGameObject**>(&pSprite),
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+
+    PLAYER_ID remotePlayerID = pSprite->m_remotePlayerID;
+    LONG remoteObjectID = pSprite->m_remoteObjectID;
+
+    // The area name is taken from the live sprite (the ctor does not capture
+    // it): "NO_AREA" when the sprite is in none.
+    if (pSprite->m_pArea == NULL) {
+        m_sAreaString = "NO_AREA";
+    } else {
+        m_sAreaString = pSprite->m_pArea->m_resRef.GetResRefStr();
+    }
+    const BYTE nAreaLength = static_cast<BYTE>(m_sAreaString.GetLength());
+
+    // The portrait icon list is taken from the live sprite too. The original
+    // does not free a list a previous call left in the message (kept).
+    field_74 = 0;
+    POSITION pos = pSprite->m_portraitIcons.GetHeadPosition();
+    while (pos != NULL) {
+        pSprite->m_portraitIcons.GetNext(pos);
+        field_74++;
+    }
+    if (field_74 > 0) {
+        field_76 = new LONG[field_74];
+        LONG* pIconIds = static_cast<LONG*>(field_76);
+        pos = pSprite->m_portraitIcons.GetHeadPosition();
+        for (SHORT nIcon = 0; pos != NULL; nIcon++) {
+            pIconIds[nIcon] = static_cast<LONG>(reinterpret_cast<INT_PTR>(pSprite->m_portraitIcons.GetNext(pos)));
+        }
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    CGameSpriteLastUpdate& last = pSprite->m_cLastSpriteUpdate;
+    field_108 = 0;
+
+    if (last.m_bFullUpdateRequired != FALSE) {
+        // A full update sends every group and clears the flag.
+        field_108 = 0xFFFFFFFF;
+        last.m_bFullUpdateRequired = FALSE;
+    } else {
+        // A changed path (count, the LONGs, destination or move scale) also
+        // forces the sequence, position and facing groups; the original
+        // stores 1, 3, 0x103 and 0x303 in turn.
+        BOOL bPathEqual = last.m_nPath == m_nPath;
+        if (bPathEqual && m_nPath > 0) {
+            bPathEqual = memcmp(last.m_pPath, m_pPath, sizeof(LONG) * m_nPath) == 0;
+        }
+        if (!bPathEqual || last.m_ptDest != m_ptDest || last.m_nMoveScale != m_nMoveScale) {
+            field_108 = 0x303;
+        }
+
+        if (last.m_nSequence != m_nSequence) {
+            field_108 |= 0x100;
+            if (m_nSequence == 10) {
+                // SEQ_WALK: the groups above travel with the sequence.
+                field_108 |= 0x303;
+            }
+        }
+
+        if ((last.m_ptPosition != m_ptPosition) && m_nSequence != 10) {
+            field_108 |= 2;
+        }
+
+        if ((last.m_nFacing != m_nFacing) && m_nSequence != 10) {
+            field_108 |= 0x200;
+        }
+
+        if (last.m_dwState != m_dwState) {
+            field_108 |= 4;
+        }
+
+        if (last.m_nHitPoints != m_nHitPoints || last.m_nMaxHitPoints != m_nMaxHitPoints) {
+            field_108 |= 8;
+        }
+
+        if (last.field_60 != field_60) {
+            field_108 |= 0x800;
+        }
+
+        if (last.field_64 != field_64
+            || last.field_66 != field_66
+            || last.field_68 != field_68
+            || last.field_6A != field_6A
+            || last.m_nACCrushingMod != m_nACCrushingMod
+            || last.m_nACMissileMod != m_nACMissileMod
+            || last.m_nACPiercingMod != m_nACPiercingMod
+            || last.m_nACSlashingMod != m_nACSlashingMod) {
+            field_108 |= 0x10;
+        }
+
+        BOOL bIconsEqual = last.field_74 == field_74;
+        if (bIconsEqual && field_74 > 0) {
+            bIconsEqual = memcmp(last.field_76, field_76, sizeof(LONG) * field_74) == 0;
+        }
+        if (!bIconsEqual) {
+            field_108 |= 0x20;
+        }
+
+        if (last.m_nEnemyAlly != m_nEnemyAlly
+            || last.m_nEnemyAllyLive != m_nEnemyAllyLive
+            || last.m_nEnemyAllyStart != m_nEnemyAllyStart
+            || last.m_bMoralFailure != m_bMoralFailure) {
+            field_108 |= 0x40;
+        }
+
+        if (last.m_bLevelUp != m_bLevelUp
+            || last.m_nHPCONBonusTotalOld != m_nHPCONBonusTotalOld) {
+            field_108 |= 0x80;
+        }
+
+        // The name travels with any other group so the receiver can place
+        // the sprite; it is also stored in the shadow when sent (below), so
+        // an unchanged sprite whose shadow carries the same name writes
+        // nothing at all.
+        if (strcmp(last.m_sAreaString, m_sAreaString) != 0 || field_108 != 0) {
+            field_108 |= 0x400;
+        }
+
+        if (last.m_nFadeSpeed != m_nFadeSpeed) {
+            field_108 |= 0x1000;
+        }
+
+        if (last.m_nTranslucent != m_nTranslucent) {
+            field_108 |= 0x4000;
+        }
+
+        if (last.m_spellStates != m_spellStates) {
+            field_108 |= 0x8000;
+        }
+
+        if (memcmp(last.m_baseSkills, m_baseSkills, sizeof(m_baseSkills)) != 0
+            || memcmp(last.m_skills, m_skills, sizeof(m_skills)) != 0
+            || last.field_106 != field_106) {
+            field_108 |= 0x10000;
+        }
+
+        if (last.m_visualEffects != m_visualEffects) {
+            field_108 |= 0x2000;
+        }
+
+        if (field_108 == 0) {
+            *dwSize = 0;
+            return;
+        }
+
+        // The receiver's "apply the hide animation" flag; a full update (the
+        // branch above) never sets it.
+        field_85 = pSprite->GetBaseStats()->field_294 != 0 ? 1 : 0;
+    }
+
+    DWORD nSize = 0xC;
+    if ((field_108 & 0x400) != 0) {
+        nSize = nAreaLength + 0xD;
+    }
+    if ((field_108 & 0x100) != 0) {
+        nSize += 2;
+    }
+    if ((field_108 & 2) != 0) {
+        nSize += 8;
+    }
+    if ((field_108 & 0x200) != 0) {
+        nSize += 2;
+    }
+    if ((field_108 & 4) != 0) {
+        nSize += 4;
+    }
+    if ((field_108 & 0x8000) != 0) {
+        nSize += 0x20;
+    }
+    if ((field_108 & 0x10000) != 0) {
+        nSize += 0x81;
+    }
+    if ((field_108 & 0x1000) != 0) {
+        nSize += 1;
+    }
+    if ((field_108 & 0x4000) != 0) {
+        nSize += 1;
+    }
+    if ((field_108 & 0x2000) != 0) {
+        nSize += 4;
+    }
+    if ((field_108 & 8) != 0) {
+        nSize += 4;
+    }
+    if ((field_108 & 0x800) != 0) {
+        nSize += 4;
+    }
+    if ((field_108 & 0x10) != 0) {
+        nSize += 0x10;
+    }
+    if ((field_108 & 0x40) != 0) {
+        nSize += 4;
+    }
+    if ((field_108 & 0x80) != 0) {
+        nSize += 5;
+    }
+    if ((field_108 & 0x20) != 0) {
+        nSize += 2;
+        if (field_74 > 0) {
+            nSize += sizeof(LONG) * field_74;
+        }
+    }
+    if ((field_108 & 1) != 0) {
+        if (m_nPath > 0) {
+            nSize += sizeof(LONG) * m_nPath;
+        }
+        nSize += 0xD;
+    }
+    nSize += 1;
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 23304
+    UTIL_ASSERT(nSize <= STATICBUFFERSIZE);
+    *dwSize = nSize;
+
+    DWORD cnt = 0;
+
+    *reinterpret_cast<PLAYER_ID*>(*pData + cnt) = remotePlayerID;
+    cnt += sizeof(PLAYER_ID);
+
+    *reinterpret_cast<LONG*>(*pData + cnt) = remoteObjectID;
+    cnt += sizeof(LONG);
+
+    *reinterpret_cast<DWORD*>(*pData + cnt) = static_cast<DWORD>(field_108);
+    cnt += sizeof(DWORD);
+
+    if ((field_108 & 0x400) != 0) {
+        *reinterpret_cast<BYTE*>(*pData + cnt) = nAreaLength;
+        cnt += sizeof(BYTE);
+
+        memcpy(*pData + cnt, static_cast<const char*>(m_sAreaString), nAreaLength);
+        cnt += nAreaLength;
+
+        // 0x50CC94: the shadow keeps the name the update just sent, so the
+        // comparison against it only fails again after an area change.
+        last.m_sAreaString = m_sAreaString;
+    }
+
+    if ((field_108 & 0x100) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_nSequence;
+        cnt += sizeof(SHORT);
+        last.m_nSequence = m_nSequence;
+    }
+
+    if ((field_108 & 2) != 0) {
+        *reinterpret_cast<LONG*>(*pData + cnt) = m_ptPosition.x;
+        *reinterpret_cast<LONG*>(*pData + cnt + sizeof(LONG)) = m_ptPosition.y;
+        cnt += 2 * sizeof(LONG);
+        last.m_ptPosition = m_ptPosition;
+    }
+
+    if ((field_108 & 0x200) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_nFacing;
+        cnt += sizeof(SHORT);
+        last.m_nFacing = m_nFacing;
+    }
+
+    if ((field_108 & 4) != 0) {
+        *reinterpret_cast<DWORD*>(*pData + cnt) = m_dwState;
+        cnt += sizeof(DWORD);
+        last.m_dwState = m_dwState;
+    }
+
+    if ((field_108 & 0x8000) != 0) {
+        memcpy(*pData + cnt, &m_spellStates, 0x20);
+        cnt += 0x20;
+        last.m_spellStates = m_spellStates;
+    }
+
+    if ((field_108 & 0x10000) != 0) {
+        memcpy(*pData + cnt, m_baseSkills, sizeof(m_baseSkills));
+        cnt += sizeof(m_baseSkills);
+
+        memcpy(*pData + cnt, m_skills, sizeof(m_skills));
+        cnt += sizeof(m_skills);
+
+        *reinterpret_cast<BYTE*>(*pData + cnt) = field_106;
+        cnt += sizeof(BYTE);
+
+        memcpy(last.m_baseSkills, m_baseSkills, sizeof(m_baseSkills));
+        memcpy(last.m_skills, m_skills, sizeof(m_skills));
+        last.field_106 = field_106;
+    }
+
+    if ((field_108 & 0x1000) != 0) {
+        *reinterpret_cast<BYTE*>(*pData + cnt) = m_nFadeSpeed;
+        cnt += sizeof(BYTE);
+        last.m_nFadeSpeed = m_nFadeSpeed;
+    }
+
+    if ((field_108 & 0x4000) != 0) {
+        *reinterpret_cast<BYTE*>(*pData + cnt) = m_nTranslucent;
+        cnt += sizeof(BYTE);
+        last.m_nTranslucent = m_nTranslucent;
+    }
+
+    if ((field_108 & 0x2000) != 0) {
+        DWORD dwVisualEffects = static_cast<DWORD>(m_visualEffects.to_ulong());
+        *reinterpret_cast<DWORD*>(*pData + cnt) = dwVisualEffects;
+        cnt += sizeof(DWORD);
+        last.m_visualEffects = m_visualEffects;
+    }
+
+    if ((field_108 & 8) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_nHitPoints;
+        *reinterpret_cast<SHORT*>(*pData + cnt + sizeof(SHORT)) = m_nMaxHitPoints;
+        cnt += 2 * sizeof(SHORT);
+        last.m_nHitPoints = m_nHitPoints;
+        last.m_nMaxHitPoints = m_nMaxHitPoints;
+    }
+
+    if ((field_108 & 0x800) != 0) {
+        *reinterpret_cast<INT*>(*pData + cnt) = field_60;
+        cnt += sizeof(INT);
+        last.field_60 = field_60;
+    }
+
+    if ((field_108 & 0x10) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt + 0) = field_64;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 2) = field_66;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 4) = field_68;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 6) = field_6A;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 8) = m_nACCrushingMod;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 10) = m_nACMissileMod;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 12) = m_nACPiercingMod;
+        *reinterpret_cast<SHORT*>(*pData + cnt + 14) = m_nACSlashingMod;
+        cnt += 8 * sizeof(SHORT);
+
+        last.field_64 = field_64;
+        last.field_66 = field_66;
+        last.field_68 = field_68;
+        last.field_6A = field_6A;
+        last.m_nACCrushingMod = m_nACCrushingMod;
+        last.m_nACMissileMod = m_nACMissileMod;
+        last.m_nACPiercingMod = m_nACPiercingMod;
+        last.m_nACSlashingMod = m_nACSlashingMod;
+    }
+
+    if ((field_108 & 0x40) != 0) {
+        *reinterpret_cast<BYTE*>(*pData + cnt + 0) = m_nEnemyAlly;
+        *reinterpret_cast<BYTE*>(*pData + cnt + 1) = m_nEnemyAllyLive;
+        *reinterpret_cast<BYTE*>(*pData + cnt + 2) = m_nEnemyAllyStart;
+        *reinterpret_cast<BOOLEAN*>(*pData + cnt + 3) = m_bMoralFailure;
+        cnt += 4 * sizeof(BYTE);
+
+        last.m_nEnemyAlly = m_nEnemyAlly;
+        last.m_nEnemyAllyLive = m_nEnemyAllyLive;
+        last.m_nEnemyAllyStart = m_nEnemyAllyStart;
+        last.m_bMoralFailure = m_bMoralFailure;
+    }
+
+    if ((field_108 & 0x80) != 0) {
+        *reinterpret_cast<BOOLEAN*>(*pData + cnt) = m_bLevelUp;
+        *reinterpret_cast<LONG*>(*pData + cnt + sizeof(BOOLEAN)) = m_nHPCONBonusTotalOld;
+        cnt += sizeof(BOOLEAN) + sizeof(LONG);
+
+        last.m_bLevelUp = m_bLevelUp;
+        last.m_nHPCONBonusTotalOld = m_nHPCONBonusTotalOld;
+    }
+
+    if ((field_108 & 0x20) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt) = field_74;
+        cnt += sizeof(SHORT);
+
+        if (field_74 > 0) {
+            memcpy(*pData + cnt, field_76, sizeof(LONG) * field_74);
+            cnt += sizeof(LONG) * field_74;
+        }
+
+        delete[] last.field_76;
+        last.field_74 = field_74;
+        last.field_76 = new LONG[field_74];
+        if (field_74 > 0) {
+            memcpy(last.field_76, field_76, sizeof(LONG) * field_74);
+        }
+
+        delete[] static_cast<LONG*>(field_76);
+        field_76 = NULL;
+    }
+
+    if ((field_108 & 1) != 0) {
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_nPath;
+        cnt += sizeof(SHORT);
+
+        if (m_nPath > 0) {
+            memcpy(*pData + cnt, m_pPath, sizeof(LONG) * m_nPath);
+            cnt += sizeof(LONG) * m_nPath;
+        }
+
+        *reinterpret_cast<SHORT*>(*pData + cnt) = m_currPath;
+        cnt += sizeof(SHORT);
+
+        *reinterpret_cast<LONG*>(*pData + cnt) = m_ptDest.x;
+        *reinterpret_cast<LONG*>(*pData + cnt + sizeof(LONG)) = m_ptDest.y;
+        cnt += 2 * sizeof(LONG);
+
+        *reinterpret_cast<BYTE*>(*pData + cnt) = m_nMoveScale;
+        cnt += sizeof(BYTE);
+
+        delete[] last.m_pPath;
+        last.m_nPath = m_nPath;
+        last.m_pPath = new LONG[m_nPath];
+        if (m_nPath > 0) {
+            memcpy(last.m_pPath, m_pPath, sizeof(LONG) * m_nPath);
+        }
+        last.m_currPath = m_currPath;
+        last.m_ptDest = m_ptDest;
+        last.m_nMoveScale = m_nMoveScale;
+    }
+
+    *reinterpret_cast<BYTE*>(*pData + cnt) = field_85;
+}
+
 // 0x50D290
 BOOL CMessageSpriteUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
 {

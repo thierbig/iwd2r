@@ -19,6 +19,8 @@
 #include "CVidCell.h"
 #include "FileFormat.h"
 
+#include <bitset>
+
 // SEQUENCE.IDS
 
 #define CGAMESPRITE_SEQ_ATTACK 0
@@ -172,13 +174,67 @@ typedef struct {
     INT field_4;
 } CGameSpriteSoundEntry;
 
+// 0x7432
+// The state CMessageSpriteUpdate::MarshalMessage (0x50C550) last sent for a
+// sprite, CGameSprite+0x7432, 0xFC bytes in the original. The encoder compares
+// a CMessageSpriteUpdate against this record and sends only the differing
+// field groups, updating the record as it goes; CGameSpriteLastUpdate::
+// Initialize (0x723B20) clears it and sets the full-update flag. The member
+// order, types and offsets are the original's: the encoder's differential
+// comparisons against 0x7432..0x752A, Initialize's clear stores at the same
+// offsets, and ~CGameSprite's frees of +0x7432/+0x746E fix every one of them.
+// Offsets are the original's absolute sprite offsets; this class's own C++
+// layout differs (64-bit pointers, std::bitset storage).
 class CGameSpriteLastUpdate {
 public:
+    // The original clears this record in Initialize; the declared member
+    // initializers below are that clear for a newly constructed sprite. The
+    // full Initialize body is still TODO (it runs again on area moves).
+    ~CGameSpriteLastUpdate()
+    {
+        delete[] m_pPath;
+        delete[] field_76;
+    }
+
     void Initialize(BOOL bFullUpdateRequired);
 
-    // NOTE: Only the last member of the original's 0xFC bytes is declared;
-    // Initialize (0x723B20) stores its argument there (0x723BDB).
-    /* 00F8 */ BOOL m_bFullUpdateRequired = FALSE;
+    /* 7432 */ LONG* m_pPath = NULL; // 0x0000
+    /* 7436 */ SHORT m_nPath = 0;
+    /* 7438 */ SHORT m_currPath = 0;
+    /* 743A */ CPoint m_ptDest; // 0x0008
+    /* 7442 */ BYTE m_nMoveScale = 0;
+    /* 7444 */ SHORT m_nSequence = 0;
+    /* 7446 */ CPoint m_ptPosition; // 0x0014
+    /* 744E */ SHORT m_nFacing = 0;
+    /* 7450 */ DWORD m_dwState = 0;
+    /* 7454 */ SHORT m_nHitPoints = 0;
+    /* 7456 */ SHORT m_nMaxHitPoints = 0;
+    /* 7458 */ INT field_60 = 0;
+    /* 745C */ SHORT field_64 = 0;
+    /* 745E */ SHORT field_66 = 0;
+    /* 7460 */ SHORT field_68 = 0;
+    /* 7462 */ SHORT field_6A = 0;
+    /* 7464 */ SHORT m_nACCrushingMod = 0;
+    /* 7466 */ SHORT m_nACMissileMod = 0;
+    /* 7468 */ SHORT m_nACPiercingMod = 0;
+    /* 746A */ SHORT m_nACSlashingMod = 0;
+    /* 746C */ SHORT field_74 = 0;
+    /* 746E */ LONG* field_76 = NULL;
+    /* 7472 */ BYTE m_nEnemyAlly = 0;
+    /* 7473 */ BYTE m_nEnemyAllyLive = 0;
+    /* 7474 */ BYTE m_nEnemyAllyStart = 0;
+    /* 7475 */ BOOLEAN m_bMoralFailure = FALSE;
+    /* 7476 */ CString m_sAreaString;
+    /* 747A */ BOOLEAN m_bLevelUp = FALSE;
+    /* 747C */ LONG m_nHPCONBonusTotalOld = 0;
+    /* 7480 */ std::bitset<256> m_spellStates;
+    /* 74A0 */ BYTE m_nFadeSpeed = 0;
+    /* 74A2 */ std::bitset<32> m_visualEffects;
+    /* 74A6 */ BYTE m_nTranslucent = 0;
+    /* 74A8 */ BYTE m_baseSkills[64] = {};
+    /* 74E8 */ BYTE m_skills[64] = {};
+    /* 7528 */ BYTE field_106 = 0;
+    /* 752A */ BOOL m_bFullUpdateRequired = FALSE;
 };
 
 class CGameSprite : public CGameAIBase {
