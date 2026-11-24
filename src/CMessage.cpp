@@ -606,6 +606,10 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS = 115;
 // 0x84CF91
 const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA = 82;
 
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_ANNOUNCE = 81;
+
+const BYTE CBaldurMessage::MSG_SUBTYPE_MAPWORLD_TRAVEL_REQUEST = 97;
+
 // 0x84CF92
 const BYTE CBaldurMessage::MSG_TYPE_MOVIE = 78;
 
@@ -6409,6 +6413,164 @@ BOOLEAN CBaldurMessage::OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWOR
         pWorldMap->StartWorldMap(1,
             nLeavingEdge,
             nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
+    }
+
+    return TRUE;
+}
+
+// 0x4358B0
+BOOLEAN CBaldurMessage::OnMapWorldTravelAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (g_pChitin->cNetwork.GetSessionHosting() != TRUE
+        || !g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorldMap* pWorldMap = g_pBaldurChitin->m_pEngineWorldMap;
+
+    // Payload: area resref (length-prefixed), the current world link, the
+    // entry point (length-prefixed), the leaving edge (WORD), the
+    // random-encounter flag (BYTE) and the travel time (DWORD).
+    BYTE nAreaLength = pData[3];
+    BYTE areaResRef[8] = {};
+    // The original copies the wire length into the buffer unchecked; bounded
+    // to the resref's 8 bytes here (P4-10).
+    memcpy(areaResRef, pData + 4, nAreaLength < sizeof(areaResRef) ? nAreaLength : sizeof(areaResRef));
+
+    DWORD nCurrentWorldLink = *reinterpret_cast<DWORD*>(pData + 4 + nAreaLength);
+
+    BYTE nEntryLength = pData[8 + nAreaLength];
+    // P4-10: the entry-point string is read with the wire length; bound the
+    // read to the bytes actually received.
+    DWORD nEntryOffset = 9 + nAreaLength;
+    DWORD nEntryAvailable = dwSize > nEntryOffset ? dwSize - nEntryOffset : 0;
+    DWORD nEntryCopyLength = nEntryLength < nEntryAvailable
+        ? nEntryLength
+        : nEntryAvailable;
+    CString sEntryPoint(reinterpret_cast<const char*>(pData + nEntryOffset), nEntryCopyLength);
+
+    DWORD nFixedOffset = nEntryOffset + nEntryLength;
+    WORD nEdge = *reinterpret_cast<WORD*>(pData + nFixedOffset);
+    BOOLEAN bRandomEncounter = pData[nFixedOffset + 2];
+    DWORD nTravelTime = *reinterpret_cast<DWORD*>(pData + nFixedOffset + 3);
+
+    // The travel announce auto-saves the game first (0x4359B1-0x435A7E). The
+    // block is the same one CGameSprite::LeaveAreaName already ports: the
+    // exe reads the 3D-accelerated flag of the video mode, syncs a frame in
+    // the software path and saves with the progress bar and a screen grab.
+    pGame->m_sSaveGame = CInfGame::AUTO_SAVE_NAME;
+    CScreenCharacter::SAVE_NAME = CInfGame::AUTO_SAVE_NAME;
+
+    if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL) {
+        pGame->field_366E = 1;
+        pGame->field_50DC = 0;
+        if (!g_pChitin->cVideo.m_bIs3dAccelerated) {
+            if (!pGame->field_50D8) {
+                pGame->SynchronousUpdate();
+            }
+            pGame->field_50D8 = TRUE;
+        }
+    }
+
+    pGame->SaveGame(TRUE, FALSE, TRUE);
+
+    if (g_pChitin->cNetwork.m_nServiceProvider == CNetwork::SERV_PROV_NULL
+        && g_pChitin->cVideo.m_bIs3dAccelerated) {
+        pGame->field_366E = 1;
+        pGame->field_50DC = 1;
+        // NOTE: The original tests the 3D flag again here, set; the sync
+        // below never runs (kept as written).
+        if (!g_pChitin->cVideo.m_bIs3dAccelerated) {
+            if (!pGame->field_50D8) {
+                pGame->SynchronousUpdate();
+            }
+            pGame->field_50D8 = TRUE;
+        }
+    }
+
+    CResRef cResArea(areaResRef);
+    pGame->m_gameSave.m_cResCurrentWorldArea = cResArea;
+    pGame->m_gameSave.m_nCurrentWorldLink = nCurrentWorldLink;
+
+    pWorldMap->MoveToArea(cResArea, sEntryPoint, nEdge, bRandomEncounter, nTravelTime);
+    pWorldMap->StopWorldMap(FALSE);
+    g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+
+    // The random-encounter byte also gates the area-entry text and sound.
+    if (bRandomEncounter != FALSE) {
+        STR_RES strRes;
+        g_pBaldurChitin->m_cTlkTable.Fetch(0x406D, strRes);
+
+        CString sName;
+        g_pBaldurChitin->m_pEngineWorld->DisplayText(sName, strRes.szText, -1, FALSE);
+
+        strRes.cSound.SetFireForget(TRUE);
+        strRes.cSound.SetChannel(5, 0);
+        strRes.cSound.Play(FALSE);
+    }
+
+    return TRUE;
+}
+
+// 0x435E00
+BOOLEAN CBaldurMessage::OnMapWorldTravelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CScreenWorldMap* pWorldMap = g_pBaldurChitin->m_pEngineWorldMap;
+
+    BYTE nAreaLength = pData[3];
+    BYTE areaResRef[8] = {};
+    // The original copies the wire length into the buffer unchecked; bounded
+    // to the resref's 8 bytes here (P4-10).
+    memcpy(areaResRef, pData + 4, nAreaLength < sizeof(areaResRef) ? nAreaLength : sizeof(areaResRef));
+
+    DWORD nCurrentWorldLink = *reinterpret_cast<DWORD*>(pData + 4 + nAreaLength);
+
+    BYTE nEntryLength = pData[8 + nAreaLength];
+    // P4-10: the entry-point string is read with the wire length; bound the
+    // read to the bytes actually received.
+    DWORD nEntryOffset = 9 + nAreaLength;
+    DWORD nEntryAvailable = dwSize > nEntryOffset ? dwSize - nEntryOffset : 0;
+    DWORD nEntryCopyLength = nEntryLength < nEntryAvailable
+        ? nEntryLength
+        : nEntryAvailable;
+    CString sEntryPoint(reinterpret_cast<const char*>(pData + nEntryOffset), nEntryCopyLength);
+
+    DWORD nFixedOffset = nEntryOffset + nEntryLength;
+    WORD nEdge = *reinterpret_cast<WORD*>(pData + nFixedOffset);
+    BOOLEAN bRandomEncounter = pData[nFixedOffset + 2];
+    DWORD nTravelTime = *reinterpret_cast<DWORD*>(pData + nFixedOffset + 3);
+
+    CResRef cResArea(areaResRef);
+    pGame->m_gameSave.m_cResCurrentWorldArea = cResArea;
+    pGame->m_gameSave.m_nCurrentWorldLink = nCurrentWorldLink;
+
+    pWorldMap->MoveToArea(cResArea, sEntryPoint, nEdge, bRandomEncounter, nTravelTime);
+    pWorldMap->StopWorldMap(FALSE);
+    g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+
+    if (bRandomEncounter != FALSE) {
+        STR_RES strRes;
+        g_pBaldurChitin->m_cTlkTable.Fetch(0x406D, strRes);
+
+        CString sName;
+        g_pBaldurChitin->m_pEngineWorld->DisplayText(sName, strRes.szText, -1, FALSE);
+
+        strRes.cSound.SetFireForget(TRUE);
+        strRes.cSound.SetChannel(5, 0);
+        strRes.cSound.Play(FALSE);
     }
 
     return TRUE;
