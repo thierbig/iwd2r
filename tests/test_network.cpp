@@ -2553,3 +2553,113 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     G15Session(FALSE, FALSE);
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
+
+// -----------------------------------------------------------------------------
+// #121 G12b: CMessage83 / CMessage84 (subtypes 83/84). The payload is the
+// target's remote pair, a one-byte resref length and the resref bytes; Run
+// only denies and releases the target.
+
+namespace {
+
+void Check83_84Wire(BYTE* pPacked, DWORD dwSize, PLAYER_ID nExpectedPlayer, LONG nExpectedObject)
+{
+    CHECK(dwSize == 9 + 6);
+    PLAYER_ID player;
+    LONG object;
+    std::memcpy(&player, pPacked, sizeof(player));
+    std::memcpy(&object, pPacked + sizeof(player), sizeof(object));
+    CHECK(player == nExpectedPlayer);
+    CHECK(object == nExpectedObject);
+    CHECK(pPacked[8] == 6);
+    CHECK(std::memcmp(pPacked + 9, "AR1000", 6) == 0);
+}
+
+} // namespace
+
+TEST_CASE("msg: CMessage83 round-trips its target pair and resref", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CResRef resRef("AR1000");
+    CMessage83 message(resRef, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::BROADCAST_OTHERS);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_83);
+
+    BYTE packed[0x40];
+    std::memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+    CHECK(pPacked == packed);
+    CHECK(packed[packedSize] == 0xCD);
+    Check83_84Wire(packed, packedSize, 7, 0x00010002);
+
+    BYTE packet[0x40];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_83;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessage83 received(CResRef(""), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CHECK(received.m_resRef == "AR1000");
+
+    // An unknown pair decodes as INVALID_INDEX.
+    const LONG bogusObject = 0x00099999;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID), &bogusObject, sizeof(bogusObject));
+    CMessage83 refused(CResRef(""), 0, nTarget);
+    CHECK(refused.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(refused.m_targetId == CGameObjectArray::INVALID_INDEX);
+
+    // Run denies and releases the target.
+    message.Run();
+}
+
+TEST_CASE("msg: CMessage84 round-trips its target pair and resref", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    const LONG nTarget = game.AddObject(7, 0x00010002);
+    game.MapRemote(7, 0x00010002, nTarget);
+
+    CResRef resRef("AR1000");
+    CMessage84 message(resRef, 0, nTarget);
+    CHECK(message.GetCommType() == CMessage::BROADCAST_OTHERS);
+    CHECK(message.GetMsgType() == CBaldurMessage::MSG_TYPE_CMESSAGE);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_84);
+
+    BYTE packed[0x40];
+    std::memset(packed, 0xCD, sizeof(packed));
+    BYTE* pPacked = packed;
+    DWORD packedSize = 0;
+    message.MarshalMessage(&pPacked, &packedSize);
+    CHECK(pPacked == packed);
+    CHECK(packed[packedSize] == 0xCD);
+    Check83_84Wire(packed, packedSize, 7, 0x00010002);
+
+    BYTE packet[0x40];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_CMESSAGE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_CMESSAGE_84;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH, packed, packedSize);
+
+    CMessage84 received(CResRef(""), 0, CGameObjectArray::INVALID_INDEX);
+    CHECK(received.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(received.m_targetId == nTarget);
+    CHECK(received.m_resRef == "AR1000");
+
+    const LONG bogusObject = 0x00099999;
+    std::memcpy(packet + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID), &bogusObject, sizeof(bogusObject));
+    CMessage84 refused(CResRef(""), 0, nTarget);
+    CHECK(refused.UnmarshalMessage(packet, CNetwork::SPEC_MSG_HEADER_LENGTH + packedSize) == TRUE);
+    CHECK(refused.m_targetId == CGameObjectArray::INVALID_INDEX);
+
+    message.Run();
+}
