@@ -411,6 +411,9 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_AREA_REST_ENCOUNTER = 110;
 // 0x84CF46
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SAVE_GAME = 111;
 
+// 0x84CF47
+const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_112 = 112;
+
 // 0x84CF48
 const BYTE CBaldurMessage::MSG_SUBTYPE_CMESSAGE_PICKED_DIALOG_RESPONSE = 113;
 
@@ -14470,6 +14473,168 @@ void CMessagePlaySoundRef::Run()
 }
 
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+
+// 0x4F5BF0
+CMessage112::CMessage112(CResRef cResSound, LONG x, LONG y, LONG caller, LONG target)
+    : CMessage(caller, target)
+{
+    m_cResSound = cResSound;
+    m_x = x;
+    m_y = y;
+    // NOTE: The original leaves m_nChannel uninitialized -- neither this
+    // constructor nor the send-site construction in CGameAIBase::PlaySound
+    // (0x45ED24-0x45ED39) writes it -- so MarshalMessage sends whatever the
+    // allocation happened to hold. Kept, as the binary has it.
+}
+
+// 0x4536E0
+SHORT CMessage112::GetCommType()
+{
+    return BROADCAST_FORCED_OTHERS;
+}
+
+// 0x40A0E0
+BYTE CMessage112::GetMsgType()
+{
+    return CBaldurMessage::MSG_TYPE_CMESSAGE;
+}
+
+// NOTE: 0x45EDD0 is the vtable's GetMsgSubType slot, a 13-byte folded getter
+// (`mov al, byte [0x84CF47]; ret`) that is not a function start in the
+// exports, so it carries no address marker, as the tree's other folded
+// getters whose addresses the export omits.
+BYTE CMessage112::GetMsgSubType()
+{
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_112;
+}
+
+// 0x503AA0
+void CMessage112::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    // NOTE: The original constructs an unused CAIObjectType local here
+    // (0x503AA0-0x503AC0), as several sibling marshals do.
+    CResRef res;
+    CString name;
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    PLAYER_ID player = 0;
+    LONG remoteId = 0xFFFFFFFF;
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc == CGameObjectArray::SUCCESS) {
+        player = pObject->m_remotePlayerID;
+        remoteId = pObject->m_remoteObjectID;
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    res = m_cResSound;
+    res.CopyToString(name);
+    BYTE length = static_cast<BYTE>(name.GetLength());
+    *dwSize = name.GetLength() + 0x12;
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    (*pData)[cnt++] = length;
+    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), length);
+    cnt += length;
+    (*pData)[cnt++] = m_nChannel;
+    memcpy(*pData + cnt, &m_x, sizeof(m_x));
+    cnt += sizeof(m_x);
+    memcpy(*pData + cnt, &m_y, sizeof(m_y));
+    cnt += sizeof(m_y);
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x503CB0
+BOOL CMessage112::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // NOTE: The original constructs an unused CAIObjectType local here, as
+    // the sibling decoders do.
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: A miss is not fatal: the target becomes INVALID_INDEX and the
+    // message is still decoded (the original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE length = pData[cnt++];
+    CHAR szSound[9] = { 0 };
+    // NOTE: The original copies the wire byte (up to 255) into a 9-byte stack
+    // buffer and overflows for a name longer than 8; bounded here (P4-10).
+    memcpy(szSound, pData + cnt, length > 8 ? 8 : length);
+    cnt += length;
+    m_cResSound = CString(szSound, length > 8 ? 8 : length);
+
+    m_nChannel = pData[cnt++];
+    memcpy(&m_x, pData + cnt, sizeof(m_x));
+    cnt += sizeof(m_x);
+    memcpy(&m_y, pData + cnt, sizeof(m_y));
+    cnt += sizeof(m_y);
+
+    UTIL_ASSERT(cnt == dwSize);
+    return TRUE;
+}
+
+// 0x503E60
+void CMessage112::Run()
+{
+    CSound cSound;
+    cSound.SetResRef(m_cResSound, TRUE, TRUE);
+
+    if (cSound.m_nLooping == 0) {
+        cSound.SetFireForget(TRUE);
+    }
+
+    CGameObject* pObject;
+
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+    if (rc == CGameObjectArray::SUCCESS) {
+        cSound.SetChannel(m_nChannel,
+            reinterpret_cast<DWORD_PTR>(pObject->GetArea()));
+        cSound.Play(m_x, m_y, 0, FALSE);
+
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    } else {
+        // The target is gone: play unpositioned on the visible area's channel
+        // 2, as the original does.
+        cSound.SetChannel(2,
+            reinterpret_cast<DWORD_PTR>(g_pBaldurChitin->GetObjectGame()->GetVisibleArea()));
+        cSound.Play(FALSE);
+    }
+}
 
 // 0x4F5CA0
 CMessageRemoveReplies::CMessageRemoveReplies(LONG entryIndex, LONG marker, COLORREF nameColor, const CString& name, LONG caller, LONG target)
