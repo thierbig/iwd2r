@@ -272,6 +272,35 @@ CGameSprite* NewGameWithOneCharacter(std::vector<BYTE>& bytes, const char* name)
     pGame->NewGame(FALSE, FALSE);
 
     CGameSprite* pSprite = MakePartySprite(bytes, name);
+
+    // Pin the party level before SetupCharacters loads the start area: AR1000's
+    // spawn points scale their creatures with the party's total level
+    // (CGameSpawning::Spawn sums GetLevel over the portraits), so an install
+    // whose alphabetically-first pregenerated character is an exported
+    // higher-level one changed the saved area's creature count and the object
+    // ids derived from it (Hedron's 0x100010). Keep the character coherent --
+    // the level is the sum of its class levels -- by moving its first class to
+    // level 1 and zeroing the rest, in the base header and the derived stats
+    // alike; the stock premades are already one level-1 class, so this is a
+    // no-op for them.
+    INT nPinnedClass = 0;
+    for (INT nClass = 0; nClass < CAIOBJECT_CLASS_MAX && nPinnedClass == 0; nClass++) {
+        if (pSprite->m_baseStats.m_classLevels[nClass] != 0) {
+            nPinnedClass = nClass + 1;
+        }
+    }
+    if (nPinnedClass == 0) {
+        nPinnedClass = CAIOBJECTTYPE_C_FIGHTER;
+    }
+    pSprite->m_baseStats.m_characterLevel = 1;
+    for (INT nClass = 0; nClass < CAIOBJECT_CLASS_MAX; nClass++) {
+        pSprite->m_baseStats.m_classLevels[nClass] = static_cast<BYTE>(nClass + 1 == nPinnedClass ? 1 : 0);
+    }
+    for (INT nClass = 1; nClass <= CAIOBJECT_CLASS_MAX; nClass++) {
+        pSprite->m_derivedStats.SetClassLevel(nClass, nClass == nPinnedClass ? 1 : 0);
+    }
+    pSprite->m_derivedStats.m_nLevel = 1;
+
     pGame->SetCharacterSlot(0, pSprite->GetId());
     return pSprite;
 }
