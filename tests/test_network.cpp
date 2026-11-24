@@ -2554,7 +2554,6 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
 }
 
-
 // CBaldurMessage::OnResourceSuggest (0x42ABA0): the client's receive of the
 // server's resource suggestion. The payload after the 3-byte spec header is
 // {UINT type; DWORD flags; char resref[]}; the sender side is
