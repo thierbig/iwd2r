@@ -7415,7 +7415,7 @@ void CBaldurMessage::HandleBlockingMessages()
         nMsgFrom,
         dwSize);
     if (pData != NULL) {
-        OnDemandSettingsNightmareMode(nMsgFrom);
+        OnDemandCharacterUpdate(nMsgFrom, pData, dwSize);
         delete pData;
     }
 

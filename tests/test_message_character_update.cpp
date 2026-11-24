@@ -235,6 +235,32 @@ void CheckCharacterUpdateHeader(const BYTE* buffer)
     CHECK(buffer[2] == CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_102);
 }
 
+// A queued MG frame as CNetworkWindow keeps it: the "MG" tag at +10, the
+// spec message for the poll match at +12, and the message the receive path
+// copies (the original's 0x7A356B reads from pData+0x18 = +24) at +24.
+// Both copies are identical, so the handler sees the same bytes either way.
+void StageIncoming(CNetworkWindow& window, BYTE nType, BYTE nSubType, const BYTE* payload, DWORD nPayloadSize)
+{
+    const DWORD messageSize = HEADER_LENGTH + nPayloadSize;
+    BYTE* pFrame = new BYTE[2 * CNetwork::dword_85E694 + messageSize]();
+    std::memcpy(pFrame + CNetwork::dword_85E698, (LPCSTR)CNetwork::MG, CNetwork::dword_85E69C);
+    for (DWORD offset : { CNetwork::dword_85E694, 2 * CNetwork::dword_85E694 }) {
+        pFrame[offset] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+        pFrame[offset + 1] = nType;
+        pFrame[offset + 2] = nSubType;
+        std::memcpy(pFrame + offset + HEADER_LENGTH, payload, nPayloadSize);
+    }
+
+    CNETWORKWINDOW_QUEUEENTRY* pEntry = new CNETWORKWINDOW_QUEUEENTRY();
+    pEntry->idFrom = 2;
+    pEntry->idTo = 1;
+    pEntry->pData = pFrame;
+    pEntry->dwSize = CNetwork::dword_85E694 + messageSize;
+
+    window.m_bInitialized = TRUE;
+    window.m_lQueueIncomingMessages.AddTail(pEntry);
+}
+
 } // namespace
 
 TEST_CASE("character update: OnDemandCharacterUpdate answers a PLAYERCHAR/70 poll", "[msg][network]")
@@ -383,4 +409,36 @@ TEST_CASE("character update: OnCharacterUpdate unmarshals PLAYERCHAR/102 into th
     WritePair(empty + HEADER_LENGTH, 3, 4);
     CHECK(message.OnCharacterUpdate(0, empty, sizeof(empty)) == TRUE);
     CHECK(receiver.Sprite()->m_timedEffectList.GetCount() == 1);
+}
+
+TEST_CASE("character update: HandleBlockingMessages answers a queued PLAYERCHAR/70", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session;
+    FakeSprite sprite;
+
+    sprite.Sprite()->m_remotePlayerID = 3;
+    sprite.Sprite()->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), reinterpret_cast<CGameObject*>(sprite.Sprite()));
+    AddRemote(game.Game(), 3, 4, nObject);
+
+    BYTE payload[PAIR_SIZE];
+    WritePair(payload, 3, 4);
+    StageIncoming(session.Network().m_pSlidingWindow[0],
+        CBaldurMessage::MSG_TYPE_PLAYERCHAR,
+        CBaldurMessage::MSG_SUBTYPE_PLAYERCHAR_70,
+        payload,
+        sizeof(payload));
+
+    CBaldurMessage message;
+    std::memset(CNetwork::STATIC_MESSAGE_BUFFER, POISON, STATIC_MESSAGE_SIZE);
+    message.HandleBlockingMessages();
+
+    // The poll is answered by OnDemandCharacterUpdate (0x43DC40), not by
+    // OnDemandSettingsNightmareMode: the answer is PLAYERCHAR/102.
+    CheckCharacterUpdateHeader(CNetwork::STATIC_MESSAGE_BUFFER);
+    CHECK(ReadPairPlayer(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 3);
+    CHECK(ReadPairObject(CNetwork::STATIC_MESSAGE_BUFFER + HEADER_LENGTH) == 4);
+    CHECK(DenyCount(game.Game(), nObject) == 0);
 }
