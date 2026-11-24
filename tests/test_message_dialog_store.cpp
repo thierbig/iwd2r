@@ -206,3 +206,227 @@ TEST_CASE("msg: CMessageEnterDialogMode::UnmarshalMessage keeps an unresolved ta
     CHECK(message.GetCommType() == CMessage::BROADCAST_FORCED_OTHERS);
     CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ENTER_DIALOG_MODE);
 }
+
+// The store message's two CAIObjectType blocks: SHORT name length and name,
+// five bytes (enemy/ally, general, race, subrace, class), four bytes
+// (specific, gender, alignment, avClass), the class mask, the block's
+// instance id as a remote pair (or (0, 0xFFFFFFFF)) and the five special-case
+// bytes; 0x1A fixed bytes after the name.
+namespace {
+constexpr DWORD STORE_BLOCK_BASE = 0x1A;
+
+void SetTypeFields(CAIObjectType& type, BYTE first, const char* name)
+{
+    type.m_nEnemyAlly = first;
+    type.m_nGeneral = static_cast<BYTE>(first + 1);
+    type.m_nRace = static_cast<BYTE>(first + 2);
+    type.m_nSubRace = static_cast<BYTE>(first + 3);
+    type.m_nClass = static_cast<BYTE>(first + 4);
+    type.m_nSpecific = static_cast<BYTE>(first + 5);
+    type.m_nGender = static_cast<BYTE>(first + 6);
+    type.m_nAlignment = static_cast<BYTE>(first + 7);
+    type.m_nAvClass = static_cast<BYTE>(first + 8);
+    type.m_nClassMask = 0x11223344;
+    type.m_sName = name;
+    for (INT index = 0; index < 5; index++) {
+        type.m_SpecialCase[index] = static_cast<BYTE>(first + 10 + index);
+    }
+}
+} // namespace
+
+TEST_CASE("msg: CMessageEnterStoreMode::MarshalMessage writes the two object blocks", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    CGameObject* pInstance = AddObject(pGame, 8, 0x1002);
+
+    CAIObjectType proprietor;
+    SetTypeFields(proprietor, 2, "PROP");
+    proprietor.m_nInstance = pInstance->m_id;
+    CAIObjectType customer;
+    SetTypeFields(customer, 21, "CUST");
+    customer.m_nInstance = CGameObjectArray::INVALID_INDEX;
+
+    CMessageEnterStoreMode message(proprietor, customer, CResRef("STOR01"), 10, pObject->m_id);
+
+    BYTE packet[HEADER_LENGTH + 0x80];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    message.MarshalMessage(&pPacket, &dwSize);
+
+    // (6 + 9) + two blocks of (2 + 4 + 0x1A).
+    REQUIRE(dwSize == 6 + 9 + 2 * (2 + 4 + STORE_BLOCK_BASE));
+    PLAYER_ID player = 0;
+    LONG remoteObject = 0;
+    std::memcpy(&player, packet + HEADER_LENGTH, sizeof(player));
+    std::memcpy(&remoteObject, packet + HEADER_LENGTH + 4, sizeof(remoteObject));
+    CHECK(player == 7);
+    CHECK(remoteObject == 0x1001);
+    CHECK(packet[HEADER_LENGTH + 8] == 6);
+    CHECK(std::memcmp(packet + HEADER_LENGTH + 9, "STOR01", 6) == 0);
+
+    const DWORD first = HEADER_LENGTH + 6 + 9;
+    SHORT nameLength = 0;
+    std::memcpy(&nameLength, packet + first, sizeof(nameLength));
+    CHECK(nameLength == 4);
+    CHECK(std::memcmp(packet + first + 2, "PROP", 4) == 0);
+    const DWORD firstFields = first + 2 + 4;
+    CHECK(packet[firstFields] == 2);
+    CHECK(packet[firstFields + 1] == 3);
+    CHECK(packet[firstFields + 2] == 4);
+    CHECK(packet[firstFields + 3] == 5);
+    CHECK(packet[firstFields + 4] == 6);
+    CHECK(packet[firstFields + 5] == 7);
+    CHECK(packet[firstFields + 6] == 8);
+    CHECK(packet[firstFields + 7] == 9);
+    CHECK(packet[firstFields + 8] == 10);
+    DWORD classMask = 0;
+    std::memcpy(&classMask, packet + firstFields + 9, sizeof(classMask));
+    CHECK(classMask == 0x11223344);
+    PLAYER_ID instancePlayer = 0;
+    LONG instanceRemote = 0;
+    std::memcpy(&instancePlayer, packet + firstFields + 0xD, sizeof(instancePlayer));
+    std::memcpy(&instanceRemote, packet + firstFields + 0x11, sizeof(instanceRemote));
+    CHECK(instancePlayer == 8);
+    CHECK(instanceRemote == 0x1002);
+    CHECK(packet[firstFields + 0x15] == 12);
+
+    const DWORD second = first + 2 + 4 + STORE_BLOCK_BASE;
+    std::memcpy(&nameLength, packet + second, sizeof(nameLength));
+    CHECK(nameLength == 4);
+    CHECK(std::memcmp(packet + second + 2, "CUST", 4) == 0);
+    std::memcpy(&instancePlayer, packet + second + 2 + 4 + 0xD, sizeof(instancePlayer));
+    std::memcpy(&instanceRemote, packet + second + 2 + 4 + 0x11, sizeof(instanceRemote));
+    CHECK(instancePlayer == 0);
+    CHECK(instanceRemote == -1);
+}
+
+TEST_CASE("msg: CMessageEnterStoreMode::MarshalMessage keeps the full body for an unknown target", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+
+    CAIObjectType proprietor;
+    SetTypeFields(proprietor, 2, "PROP");
+    proprietor.m_nInstance = CGameObjectArray::INVALID_INDEX;
+    CAIObjectType customer;
+    SetTypeFields(customer, 21, "CUST");
+    customer.m_nInstance = CGameObjectArray::INVALID_INDEX;
+
+    CMessageEnterStoreMode message(proprietor, customer, CResRef("STOR01"), 10, CGameObjectArray::INVALID_INDEX);
+
+    BYTE packet[HEADER_LENGTH + 0x80];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    message.MarshalMessage(&pPacket, &dwSize);
+
+    // NOTE: Unlike the other marshals, a failed target share does not zero
+    // the size: the pair is written as (0, 0xFFFFFFFF).
+    CHECK(dwSize == 6 + 9 + 2 * (2 + 4 + STORE_BLOCK_BASE));
+    PLAYER_ID player = 123;
+    LONG remoteObject = 456;
+    std::memcpy(&player, packet + HEADER_LENGTH, sizeof(player));
+    std::memcpy(&remoteObject, packet + HEADER_LENGTH + 4, sizeof(remoteObject));
+    CHECK(player == 0);
+    CHECK(remoteObject == -1);
+}
+
+TEST_CASE("msg: CMessageEnterStoreMode codec round-trips", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    CGameObject* pProprietor = AddObject(pGame, 8, 0x1002);
+    CGameObject* pCustomer = AddObject(pGame, 9, 0x1003);
+    AddRemote(pGame, 7, 0x1001, pObject->m_id);
+    AddRemote(pGame, 8, 0x1002, pProprietor->m_id);
+    AddRemote(pGame, 9, 0x1003, pCustomer->m_id);
+
+    CAIObjectType proprietor;
+    SetTypeFields(proprietor, 2, "PROP");
+    proprietor.m_nInstance = pProprietor->m_id;
+    CAIObjectType customer;
+    SetTypeFields(customer, 21, "CUST");
+    customer.m_nInstance = pCustomer->m_id;
+
+    CMessageEnterStoreMode sent(proprietor, customer, CResRef("STOR01"), 10, pObject->m_id);
+    BYTE packet[HEADER_LENGTH + 0x80];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPacket, &dwSize);
+
+    CMessageEnterStoreMode received(proprietor, customer, CResRef(""), 0, 0);
+    REQUIRE(received.UnmarshalMessage(packet, HEADER_LENGTH + dwSize) == TRUE);
+    CHECK(received.GetTarget() == pObject->m_id);
+    CHECK(received.m_cResStore == CResRef("STOR01"));
+
+    const CAIObjectType& gotProprietor = received.m_cAIProprietor;
+    CHECK(gotProprietor.m_sName == "PROP");
+    CHECK(gotProprietor.m_nEnemyAlly == proprietor.m_nEnemyAlly);
+    CHECK(gotProprietor.m_nGeneral == proprietor.m_nGeneral);
+    CHECK(gotProprietor.m_nRace == proprietor.m_nRace);
+    CHECK(gotProprietor.m_nSubRace == proprietor.m_nSubRace);
+    CHECK(gotProprietor.m_nClass == proprietor.m_nClass);
+    CHECK(gotProprietor.m_nSpecific == proprietor.m_nSpecific);
+    CHECK(gotProprietor.m_nGender == proprietor.m_nGender);
+    CHECK(gotProprietor.m_nAlignment == proprietor.m_nAlignment);
+    CHECK(gotProprietor.m_nAvClass == proprietor.m_nAvClass);
+    CHECK(gotProprietor.m_nClassMask == proprietor.m_nClassMask);
+    CHECK(gotProprietor.m_nInstance == pProprietor->m_id);
+    for (INT index = 0; index < 5; index++) {
+        CHECK(gotProprietor.m_SpecialCase[index] == proprietor.m_SpecialCase[index]);
+    }
+
+    const CAIObjectType& gotCustomer = received.m_cAICustomer;
+    CHECK(gotCustomer.m_sName == "CUST");
+    CHECK(gotCustomer.m_nEnemyAlly == customer.m_nEnemyAlly);
+    CHECK(gotCustomer.m_nInstance == pCustomer->m_id);
+    for (INT index = 0; index < 5; index++) {
+        CHECK(gotCustomer.m_SpecialCase[index] == customer.m_SpecialCase[index]);
+    }
+}
+
+TEST_CASE("msg: CMessageEnterStoreMode::UnmarshalMessage rejects an unknown instance pair", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    AddRemote(pGame, 7, 0x1001, pObject->m_id);
+
+    CAIObjectType proprietor;
+    SetTypeFields(proprietor, 2, "PROP");
+    proprietor.m_nInstance = CGameObjectArray::INVALID_INDEX;
+    CAIObjectType customer;
+    SetTypeFields(customer, 21, "CUST");
+    customer.m_nInstance = CGameObjectArray::INVALID_INDEX;
+
+    CMessageEnterStoreMode sent(proprietor, customer, CResRef("STOR01"), 10, pObject->m_id);
+    BYTE packet[HEADER_LENGTH + 0x80];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPacket, &dwSize);
+
+    // Overwrite the first block's instance pair with an unresolved one: the
+    // decoder rejects the whole message (a resolved pair or (0, 0xFFFFFFFF)
+    // are the only accepted values).
+    const DWORD first = HEADER_LENGTH + 6 + 9;
+    const DWORD instancePair = first + 2 + 4 + 0xD;
+    PLAYER_ID player = 9;
+    LONG remoteObject = 0x1999;
+    std::memcpy(packet + instancePair, &player, sizeof(player));
+    std::memcpy(packet + instancePair + 4, &remoteObject, sizeof(remoteObject));
+
+    CMessageEnterStoreMode received(proprietor, customer, CResRef(""), 0, 0);
+    CHECK(received.UnmarshalMessage(packet, HEADER_LENGTH + dwSize) == FALSE);
+}

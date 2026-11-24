@@ -11933,6 +11933,190 @@ BYTE CMessageEnterStoreMode::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_ENTER_STORE_MODE;
 }
 
+// 0x4FECF0
+void CMessageEnterStoreMode::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    CAIObjectType type;
+    CResRef res;
+    CString name;
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    PLAYER_ID player = 0;
+    LONG remoteId = 0xFFFFFFFF;
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc == CGameObjectArray::SUCCESS) {
+        player = pObject->m_remotePlayerID;
+        remoteId = pObject->m_remoteObjectID;
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    res = m_cResStore;
+    res.CopyToString(name);
+    BYTE length = static_cast<BYTE>(name.GetLength());
+
+    // 0x4FCxxx: (resref length) + 9 then, per CAIObjectType block, the name
+    // length + 2 and the fixed 0x1A bytes.
+    *dwSize = (length & 0xff) + 9;
+    type.Set(m_cAIProprietor);
+    *dwSize += type.GetName().GetLength() + 2 + 0x1A;
+    type.Set(m_cAICustomer);
+    *dwSize += type.GetName().GetLength() + 2 + 0x1A;
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    (*pData)[cnt++] = length;
+    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), length);
+    cnt += length;
+
+    for (INT block = 0; block < 2; block++) {
+        if (block == 0) {
+            type.Set(m_cAIProprietor);
+        } else {
+            type.Set(m_cAICustomer);
+        }
+
+        CString sName = type.GetName();
+        SHORT nameLength = static_cast<SHORT>(sName.GetLength());
+        memcpy(*pData + cnt, &nameLength, sizeof(nameLength));
+        cnt += sizeof(nameLength);
+        memcpy(*pData + cnt, sName.GetBuffer(sName.GetLength()), nameLength);
+        cnt += nameLength;
+
+        (*pData)[cnt++] = type.m_nEnemyAlly;
+        (*pData)[cnt++] = type.m_nGeneral;
+        (*pData)[cnt++] = type.m_nRace;
+        (*pData)[cnt++] = type.m_nSubRace;
+        (*pData)[cnt++] = type.m_nClass;
+        (*pData)[cnt++] = type.m_nSpecific;
+        (*pData)[cnt++] = type.m_nGender;
+        (*pData)[cnt++] = type.m_nAlignment;
+        (*pData)[cnt++] = type.m_nAvClass;
+        memcpy(*pData + cnt, &type.m_nClassMask, sizeof(type.m_nClassMask));
+        cnt += sizeof(type.m_nClassMask);
+
+        // The block's instance id as a remote pair, or (0, 0xFFFFFFFF).
+        PLAYER_ID instancePlayer = 0;
+        LONG instanceRemoteId = 0xFFFFFFFF;
+        CGameObject* pInstance;
+        BYTE instanceRc;
+        do {
+            instanceRc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(type.m_nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                &pInstance,
+                INFINITE);
+        } while (instanceRc == CGameObjectArray::SHARED || instanceRc == CGameObjectArray::DENIED);
+        if (instanceRc == CGameObjectArray::SUCCESS) {
+            instancePlayer = pInstance->m_remotePlayerID;
+            instanceRemoteId = pInstance->m_remoteObjectID;
+            g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(type.m_nInstance,
+                CGameObjectArray::THREAD_ASYNCH,
+                INFINITE);
+        }
+        memcpy(*pData + cnt, &instancePlayer, sizeof(instancePlayer));
+        cnt += sizeof(instancePlayer);
+        memcpy(*pData + cnt, &instanceRemoteId, sizeof(instanceRemoteId));
+        cnt += sizeof(instanceRemoteId);
+
+        memcpy(*pData + cnt, type.m_SpecialCase, sizeof(type.m_SpecialCase));
+        cnt += sizeof(type.m_SpecialCase);
+    }
+
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x4FF170
+BOOL CMessageEnterStoreMode::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    CAIObjectType type;
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cursor = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cursor, sizeof(player));
+    cursor += sizeof(player);
+    memcpy(&remoteId, pData + cursor, sizeof(remoteId));
+    cursor += sizeof(remoteId);
+    // NOTE: A miss is not fatal: the target becomes INVALID_INDEX and the
+    // message is still decoded (the original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE length = pData[cursor++];
+    CHAR szStore[9] = { 0 };
+    // NOTE: The original copies the wire byte (up to 255) into a 9-byte stack
+    // buffer and overflows for a name longer than 8; bounded here (P4-10).
+    memcpy(szStore, pData + cursor, length > 8 ? 8 : length);
+    m_cResStore = CString(szStore, length > 8 ? 8 : length);
+    cursor += length;
+
+    for (INT block = 0; block < 2; block++) {
+        SHORT nameLength;
+        memcpy(&nameLength, pData + cursor, sizeof(nameLength));
+        cursor += sizeof(nameLength);
+        // NOTE: The original builds the CString from the wire length; bounded
+        // to the engine's SCRIPTNAME_SIZE here (P4-10).
+        SHORT nName = nameLength > 32 ? 32 : nameLength;
+        type.m_sName = CString(reinterpret_cast<const char*>(pData + cursor), nName);
+        cursor += nameLength;
+
+        type.m_nEnemyAlly = pData[cursor++];
+        type.m_nGeneral = pData[cursor++];
+        type.m_nRace = pData[cursor++];
+        type.m_nSubRace = pData[cursor++];
+        type.m_nClass = pData[cursor++];
+        type.m_nSpecific = pData[cursor++];
+        type.m_nGender = pData[cursor++];
+        type.m_nAlignment = pData[cursor++];
+        type.m_nAvClass = pData[cursor++];
+        memcpy(&type.m_nClassMask, pData + cursor, sizeof(type.m_nClassMask));
+        cursor += sizeof(type.m_nClassMask);
+
+        PLAYER_ID instancePlayer;
+        LONG instanceRemoteId;
+        memcpy(&instancePlayer, pData + cursor, sizeof(instancePlayer));
+        memcpy(&instanceRemoteId, pData + cursor + 4, sizeof(instanceRemoteId));
+        cursor += 8;
+        if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(instancePlayer, instanceRemoteId, local) == TRUE) {
+            type.m_nInstance = local;
+        } else if (instancePlayer == 0 && instanceRemoteId == static_cast<LONG>(0xFFFFFFFF)) {
+            type.m_nInstance = CGameObjectArray::INVALID_INDEX;
+        } else {
+            // NOTE: A block whose instance pair does not resolve rejects the
+            // whole message (0x4FF373-0x4FF381), unlike the target pair.
+            return FALSE;
+        }
+
+        type.SetSpecialCase(pData + cursor);
+        cursor += sizeof(type.m_SpecialCase);
+
+        if (block == 0) {
+            m_cAIProprietor.Set(type);
+        } else {
+            m_cAICustomer.Set(type);
+        }
+    }
+
+    UTIL_ASSERT(cursor == dwSize);
+    return TRUE;
+}
+
 // 0x4FF480
 void CMessageEnterStoreMode::Run()
 {
