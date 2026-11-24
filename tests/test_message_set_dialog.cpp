@@ -210,3 +210,152 @@ TEST_CASE("msg: CMessageSetDialogResRef::UnmarshalMessage keeps an unresolved ta
     CHECK(message.GetTarget() == static_cast<LONG>(CGameObjectArray::INVALID_INDEX));
     CHECK(message.m_cResRefDialog == CResRef("DLG001"));
 }
+
+TEST_CASE("msg: CMessageSetDialogWait::MarshalMessage writes the wait and its sprite", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    CGameObject* pWaitTarget = AddObject(pGame, 8, 0x1002);
+    CMessageSetDialogWait message(33, pWaitTarget->m_id, 10, pObject->m_id);
+
+    BYTE packet[HEADER_LENGTH + 0x14];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    message.MarshalMessage(&pPacket, &dwSize);
+
+    REQUIRE(dwSize == 0x14);
+    PLAYER_ID player = 0;
+    LONG remoteObject = 0;
+    LONG wait = 0;
+    PLAYER_ID waitPlayer = 0;
+    LONG waitRemoteObject = 0;
+    std::memcpy(&player, packet + HEADER_LENGTH, sizeof(player));
+    std::memcpy(&remoteObject, packet + HEADER_LENGTH + 4, sizeof(remoteObject));
+    std::memcpy(&wait, packet + HEADER_LENGTH + 8, sizeof(wait));
+    std::memcpy(&waitPlayer, packet + HEADER_LENGTH + 0xC, sizeof(waitPlayer));
+    std::memcpy(&waitRemoteObject, packet + HEADER_LENGTH + 0x10, sizeof(waitRemoteObject));
+    CHECK(player == 7);
+    CHECK(remoteObject == 0x1001);
+    CHECK(wait == 33);
+    CHECK(waitPlayer == 8);
+    CHECK(waitRemoteObject == 0x1002);
+
+    // The wait target's absence writes (0, 0xFFFFFFFF).
+    CMessageSetDialogWait noWaitTarget(33, CGameObjectArray::INVALID_INDEX, 10, pObject->m_id);
+    std::memset(packet, 0xCD, sizeof(packet));
+    pPacket = packet + HEADER_LENGTH;
+    dwSize = 0;
+    noWaitTarget.MarshalMessage(&pPacket, &dwSize);
+    std::memcpy(&waitPlayer, packet + HEADER_LENGTH + 0xC, sizeof(waitPlayer));
+    std::memcpy(&waitRemoteObject, packet + HEADER_LENGTH + 0x10, sizeof(waitRemoteObject));
+    CHECK(waitPlayer == 0);
+    CHECK(waitRemoteObject == -1);
+}
+
+TEST_CASE("msg: CMessageSetDialogWait::MarshalMessage zeroes the size for an unknown target", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+
+    CMessageSetDialogWait message(33, 0, 10, CGameObjectArray::INVALID_INDEX);
+
+    BYTE packet[HEADER_LENGTH + 0x14];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0x10;
+    message.MarshalMessage(&pPacket, &dwSize);
+
+    CHECK(dwSize == 0);
+    for (BYTE nByte : packet) {
+        CHECK(nByte == 0xCD);
+    }
+}
+
+TEST_CASE("msg: CMessageSetDialogWait codec round-trips", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    CGameObject* pWaitTarget = AddObject(pGame, 8, 0x1002);
+    AddRemote(pGame, 7, 0x1001, pObject->m_id);
+    AddRemote(pGame, 8, 0x1002, pWaitTarget->m_id);
+
+    CMessageSetDialogWait sent(33, pWaitTarget->m_id, 10, pObject->m_id);
+    BYTE packet[HEADER_LENGTH + 0x14];
+    std::memset(packet, 0xCD, sizeof(packet));
+    BYTE* pPacket = packet + HEADER_LENGTH;
+    DWORD dwSize = 0;
+    sent.MarshalMessage(&pPacket, &dwSize);
+
+    CMessageSetDialogWait received(0, 0, 0, 0);
+    REQUIRE(received.UnmarshalMessage(packet, HEADER_LENGTH + dwSize) == TRUE);
+    CHECK(received.GetTarget() == pObject->m_id);
+    CHECK(received.m_wait == 33);
+    CHECK(received.m_waitTarget == pWaitTarget->m_id);
+
+    // The vtable getters: SEND and subtype 40.
+    CHECK(received.GetCommType() == CMessage::SEND);
+    CHECK(received.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_DIALOG_WAIT);
+}
+
+TEST_CASE("msg: CMessageSetDialogWait::UnmarshalMessage rejects unknown pairs", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope scope;
+    CInfGame* pGame = scope.Game();
+
+    CGameObject* pObject = AddObject(pGame, 7, 0x1001);
+    AddRemote(pGame, 7, 0x1001, pObject->m_id);
+
+    BYTE packet[HEADER_LENGTH + 0x14];
+    std::memset(packet, 0, sizeof(packet));
+    PLAYER_ID player = 7;
+    LONG remoteObject = 0x1001;
+    LONG wait = 33;
+    std::memcpy(packet + HEADER_LENGTH, &player, sizeof(player));
+    std::memcpy(packet + HEADER_LENGTH + 4, &remoteObject, sizeof(remoteObject));
+    std::memcpy(packet + HEADER_LENGTH + 8, &wait, sizeof(wait));
+
+    SECTION("an unknown target pair rejects the message")
+    {
+        player = 9;
+        remoteObject = 0x1999;
+        std::memcpy(packet + HEADER_LENGTH, &player, sizeof(player));
+        std::memcpy(packet + HEADER_LENGTH + 4, &remoteObject, sizeof(remoteObject));
+
+        CMessageSetDialogWait message(0, 0, 0, 44);
+        CHECK(message.UnmarshalMessage(packet, sizeof(packet)) == FALSE);
+        CHECK(message.GetTarget() == 44);
+    }
+
+    SECTION("an absent wait target pair (0, 0xFFFFFFFF) decodes as INVALID_INDEX")
+    {
+        PLAYER_ID waitPlayer = 0;
+        LONG waitRemoteObject = -1;
+        std::memcpy(packet + HEADER_LENGTH + 0xC, &waitPlayer, sizeof(waitPlayer));
+        std::memcpy(packet + HEADER_LENGTH + 0x10, &waitRemoteObject, sizeof(waitRemoteObject));
+
+        CMessageSetDialogWait message(0, 0, 0, 44);
+        CHECK(message.UnmarshalMessage(packet, sizeof(packet)) == TRUE);
+        CHECK(message.GetTarget() == pObject->m_id);
+        CHECK(message.m_wait == 33);
+        CHECK(message.m_waitTarget == static_cast<LONG>(CGameObjectArray::INVALID_INDEX));
+    }
+
+    SECTION("an unknown wait-target pair rejects the message")
+    {
+        PLAYER_ID waitPlayer = 9;
+        LONG waitRemoteObject = 0x1999;
+        std::memcpy(packet + HEADER_LENGTH + 0xC, &waitPlayer, sizeof(waitPlayer));
+        std::memcpy(packet + HEADER_LENGTH + 0x10, &waitRemoteObject, sizeof(waitRemoteObject));
+
+        CMessageSetDialogWait message(0, 0, 0, 44);
+        CHECK(message.UnmarshalMessage(packet, sizeof(packet)) == FALSE);
+    }
+}

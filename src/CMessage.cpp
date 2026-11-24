@@ -13394,6 +13394,107 @@ BYTE CMessageSetDialogWait::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_DIALOG_WAIT;
 }
 
+// 0x506000
+void CMessageSetDialogWait::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    PLAYER_ID player;
+    LONG remoteId;
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc != CGameObjectArray::SUCCESS) {
+        *dwSize = 0;
+        return;
+    }
+    player = pObject->m_remotePlayerID;
+    remoteId = pObject->m_remoteObjectID;
+    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+        CGameObjectArray::THREAD_ASYNCH,
+        INFINITE);
+
+    *dwSize = 0x14;
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    memcpy(*pData + cnt, &m_wait, sizeof(m_wait));
+    cnt += sizeof(m_wait);
+
+    // The sprite the wait applies to, as a remote pair, or (0, 0xFFFFFFFF).
+    PLAYER_ID waitPlayer = 0;
+    LONG waitRemoteId = 0xFFFFFFFF;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_waitTarget,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc == CGameObjectArray::SUCCESS) {
+        waitPlayer = pObject->m_remotePlayerID;
+        waitRemoteId = pObject->m_remoteObjectID;
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_waitTarget,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+    memcpy(*pData + cnt, &waitPlayer, sizeof(waitPlayer));
+    cnt += sizeof(waitPlayer);
+    memcpy(*pData + cnt, &waitRemoteId, sizeof(waitRemoteId));
+    cnt += sizeof(waitRemoteId);
+
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x5061D0
+BOOL CMessageSetDialogWait::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // Unlike its sibling resref message, an unresolved target rejects the
+    // whole message (0x5061F0-0x506205).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) != TRUE) {
+        return FALSE;
+    }
+    m_targetId = local;
+
+    memcpy(&m_wait, pData + cnt, sizeof(m_wait));
+    cnt += sizeof(m_wait);
+
+    PLAYER_ID waitPlayer;
+    LONG waitRemoteId;
+    memcpy(&waitPlayer, pData + cnt, sizeof(waitPlayer));
+    memcpy(&waitRemoteId, pData + cnt + 4, sizeof(waitRemoteId));
+    cnt += 8;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(waitPlayer, waitRemoteId, local) == TRUE) {
+        m_waitTarget = local;
+    } else if (waitRemoteId == static_cast<LONG>(0xFFFFFFFF) && waitPlayer == 0) {
+        m_waitTarget = CGameObjectArray::INVALID_INDEX;
+    } else {
+        // NOTE: An unresolved wait-target pair rejects the whole message
+        // (0x50620D-0x506226).
+        return FALSE;
+    }
+
+    UTIL_ASSERT(dwSize == cnt);
+    return TRUE;
+}
+
 // 0x5062C0
 void CMessageSetDialogWait::Run()
 {
