@@ -24857,9 +24857,96 @@ BOOL CMessageStoreMarkup::UnmarshalMessage(BYTE* pData, DWORD dwSize)
     return TRUE;
 }
 
-// TODO: 0x515CC0 not ported
+// 0x515CC0
 void CMessageStoreMarkup::Run()
 {
+    CStore* pStore;
+
+    if (g_pChitin->cNetwork.GetSessionHosting()) {
+        pStore = g_pBaldurChitin->GetObjectGame()->GetServerStore(m_store);
+
+        // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+        // __LINE__: 31433
+        UTIL_ASSERT(pStore != NULL);
+
+        pStore->m_header.m_nBuyMarkUp = m_nBuyMarkUp;
+        pStore->m_header.m_nSellMarkDown = m_nSellMarkDown;
+        pStore->m_header.m_nAdditionalMarkDown = m_nAdditionalMarkDown;
+    } else if (g_pChitin->cNetwork.GetSessionOpen()) {
+        CStore::InvalidateStore(m_store);
+    }
+
+    pStore = g_pBaldurChitin->m_pEngineStore->m_pStore;
+    if (pStore != NULL) {
+        if (pStore->m_resRef == m_store) {
+            g_pBaldurChitin->GetObjectGame()->ChangeStoreMarkup(m_store,
+                m_nBuyMarkUp,
+                m_nSellMarkDown,
+                m_nAdditionalMarkDown);
+            g_pBaldurChitin->m_pEngineStore->UpdateStoreCost();
+
+            LONG nCharacterId = g_pBaldurChitin->m_pEngineWorld->m_internalLoadedDialog.m_characterIndex;
+            if (nCharacterId != CGameObjectArray::BAD_INDEX) {
+                CGameObject* pObject;
+
+                BYTE rc;
+                do {
+                    rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        &pObject,
+                        INFINITE);
+                } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                if (rc == CGameObjectArray::SUCCESS) {
+                    // NOTE: Uninline.
+                    if (pObject->InControl()) {
+                        g_pBaldurChitin->m_pEngineStore->UpdateMainPanel();
+                    }
+
+                    g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                        CGameObjectArray::THREAD_ASYNCH,
+                        INFINITE);
+                }
+            }
+        } else {
+            pStore = g_pBaldurChitin->m_pEngineStore->m_pBag;
+            if (pStore != NULL && pStore->m_resRef == m_store) {
+                g_pBaldurChitin->GetObjectGame()->ChangeStoreMarkup(m_store,
+                    m_nBuyMarkUp,
+                    m_nSellMarkDown,
+                    m_nAdditionalMarkDown);
+                g_pBaldurChitin->m_pEngineStore->UpdateGroupCost();
+
+                LONG nCharacterId = g_pBaldurChitin->m_pEngineWorld->m_internalLoadedDialog.m_characterIndex;
+                if (nCharacterId != CGameObjectArray::BAD_INDEX) {
+                    CGameObject* pObject;
+
+                    BYTE rc;
+                    do {
+                        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(nCharacterId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            &pObject,
+                            INFINITE);
+                    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+
+                    if (rc == CGameObjectArray::SUCCESS) {
+                        // NOTE: Uninline.
+                        if (pObject->InControl()) {
+                            g_pBaldurChitin->m_pEngineStore->UpdateMainPanel();
+                        }
+
+                        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(nCharacterId,
+                            CGameObjectArray::THREAD_ASYNCH,
+                            INFINITE);
+                    }
+                }
+            }
+        }
+    }
+
+    if (g_pChitin->cNetwork.GetSessionHosting()) {
+        g_pBaldurChitin->GetObjectGame()->ReleaseServerStore(m_store);
+    }
 }
 
 // -----------------------------------------------------------------------------
