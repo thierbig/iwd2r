@@ -16,6 +16,7 @@
 #include "CGameStatic.h"
 #include "CGameTrigger.h"
 #include "CInfCursor.h"
+#include "CInfinity.h"
 #include "CInfGame.h"
 #include "CItem.h"
 #include "CPathSearch.h"
@@ -34,6 +35,7 @@
 #include "CScreenSinglePlayer.h"
 #include "CScreenStore.h"
 #include "CScreenWorld.h"
+#include "CScreenWorldMap.h"
 #include "CSpell.h"
 #include "CStore.h"
 #include "CUIControlTextDisplay.h"
@@ -45,6 +47,173 @@
 
 // NOTE: Might be static in `CMessage`.
 //
+// 0x434D80
+BOOLEAN CBaldurMessage::OnChapterRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    BYTE nChapter = pData[3];
+    BYTE nResRefLength = pData[4];
+    BYTE resRef[8] = {};
+    memcpy(resRef, pData + 5, nResRefLength);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The pending-chapter switch only fires when the chapter cannot start at
+    // once (a loaded/cut-scene save, a permitted dialog or a hard pause).
+    BOOL bCanStart = TRUE;
+    if (pGame->m_gameSave.m_mode == 0x182 || pGame->m_gameSave.m_mode == 0x502) {
+        bCanStart = FALSE;
+    }
+    if (pGame->m_multiplayerSettings.m_bHostPermittedDialog == TRUE) {
+        bCanStart = FALSE;
+    }
+    if (g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
+        bCanStart = FALSE;
+    }
+
+    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter)) {
+        if (!bCanStart || g_pBaldurChitin->m_pEngineWorld->m_bHardPaused == TRUE) {
+            g_pBaldurChitin->m_pEngineWorld->SetPendingChapterChange(nChapter, resRef);
+        }
+    }
+
+    if (pGame->GetCurrentChapter() < static_cast<INT>(nChapter) && bCanStart
+        && g_pBaldurChitin->m_pEngineWorld->m_bHardPaused != TRUE) {
+        g_pBaldurChitin->m_pEngineChapter->StartChapterMultiplayerHost(nChapter, resRef);
+    }
+
+    return TRUE;
+}
+
+// 0x435040
+BOOLEAN CBaldurMessage::OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    BYTE nChapter = pData[3];
+    BYTE nResRefLength = pData[4];
+    BYTE resRefBytes[8] = {};
+    memcpy(resRefBytes, pData + 5, nResRefLength);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    pGame->SetCurrentChapter(nChapter);
+
+    g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineChapter);
+
+    CResRef resRef(resRefBytes);
+    g_pBaldurChitin->m_pEngineChapter->StartChapter(resRef);
+
+    return TRUE;
+}
+
+// 0x435470
+BOOLEAN CBaldurMessage::OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)pData;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() != TRUE) {
+        return FALSE;
+    }
+
+    if (g_pChitin->pActiveEngine == g_pBaldurChitin->m_pEngineWorldMap) {
+        SendMapWorldAnnounceStatus(FALSE, 0, 0);
+        g_pBaldurChitin->m_pEngineWorldMap->StopWorldMap(FALSE);
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    }
+
+    return TRUE;
+}
+
+// 0x4355F0
+BOOLEAN CBaldurMessage::OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting() == TRUE) {
+        return FALSE;
+    }
+
+    BOOLEAN bStart = pData[3];
+    LONG nFacing = *reinterpret_cast<LONG*>(pData + 4);
+    DWORD nLeavingEdge = *reinterpret_cast<DWORD*>(pData + 8);
+
+    CScreenWorldMap* pWorldMap = g_pBaldurChitin->m_pEngineWorldMap;
+
+    if (g_pChitin->pActiveEngine != pWorldMap) {
+        if (bStart == TRUE) {
+            pWorldMap->StartWorldMap(1,
+                nLeavingEdge,
+                nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
+            g_pChitin->pActiveEngine->SelectEngine(pWorldMap);
+        }
+        return TRUE;
+    }
+
+    if (bStart == FALSE) {
+        pWorldMap->StopWorldMap(FALSE);
+        g_pChitin->pActiveEngine->SelectEngine(g_pBaldurChitin->m_pEngineWorld);
+    } else {
+        pWorldMap->StopWorldMap(FALSE);
+        pWorldMap->StartWorldMap(1,
+            nLeavingEdge,
+            nFacing == g_pChitin->cNetwork.m_idLocalPlayer);
+    }
+
+    return TRUE;
+}
+
+// 0x4361D0
+BOOLEAN CBaldurMessage::OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    BYTE nResRefLength = pData[3];
+    BYTE resRefBytes[8] = {};
+    memcpy(resRefBytes, pData + 4, nResRefLength);
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CResRef resRef(resRefBytes);
+    CString sAreaName;
+    resRef.CopyToString(sAreaName);
+
+    CWorldMap* pWorldMap = pGame->GetWorldMap(sAreaName);
+    pWorldMap->EnableArea(pWorldMap->sub_55A3A0(), resRef, TRUE);
+
+    return TRUE;
+}
+
+
+
+
+
+
+
+
+
+
 // 0x8ABE0C
 static const DWORD STATICBUFFERSIZE = 0x4000;
 
@@ -611,6 +780,8 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST = 82;
 
 // 0x84CF94
 const BYTE CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE = 65;
+
+const BYTE CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST = 114;
 
 // 0x84CF98
 const BYTE CBaldurMessage::MSG_TYPE_OBJECT = 79;

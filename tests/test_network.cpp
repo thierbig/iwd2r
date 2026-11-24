@@ -1828,3 +1828,95 @@ TEST_CASE("msg: CMessageAddAction marshal/unmarshal failure paths", "[network][m
     CHECK(objectResult.UnmarshalMessage(objectMiss, CNetwork::SPEC_MSG_HEADER_LENGTH + payloadSize) == FALSE);
     CHECK(objectResult.m_targetId == nTarget);
 }
+
+// -----------------------------------------------------------------------------
+// #121 G15: the chapter/mapworld/movie/rest/reform/weather/time handlers.
+//
+// These are thin multiplayer-only shells around engine calls that need a live
+// screen/area, so the fixture pins the guards (the payload layouts are checked
+// by the evidence notes and the dispatcher arms). No handler is called with
+// passing guards on the zeroed engine.
+
+namespace {
+
+BYTE* G15Packet(BYTE nType, BYTE nSubType)
+{
+    static BYTE packet[64];
+    std::memset(packet, 0, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = nType;
+    packet[2] = nSubType;
+    return packet;
+}
+
+void G15Session(BOOLEAN bConnected, BOOLEAN bHost)
+{
+    CNetwork& network = g_pChitin->cNetwork;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = bConnected;
+    network.m_bIsHost = bHost;
+    network.m_idLocalPlayer = 1;
+    network.m_nHostPlayer = 0;
+    network.m_psPlayerName[0] = "host";
+    network.m_pPlayerID[0] = 2;
+    network.m_pbPlayerVisible[0] = TRUE;
+}
+
+} // namespace
+
+TEST_CASE("msg: the G15 handlers refuse a closed session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    G15Session(FALSE, FALSE);
+
+    CBaldurMessage message;
+
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA);
+    CHECK(message.OnMapWorldRevealArea(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CBaldurMessage message;
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+
+    // Client-only handlers on a host machine.
+    G15Session(TRUE, TRUE);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+
+    // Host-only handlers on a client machine.
+    G15Session(TRUE, FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
