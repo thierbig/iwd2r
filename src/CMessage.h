@@ -303,6 +303,8 @@ public:
     BOOLEAN OnUpdateCharacterSlotReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnResourceDemanded(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN ResourceSuggestLoad(const CString& sResName, UINT nType, DWORD dwFlags);
+    BOOLEAN OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnResourceRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL OnSettingsFullDemanded(INT nMsgFrom);
     BOOL SendFullSettingsToClients(const CString& sPlayerName);
     BOOL OnSettingsFullSet(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);

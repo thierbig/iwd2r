@@ -2663,3 +2663,96 @@ TEST_CASE("msg: CMessage84 round-trips its target pair and resref", "[network][m
 
     message.Run();
 }
+
+// CBaldurMessage::OnResourceSuggest (0x42ABA0): the client's receive of the
+// server's resource suggestion. The payload after the 3-byte spec header is
+// {UINT type; DWORD flags; char resref[]}; the sender side is
+// ResourceSuggestLoad (0x42AA10). Only type 1010 loads an area, and that needs
+// the real install, so the fixture pins the connected-session guard and the
+// accepted-and-dropped arm for another type.
+TEST_CASE("msg: OnResourceSuggest takes only a connected session's suggestion", "[network][msg]")
+{
+    ChitinScope chitin;
+    // RosterSession is a generic connected TCP/IP session here; the name comes
+    // from the roster tests that introduced it.
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + sizeof(UINT) + sizeof(DWORD) + 8];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST;
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const UINT nType = 1013; // CGameFile: accepted and dropped
+    std::memcpy(packet + cnt, &nType, sizeof(nType));
+    cnt += sizeof(nType);
+    const DWORD dwFlags = 0x101; // travel image 1, progress-bar bit set
+    std::memcpy(packet + cnt, &dwFlags, sizeof(dwFlags));
+    cnt += sizeof(dwFlags);
+    std::memcpy(packet + cnt, "AR1001", 6);
+    cnt += 6;
+
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == TRUE);
+
+    // A closed session is the guard's FALSE arm.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == FALSE);
+}
+
+// CBaldurMessage::OnResourceRequest (0x42ADF0): the host's receive of a
+// client's resource hand-off. The payload after the 3-byte spec header is
+// {BYTE nLength; char sResRef[nLength]; UINT nType; DWORD nSize; BYTE
+// data[nSize]}; the two written types (world map 1015, store 1014) need a real
+// CRes object from the install, so the fixture pins the host guard and the
+// accepted-and-dropped arm for another type. The subtype is 0x43 (67) of the
+// dispatcher's MSG_TYPE_RESOURCE (82) arm; the original has no labelled
+// constant for it (the dispatcher uses its jump table), so the literal is
+// spelled with this comment.
+TEST_CASE("msg: OnResourceRequest takes only a hosting session's hand-off", "[network][msg]")
+{
+    ChitinScope chitin;
+    RosterSession session(TRUE);
+
+    CBaldurMessage message;
+
+    // {BYTE nLength; char sResRef[]; UINT nType; DWORD nSize; BYTE data[]}
+    // after the 3-byte spec header.
+    const BYTE nLength = 8;
+    const UINT nType = 1013; // CGameFile: accepted and dropped
+    const char* szData = "PROBE";
+    const DWORD nSize = 5;
+
+    BYTE packet[3 + sizeof(BYTE) + nLength + sizeof(UINT) + sizeof(DWORD) + 5];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    packet[2] = 67; // the subtype-0x43 (resource request) arm
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    packet[cnt] = nLength;
+    cnt += sizeof(BYTE);
+    std::memcpy(packet + cnt, "00GBGA01", nLength);
+    cnt += nLength;
+    std::memcpy(packet + cnt, &nType, sizeof(nType));
+    cnt += sizeof(nType);
+    std::memcpy(packet + cnt, &nSize, sizeof(nSize));
+    cnt += sizeof(nSize);
+    std::memcpy(packet + cnt, szData, nSize);
+    cnt += nSize;
+
+    CHECK(message.OnResourceRequest(0, packet, cnt) == TRUE);
+
+    // Only the host takes a hand-off.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.OnResourceRequest(0, packet, cnt) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    // A closed session is the guard's other FALSE arm.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnResourceRequest(0, packet, cnt) == FALSE);
+}

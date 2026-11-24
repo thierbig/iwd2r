@@ -1584,6 +1584,118 @@ BOOLEAN CBaldurMessage::ResourceSuggestLoad(const CString& sResName, UINT nType,
     return TRUE;
 }
 
+// 0x42ABA0
+// The server's resource suggestion: a client is told to load an area. The
+// payload after the 3-byte spec header is {UINT nType; DWORD dwFlags; char
+// sResRef[]}; only type 1010 (CAreaFile) acts, and dwFlags carries the travel
+// screen image in its low byte and the progress-bar request in bit 8, exactly
+// as ResourceSuggestLoad (0x42AA10) packs it. field_4BD4 suppresses the queued
+// messages while the area loads.
+//
+// NOTE: The original also declares two CResHelper locals that are born dead
+// here (their refcounted ctor/dtor run, nothing else); the port omits them as
+// they have no observable effect.
+BOOLEAN CBaldurMessage::OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+
+    // The client's receive: a session, but no hosting requirement.
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    UINT nType = *reinterpret_cast<UINT*>(pData + cnt);
+    cnt += sizeof(UINT);
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    // The original copies the payload remainder into a fixed stack buffer
+    // unchecked; bound the resref copy to 8 bytes here (P4-10).
+    DWORD nLength = dwSize > cnt ? dwSize - cnt : 0;
+    if (nLength > RESREF_SIZE) {
+        nLength = RESREF_SIZE;
+    }
+    CString sResName(reinterpret_cast<char*>(pData + cnt), nLength);
+
+    if (nType == 1010) { // CAreaFile
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+        pGame->field_4BD4 = 1;
+        pGame->LoadArea(sResName,
+            static_cast<BYTE>(dwFlags),
+            ((dwFlags >> 8) & 1) != 0,
+            FALSE);
+        pGame->field_4BD4 = 0;
+    }
+
+    return TRUE;
+}
+
+// 0x42ADF0
+// The host's resource hand-off: a client sends one resource's records and the
+// host writes them into the game's temp directory through the matching CRes
+// type. The payload after the 3-byte spec header is {BYTE nLength; char
+// sResRef[nLength]; UINT nType; DWORD nSize; BYTE data[nSize]}. Only the world
+// map (1015) and store (1014) records are written; every other type is accepted
+// and dropped. 0x43E190, the out-of-line CResHelper<CResStore,1014>::SetResRef
+// (survey row 57), is the same template method the world-map arm uses
+// (src/CRes.h), so the store arm calls SetResRef like the world-map arm.
+BOOLEAN CBaldurMessage::OnResourceRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    // The host's receive: session open and hosting.
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    BYTE nLength = pData[cnt];
+    cnt += sizeof(BYTE);
+
+    // The original copies the wire length into a fixed stack buffer
+    // unchecked; bound the resref copy to 8 bytes here (P4-10) while the
+    // cursor still advances by the wire length.
+    BYTE nCopyLength = nLength < RESREF_SIZE ? nLength : RESREF_SIZE;
+    CString sResName(reinterpret_cast<char*>(pData + cnt), nCopyLength);
+    cnt += nLength;
+
+    UINT nType = *reinterpret_cast<UINT*>(pData + cnt);
+    cnt += sizeof(UINT);
+
+    DWORD nSize = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    BYTE* pBuffer = CreateBuffer(nSize);
+    if (pBuffer == NULL) {
+        return FALSE;
+    }
+
+    memcpy(pBuffer, pData + cnt, nSize);
+
+    if (nType == 1015) { // CResWorldMap
+        CResHelper<CResWorldMap, 1015> res;
+        CResRef cResRef(sResName);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(g_pBaldurChitin->GetObjectGame()->m_sTempDir, pBuffer, nSize);
+    } else if (nType == 1014) { // CResStore
+        CResHelper<CResStore, 1014> res;
+        CResRef cResRef(sResName);
+        res.SetResRef(cResRef, TRUE, TRUE);
+        res.GetRes()->Write(g_pBaldurChitin->GetObjectGame()->m_sTempDir, pBuffer, nSize);
+    }
+
+    DestroyBuffer(pBuffer);
+
+    return TRUE;
+}
+
 // 0x42B1F0
 BOOL CBaldurMessage::OnSettingsFullDemanded(INT nMsgFrom)
 {
