@@ -26,6 +26,7 @@
 #include "CScreenCreateChar.h"
 #include "CScreenWorld.h"
 #include "CSearchBitmap.h"
+#include "CSpell.h"
 #include "CStore.h"
 #include "CUIControlTextDisplay.h"
 #include "CUtil.h"
@@ -6725,4 +6726,87 @@ TEST_CASE("sprite: sub_723830 stores the rule tables' base attack count (0x72383
         pCharacter->sub_723830();
         CHECK(pCharacter->m_baseStats.m_numberOfAttacksBase == c.attacks);
     }
+}
+
+// CGameSprite::ReadySpell(CString) (0x719180): the keymap spell-key entry.
+// Readying SPWI114 (a level-1 wizard spell of the keymap table, in
+// src/CInfGame.cpp's off_8B4F84) from its resref fills the use button with
+// the resref and the selected ability's target type, drives the game state
+// and the action bar from it, and queues the SPELL action the caster
+// performs.
+TEST_CASE("sprite: ReadySpell(resref) readies a keymap spell and queues its cast (0x719180)", "[ai][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pCharacter = NewGameInStartArea(cre);
+    REQUIRE(pCharacter != NULL);
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+    // The ability the body's scan reaches at the sprite's caster level: the
+    // last one whose minimum caster level the sprite meets.
+    CSpell spell(CResRef("SPWI114"));
+    spell.Demand();
+    REQUIRE(spell.GetAbilityCount() > 0);
+    SHORT nCasterLevel = pCharacter->GetCasterLevel(&spell, 0, 0);
+    if (nCasterLevel <= 1) {
+        nCasterLevel = 1;
+    }
+    SPELL_ABILITY* pAbility = NULL;
+    for (INT nAbility = 0; nAbility < spell.GetAbilityCount(); nAbility++) {
+        if (spell.GetAbility(nAbility)->minCasterLevel > nCasterLevel) {
+            break;
+        }
+        pAbility = spell.GetAbility(nAbility);
+    }
+    REQUIRE(pAbility != NULL);
+    const BYTE nActionType = pAbility->actionType;
+    spell.Release();
+    INFO("SPWI114 actionType " << static_cast<int>(nActionType)
+                               << ", caster level " << nCasterLevel);
+    // The case-5 arm is the one that queues the cast; the fixture's spell is
+    // a self-cast whose first ability selects it.
+    REQUIRE(nActionType == 5);
+
+    // A ready state and a non-zero selected button before the call, so the
+    // arm's stores are visible.
+    pCharacter->ClearActions(FALSE);
+    pCharacter->m_interrupt = FALSE;
+    pCharacter->m_userCommandPause = 0;
+    pCharacter->m_triggerId = 0;
+    pGame->SetState(3);
+    pGame->GetButtonArray()->m_nSelectedButton = 0;
+
+    pCharacter->ReadySpell(CString("SPWI114"));
+
+    // The use button keeps the resref and the selected ability's target type
+    // (the exe dereferences the ability before its NULL check).
+    CHECK(pCharacter->m_currentUseButton.m_abilityId.m_res == CResRef("SPWI114"));
+    CHECK(pCharacter->m_currentUseButton.m_abilityId.m_targetType == nActionType);
+    // ReadyCursor and the case-5 arm leave the cast cursor ready.
+    CHECK(pGame->GetState() == 0);
+    CHECK(pGame->GetButtonArray()->m_nSelectedButton == 100);
+
+    // The case-5 arm queues exactly the SPELL action the caster performs.
+    const CAbilityId& abilityId = pCharacter->m_currentUseButton.m_abilityId;
+    REQUIRE(pCharacter->m_queuedActions.GetCount() == 1);
+    const CAIAction* pAction = pCharacter->m_queuedActions.GetHead();
+    REQUIRE(pAction != NULL);
+    CHECK(pAction->m_actionID == CAIAction::SPELL);
+    CHECK(pAction->m_acteeID.m_nInstance == pCharacter->m_typeAI.m_nInstance);
+    CHECK(pAction->m_string1 == "SPWI114");
+    CHECK(pAction->m_specificID == 0);
+    CHECK(pAction->m_specificID2 == (abilityId.m_nClass | (abilityId.field_1E << 8)));
+    CHECK(pAction->m_specificID3 == abilityId.field_1D);
+    CHECK(pCharacter->m_userCommandPause == 75);
+    CHECK(pCharacter->m_triggerId == CGameObjectArray::INVALID_INDEX);
+    CHECK(pCharacter->m_interrupt == TRUE);
 }
