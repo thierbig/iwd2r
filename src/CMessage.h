@@ -1270,6 +1270,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL sub_50D660(CString sAreaString);
     void Run() override;
 
     /* 000C */ LONG* m_pPath;
