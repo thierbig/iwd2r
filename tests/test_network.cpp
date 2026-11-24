@@ -769,6 +769,136 @@ TEST_CASE("CBaldurMessage::OnLeaveAreaLuaRequestToServer refuses without a sessi
     network.m_bIsHost = FALSE;
 }
 
+// LEAVEAREALUA 88/114 cancel handler: the client records the host's reply
+// code in its waiting slot. It takes the buffer and a dwSize it ignores (the
+// original's 2-argument `ret 8` form), and neither guard needs game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xCD };
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // A closed session is refused before the payload is read.
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // Only a client waits for the cancel; the host's own request never
+    // reaches this handler.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == FALSE);
+
+    // The client stores the payload byte after the 3-byte header and marks
+    // the reply returned.
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaLuaCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaLuaReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaLuaReplyValue == 0xCD);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/114 cancel handler: the LEAVEAREALUA cancel's twin,
+// with its own waiting slot. Two-argument `ret 8` form, no game state.
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameCancel records the reply only on a connected client", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    BYTE packet[4] = { 0, 0, 0, 0xAB };
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == FALSE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == FALSE);
+
+    network.m_bIsHost = FALSE;
+    CHECK(message.OnLeaveAreaNameCancel(packet, sizeof(packet)) == TRUE);
+    CHECK(message.m_bLeaveAreaNameReplyReturned == TRUE);
+    CHECK(message.m_nLeaveAreaNameReplyValue == 0xAB);
+
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREALUA 88/65 announce handler: the host tells a client to make one
+// sprite leave an area. The two entry guards need no game state; after them
+// the handler decodes the announce and calls CInfGame::LeaveAreaLUA, which
+// needs a booted game (its own paths are covered by the permit-reply case
+// below and by tests/test_ui_misc.cpp's travel scenario).
+TEST_CASE("CBaldurMessage::OnLeaveAreaLuaAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREALUA 88, announce 65, zeroed body}; the announce
+    // subtype has no in-tree constant (the survey's X/A row publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 2 + 1 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREALUA;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Only a client acts on the announce.
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaLuaAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
+// LEAVEAREANAME 120/65 announce handler: the host tells a client's copy of
+// a party member to run a party-required trigger's transition. The guard
+// needs no game state; after it the handler decodes the announce and calls
+// CInfGame::sub_5C4AD0, which on the client side waits for the host's
+// signals (tests/test_ui_misc.cpp's travel scenario and 5C4AD0.md cover it).
+TEST_CASE("CBaldurMessage::OnLeaveAreaNameAnnounce refuses without a session or on the host", "[msg][network]")
+{
+    ChitinScope scope;
+    CNetwork& network = g_pChitin->cNetwork;
+    CBaldurMessage message;
+
+    // {header 0xFF, LEAVEAREANAME 120, announce 65, zeroed body}; the
+    // announce subtype has no in-tree constant (the survey's x/A row
+    // publishes 65).
+    BYTE packet[3 + 4 + 4 + 4 + 4 + 1] = { 0 };
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_LEAVEAREANAME;
+    packet[2] = 65;
+
+    CHECK(network.m_bConnectionEstablished == FALSE);
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    network.m_bConnectionEstablished = TRUE;
+    network.m_bIsHost = TRUE;
+    CHECK(message.OnLeaveAreaNameAnnounce(0, packet, sizeof(packet)) == FALSE);
+
+    // Leave the embedded CNetwork closed before the ChitinScope restores
+    // g_pChitin (its destructor would otherwise call OnCloseSession).
+    network.m_bConnectionEstablished = FALSE;
+    network.m_bIsHost = FALSE;
+}
+
 // The handler's response computation and the 1-byte LEAVEAREALUA 88/114
 // reply on a zeroed game: the remote object always misses (so no feedback
 // sprite), the area is never loaded and the settings are the only variable.
@@ -2277,6 +2407,153 @@ TEST_CASE("msg: OnCharacterPartyOrderReply accepts the host's answer", "[network
 
     g_pChitin->pActiveEngine = NULL;
 }
+
+// -----------------------------------------------------------------------------
+// #121 G15: the chapter/mapworld/movie/rest/reform/weather/time handlers.
+//
+// These are thin multiplayer-only shells around engine calls that need a live
+// screen/area, so the fixture pins the guards (the payload layouts are checked
+// by the evidence notes and the dispatcher arms). No handler is called with
+// passing guards on the zeroed engine.
+
+namespace {
+
+BYTE* G15Packet(BYTE nType, BYTE nSubType)
+{
+    static BYTE packet[64];
+    std::memset(packet, 0, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = nType;
+    packet[2] = nSubType;
+    return packet;
+}
+
+void G15Session(BOOLEAN bConnected, BOOLEAN bHost)
+{
+    CNetwork& network = g_pChitin->cNetwork;
+    network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+    network.m_bConnectionEstablished = bConnected;
+    network.m_bIsHost = bHost;
+    network.m_idLocalPlayer = 1;
+    network.m_nHostPlayer = 0;
+    network.m_psPlayerName[0] = "host";
+    network.m_pPlayerID[0] = 2;
+    network.m_pbPlayerVisible[0] = TRUE;
+}
+
+} // namespace
+
+TEST_CASE("msg: the G15 handlers refuse a closed session", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+    G15Session(FALSE, FALSE);
+
+    CBaldurMessage message;
+
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA);
+    CHECK(message.OnMapWorldRevealArea(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
+TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]")
+{
+    ChitinScope chitin;
+    MessageGameScope game;
+
+    CBaldurMessage message;
+    BYTE* pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_ANNOUNCE_STATUS);
+
+    // Client-only handlers on a host machine.
+    G15Session(TRUE, TRUE);
+    CHECK(message.OnChapterAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
+    CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
+
+    // Host-only handlers on a client machine.
+    G15Session(TRUE, FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_CHAPTER,
+        CBaldurMessage::MSG_SUBTYPE_CHAPTER_REQUEST);
+    CHECK(message.OnChapterRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
+        CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
+    CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
+
+    G15Session(FALSE, FALSE);
+    g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+}
+
 
 // -----------------------------------------------------------------------------
 // #121 G12b: CMessage83 / CMessage84 (subtypes 83/84). The payload is the
