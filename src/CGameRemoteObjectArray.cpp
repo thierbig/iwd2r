@@ -124,7 +124,10 @@ BOOL CGameRemoteObjectArray::Add(PLAYER_ID remotePlayerID, LONG remoteObjectID, 
         node->pNext = m_pArray[arrayIndex];
         m_pArray[arrayIndex] = node;
     } else {
-        m_pArray[arrayIndex] = NULL;
+        // NOTE: The original stores the new node here too (0x59B071); the
+        // ported body assigned NULL, so the first entry of every empty
+        // bucket was lost.
+        m_pArray[arrayIndex] = node;
     }
 
     if (bSetInGame == TRUE) {
