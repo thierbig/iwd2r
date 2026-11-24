@@ -177,7 +177,9 @@ TEST_CASE("msg: CMessageDisplayText::UnmarshalMessage keeps an unresolved target
     CHECK(message.m_text == "TXT");
     CHECK(message.m_moveToTop == FALSE);
 
-    // The vtable getters: BROADCAST_FORCED and the cut-scene status subtype.
+    // The vtable getters: BROADCAST_FORCED and the display-text subtype, 16
+    // (the original's 0x43E060 reads the table byte at 0x84CEE7).
     CHECK(message.GetCommType() == CMessage::BROADCAST_FORCED);
-    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CUT_SCENE_MODE_STATUS);
+    CHECK(message.GetMsgSubType() == CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXT);
+    CHECK(message.GetMsgSubType() == 16);
 }

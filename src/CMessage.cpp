@@ -11734,7 +11734,9 @@ BYTE CMessageDisplayText::GetMsgType()
 // 0x43E060
 BYTE CMessageDisplayText::GetMsgSubType()
 {
-    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CUT_SCENE_MODE_STATUS;
+    // The original reads the subtype table byte at 0x84CEE7 (0x84CED7 + 16),
+    // which holds 16.
+    return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_DISPLAY_TEXT;
 }
 
 // 0x4FC390
