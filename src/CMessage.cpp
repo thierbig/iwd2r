@@ -19331,6 +19331,81 @@ BYTE CMessageStartTextScreen::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_START_TEXT_SCREEN;
 }
 
+// 0x5089E0
+void CMessageStartTextScreen::MarshalMessage(BYTE** pData, DWORD* dwSize)
+{
+    CResRef res;
+    CString name;
+    UTIL_ASSERT(pData != NULL && dwSize != NULL);
+
+    PLAYER_ID player = 0;
+    LONG remoteId = 0xFFFFFFFF;
+    CGameObject* pObject;
+    BYTE rc;
+    do {
+        rc = g_pBaldurChitin->GetObjectGame()->GetObjectArray()->GetShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            &pObject,
+            INFINITE);
+    } while (rc == CGameObjectArray::SHARED || rc == CGameObjectArray::DENIED);
+    if (rc == CGameObjectArray::SUCCESS) {
+        player = pObject->m_remotePlayerID;
+        remoteId = pObject->m_remoteObjectID;
+        g_pBaldurChitin->GetObjectGame()->GetObjectArray()->ReleaseShare(m_targetId,
+            CGameObjectArray::THREAD_ASYNCH,
+            INFINITE);
+    }
+
+    res = m_screen;
+    res.CopyToString(name);
+    *dwSize = name.GetLength() + 9;
+    UTIL_ASSERT(*dwSize <= STATICBUFFERSIZE);
+
+    DWORD cnt = 0;
+    memcpy(*pData + cnt, &player, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(*pData + cnt, &remoteId, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    (*pData)[cnt++] = static_cast<BYTE>(name.GetLength());
+    memcpy(*pData + cnt, name.GetBuffer(name.GetLength()), name.GetLength());
+    cnt += name.GetLength();
+    UTIL_ASSERT(cnt == *dwSize);
+}
+
+// 0x508BA0
+BOOL CMessageStartTextScreen::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    // NOTE: The original also constructs an unused CAIObjectType local at
+    // entry (SEH-protected, destructed on both exits); the port omits it.
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: A miss is not fatal: the target becomes INVALID_INDEX and the
+    // message is still decoded (the original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    BYTE length = pData[cnt++];
+    CHAR szScreen[9] = { 0 };
+    // NOTE: The original copies the wire byte (up to 255) into a 9-byte stack
+    // buffer and overflows for a name longer than 8; bounded here (P4-10).
+    memcpy(szScreen, pData + cnt, length > 8 ? 8 : length);
+    cnt += length;
+    m_screen = CString(szScreen, length > 8 ? 8 : length);
+
+    UTIL_ASSERT(dwSize == cnt);
+    return TRUE;
+}
+
 // 0x508D30
 void CMessageStartTextScreen::Run()
 {
