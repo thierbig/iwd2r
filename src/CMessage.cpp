@@ -10817,6 +10817,61 @@ BYTE CMessageDisplayText::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_CUT_SCENE_MODE_STATUS;
 }
 
+// 0x4FC390
+BOOL CMessageDisplayText::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: A miss is not fatal: the target becomes INVALID_INDEX and the
+    // message is still decoded (the original returns TRUE either way).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) == TRUE) {
+        m_targetId = local;
+    } else {
+        m_targetId = CGameObjectArray::INVALID_INDEX;
+    }
+
+    SHORT nameLength;
+    memcpy(&nameLength, pData + cnt, sizeof(nameLength));
+    cnt += sizeof(nameLength);
+    // NOTE: The original builds each CString from the wire length without
+    // checking it against dwSize; the copies are bounded to the packet here
+    // (P4-10), while the cursor keeps the wire lengths as the exe does.
+    DWORD nName = static_cast<DWORD>(nameLength);
+    if (nName > dwSize - cnt) {
+        nName = dwSize > cnt ? dwSize - cnt : 0;
+    }
+    m_name = CString(reinterpret_cast<const char*>(pData + cnt), static_cast<int>(nName));
+    cnt += nameLength;
+
+    SHORT textLength;
+    memcpy(&textLength, pData + cnt, sizeof(textLength));
+    cnt += sizeof(textLength);
+    DWORD nText = static_cast<DWORD>(textLength);
+    if (nText > dwSize - cnt) {
+        nText = dwSize > cnt ? dwSize - cnt : 0;
+    }
+    m_text = CString(reinterpret_cast<const char*>(pData + cnt), static_cast<int>(nText));
+    cnt += textLength;
+
+    memcpy(&m_nameColor, pData + cnt, sizeof(m_nameColor));
+    cnt += sizeof(m_nameColor);
+    memcpy(&m_textColor, pData + cnt, sizeof(m_textColor));
+    cnt += sizeof(m_textColor);
+    memcpy(&m_marker, pData + cnt, sizeof(m_marker));
+    cnt += sizeof(m_marker);
+    m_moveToTop = pData[cnt++];
+
+    UTIL_ASSERT(cnt == dwSize);
+    return TRUE;
+}
+
 // 0x4FC4F0
 void CMessageDisplayText::Run()
 {
