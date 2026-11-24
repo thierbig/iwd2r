@@ -61,7 +61,9 @@ BOOLEAN CBaldurMessage::OnChapterRequestToServer(INT nMsgFrom, BYTE* pData, DWOR
     BYTE nChapter = pData[3];
     BYTE nResRefLength = pData[4];
     BYTE resRef[8] = {};
-    memcpy(resRef, pData + 5, nResRefLength);
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRef, pData + 5, nResRefLength < sizeof(resRef) ? nResRefLength : sizeof(resRef));
 
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
 
@@ -106,7 +108,9 @@ BOOLEAN CBaldurMessage::OnChapterAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD
     BYTE nChapter = pData[3];
     BYTE nResRefLength = pData[4];
     BYTE resRefBytes[8] = {};
-    memcpy(resRefBytes, pData + 5, nResRefLength);
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 5, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
 
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     pGame->SetCurrentChapter(nChapter);
@@ -192,7 +196,9 @@ BOOLEAN CBaldurMessage::OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dw
 
     BYTE nResRefLength = pData[3];
     BYTE resRefBytes[8] = {};
-    memcpy(resRefBytes, pData + 4, nResRefLength);
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
 
     CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     CResRef resRef(resRefBytes);
@@ -276,7 +282,9 @@ BOOLEAN CBaldurMessage::OnMovieRequestToServer(INT nMsgFrom, BYTE* pData, DWORD 
 
     BYTE nResRefLength = pData[3];
     BYTE resRefBytes[8] = {};
-    memcpy(resRefBytes, pData + 4, nResRefLength);
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
 
     CResRef resRef(resRefBytes);
     CString sMovie;
@@ -320,7 +328,9 @@ BOOLEAN CBaldurMessage::OnMovieAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize)
 
     BYTE nResRefLength = pData[3];
     BYTE resRefBytes[8] = {};
-    memcpy(resRefBytes, pData + 4, nResRefLength);
+    // The original copies the wire length into a 9-byte stack buffer
+    // without checking it; bounded to the resref's 8 bytes here (P4-10).
+    memcpy(resRefBytes, pData + 4, nResRefLength < sizeof(resRefBytes) ? nResRefLength : sizeof(resRefBytes));
 
     CResRef resRef(resRefBytes);
     g_pBaldurChitin->m_pEngineWorld->ReadyMovie(resRef, TRUE);
