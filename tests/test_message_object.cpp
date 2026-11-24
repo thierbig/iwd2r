@@ -232,3 +232,141 @@ TEST_CASE("remote object array: UnmarshalControlChanges starts after the spec he
     CHECK(pRemote->Find(9, 10, nLocal) == TRUE);
     CHECK(nLocal == nObject);
 }
+
+TEST_CASE("object control: OnObjectControlSuggest asks for the mapped object", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(TRUE);
+
+    // The suggestion carries the object's own remote ids; the local copy
+    // mirrors them in m_remotePlayerID/m_remoteObjectID.
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 7;
+    pObject->m_remoteObjectID = 8;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 7, 8, nObject);
+
+    CBaldurMessage message;
+
+    BYTE packet[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(packet + HEADER_LENGTH, 7, 8);
+
+    // A closed session refuses before the lookup.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnObjectControlSuggest(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    // An unknown {player; object} pair is refused.
+    BYTE unknown[HEADER_LENGTH + PAIR_SIZE] = {};
+    WritePair(unknown + HEADER_LENGTH, 9, 9);
+    CHECK(message.OnObjectControlSuggest(0, unknown, sizeof(unknown)) == FALSE);
+
+    // A known pair is handed to ObjectControlRequest (0x430980): this host
+    // moves the control to itself and queues the change for the next
+    // OBJECT/67 broadcast.
+    CHECK(message.OnObjectControlSuggest(0, packet, sizeof(packet)) == TRUE);
+    CGameRemoteObjectArray* pRemote = game.Game()->GetRemoteObjectArray();
+    LONG nLocal = 0;
+    CHECK(pRemote->Find(1, nObject, nLocal) == TRUE);
+    CHECK(nLocal == nObject);
+    CHECK(pRemote->m_nControlsChanged == 1);
+    REQUIRE(pRemote->m_pControlsChanged != NULL);
+    CHECK(pRemote->m_pControlsChanged->oldPlayerID == 7);
+    CHECK(pRemote->m_pControlsChanged->oldObjectID == 8);
+    CHECK(pRemote->m_pControlsChanged->newPlayerID == 1);
+    CHECK(pRemote->m_pControlsChanged->newObjectID == nObject);
+    CHECK(pRemote->m_pControlsChanged->localControl == FALSE);
+}
+
+TEST_CASE("object control: OnObjectControlRequest applies the host's control change", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(TRUE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 3;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 3, 4, nObject);
+
+    CBaldurMessage message;
+
+    BYTE packet[HEADER_LENGTH + 4 * sizeof(DWORD)] = {};
+    WritePair(packet + HEADER_LENGTH, 3, 4);
+    WritePair(packet + HEADER_LENGTH + PAIR_SIZE, 9, 10);
+
+    // Only the host applies a request.
+    session.Network().m_bIsHost = FALSE;
+    CHECK(message.OnObjectControlRequest(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bIsHost = TRUE;
+
+    CHECK(message.OnObjectControlRequest(0, packet, sizeof(packet)) == TRUE);
+    CGameRemoteObjectArray* pRemote = game.Game()->GetRemoteObjectArray();
+    LONG nLocal = 0;
+    CHECK(pRemote->Find(9, 10, nLocal) == TRUE);
+    CHECK(nLocal == nObject);
+    CHECK(pRemote->m_nControlsChanged == 1);
+    REQUIRE(pRemote->m_pControlsChanged != NULL);
+    CHECK(pRemote->m_pControlsChanged->oldPlayerID == 3);
+    CHECK(pRemote->m_pControlsChanged->oldObjectID == 4);
+    CHECK(pRemote->m_pControlsChanged->newPlayerID == 9);
+    CHECK(pRemote->m_pControlsChanged->newObjectID == 10);
+    CHECK(pRemote->m_pControlsChanged->localControl == FALSE);
+}
+
+TEST_CASE("object control: OnObjectControl unmarshals the host's broadcast", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 3;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 3, 4, nObject);
+
+    CBaldurMessage message;
+
+    // {header; SHORT 0 areas changed; SHORT 1 control change;
+    //  {PLAYER_ID oldPlayer 3; LONG oldObject 4; PLAYER_ID newPlayer 9;
+    //   LONG newObject 10; BOOLEAN localControl 0}}
+    const DWORD payloadSize = sizeof(SHORT) + sizeof(SHORT)
+        + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(PLAYER_ID) + sizeof(LONG)
+        + sizeof(BOOLEAN);
+    BYTE packet[HEADER_LENGTH + payloadSize] = {};
+    DWORD cnt = HEADER_LENGTH;
+    const SHORT nAreas = 0;
+    std::memcpy(packet + cnt, &nAreas, sizeof(nAreas));
+    cnt += sizeof(nAreas);
+    const SHORT nChanges = 1;
+    std::memcpy(packet + cnt, &nChanges, sizeof(nChanges));
+    cnt += sizeof(nChanges);
+    WritePair(packet + cnt, 3, 4);
+    cnt += PAIR_SIZE;
+    WritePair(packet + cnt, 9, 10);
+    cnt += PAIR_SIZE;
+    packet[cnt++] = FALSE;
+    REQUIRE(cnt == sizeof(packet));
+
+    // A client applies exactly one broadcast: the host's.
+    session.Network().m_bIsHost = TRUE;
+    CHECK(message.OnObjectControl(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bIsHost = FALSE;
+
+    // Player location 1 is not the host's id.
+    CHECK(message.OnObjectControl(1, packet, sizeof(packet)) == FALSE);
+
+    // A closed session refuses.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnObjectControl(0, packet, sizeof(packet)) == FALSE);
+    session.Network().m_bConnectionEstablished = TRUE;
+
+    CHECK(message.OnObjectControl(0, packet, sizeof(packet)) == TRUE);
+    CGameRemoteObjectArray* pRemote = game.Game()->GetRemoteObjectArray();
+    LONG nLocal = 0;
+    CHECK(pRemote->Find(9, 10, nLocal) == TRUE);
+    CHECK(nLocal == nObject);
+}

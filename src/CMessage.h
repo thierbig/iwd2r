@@ -224,6 +224,8 @@ public:
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL;
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_REQUEST;
     static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST;
+    static const BYTE MSG_SUBTYPE_OBJECT_DELETE;
+    static const BYTE MSG_SUBTYPE_OBJECT_CONTROL_STATUS;
 
     static const BYTE MSG_TYPE_PLAYERCHAR;
     static const BYTE MSG_SUBTYPE_PLAYERCHAR_UPDATE_DEMAND;
@@ -333,6 +335,9 @@ public:
     BOOL ObjectControlSuggestion(PLAYER_ID playerToSuggestID, LONG localObjectID);
     BOOL ObjectControlRequest(LONG localObjectID);
     BOOL ObjectControl();
+    BOOLEAN OnObjectControlSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnObjectControlRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN SendChatMessage(CString& sChatMessage);

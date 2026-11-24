@@ -623,6 +623,12 @@ const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_REQUEST = 99;
 // 0x84CF9C
 const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_SUGGEST = 115;
 
+// 0x84CF9D
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_DELETE = 68;
+
+// 0x84CF9E
+const BYTE CBaldurMessage::MSG_SUBTYPE_OBJECT_CONTROL_STATUS = 100;
+
 // 0x84CF9F
 const BYTE CBaldurMessage::MSG_TYPE_PLAYERCHAR = 80;
 
@@ -3787,6 +3793,76 @@ BOOL CBaldurMessage::ObjectControl()
     // NOTE: The original's only epilogue zeroes EAX, so it answers FALSE even
     // after the broadcast (the callers ignore the value).
     return FALSE;
+}
+
+// 0x430910
+BOOLEAN CBaldurMessage::OnObjectControlSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    LONG nObject;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID)),
+            nObject)
+        != TRUE) {
+        return FALSE;
+    }
+
+    ObjectControlRequest(nObject);
+
+    return TRUE;
+}
+
+// 0x430BE0
+BOOLEAN CBaldurMessage::OnObjectControlRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || !g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // {PLAYER_ID oldRemotePlayerID; LONG oldRemoteObjectID;
+    //  PLAYER_ID newRemotePlayerID; LONG newRemoteObjectID}
+    g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->ChangeControl(
+        *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+        *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID)),
+        *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID) + sizeof(LONG)),
+        *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(PLAYER_ID)),
+        FALSE);
+
+    return TRUE;
+}
+
+// 0x430D40
+BOOLEAN CBaldurMessage::OnObjectControl(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    if (!g_pChitin->cNetwork.GetSessionOpen()
+        || g_pChitin->cNetwork.GetSessionHosting()) {
+        return FALSE;
+    }
+
+    // Only the host's own broadcast is applied.
+    PLAYER_ID nHostID = g_pChitin->cNetwork.m_nHostPlayer == -1
+        ? 0
+        : g_pChitin->cNetwork.m_pPlayerID[g_pChitin->cNetwork.m_nHostPlayer];
+
+    if (g_pChitin->cNetwork.GetPlayerID(nMsgFrom) != nHostID) {
+        return FALSE;
+    }
+
+    g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->UnmarshalControlChanges(pData, dwSize);
+
+    return TRUE;
 }
 
 // 0x4319C0
