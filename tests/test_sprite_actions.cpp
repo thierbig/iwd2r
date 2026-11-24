@@ -3925,10 +3925,46 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     REQUIRE(StartEngine(error));
     INFO(error);
     FramePump pump;
-    std::vector<BYTE> cre = FinishedCharacter();
-    if (cre.empty()) {
+
+    // The Characters folder ships the game's pregenerated party in name
+    // order, and the alphabetically first one is a dwarf. The CRELIGHT
+    // LIGHTMOD row gives the dwarf 0 (only HALF_ELF, ELF, DOG and WOLF get
+    // 50 in the shipped table; a missing race falls back to the 2DA default,
+    // 100), so the dark/bright contrast this test needs cannot be built from
+    // that character. Pin the fixture to the first pregenerated character
+    // whose race the rule table scales instead of depending on which .CHR
+    // the install happens to sort first.
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    std::vector<std::vector<BYTE>> candidates = FinishedCharacters();
+    if (candidates.empty()) {
         SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
     }
+    std::vector<BYTE> cre;
+    INT nLightMod = 0;
+    for (std::vector<BYTE>& candidate : candidates) {
+        CGameSprite* pProbe = new CGameSprite(candidate.data(),
+            static_cast<LONG>(candidate.size()),
+            0,
+            0,
+            static_cast<DWORD>(-1),
+            0,
+            0,
+            INT_MAX,
+            CPoint(-1, -1),
+            0);
+        CString sProbeRace = CGameSprite::GetRaceString(pProbe->GetAIType().m_nRace);
+        nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sProbeRace));
+        delete pProbe;
+        if (nLightMod > 0) {
+            cre = candidate;
+            break;
+        }
+    }
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no pregenerated character whose race has a positive CRELIGHT LIGHTMOD");
+    }
+    INFO("pinned a character whose race has LIGHTMOD " << nLightMod);
+
     CGameSprite* pCharacter = NewGameInStartArea(cre);
     CGameArea* pArea = pCharacter->GetArea();
     REQUIRE(pArea != NULL);
@@ -3936,7 +3972,6 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     pArea->m_visibility.SetAreaExplored();
     ClearMessages();
 
-    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
     pGame->m_worldTime.m_gameTime = 1000;
 
     // The hide feedback reaches the world screen's dialog display (it is
@@ -4029,7 +4064,7 @@ TEST_CASE("sprite: Hide (18) hides in the dark, fails in the light and reveals o
     // The racial LIGHTMOD row of CRELIGHT scales the light level against
     // the skill average.
     CString sRace = CGameSprite::GetRaceString(pCharacter->GetAIType().m_nRace);
-    INT nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
+    nLightMod = atol(pGame->GetRuleTables().m_tCRELIGHT.GetAt(CString("LIGHTMOD"), sRace));
     INFO("LIGHTMOD for " << std::string(static_cast<LPCSTR>(sRace)) << " is " << nLightMod);
     REQUIRE(nLightMod > 0);
 
