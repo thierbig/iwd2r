@@ -220,7 +220,11 @@ public:
     static const BYTE MSG_TYPE_MOVIE;
     static const BYTE MSG_SUBTYPE_MOVIE_REQUEST;
     static const BYTE MSG_SUBTYPE_MOVIE_ANNOUNCE;
+    static const BYTE MSG_TYPE_REST;
+    static const BYTE MSG_SUBTYPE_REST_REQUEST;
+    static const BYTE MSG_SUBTYPE_REST_ANNOUNCE;
     static const BYTE MSG_SUBTYPE_CHAPTER_REQUEST;
+    static const BYTE MSG_SUBTYPE_REFORMPARTY_REQUEST;
 
     static const BYTE MSG_TYPE_OBJECT;
     static const BYTE MSG_SUBTYPE_OBJECT_ADD;
@@ -443,6 +447,15 @@ public:
     BOOLEAN OnMapWorldCancelRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldAnnounceStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnRestRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnRestAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMovieRequestToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnMovieAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnReformPartyRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnReformPartyAnnounce(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnWeatherBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnTimeSynchBroadcast(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnTimeChangeToServer(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOL DisplayText(const CString& sName, const CString& sText, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);
     BOOL DisplayTextRef(STRREF name, STRREF text, COLORREF rgbNameColor, COLORREF rgbTextColor, LONG lMarker, LONG caller, LONG target);
     CString GetVersionControlShutdownServerString();

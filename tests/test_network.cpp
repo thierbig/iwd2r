@@ -1887,6 +1887,33 @@ TEST_CASE("msg: the G15 handlers refuse a closed session", "[network][msg]")
     pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
         CBaldurMessage::MSG_SUBTYPE_MAPWORLD_REVEAL_AREA);
     CHECK(message.OnMapWorldRevealArea(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
 
     G15Session(FALSE, FALSE);
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
@@ -1907,6 +1934,21 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
         CBaldurMessage::MSG_SUBTYPE_MAPWORLD_ANNOUNCE_STATUS);
     CHECK(message.OnMapWorldAnnounceStatus(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_ANNOUNCE);
+    CHECK(message.OnRestAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_ANNOUNCE);
+    CHECK(message.OnMovieAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_ANNOUNCE_STATUS);
+    CHECK(message.OnReformPartyAnnounce(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_WEATHER,
+        CBaldurMessage::MSG_SUBTYPE_WEATHER_BROADCAST);
+    CHECK(message.OnWeatherBroadcast(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_SYNCH_BROADCAST);
+    CHECK(message.OnTimeSynchBroadcast(0, pData, 64) == FALSE);
 
     // Host-only handlers on a client machine.
     G15Session(TRUE, FALSE);
@@ -1916,6 +1958,18 @@ TEST_CASE("msg: the G15 receive handlers refuse the wrong role", "[network][msg]
     pData = G15Packet(CBaldurMessage::MSG_TYPE_MAPWORLD,
         CBaldurMessage::MSG_SUBTYPE_MAPWORLD_CANCEL_REQUEST);
     CHECK(message.OnMapWorldCancelRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REST,
+        CBaldurMessage::MSG_SUBTYPE_REST_REQUEST);
+    CHECK(message.OnRestRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_MOVIE,
+        CBaldurMessage::MSG_SUBTYPE_MOVIE_REQUEST);
+    CHECK(message.OnMovieRequestToServer(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_REFORMPARTY,
+        CBaldurMessage::MSG_SUBTYPE_REFORMPARTY_REQUEST);
+    CHECK(message.OnReformPartyRequest(0, pData, 64) == FALSE);
+    pData = G15Packet(CBaldurMessage::MSG_TYPE_TIME,
+        CBaldurMessage::MSG_SUBTYPE_TIME_CHANGE_TO_SERVER);
+    CHECK(message.OnTimeChangeToServer(0, pData, 64) == FALSE);
 
     G15Session(FALSE, FALSE);
     g_pChitin->cNetwork.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
