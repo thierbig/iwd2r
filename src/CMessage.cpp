@@ -15562,6 +15562,57 @@ BYTE CMessageSetPath::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SET_PATH;
 }
 
+// 0x508320
+BOOL CMessageSetPath::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    UTIL_ASSERT(pData != NULL);
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    PLAYER_ID player;
+    LONG remoteId, local;
+    memcpy(&player, pData + cnt, sizeof(player));
+    cnt += sizeof(player);
+    memcpy(&remoteId, pData + cnt, sizeof(remoteId));
+    cnt += sizeof(remoteId);
+    // NOTE: Unlike most of the sibling decoders, an unresolved target is
+    // fatal here: the original returns FALSE without touching the message
+    // (0x50838C).
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(player, remoteId, local) != TRUE) {
+        return FALSE;
+    }
+    m_targetId = local;
+
+    BYTE length = pData[cnt++];
+    CHAR szArea[9] = { 0 };
+    // NOTE: The original copies the wire byte (up to 255) into a 9-byte stack
+    // buffer and overflows for a name longer than 8; bounded here (P4-10).
+    memcpy(szArea, pData + cnt, length > 8 ? 8 : length);
+    cnt += length;
+    m_sAreaString = CString(szArea, length > 8 ? 8 : length);
+
+    memcpy(&m_position, pData + cnt, sizeof(m_position));
+    cnt += sizeof(m_position);
+    memcpy(&m_nPath, pData + cnt, sizeof(m_nPath));
+    cnt += sizeof(m_nPath);
+    memcpy(&m_currPath, pData + cnt, sizeof(m_currPath));
+    cnt += sizeof(m_currPath);
+    memcpy(&m_currDest.x, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+    memcpy(&m_currDest.y, pData + cnt, sizeof(LONG));
+    cnt += sizeof(LONG);
+
+    if (m_nPath < 1) {
+        m_pPath = NULL;
+    } else {
+        m_pPath = new LONG[m_nPath];
+        memcpy(m_pPath, pData + cnt, sizeof(LONG) * m_nPath);
+        cnt += sizeof(LONG) * m_nPath;
+    }
+
+    UTIL_ASSERT(cnt == dwSize);
+    return TRUE;
+}
+
 // 0x5084C0
 void CMessageSetPath::Run()
 {
