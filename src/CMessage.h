@@ -1324,6 +1324,7 @@ public:
     SHORT GetCommType() override;
     BYTE GetMsgType() override;
     BYTE GetMsgSubType() override;
+    BOOL UnmarshalMessage(BYTE* pData, DWORD dwSize) override;
     BOOL sub_50D660(CString sAreaString);
     void Run() override;
 

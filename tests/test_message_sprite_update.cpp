@@ -598,3 +598,161 @@ TEST_CASE("sprite equipment: Run equips the message's items on the target", "[ms
         CHECK(message.m_equipment.m_items[nSlot] == NULL);
     }
 }
+
+// ---------------------------------------------------------------------------
+// CMessageSpriteUpdate::UnmarshalMessage (0x50D290): the decode half of the
+// subtype 57 wire record that Run test above applies.
+// ---------------------------------------------------------------------------
+
+// CMessageSpriteUpdate::UnmarshalMessage (0x50D290): the 14-byte record
+// (target's remote id pair, field-group mask) then only the groups the mask
+// bit marks present, in the exe's order.
+TEST_CASE("sprite update: UnmarshalMessage decodes the field groups it marks present", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+
+    CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    pGame->UpdateCharacterSlots();
+    pGame->SetupCharacters(FALSE);
+    REQUIRE(pSprite->GetArea() != NULL);
+
+    pSprite->m_remotePlayerID = 0x999;
+    pSprite->m_remoteObjectID = 0x888;
+    REQUIRE(pGame->GetRemoteObjectArray()->Add(0x999, 0x888, pSprite->GetId(), FALSE) == TRUE);
+
+    const DWORD nGroups = 0x400 | 0x100 | 2 | 4 | 8 | 0x800 | 0x10 | 0x40 | 0x20 | 1;
+
+    BYTE packet[0x300];
+    std::memset(packet, 0, sizeof(packet));
+
+    DWORD cnt = kSpecHeader;
+    *reinterpret_cast<PLAYER_ID*>(packet + cnt) = 0x999;
+    cnt += sizeof(PLAYER_ID);
+    *reinterpret_cast<LONG*>(packet + cnt) = 0x888;
+    cnt += sizeof(LONG);
+    *reinterpret_cast<DWORD*>(packet + cnt) = nGroups;
+    cnt = 0xF;
+
+    // Area name (0x400): length byte then the bytes.
+    const char* sArea = "AR1000";
+    const BYTE nAreaLength = static_cast<BYTE>(std::strlen(sArea));
+    packet[cnt] = nAreaLength;
+    cnt++;
+    std::memcpy(packet + cnt, sArea, nAreaLength);
+    cnt = nAreaLength + 0x10;
+
+    // Sequence (0x100).
+    *reinterpret_cast<SHORT*>(packet + cnt) = 7;
+    cnt += sizeof(SHORT);
+
+    // Position (0x2).
+    *reinterpret_cast<LONG*>(packet + cnt) = 1234;
+    *reinterpret_cast<LONG*>(packet + cnt + 4) = -5678;
+    cnt += 8;
+
+    // General state (0x4).
+    *reinterpret_cast<DWORD*>(packet + cnt) = 0x40;
+    cnt += sizeof(DWORD);
+
+    // Hit points (0x8).
+    *reinterpret_cast<SHORT*>(packet + cnt) = 37;
+    *reinterpret_cast<SHORT*>(packet + cnt + 2) = 40;
+    cnt += 4;
+
+    // Base-stat flags (0x800).
+    *reinterpret_cast<DWORD*>(packet + cnt) = 0x1234;
+    cnt += sizeof(DWORD);
+
+    // AC and field_64..field_6A (0x10): eight shorts.
+    for (INT nField = 0; nField < 8; nField++) {
+        *reinterpret_cast<SHORT*>(packet + cnt) = static_cast<SHORT>(100 + nField);
+        cnt += sizeof(SHORT);
+    }
+
+    // Enemy/ally and morale (0x40).
+    packet[cnt + 0] = 200;
+    packet[cnt + 1] = 201;
+    packet[cnt + 2] = 202;
+    packet[cnt + 3] = 1;
+    cnt += 4;
+
+    // Portrait icons (0x20): count then the ids.
+    *reinterpret_cast<SHORT*>(packet + cnt) = 2;
+    cnt += sizeof(SHORT);
+    *reinterpret_cast<LONG*>(packet + cnt) = 101;
+    *reinterpret_cast<LONG*>(packet + cnt + 4) = 102;
+    cnt += 8;
+
+    // Path, current path point, destination and move scale (0x1).
+    *reinterpret_cast<SHORT*>(packet + cnt) = 3;
+    cnt += sizeof(SHORT);
+    *reinterpret_cast<LONG*>(packet + cnt + 0) = 10;
+    *reinterpret_cast<LONG*>(packet + cnt + 4) = 20;
+    *reinterpret_cast<LONG*>(packet + cnt + 8) = 30;
+    cnt += 12;
+    *reinterpret_cast<SHORT*>(packet + cnt) = 1;
+    cnt += sizeof(SHORT);
+    *reinterpret_cast<LONG*>(packet + cnt) = 4444;
+    *reinterpret_cast<LONG*>(packet + cnt + 4) = -5555;
+    cnt += 8;
+    packet[cnt] = 5;
+    cnt++;
+    packet[cnt] = 1;
+    cnt++;
+
+    CMessageSpriteUpdate message(NULL, 0, 0);
+    REQUIRE(message.UnmarshalMessage(packet, cnt) == TRUE);
+
+    CHECK(message.m_targetId == pSprite->GetId());
+    CHECK(message.field_108 == nGroups);
+    CHECK(message.m_sAreaString == "AR1000");
+    CHECK(message.m_nSequence == 7);
+    CHECK(message.m_ptPosition.x == 1234);
+    CHECK(message.m_ptPosition.y == -5678);
+    CHECK(message.m_dwState == 0x40);
+    CHECK(message.m_nHitPoints == 37);
+    CHECK(message.m_nMaxHitPoints == 40);
+    CHECK(message.field_60 == 0x1234);
+    CHECK(message.field_64 == 100);
+    CHECK(message.field_66 == 101);
+    CHECK(message.field_68 == 102);
+    CHECK(message.field_6A == 103);
+    CHECK(message.m_nACCrushingMod == 104);
+    CHECK(message.m_nACMissileMod == 105);
+    CHECK(message.m_nACPiercingMod == 106);
+    CHECK(message.m_nACSlashingMod == 107);
+    CHECK(message.m_nEnemyAlly == 200);
+    CHECK(message.m_nEnemyAllyLive == 201);
+    CHECK(message.m_nEnemyAllyStart == 202);
+    CHECK(message.m_bMoralFailure == TRUE);
+    CHECK(message.field_74 == 2);
+    REQUIRE(message.field_76 != NULL);
+    CHECK(static_cast<LONG*>(message.field_76)[0] == 101);
+    CHECK(static_cast<LONG*>(message.field_76)[1] == 102);
+    CHECK(message.m_nPath == 3);
+    REQUIRE(message.m_pPath != NULL);
+    CHECK(message.m_pPath[0] == 10);
+    CHECK(message.m_pPath[1] == 20);
+    CHECK(message.m_pPath[2] == 30);
+    CHECK(message.m_currPath == 1);
+    CHECK(message.m_ptDest.x == 4444);
+    CHECK(message.m_ptDest.y == -5555);
+    CHECK(message.m_nMoveScale == 5);
+    CHECK(message.field_85 == 1);
+
+    // An unknown remote object is refused and leaves the message alone.
+    CMessageSpriteUpdate unknown(NULL, 0, 0);
+    packet[kSpecHeader + 1] = 0xAA;
+    CHECK(unknown.UnmarshalMessage(packet, cnt) == FALSE);
+}

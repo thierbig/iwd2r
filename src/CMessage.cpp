@@ -17689,6 +17689,168 @@ BYTE CMessageSpriteUpdate::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_UPDATE;
 }
 
+
+// 0x50D290
+BOOL CMessageSpriteUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    // __FILE__: C:\Projects\Icewind2\src\Baldur\CMessage.cpp
+    // __LINE__: 23421
+    UTIL_ASSERT(pData != NULL);
+
+    LONG localObjectID;
+    if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(
+            *reinterpret_cast<PLAYER_ID*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH),
+            *reinterpret_cast<LONG*>(pData + CNetwork::SPEC_MSG_HEADER_LENGTH + sizeof(PLAYER_ID)),
+            localObjectID)
+        != TRUE) {
+        return FALSE;
+    }
+
+    m_targetId = localObjectID;
+    field_108 = *reinterpret_cast<DWORD*>(pData + 0xB);
+
+    DWORD cnt = 0xF;
+
+    if ((field_108 & 0x400) != 0) {
+        BYTE nLength = *reinterpret_cast<BYTE*>(pData + cnt);
+        cnt += sizeof(BYTE);
+        m_sAreaString = CString(reinterpret_cast<char*>(pData + cnt), nLength);
+        cnt = nLength + 0x10;
+    }
+
+    if ((field_108 & 0x100) != 0) {
+        m_nSequence = *reinterpret_cast<SHORT*>(pData + cnt);
+        cnt += sizeof(SHORT);
+    }
+
+    if ((field_108 & 2) != 0) {
+        m_ptPosition.x = *reinterpret_cast<LONG*>(pData + cnt);
+        m_ptPosition.y = *reinterpret_cast<LONG*>(pData + cnt + sizeof(LONG));
+        cnt += 2 * sizeof(LONG);
+    }
+
+    if ((field_108 & 0x200) != 0) {
+        m_nFacing = *reinterpret_cast<SHORT*>(pData + cnt);
+        cnt += sizeof(SHORT);
+    }
+
+    if ((field_108 & 4) != 0) {
+        m_dwState = *reinterpret_cast<DWORD*>(pData + cnt);
+        cnt += sizeof(DWORD);
+    }
+
+    if ((field_108 & 0x8000) != 0) {
+        for (INT nBit = 0; nBit < 256; nBit++) {
+            m_spellStates[nBit] = ((pData[cnt + nBit / 8] >> (nBit % 8)) & 1) != 0;
+        }
+        cnt += 0x20;
+    }
+
+    if ((field_108 & 0x10000) != 0) {
+        memcpy(m_baseSkills, pData + cnt, sizeof(m_baseSkills));
+        cnt += sizeof(m_baseSkills);
+        memcpy(m_skills, pData + cnt, sizeof(m_skills));
+        cnt += sizeof(m_skills);
+        field_106 = *reinterpret_cast<BYTE*>(pData + cnt);
+        cnt += sizeof(BYTE);
+    }
+
+    if ((field_108 & 0x1000) != 0) {
+        m_nFadeSpeed = *reinterpret_cast<BYTE*>(pData + cnt);
+        cnt += sizeof(BYTE);
+    }
+
+    if ((field_108 & 0x4000) != 0) {
+        m_nTranslucent = *reinterpret_cast<BYTE*>(pData + cnt);
+        cnt += sizeof(BYTE);
+    }
+
+    if ((field_108 & 0x2000) != 0) {
+        DWORD dwVisualEffects = *reinterpret_cast<DWORD*>(pData + cnt);
+        for (INT nBit = 0; nBit < 32; nBit++) {
+            m_visualEffects[nBit] = ((dwVisualEffects >> nBit) & 1) != 0;
+        }
+        cnt += sizeof(DWORD);
+    }
+
+    if ((field_108 & 8) != 0) {
+        m_nHitPoints = *reinterpret_cast<SHORT*>(pData + cnt);
+        m_nMaxHitPoints = *reinterpret_cast<SHORT*>(pData + cnt + sizeof(SHORT));
+        cnt += 2 * sizeof(SHORT);
+    }
+
+    if ((field_108 & 0x800) != 0) {
+        field_60 = *reinterpret_cast<INT*>(pData + cnt);
+        cnt += sizeof(INT);
+    }
+
+    if ((field_108 & 0x10) != 0) {
+        field_64 = *reinterpret_cast<SHORT*>(pData + cnt + 0);
+        field_66 = *reinterpret_cast<SHORT*>(pData + cnt + 2);
+        field_68 = *reinterpret_cast<SHORT*>(pData + cnt + 4);
+        field_6A = *reinterpret_cast<SHORT*>(pData + cnt + 6);
+        m_nACCrushingMod = *reinterpret_cast<SHORT*>(pData + cnt + 8);
+        m_nACMissileMod = *reinterpret_cast<SHORT*>(pData + cnt + 10);
+        m_nACPiercingMod = *reinterpret_cast<SHORT*>(pData + cnt + 12);
+        m_nACSlashingMod = *reinterpret_cast<SHORT*>(pData + cnt + 14);
+        cnt += 8 * sizeof(SHORT);
+    }
+
+    if ((field_108 & 0x40) != 0) {
+        m_nEnemyAlly = *reinterpret_cast<BYTE*>(pData + cnt + 0);
+        m_nEnemyAllyLive = *reinterpret_cast<BYTE*>(pData + cnt + 1);
+        m_nEnemyAllyStart = *reinterpret_cast<BYTE*>(pData + cnt + 2);
+        m_bMoralFailure = *reinterpret_cast<BOOLEAN*>(pData + cnt + 3);
+        cnt += 4 * sizeof(BYTE);
+    }
+
+    if ((field_108 & 0x80) != 0) {
+        m_bLevelUp = *reinterpret_cast<BOOLEAN*>(pData + cnt);
+        cnt += sizeof(BYTE);
+        m_nHPCONBonusTotalOld = *reinterpret_cast<LONG*>(pData + cnt);
+        cnt += sizeof(LONG);
+    }
+
+    if ((field_108 & 0x20) != 0) {
+        field_74 = *reinterpret_cast<SHORT*>(pData + cnt);
+        cnt += sizeof(SHORT);
+        if (field_74 > 0) {
+            field_76 = new LONG[field_74];
+            memcpy(field_76, pData + cnt, sizeof(LONG) * field_74);
+            cnt += sizeof(LONG) * field_74;
+        }
+    }
+
+    if ((field_108 & 1) != 0) {
+        m_nPath = *reinterpret_cast<SHORT*>(pData + cnt);
+        cnt += sizeof(SHORT);
+
+        if (m_nPath < 1) {
+            m_pPath = NULL;
+        } else {
+            m_pPath = new LONG[m_nPath];
+            memcpy(m_pPath, pData + cnt, sizeof(LONG) * m_nPath);
+            cnt += sizeof(LONG) * m_nPath;
+        }
+
+        m_currPath = *reinterpret_cast<SHORT*>(pData + cnt);
+        cnt += sizeof(SHORT);
+
+        m_ptDest.x = *reinterpret_cast<LONG*>(pData + cnt);
+        m_ptDest.y = *reinterpret_cast<LONG*>(pData + cnt + sizeof(LONG));
+        cnt += 2 * sizeof(LONG);
+
+        m_nMoveScale = *reinterpret_cast<BYTE*>(pData + cnt);
+        cnt += sizeof(BYTE);
+    }
+
+    field_85 = *reinterpret_cast<BYTE*>(pData + cnt);
+
+    return TRUE;
+}
+
 // Whether this sprite update applies in `sAreaString` -- the area a party
 // transition is entering at every call site. TRUE when the message carries
 // no area ("NO_AREA", what Run 0x50D6F0 stores for a sprite in none) or when
