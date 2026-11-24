@@ -4681,6 +4681,70 @@ BOOLEAN CBaldurMessage::CharacterPartyOrderRequest()
     return TRUE;
 }
 
+// 0x4324E0
+BOOLEAN CBaldurMessage::OnCharacterPartyOrderRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+    (void)dwSize;
+
+    if (g_pChitin->cNetwork.GetSessionHosting() != TRUE
+        || !g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    LONG desired[CINFGAME_MAXCHARACTERS];
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+        cnt += sizeof(PLAYER_ID);
+
+        LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+        cnt += sizeof(LONG);
+
+        LONG localObjectID;
+        if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+                remoteObjectID,
+                localObjectID)
+            == TRUE) {
+            desired[nSlot] = localObjectID;
+        } else {
+            desired[nSlot] = CGameObjectArray::INVALID_INDEX;
+        }
+    }
+
+    SHORT nOverflowCount = pData[cnt++];
+    LONG* pOverflowIds = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowIds = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+            cnt += sizeof(PLAYER_ID);
+
+            LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+            cnt += sizeof(LONG);
+
+            LONG localObjectID;
+            if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+                    remoteObjectID,
+                    localObjectID)
+                == TRUE) {
+                pOverflowIds[nIndex] = localObjectID;
+            } else {
+                pOverflowIds[nIndex] = CGameObjectArray::INVALID_INDEX;
+            }
+        }
+    }
+
+    g_pBaldurChitin->GetObjectGame()->ApplyPartyRoster(desired, nOverflowCount, pOverflowIds);
+
+    if (nOverflowCount != 0) {
+        delete[] pOverflowIds;
+    }
+
+    return TRUE;
+}
+
 // 0x432610
 BOOLEAN CBaldurMessage::SendCharacterPartyOrderStatus()
 {
@@ -4799,6 +4863,120 @@ BOOLEAN CBaldurMessage::SendCharacterPartyOrderStatus()
         delete[] pOverflowIds;
         delete[] pOverflowPlayers;
         delete[] pOverflowObjects;
+    }
+
+    return TRUE;
+}
+
+// 0x432A10
+BOOLEAN CBaldurMessage::OnCharacterPartyOrderStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    if (g_pChitin->cNetwork.GetSessionHosting() == TRUE
+        || !g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    if (nMsgFrom != static_cast<INT>(static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer))) {
+        return FALSE;
+    }
+
+    LONG desired[CINFGAME_MAXCHARACTERS];
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    for (INT nSlot = 0; nSlot < CINFGAME_MAXCHARACTERS; nSlot++) {
+        PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+        cnt += sizeof(PLAYER_ID);
+
+        LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+        cnt += sizeof(LONG);
+
+        LONG localObjectID;
+        if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+                remoteObjectID,
+                localObjectID)
+            == TRUE) {
+            desired[nSlot] = localObjectID;
+        } else {
+            desired[nSlot] = CGameObjectArray::INVALID_INDEX;
+        }
+    }
+
+    SHORT nOverflowCount = pData[cnt++];
+    LONG* pOverflowIds = NULL;
+    if (nOverflowCount != 0) {
+        pOverflowIds = new LONG[nOverflowCount];
+        for (SHORT nIndex = 0; nIndex < nOverflowCount; nIndex++) {
+            PLAYER_ID remotePlayerID = *reinterpret_cast<PLAYER_ID*>(pData + cnt);
+            cnt += sizeof(PLAYER_ID);
+
+            LONG remoteObjectID = *reinterpret_cast<LONG*>(pData + cnt);
+            cnt += sizeof(LONG);
+
+            LONG localObjectID;
+            if (g_pBaldurChitin->GetObjectGame()->GetRemoteObjectArray()->Find(remotePlayerID,
+                    remoteObjectID,
+                    localObjectID)
+                == TRUE) {
+                pOverflowIds[nIndex] = localObjectID;
+            } else {
+                pOverflowIds[nIndex] = CGameObjectArray::INVALID_INDEX;
+            }
+        }
+    }
+
+    g_pBaldurChitin->GetObjectGame()->ApplyPartyRoster(desired, nOverflowCount, pOverflowIds);
+
+    CScreenWorld* pEngineWorld = g_pBaldurChitin->m_pEngineWorld;
+    if (g_pChitin->pActiveEngine == pEngineWorld) {
+        // NOTE: The exe compares the active panel id with CVidInf::GetType
+        // (0x7ABB90), a shared function returning 0 (see
+        // src/CScreenConnection.cpp:793).
+        if (pEngineWorld->GetActivePanelID() == 0) {
+            g_pBaldurChitin->GetObjectGame()->m_nCharacterOverflowCount = nOverflowCount;
+            pEngineWorld->m_nPickPartyNumCharacters = -1;
+            pEngineWorld->CheckEnableLeftPanel();
+        }
+    }
+
+    if (nOverflowCount != 0) {
+        delete[] pOverflowIds;
+    }
+
+    return TRUE;
+}
+
+// 0x432BA0
+BOOLEAN CBaldurMessage::OnCharacterPartyOrderReply(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)dwSize;
+
+    if (g_pChitin->cNetwork.GetSessionHosting() == TRUE
+        || !g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    if (nMsgFrom != static_cast<INT>(static_cast<BYTE>(g_pChitin->cNetwork.m_nHostPlayer))) {
+        return FALSE;
+    }
+
+    BOOLEAN bTimeout = pData[CNetwork::SPEC_MSG_HEADER_LENGTH];
+
+    CScreenWorld* pEngineWorld = g_pBaldurChitin->m_pEngineWorld;
+    if (g_pChitin->pActiveEngine == pEngineWorld) {
+        // NOTE: The exe compares the active panel id with CVidInf::GetType
+        // (0x7ABB90), a shared function returning 0 (see
+        // src/CScreenConnection.cpp:793).
+        if (pEngineWorld->GetActivePanelID() == 0) {
+            pEngineWorld->m_nPickPartyNumCharacters = -1;
+            pEngineWorld->CancelPopup();
+
+            if (bTimeout == FALSE) {
+                g_pBaldurChitin->GetObjectGame()->GetWorldTimer()->StartTime();
+                pEngineWorld->m_bPaused = FALSE;
+            }
+        }
     }
 
     return TRUE;

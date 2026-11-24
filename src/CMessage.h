@@ -353,7 +353,10 @@ public:
     BOOLEAN OnSwapItemRequest(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     BOOLEAN SwapItemReply(INT nMsgFrom, BOOLEAN bResult, CItem* pItem, STRREF errorCode);
     BOOLEAN CharacterPartyOrderRequest();
+    BOOLEAN OnCharacterPartyOrderRequest(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN SendCharacterPartyOrderStatus();
+    BOOLEAN OnCharacterPartyOrderStatus(INT nMsgFrom, BYTE* pData, DWORD dwSize);
+    BOOLEAN OnCharacterPartyOrderReply(INT nMsgFrom, BYTE* pData, DWORD dwSize);
     BOOLEAN SendChatMessage(CString& sChatMessage);
     BOOLEAN OnChatMessage(INT nMsgFrom, BYTE* pMessage, DWORD dwSize);
     void SetSignalDefaultSecondsToTimeout();
