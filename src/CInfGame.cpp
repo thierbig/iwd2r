@@ -14144,7 +14144,7 @@ BOOL CInfGame::ApplyPartyRoster(LONG* pDesiredPartyIds, SHORT nDesiredOverflowCo
 
     // The host pushes the reconciled roster out to the clients (0x5AF04D).
     if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
-        // TODO: 0x432610 not ported (unidentified CBaldurMessage member).
+        g_pBaldurChitin->GetBaldurMessage()->SendCharacterPartyOrderStatus();
         g_pBaldurChitin->GetBaldurMessage()->SendFullSettingsToClients(CString(""));
     }
 
