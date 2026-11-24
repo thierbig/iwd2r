@@ -200,7 +200,7 @@ BOOLEAN CBaldurMessage::OnMapWorldRevealArea(INT nMsgFrom, BYTE* pData, DWORD dw
     resRef.CopyToString(sAreaName);
 
     CWorldMap* pWorldMap = pGame->GetWorldMap(sAreaName);
-    pWorldMap->EnableArea(pWorldMap->sub_55A3A0(), resRef, TRUE);
+    pWorldMap->EnableArea(pWorldMap->sub_55A3A0(), resRef, TRUE); // re-lint: disable RE004 (address-named in this tree; rename is Ghidra-first)
 
     return TRUE;
 }
