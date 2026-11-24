@@ -85,6 +85,79 @@ private:
     std::unique_ptr<unsigned char[]> m_game;
 };
 
+// Places an object at array index 1. GetShare/GetDeny only check
+// m_nMaxArrayIndex, m_nNextObjectId and the entry's m_objectId, so no
+// CGameObjectArray::Add (which would touch the remote array and the sprite AI
+// type) is needed. The array's destructor owns the object.
+constexpr LONG OBJECT_ID = 0x00010001;
+
+LONG PutObject(CInfGame* pGame, CGameObject* pObject)
+{
+    CGameObjectArray* pArray = pGame->GetObjectArray();
+    const SHORT arrayIndex = static_cast<SHORT>((OBJECT_ID >> 16) & 0x7FFF);
+    pArray->m_pArray[arrayIndex].m_objectId = static_cast<SHORT>(OBJECT_ID);
+    pArray->m_pArray[arrayIndex].m_objectPtr = pObject;
+    pArray->m_nMaxArrayIndex = arrayIndex;
+    pArray->m_nNextObjectId = static_cast<SHORT>(OBJECT_ID) + 1;
+    return OBJECT_ID;
+}
+
+// CGameRemoteObjectArray::Add leaves an empty bucket null (its else branch
+// stores NULL), so insert the entry ourselves into the array's public bucket.
+// The array's destructor owns and deletes it.
+void AddRemote(CInfGame* pGame, PLAYER_ID remotePlayerID, LONG remoteObjectID, LONG localObjectID)
+{
+    const SHORT arrayIndex = static_cast<SHORT>((remoteObjectID >> 16) & 0x7FFF);
+    CGameRemoteObjectListEntry* pEntry = new CGameRemoteObjectListEntry();
+    pEntry->remotePlayerID = remotePlayerID;
+    pEntry->remoteObjectID = remoteObjectID;
+    pEntry->localObjectID = localObjectID;
+    pEntry->pNext = pGame->m_cRemoteObjectArray.m_pArray[arrayIndex];
+    pGame->m_cRemoteObjectArray.m_pArray[arrayIndex] = pEntry;
+}
+
+// tests/test_network.cpp's connected-provider setup: player location 0 is the
+// session host, so OnObjectControl accepts nMsgFrom 0, and a send lands in
+// CNetwork::STATIC_MESSAGE_BUFFER.
+class SessionScope {
+public:
+    explicit SessionScope(BOOLEAN bHost)
+        : m_network(g_pChitin->cNetwork)
+    {
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_TCP_IP;
+        m_network.m_bConnectionEstablished = TRUE;
+        m_network.m_bIsHost = bHost;
+        m_network.m_idLocalPlayer = 1;
+        m_network.m_nHostPlayer = 0;
+        m_network.m_psPlayerName[0] = "remote";
+        m_network.m_pPlayerID[0] = 2;
+        m_network.m_pbPlayerVisible[0] = TRUE;
+        std::memset(CNetwork::STATIC_MESSAGE_BUFFER, 0xCD, STATIC_MESSAGE_SIZE);
+    }
+
+    ~SessionScope()
+    {
+        m_network.m_bConnectionEstablished = FALSE;
+        m_network.m_bIsHost = FALSE;
+        m_network.m_nHostPlayer = -1;
+        m_network.m_nServiceProvider = CNetwork::SERV_PROV_NULL;
+    }
+
+    SessionScope(const SessionScope&) = delete;
+    SessionScope& operator=(const SessionScope&) = delete;
+
+    CNetwork& Network() { return m_network; }
+
+private:
+    CNetwork& m_network;
+};
+
+void WritePair(BYTE* at, PLAYER_ID remotePlayerID, LONG remoteObjectID)
+{
+    std::memcpy(at, &remotePlayerID, sizeof(remotePlayerID));
+    std::memcpy(at + sizeof(remotePlayerID), &remoteObjectID, sizeof(remoteObjectID));
+}
+
 } // namespace
 
 TEST_CASE("remote object array: Add stores an entry in an empty bucket", "[msg][network]")
@@ -115,4 +188,47 @@ TEST_CASE("remote object array: Add stores an entry in an empty bucket", "[msg][
 
     // A duplicate pair is refused.
     CHECK(pRemote->Add(3, 4, nObject, FALSE) == FALSE);
+}
+
+TEST_CASE("remote object array: UnmarshalControlChanges starts after the spec header", "[msg][network]")
+{
+    ChitinScope chitin;
+    GameScope game;
+    SessionScope session(FALSE);
+    CGameRemoteObjectArray* pRemote = game.Game()->GetRemoteObjectArray();
+
+    CGameObject* pObject = new CGameObject();
+    pObject->m_remotePlayerID = 3;
+    pObject->m_remoteObjectID = 4;
+    const LONG nObject = PutObject(game.Game(), pObject);
+    AddRemote(game.Game(), 3, 4, nObject);
+
+    // {header[3] poison; SHORT 0 areas changed; SHORT 1 change;
+    //  {PLAYER_ID oldPlayer 3; LONG oldObject 4; PLAYER_ID newPlayer 9;
+    //   LONG newObject 10; BOOLEAN localControl 0}}
+    const DWORD payloadSize = sizeof(SHORT) + sizeof(SHORT)
+        + sizeof(PLAYER_ID) + sizeof(LONG) + sizeof(PLAYER_ID) + sizeof(LONG)
+        + sizeof(BOOLEAN);
+    BYTE packet[HEADER_LENGTH + payloadSize];
+    std::memset(packet, 0xCD, sizeof(packet));
+    DWORD cnt = HEADER_LENGTH;
+    const SHORT nAreas = 0;
+    std::memcpy(packet + cnt, &nAreas, sizeof(nAreas));
+    cnt += sizeof(nAreas);
+    const SHORT nChanges = 1;
+    std::memcpy(packet + cnt, &nChanges, sizeof(nChanges));
+    cnt += sizeof(nChanges);
+    WritePair(packet + cnt, 3, 4);
+    cnt += PAIR_SIZE;
+    WritePair(packet + cnt, 9, 10);
+    cnt += PAIR_SIZE;
+    packet[cnt++] = FALSE;
+    REQUIRE(cnt == sizeof(packet));
+
+    // Reading from offset 0 would take the 0xCDCD header as the area count
+    // and then trip the trailing `dwSize == cnt`; the payload starts at +3.
+    CHECK(pRemote->UnmarshalControlChanges(packet, sizeof(packet)) == TRUE);
+    LONG nLocal = 0;
+    CHECK(pRemote->Find(9, 10, nLocal) == TRUE);
+    CHECK(nLocal == nObject);
 }

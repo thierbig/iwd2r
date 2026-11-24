@@ -4,6 +4,7 @@
 #include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
+#include "CNetwork.h"
 #include "CUtil.h"
 
 // NOTE: Inlined.
@@ -418,7 +419,9 @@ BOOL CGameRemoteObjectArray::UnmarshalControlChanges(BYTE* pData, DWORD dwSize)
     // __LINE__: 1859
     UTIL_ASSERT(pData != NULL && dwSize != 0);
 
-    cnt = 0;
+    // The control-change block is a player message: its payload starts after
+    // the 3-byte spec header (0x85E670, read at 0x59B80D).
+    cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
 
     SHORT nControlsAreaChanged = *reinterpret_cast<SHORT*>(pData + cnt);
     cnt += sizeof(SHORT);
