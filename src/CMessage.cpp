@@ -16,8 +16,8 @@
 #include "CGameStatic.h"
 #include "CGameTrigger.h"
 #include "CInfCursor.h"
-#include "CInfinity.h"
 #include "CInfGame.h"
+#include "CInfinity.h"
 #include "CItem.h"
 #include "CPathSearch.h"
 #include "CProjectile.h"
@@ -18598,7 +18598,6 @@ BYTE CMessageSpriteEquipment::GetMsgSubType()
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_EQUIPMENT;
 }
 
-
 // 0x50B680
 void CMessageSpriteEquipment::MarshalMessage(BYTE** pData, DWORD* dwSize)
 {
@@ -19138,7 +19137,6 @@ BYTE CMessageSpriteUpdate::GetMsgSubType()
 {
     return CBaldurMessage::MSG_SUBTYPE_CMESSAGE_SPRITE_UPDATE;
 }
-
 
 // 0x50D290
 BOOL CMessageSpriteUpdate::UnmarshalMessage(BYTE* pData, DWORD dwSize)
