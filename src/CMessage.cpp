@@ -1603,7 +1603,13 @@ BOOLEAN CBaldurMessage::OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSiz
     DWORD dwFlags = *reinterpret_cast<DWORD*>(pData + cnt);
     cnt += sizeof(DWORD);
 
-    CString sResName(reinterpret_cast<char*>(pData + cnt), dwSize - cnt);
+    // The original copies the payload remainder into a fixed stack buffer
+    // unchecked; bound the resref copy to 8 bytes here (P4-10).
+    DWORD nLength = dwSize > cnt ? dwSize - cnt : 0;
+    if (nLength > RESREF_SIZE) {
+        nLength = RESREF_SIZE;
+    }
+    CString sResName(reinterpret_cast<char*>(pData + cnt), nLength);
 
     if (nType == 1010) { // CAreaFile
         CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
@@ -1644,7 +1650,11 @@ BOOLEAN CBaldurMessage::OnResourceRequest(INT nMsgFrom, BYTE* pData, DWORD dwSiz
     BYTE nLength = pData[cnt];
     cnt += sizeof(BYTE);
 
-    CString sResName(reinterpret_cast<char*>(pData + cnt), nLength);
+    // The original copies the wire length into a fixed stack buffer
+    // unchecked; bound the resref copy to 8 bytes here (P4-10) while the
+    // cursor still advances by the wire length.
+    BYTE nCopyLength = nLength < RESREF_SIZE ? nLength : RESREF_SIZE;
+    CString sResName(reinterpret_cast<char*>(pData + cnt), nCopyLength);
     cnt += nLength;
 
     UINT nType = *reinterpret_cast<UINT*>(pData + cnt);
