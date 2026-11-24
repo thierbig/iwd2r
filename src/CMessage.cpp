@@ -1150,6 +1150,50 @@ BOOLEAN CBaldurMessage::ResourceSuggestLoad(const CString& sResName, UINT nType,
     return TRUE;
 }
 
+// 0x42ABA0
+// The server's resource suggestion: a client is told to load an area. The
+// payload after the 3-byte spec header is {UINT nType; DWORD dwFlags; char
+// sResRef[]}; only type 1010 (CAreaFile) acts, and dwFlags carries the travel
+// screen image in its low byte and the progress-bar request in bit 8, exactly
+// as ResourceSuggestLoad (0x42AA10) packs it. field_4BD4 suppresses the queued
+// messages while the area loads.
+//
+// NOTE: The original also declares two CResHelper locals that are born dead
+// here (their refcounted ctor/dtor run, nothing else); the port omits them as
+// they have no observable effect.
+BOOLEAN CBaldurMessage::OnResourceSuggest(INT nMsgFrom, BYTE* pData, DWORD dwSize)
+{
+    (void)nMsgFrom;
+
+    // The client's receive: a session, but no hosting requirement.
+    if (!g_pChitin->cNetwork.GetSessionOpen()) {
+        return FALSE;
+    }
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+
+    UINT nType = *reinterpret_cast<UINT*>(pData + cnt);
+    cnt += sizeof(UINT);
+
+    DWORD dwFlags = *reinterpret_cast<DWORD*>(pData + cnt);
+    cnt += sizeof(DWORD);
+
+    CString sResName(reinterpret_cast<char*>(pData + cnt), dwSize - cnt);
+
+    if (nType == 1010) { // CAreaFile
+        CInfGame* pGame = g_pBaldurChitin->GetObjectGame();
+
+        pGame->field_4BD4 = 1;
+        pGame->LoadArea(sResName,
+            static_cast<BYTE>(dwFlags),
+            ((dwFlags >> 8) & 1) != 0,
+            FALSE);
+        pGame->field_4BD4 = 0;
+    }
+
+    return TRUE;
+}
+
 // 0x42B1F0
 BOOL CBaldurMessage::OnSettingsFullDemanded(INT nMsgFrom)
 {

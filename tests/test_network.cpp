@@ -2277,3 +2277,43 @@ TEST_CASE("msg: OnCharacterPartyOrderReply accepts the host's answer", "[network
 
     g_pChitin->pActiveEngine = NULL;
 }
+
+// CBaldurMessage::OnResourceSuggest (0x42ABA0): the client's receive of the
+// server's resource suggestion. The payload after the 3-byte spec header is
+// {UINT type; DWORD flags; char resref[]}; the sender side is
+// ResourceSuggestLoad (0x42AA10). Only type 1010 loads an area, and that needs
+// the real install, so the fixture pins the connected-session guard and the
+// accepted-and-dropped arm for another type.
+TEST_CASE("msg: OnResourceSuggest takes only a connected session's suggestion", "[network][msg]")
+{
+    ChitinScope chitin;
+    // RosterSession is a generic connected TCP/IP session here; the name comes
+    // from the roster tests that introduced it.
+    RosterSession session(FALSE);
+
+    CBaldurMessage message;
+
+    // CNetwork::SPEC_MSG_HEADER_LENGTH is a runtime constant, so its value
+    // (3) is spelled out for the array bound.
+    BYTE packet[3 + sizeof(UINT) + sizeof(DWORD) + 8];
+    std::memset(packet, 0xCD, sizeof(packet));
+    packet[0] = CNetwork::SPEC_MSG_FLAG_ENABLED;
+    packet[1] = CBaldurMessage::MSG_TYPE_RESOURCE;
+    packet[2] = CBaldurMessage::MSG_SUBTYPE_RESOURCE_SUGGEST;
+
+    DWORD cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
+    const UINT nType = 1013; // CGameFile: accepted and dropped
+    std::memcpy(packet + cnt, &nType, sizeof(nType));
+    cnt += sizeof(nType);
+    const DWORD dwFlags = 0x101; // travel image 1, progress-bar bit set
+    std::memcpy(packet + cnt, &dwFlags, sizeof(dwFlags));
+    cnt += sizeof(dwFlags);
+    std::memcpy(packet + cnt, "AR1001", 6);
+    cnt += 6;
+
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == TRUE);
+
+    // A closed session is the guard's FALSE arm.
+    session.Network().m_bConnectionEstablished = FALSE;
+    CHECK(message.OnResourceSuggest(0, packet, cnt) == FALSE);
+}
