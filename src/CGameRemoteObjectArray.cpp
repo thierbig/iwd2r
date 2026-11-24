@@ -793,6 +793,11 @@ void CGameRemoteObjectArray::Clean()
             delete node;
             node = next;
         }
+
+        // NOTE: The original clears the bucket head after freeing its chain
+        // (0x59AE30-0x59AE36 in the destructor's inlined copy at 0x59ADD0),
+        // so a second Clean cannot free the same nodes again.
+        m_pArray[nIndex] = NULL;
     }
 
     // NOTE: Uninline.
