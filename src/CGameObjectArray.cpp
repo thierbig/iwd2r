@@ -464,9 +464,14 @@ BYTE CGameObjectArray::Delete(LONG index, BYTE threadNum, CGameObject** ptr, DWO
         }
     }
 
-    // TODO: Incomplete. With a connection established (CNetwork 0x6E0) and
-    // the game's byte at 0x4889 clear, the original first sends the
-    // deletion through 0x430DC0 (CBaldurMessage, not in our tree yet).
+    // The original tells the other players before it drops the entry, when a
+    // session is open and we are not already inside OnObjectDelete
+    // (0x59A669-0x59A68E; the byte at 0x4889 is
+    // CBaldurMessage::m_bInOnObjectDelete).
+    if (g_pChitin->cNetwork.GetSessionOpen() == TRUE
+        && g_pBaldurChitin->GetBaldurMessage()->m_bInOnObjectDelete != TRUE) {
+        g_pBaldurChitin->GetBaldurMessage()->SendObjectDelete(index);
+    }
 
     if (ptr != NULL) {
         *ptr = m_pArray[arrayIndex].m_objectPtr;

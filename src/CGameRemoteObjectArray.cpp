@@ -4,6 +4,7 @@
 #include "CGameArea.h"
 #include "CGameSprite.h"
 #include "CInfGame.h"
+#include "CNetwork.h"
 #include "CUtil.h"
 
 // NOTE: Inlined.
@@ -124,7 +125,10 @@ BOOL CGameRemoteObjectArray::Add(PLAYER_ID remotePlayerID, LONG remoteObjectID, 
         node->pNext = m_pArray[arrayIndex];
         m_pArray[arrayIndex] = node;
     } else {
-        m_pArray[arrayIndex] = NULL;
+        // NOTE: The original stores the new node here too (0x59B071); the
+        // ported body assigned NULL, so the first entry of every empty
+        // bucket was lost.
+        m_pArray[arrayIndex] = node;
     }
 
     if (bSetInGame == TRUE) {
@@ -415,7 +419,9 @@ BOOL CGameRemoteObjectArray::UnmarshalControlChanges(BYTE* pData, DWORD dwSize)
     // __LINE__: 1859
     UTIL_ASSERT(pData != NULL && dwSize != 0);
 
-    cnt = 0;
+    // The control-change block is a player message: its payload starts after
+    // the 3-byte spec header (0x85E670, read at 0x59B80D).
+    cnt = CNetwork::SPEC_MSG_HEADER_LENGTH;
 
     SHORT nControlsAreaChanged = *reinterpret_cast<SHORT*>(pData + cnt);
     cnt += sizeof(SHORT);
@@ -787,6 +793,11 @@ void CGameRemoteObjectArray::Clean()
             delete node;
             node = next;
         }
+
+        // NOTE: The original clears the bucket head after freeing its chain
+        // (0x59AE30-0x59AE36 in the destructor's inlined copy at 0x59ADD0),
+        // so a second Clean cannot free the same nodes again.
+        m_pArray[nIndex] = NULL;
     }
 
     // NOTE: Uninline.
