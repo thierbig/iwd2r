@@ -13727,10 +13727,56 @@ BOOLEAN CGameSprite::DoAIUpdate(BOOLEAN active, LONG counter)
 }
 
 // 0x723B20
+// The clear sweep the area move/load paths run over the last-sent shadow
+// before a CMessageSpriteUpdate is queued: free the path and portrait
+// buffers, zero every compared field, then store the full-update flag. The
+// 64-byte base-skill and skill arrays and field_106 are deliberately NOT
+// cleared (the exe does not touch +0x76/+0xB6/+0xF6): a full update refreshes
+// them from the sprite afterwards.
 void CGameSpriteLastUpdate::Initialize(BOOL bFullUpdateRequired)
 {
-    // TODO: Incomplete. The original also clears the update's other members
-    // (0x723B20-0x723BD8), which CGameSpriteLastUpdate does not declare.
+    // NOTE: The exe frees its operator_new path/portrait buffers with
+    // operator_delete; our encoder allocates them with new LONG[]
+    // (src/CMessage.cpp), so the matching free here and in the destructor is
+    // delete[].
+    delete[] m_pPath;
+    m_pPath = NULL;
+
+    m_nPath = 0;
+    m_currPath = 0;
+    m_ptDest = CPoint(0, 0);
+    m_nMoveScale = 0;
+    m_nSequence = 0;
+    m_ptPosition = CPoint(0, 0);
+    m_nFacing = 0;
+    m_dwState = 0;
+    m_nHitPoints = 0;
+    m_nMaxHitPoints = 0;
+    field_60 = 0;
+    field_64 = 0;
+    field_66 = 0;
+    field_68 = 0;
+    field_6A = 0;
+    m_nACCrushingMod = 0;
+    m_nACMissileMod = 0;
+    m_nACPiercingMod = 0;
+    m_nACSlashingMod = 0;
+    field_74 = 0;
+
+    delete[] field_76;
+    field_76 = NULL;
+
+    m_nEnemyAlly = 0;
+    m_nEnemyAllyLive = 0;
+    m_nEnemyAllyStart = 0;
+    m_bMoralFailure = FALSE;
+    m_bLevelUp = FALSE;
+    m_nHPCONBonusTotalOld = 0;
+    m_sAreaString = "";
+    m_nFadeSpeed = 0;
+    m_spellStates.reset();
+    m_visualEffects.reset();
+    m_nTranslucent = 0;
     m_bFullUpdateRequired = bFullUpdateRequired;
 }
 
