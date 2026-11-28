@@ -96,7 +96,7 @@ this checkout). Names from history were re-checked against the exe structurally.
 | 0x64D950 | 31 | `CScreenMultiPlayer_0064d950` | `CScreenMultiPlayer` virtual at vt+0x100 (slot 64): loops this+0x444 calling 0x64AA10 | MP | DROP | lobby-screen virtual |
 | 0x64D970 | 516 | `FUN_0064d970` | `CScreenMultiPlayer` helper: arbitration lock + close session | MP | DROP | lobby-only helper |
 | 0x64DB90 | 533 | `FUN_0064db90` | `CScreenMultiPlayer` helper: help/text update | MP | DROP | lobby-only helper |
-| 0x64DDB0 | 536 | `FUN_0064ddb0` | `CScreenMultiPlayer::UpdateMainPanel` (polls `CMultiplayerSettings`, refreshes lobby panels; state at this+0x45C) | reached in SP only through the always-constructed MP object (12 call sites load chitin+0x1C90 and null-check, e.g. `CScreenConnection::OnNewGameButtonClick` 0x5FD5A5, `CScreenLoad::LoadGame`) | DROP | lobby-screen member; ADR trimming needed at the call sites |
+| 0x64DDB0 | 536 | `FUN_0064ddb0` | `CScreenMultiPlayer::StartMultiPlayer` (the binary twin of `StartSinglePlayer`; reads `CMultiplayerSettings`, writes only this+0x48A) | reached in SP only through the always-constructed MP object (12 call sites load chitin+0x1C90 and null-check, e.g. `CScreenConnection::OnNewGameButtonClick` 0x5FD5A5, `CScreenLoad::LoadGame`) | DROP | lobby-screen member; ADR trimming needed at the call sites |
 | 0x64DFD0 | 220 | `FUN_0064dfd0` | `CScreenMultiPlayer` helper: mouse capture / panel close | MP | DROP | lobby-only helper |
 | 0x64E0B0 | 172 | `FUN_0064e0b0` | `CScreenMultiPlayer` helper | DEAD: no callers, no pointer references in the image | DROP | unreferenced in the original |
 | 0x64E160 | 352 | `CGameSprite_B3AUTO_0064e160` | `CScreenMultiPlayer` helper: character class/level text (Ghidra alias name is bogus) | MP | DROP | lobby-only helper |
@@ -176,14 +176,14 @@ COVERED (compiler-generated; the class is one of the two the factory kept):
    stored at chitin+0x1C90), so its object exists in the original engine in single player too.
    Two rows are therefore reached from SP engine code: `0x64D690 ClearChatMessages` (via
    `CBaldurChitin::ClearChatMessages` 0x425BD0 from `CUIControlButtonStartMenu::OnLButtonClick`) and
-   `0x64DDB0 UpdateMainPanel` (12 call sites load chitin+0x1C90 and null-check it). Both stay
+   `0x64DDB0 StartMultiPlayer` (12 call sites load chitin+0x1C90 and null-check it). Both stay
    DROP as lobby members, but **ADR 0002's deletion also has to trim or guard those call sites**,
    which is separate work from this area.
 
 ## Open questions for the maintainer
 
 1. **ADR 0002 trimming: none needed in code.** The two lobby methods reached from SP code
-   (`0x64D690 ClearChatMessages`, `0x64DDB0 UpdateMainPanel`) are called from 14 exe sites through
+   (`0x64D690 ClearChatMessages`, `0x64DDB0 StartMultiPlayer`) are called from 14 exe sites through
    `CBaldurChitin+0x1C90` (`m_pEngineMultiPlayer`, written unconditionally by `CBaldurChitin::Init`
    0x423C3D): `CBaldurChitin::ClearChatMessages`/`OnMultiplayerSessionOpen`
    (`src/CBaldurChitin.cpp:2066`/`:1983`), `CBaldurEngine::OnLeftPanelButtonClick`
