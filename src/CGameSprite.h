@@ -187,9 +187,10 @@ typedef struct {
 // layout differs (64-bit pointers, std::bitset storage).
 class CGameSpriteLastUpdate {
 public:
-    // The original clears this record in Initialize; the declared member
-    // initializers below are that clear for a newly constructed sprite. The
-    // full Initialize body is still TODO (it runs again on area moves).
+    // Initialize runs the original's clear sweep over this record on the area
+    // move/load paths; the declared member initializers below give a newly
+    // constructed sprite the same state. The skill arrays and field_106 are
+    // deliberately not cleared (the exe does not touch +0x76/+0xB6/+0xF6).
     ~CGameSpriteLastUpdate()
     {
         delete[] m_pPath;

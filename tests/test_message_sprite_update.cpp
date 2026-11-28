@@ -1014,3 +1014,159 @@ TEST_CASE("sprite update: MarshalMessage zeroes the size for an unknown target",
         CHECK(nByte == 0xCD);
     }
 }
+
+// CGameSpriteLastUpdate::Initialize (0x723B20): the clear sweep the area
+// move/load paths run before queueing a sprite update. The record is plain
+// data, so the exact clear set is pinned directly; the 64-byte base-skill and
+// skill arrays and field_106 are deliberately not cleared (the exe's stores
+// stop at +0x74 and go to the flag at +0xF8).
+TEST_CASE("sprite update: Initialize clears the last-sent shadow", "[msg]")
+{
+    CGameSpriteLastUpdate last;
+    last.m_pPath = new LONG[3];
+    last.m_pPath[0] = 7;
+    last.m_nPath = 3;
+    last.m_currPath = 1;
+    last.m_ptDest = CPoint(11, 12);
+    last.m_nMoveScale = 7;
+    last.m_nSequence = 4;
+    last.m_ptPosition = CPoint(13, 14);
+    last.m_nFacing = 5;
+    last.m_dwState = 0x1234;
+    last.m_nHitPoints = 6;
+    last.m_nMaxHitPoints = 7;
+    last.field_60 = 8;
+    last.field_64 = 9;
+    last.field_66 = 10;
+    last.field_68 = 11;
+    last.field_6A = 12;
+    last.m_nACCrushingMod = 13;
+    last.m_nACMissileMod = 14;
+    last.m_nACPiercingMod = 15;
+    last.m_nACSlashingMod = 16;
+    last.field_74 = 2;
+    last.field_76 = new LONG[2];
+    last.field_76[0] = 17;
+    last.m_nEnemyAlly = 1;
+    last.m_nEnemyAllyLive = 2;
+    last.m_nEnemyAllyStart = 3;
+    last.m_bMoralFailure = TRUE;
+    last.m_sAreaString = "AR1000";
+    last.m_bLevelUp = TRUE;
+    last.m_nHPCONBonusTotalOld = 18;
+    last.m_spellStates.set(0);
+    last.m_spellStates.set(255);
+    last.m_nFadeSpeed = 3;
+    last.m_visualEffects.set(0);
+    last.m_visualEffects.set(31);
+    last.m_nTranslucent = 4;
+    last.m_baseSkills[0] = 21;
+    last.m_baseSkills[63] = 22;
+    last.m_skills[0] = 23;
+    last.m_skills[63] = 24;
+    last.field_106 = 0x5A;
+
+    last.Initialize(TRUE);
+
+    CHECK(last.m_pPath == NULL);
+    CHECK(last.m_nPath == 0);
+    CHECK(last.m_currPath == 0);
+    CHECK((last.m_ptDest == CPoint(0, 0)));
+    CHECK(last.m_nMoveScale == 0);
+    CHECK(last.m_nSequence == 0);
+    CHECK((last.m_ptPosition == CPoint(0, 0)));
+    CHECK(last.m_nFacing == 0);
+    CHECK(last.m_dwState == 0);
+    CHECK(last.m_nHitPoints == 0);
+    CHECK(last.m_nMaxHitPoints == 0);
+    CHECK(last.field_60 == 0);
+    CHECK(last.field_64 == 0);
+    CHECK(last.field_66 == 0);
+    CHECK(last.field_68 == 0);
+    CHECK(last.field_6A == 0);
+    CHECK(last.m_nACCrushingMod == 0);
+    CHECK(last.m_nACMissileMod == 0);
+    CHECK(last.m_nACPiercingMod == 0);
+    CHECK(last.m_nACSlashingMod == 0);
+    CHECK(last.field_74 == 0);
+    CHECK(last.field_76 == NULL);
+    CHECK(last.m_nEnemyAlly == 0);
+    CHECK(last.m_nEnemyAllyLive == 0);
+    CHECK(last.m_nEnemyAllyStart == 0);
+    CHECK(last.m_bMoralFailure == FALSE);
+    CHECK(last.m_sAreaString == "");
+    CHECK(last.m_bLevelUp == FALSE);
+    CHECK(last.m_nHPCONBonusTotalOld == 0);
+    CHECK(last.m_spellStates.none());
+    CHECK(last.m_nFadeSpeed == 0);
+    CHECK(last.m_visualEffects.none());
+    CHECK(last.m_nTranslucent == 0);
+    CHECK(last.m_bFullUpdateRequired == TRUE);
+
+    // The exe does not clear these three (they are refreshed by the full
+    // update that the set flag requests).
+    CHECK(last.m_baseSkills[0] == 21);
+    CHECK(last.m_baseSkills[63] == 22);
+    CHECK(last.m_skills[0] == 23);
+    CHECK(last.m_skills[63] == 24);
+    CHECK(last.field_106 == 0x5A);
+
+    // The flag argument is the only thing the second call changes.
+    last.Initialize(FALSE);
+    CHECK(last.m_bFullUpdateRequired == FALSE);
+    CHECK(last.m_sAreaString == "");
+    CHECK(last.field_106 == 0x5A);
+}
+
+// The same clear on a live sprite's record: the engine exposes the shadow as
+// CGameSprite::m_cLastSpriteUpdate, and Initialize is what the area move/load
+// paths call on it. The call sites themselves are network-gated, so this test
+// drives the method on a real sprite rather than an area transition.
+TEST_CASE("sprite update: Initialize clears a live sprite's shadow record", "[msg][data]")
+{
+    if (DataDir() == nullptr) {
+        SKIP("[iwd2r-skip] IWD2_DATA unset");
+    }
+    std::string error;
+    REQUIRE(StartEngine(error));
+    INFO(error);
+    FramePump pump;
+    std::vector<BYTE> cre = FinishedCharacter();
+    if (cre.empty()) {
+        SKIP("[iwd2r-skip] no CHR V2.2 file in the Characters folder");
+    }
+    CGameSprite* pSprite = NewGameWithOneCharacter(cre, "Probe");
+    REQUIRE(pSprite != NULL);
+
+    CGameSpriteLastUpdate& last = pSprite->m_cLastSpriteUpdate;
+    last.m_pPath = new LONG[2];
+    last.m_pPath[0] = 7;
+    last.m_nPath = 2;
+    last.m_ptDest = CPoint(3, 4);
+    last.m_sAreaString = "AR1000";
+    last.m_spellStates.set(7);
+    last.m_visualEffects.set(3);
+    last.field_76 = new LONG[1];
+    last.field_74 = 1;
+    last.m_nEnemyAlly = 1;
+    last.m_baseSkills[0] = 9;
+    last.m_skills[0] = 10;
+    last.field_106 = 0x33;
+    last.m_bFullUpdateRequired = FALSE;
+
+    last.Initialize(TRUE);
+
+    CHECK(last.m_pPath == NULL);
+    CHECK(last.m_nPath == 0);
+    CHECK((last.m_ptDest == CPoint(0, 0)));
+    CHECK(last.m_sAreaString == "");
+    CHECK(last.m_spellStates.none());
+    CHECK(last.m_visualEffects.none());
+    CHECK(last.field_76 == NULL);
+    CHECK(last.field_74 == 0);
+    CHECK(last.m_nEnemyAlly == 0);
+    CHECK(last.m_bFullUpdateRequired == TRUE);
+    CHECK(last.m_baseSkills[0] == 9);
+    CHECK(last.m_skills[0] == 10);
+    CHECK(last.field_106 == 0x33);
+}
