@@ -415,6 +415,7 @@ public:
     BOOLEAN OnLeaveAreaNameCancel(BYTE* pByteMessage, DWORD dwSize);
     BOOLEAN OnLeaveAreaNameAnnounce(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);
     void CleanLeaveAreaLuaRequest();
+    BOOLEAN SendLeaveAreaLuaPanic(CPoint ptLocation, SHORT nDirection, CString sAreaName, CString sParchment);
     void CleanLeaveAreaNameRequest();
     BOOLEAN SendJournalEntryToServer(STRREF strText, INT nChapter, LONG nTime);
     BOOLEAN OnSendJournalEntry(INT nMsgFrom, BYTE* pByteMessage, DWORD dwSize);

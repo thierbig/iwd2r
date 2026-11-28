@@ -7769,6 +7769,47 @@ void CBaldurMessage::CleanLeaveAreaLuaRequest()
     m_bLeaveAreaLuaReplyReturned = FALSE;
 }
 
+// 0x4381C0
+BOOLEAN CBaldurMessage::SendLeaveAreaLuaPanic(CPoint ptLocation, SHORT nDirection, CString sAreaName, CString sParchment)
+{
+    // The row is dead without a session: every single-player game has
+    // m_bConnectionEstablished FALSE, which is what the caller's gate tests
+    // too. Across a session only the host half is ported (the client half is
+    // the omitted send below), so a connected client answers FALSE.
+    if (g_pChitin->cNetwork.m_bConnectionEstablished == FALSE) {
+        return FALSE;
+    }
+
+    if (g_pChitin->cNetwork.m_bIsHost == TRUE) {
+        // The host records the transition on the world screen and arms the
+        // deadline the world screen checks against the world clock: 90 ticks
+        // (the dword at 0x85A240) after the current game time. The two CString
+        // arguments are copied by value into SetLeaveAreaLuaPanicData, which
+        // is why the original stages two CString_Construct copies here.
+        g_pBaldurChitin->m_pEngineWorld->m_bLeaveAreaLuaPanicPending = TRUE;
+        g_pBaldurChitin->m_pEngineWorld->m_ulLeaveAreaLuaPanicTimer = g_pBaldurChitin->GetObjectGame()->m_worldTime.m_gameTime + 90;
+
+        g_pBaldurChitin->GetScreenWorld()->SetLeaveAreaLuaPanicData(ptLocation, nDirection, sAreaName, sParchment);
+
+        return TRUE;
+    }
+
+    // NOTE: Omitted: the client half of the original (0x4382D0-0x438452)
+    // fetches the local player's name from the network player-name table (an
+    // empty name fails), marshals
+    //   {LONG x; LONG y; SHORT direction;
+    //    BYTE parchmentLen; char parchment[];
+    //    BYTE areaNameLen; char areaName[]}
+    // into the 0x4000-byte static buffer at 0x8D8FE4 (a heap copy beyond it,
+    // and the CBaldurMessage flag at +0xDA is cleared if that allocation
+    // fails), and sends it with CNetwork::SendSpecificMessage (0x7A84F0,
+    // spec type 0x41/subtype 0x04, flags 0x200) to the host, who arms its own
+    // panic in OnLeaveAreaLuaPanicToServer (0x438560). Omitted: single player
+    // only (docs/adr/0002-single-player-only.md). No send happens here, so
+    // the answer is FALSE.
+    return FALSE;
+}
+
 // 0x4393E0
 void CBaldurMessage::CleanLeaveAreaNameRequest()
 {

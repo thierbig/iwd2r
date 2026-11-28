@@ -2614,6 +2614,45 @@ TEST_CASE("ai: ExecuteAction 189 LeaveAreaLUAPanic 259 SetVisualRange and 270 Cl
     CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
     CHECK(g_pBaldurChitin->m_cMessageHandler.m_messageList.IsEmpty());
 
+    // The host arm of the same hand-off (row 43, 0x4381C0): with a session
+    // established and this machine the host, the message arms the world
+    // screen's pending panic and its deadline and records the transition.
+    {
+        CAIAction hostPanic;
+        hostPanic.m_actionID = 189;
+        hostPanic.m_specificID = 42;
+        hostPanic.m_dest = CPoint(101, 202);
+        hostPanic.m_string1 = "AR1000";
+        hostPanic.m_string2 = "parchment";
+
+        CScreenWorld* pWorld = g_pBaldurChitin->GetScreenWorld();
+        REQUIRE(pWorld != NULL);
+        const BOOLEAN bPendingBefore = pWorld->m_bLeaveAreaLuaPanicPending;
+        const ULONG ulTimerBefore = pWorld->m_ulLeaveAreaLuaPanicTimer;
+        pWorld->m_bLeaveAreaLuaPanicPending = FALSE;
+        pWorld->m_ulLeaveAreaLuaPanicTimer = 0;
+
+        const BOOLEAN bConnectionEstablishedBefore = g_pChitin->cNetwork.m_bConnectionEstablished;
+        const BOOLEAN bIsHostBefore = g_pChitin->cNetwork.m_bIsHost;
+        g_pChitin->cNetwork.m_bConnectionEstablished = TRUE;
+        g_pChitin->cNetwork.m_bIsHost = TRUE;
+        pCaller->SetCurrAction(hostPanic);
+        CHECK(pCaller->ExecuteAction() == CGameAIBase::ACTION_DONE);
+        g_pChitin->cNetwork.m_bConnectionEstablished = bConnectionEstablishedBefore;
+        g_pChitin->cNetwork.m_bIsHost = bIsHostBefore;
+
+        CHECK(pWorld->m_bLeaveAreaLuaPanicPending == TRUE);
+        CHECK(pWorld->m_ulLeaveAreaLuaPanicTimer
+            == g_pBaldurChitin->GetObjectGame()->m_worldTime.m_gameTime + 90);
+        CHECK(pWorld->m_ptLeaveAreaLuaPanicLocation == hostPanic.m_dest);
+        CHECK(pWorld->m_nLeaveAreaLuaPanicDirection == 42);
+        CHECK(pWorld->m_sLeaveAreaLuaPanicAreaName == hostPanic.m_string1);
+        CHECK(pWorld->m_sLeaveAreaLuaPanicParchment == hostPanic.m_string2);
+
+        pWorld->m_bLeaveAreaLuaPanicPending = bPendingBefore;
+        pWorld->m_ulLeaveAreaLuaPanicTimer = ulTimerBefore;
+    }
+
     // 259 SetVisualRange(14): a CMessage92 to self carries the range.
     CAIAction setRange;
     setRange.m_actionID = 259;
