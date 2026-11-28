@@ -4691,12 +4691,11 @@ SHORT CGameAIBase::SetMusic()
 SHORT CGameAIBase::LeaveAreaLUAPanic()
 {
     if (g_pChitin->cNetwork.m_bConnectionEstablished == TRUE) {
-        // TODO: 0x4669B6 calls 0x4381C0 (not ported): the CBaldurMessage
-        // hand-off for the networked panic jump. It is passed m_curAction's
-        // dest point, m_specificID, and copies of GetString1()/GetString2()
-        // (the copies feed only this call and are omitted with it), and on
-        // the host ends in CScreenWorld::SetLeaveAreaLuaPanicData
-        // (0x4384B0, in tree).
+        // NOTE: Uninline.
+        g_pBaldurChitin->GetBaldurMessage()->SendLeaveAreaLuaPanic(m_curAction.m_dest,
+            static_cast<SHORT>(m_curAction.m_specificID),
+            m_curAction.GetString1(),
+            m_curAction.GetString2());
     }
 
     return ACTION_DONE;
